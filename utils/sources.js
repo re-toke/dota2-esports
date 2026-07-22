@@ -237,11 +237,24 @@ async function enrichLiveGames() {
       }
     } catch (e) { /* 隔离 */ }
   }
-  // 去重：steam 用 lobbyId，stratz 用 matchId；简单 dedup 保留第一条
+  // 去重：steam 的 lobbyId 与 stratz 的 matchId 属不同 ID 空间，无法跨源去重。
+  // 改用跨源稳定的复合键 (radiantTeamId, direTeamId, leagueId)，并对两个队伍 id
+  // 升序归一，避免两端天辉/夜魇槽位顺序不同导致同一局被判为两场。
+  // 三个标识全部 0/缺失时，回退到源私有 id（前缀 src_），避免误合并两场无法识别的局。
   const seen = {};
   const merged = [];
   allUnmerged.forEach((g) => {
-    const dedupKey = g.lobbyId != null ? 'lobby_' + g.lobbyId : ('match_' + (g.matchId || ''));
+    const radiant = g.radiantTeamId || 0;
+    const dire = g.direTeamId || 0;
+    const league = g.leagueId || 0;
+    let dedupKey;
+    if (radiant === 0 && dire === 0 && league === 0) {
+      dedupKey = 'src_' + (g.lobbyId != null ? 'lobby_' + g.lobbyId : ('match_' + (g.matchId || '')));
+    } else {
+      const teamA = Math.min(radiant, dire);
+      const teamB = Math.max(radiant, dire);
+      dedupKey = teamA + '_' + teamB + '_' + league;
+    }
     if (!seen[dedupKey]) {
       seen[dedupKey] = true;
       merged.push(g);

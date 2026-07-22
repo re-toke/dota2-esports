@@ -5,10 +5,12 @@
 //  - request(): 带限流（约 60 次/分钟，最小间隔 + 429 退避）。
 //  - cached(): 带 TTL 的本地缓存，命中不计入限流，是降低请求量的核心手段。
 //  - 所有对外方法默认走 cached()，TTL 见 config.cacheTTL。
+//  - 可选云函数代理（config.cloudProxy.enabled）：优先走云函数，失败回退直连。
 
 const cache = require('./cache.js');
 const config = require('./config.js');
 const inc = require('./incremental.js');
+const sqlFragments = require('./sqlFragments.js');
 
 const BASE = 'https://api.opendota.com/api';
 
@@ -68,12 +70,40 @@ function request(path, data, opts) {
     });
 }
 
+// 响应校验：避免将畸形/空响应写入缓存；畸形时回退到陈旧缓存。
+// 空数组 [] 视为合法（OpenDota 合法地返回空列表），仅拒绝 null/undefined/''/非数组/错误对象。
+function validateResponse(path, data) {
+  if (!path) return true;
+  // /explorer?sql=... → 期望 { rows: [...] }
+  if (path.indexOf('/explorer') === 0) {
+    return !!(data && Array.isArray(data.rows));
+  }
+  // 数组型端点：/leagues, /search, /heroes, /teams/{id}/matches, /teams/{id}/players, /leagues/{id}/matches, /players/{id}/matches
+  if (path === '/leagues' || path === '/search' || path === '/heroes' ||
+      /^\/teams\/\d+\/matches$/.test(path) || /^\/teams\/\d+\/players$/.test(path) ||
+      /^\/leagues\/\d+\/matches$/.test(path) || /^\/players\/\d+\/matches$/.test(path)) {
+    return Array.isArray(data);
+  }
+  // 对象型端点：/teams/{id}, /players/{id}
+  if (/^\/teams\/\d+$/.test(path) || /^\/players\/\d+$/.test(path)) {
+    return !!(data && typeof data === 'object' && !Array.isArray(data));
+  }
+  // 默认：不限制（未知端点不过度校验）
+  return true;
+}
+
 // 带缓存的请求：命中缓存直接返回（不计入限流）
 function cached(path, data, ttlSec) {
   const key = path + '|' + JSON.stringify(data || {});
   const hit = cache.get(key, ttlSec);
   if (hit !== null && hit !== undefined) return Promise.resolve(hit);
   return request(path, data).then((data) => {
+    if (!validateResponse(path, data)) {
+      // 畸形响应：不写入缓存，尝试回退到陈旧缓存
+      const stale = cache.peek(key);
+      if (stale && stale.value != null) return stale.value;
+      throw new Error('invalid response');
+    }
     cache.set(key, data, ttlSec);
     return data;
   });
@@ -92,6 +122,11 @@ function cachedFresh(path, data, freshSec, ttlSec) {
   const meta = cache.getStale(key, freshSec, ttlSec);
   if (meta.expired || !meta.value) {
     return request(path, data).then((data) => {
+      if (!validateResponse(path, data)) {
+        // 畸形响应：回退到旧值（若有），否则抛错
+        if (meta.value != null) return meta.value;
+        throw new Error('invalid response');
+      }
       cache.set(key, data, ttlSec);
       return data;
     });
@@ -103,7 +138,9 @@ function cachedFresh(path, data, freshSec, ttlSec) {
   if (!refreshInFlight[key]) {
     refreshInFlight[key] = true;
     request(path, data)
-      .then((data) => { cache.set(key, data, ttlSec); })
+      .then((data) => {
+        if (validateResponse(path, data)) cache.set(key, data, ttlSec);
+      })
       .catch(() => {})
       .then(() => { delete refreshInFlight[key]; });
   }
@@ -120,9 +157,7 @@ function fetchedAtOf(name, arg) {
   else if (name === 'playerMatches') path = '/players/' + arg + '/matches';
   else if (name === 'leagueMatches') path = '/leagues/' + arg + '/matches';
   else if (name === 'leagueWindows') {
-    const sql = "SELECT leagueid, min(start_time) AS earliest, max(start_time) AS latest, count(*) AS n " +
-      "FROM matches WHERE start_time > extract(epoch FROM now() - interval '1 year') GROUP BY leagueid";
-    path = '/explorer?sql=' + encodeURIComponent(sql);
+    path = '/explorer?sql=' + encodeURIComponent(sqlFragments.LEAGUE_WINDOWS_SQL);
   }
   if (!path) return 0;
   const meta = cache.peek(path + '|{}');
@@ -144,7 +179,15 @@ function cachedFreshIncremental(resPath, resource, id, freshSec, ttlSec) {
   const key = resPath + '|{}';
   const meta = cache.getStale(key, freshSec, ttlSec);
   if (meta.expired || !meta.value) {
-    return request(resPath).then((data) => { cache.set(key, data, ttlSec); return data; });
+    return request(resPath).then((data) => {
+      if (!validateResponse(resPath, data)) {
+        // 畸形响应：回退到旧值（若有），否则抛错
+        if (meta.value != null) return meta.value;
+        throw new Error('invalid response');
+      }
+      cache.set(key, data, ttlSec);
+      return data;
+    });
   }
   if (meta.fresh) {
     return Promise.resolve(meta.value);
@@ -171,73 +214,167 @@ function cachedFreshIncremental(resPath, resource, id, freshSec, ttlSec) {
   return Promise.resolve(meta.value);
 }
 
+// ===== 云函数代理（可选）=====
+// 当 config.cloudProxy.enabled 时，优先走云函数（国内加速 + 共享缓存），
+// 失败时自动回退到直连逻辑（cached/cachedFresh），不产生循环依赖。
+// 注意：cloudProxy.js 顶部 require('./api.js') 用于回退，故 api.js 顶部不可
+// 反向 require('./cloudProxy.js')，否则循环依赖。cloudFetch 内联了相同逻辑。
+function cloudFetch(action, params) {
+  return wx.cloud.callFunction({
+    name: 'aggregation',
+    data: { action: action, params: params || {} }
+  }).then((res) => {
+    const r = res && res.result;
+    if (r && !r.error && r.data) {
+      return r.data;
+    }
+    throw new Error((r && r.error) || 'cloud proxy error');
+  });
+}
+
+function cloudEnabled() {
+  return !!(config.cloudProxy && config.cloudProxy.enabled);
+}
+
+// 方法名 → (action, params-builder)，与 cloudProxy.js 的 PARAM_MAP 对齐
+const ACTION_MAP = {
+  getLeagues: function () { return { action: 'getLeagues', params: {} }; },
+  getLeagueWindows: function () { return { action: 'getLeagueWindows', params: {} }; },
+  getLeagueMatches: function (id) { return { action: 'getLeagueMatches', params: { leagueId: id } }; },
+  searchTeams: function (name) { return { action: 'searchTeams', params: { q: name } }; },
+  getTeam: function (id) { return { action: 'getTeam', params: { teamId: id } }; },
+  getTeamPlayers: function (id) { return { action: 'getTeamPlayers', params: { teamId: id } }; },
+  getTeamMatches: function (id) { return { action: 'getTeamMatches', params: { teamId: id } }; },
+  getPlayer: function (id) { return { action: 'getPlayer', params: { accountId: id } }; },
+  getPlayerMatches: function (id) { return { action: 'getPlayerMatches', params: { accountId: id } }; },
+  getHeroes: function () { return { action: 'getHeroes', params: {} }; }
+};
+
 // ===== 对外方法 =====
 
 function getLeagues() {
-  return cached('/leagues', null, config.cacheTTL.leagues);
+  const direct = function () { return cached('/leagues', null, config.cacheTTL.leagues); };
+  if (cloudEnabled()) {
+    const m = ACTION_MAP.getLeagues();
+    return cloudFetch(m.action, m.params).catch(function () { return direct(); });
+  }
+  return direct();
 }
 
 // 一次 SQL 拿所有赛事近一年的时间窗口：{ leagueid -> { earliest, latest, count } }
 // 用于「正在进行 / 全部（按最近比赛排序）」判定，避免逐个拉 /leagues/{id}/matches。
-function getLeagueWindows() {
-  const sql =
-    "SELECT leagueid, min(start_time) AS earliest, max(start_time) AS latest, count(*) AS n " +
-    "FROM matches WHERE start_time > extract(epoch FROM now() - interval '1 year') " +
-    "GROUP BY leagueid";
-  const path = '/explorer?sql=' + encodeURIComponent(sql);
-  return cached(path, null, config.cacheTTL.leagueWindows).then((data) => {
-    const rows = (data && data.rows) || [];
-    const map = {};
-    rows.forEach((r) => {
-      if (r && r.leagueid != null) {
-        map[r.leagueid] = {
-          earliest: Number(r.earliest) || 0,
-          latest: Number(r.latest) || 0,
-          count: Number(r.n) || 0
-        };
-      }
-    });
-    return map;
+function transformLeagueWindows(data) {
+  const rows = (data && data.rows) || [];
+  const map = {};
+  rows.forEach((r) => {
+    if (r && r.leagueid != null) {
+      map[r.leagueid] = {
+        earliest: Number(r.earliest) || 0,
+        latest: Number(r.latest) || 0,
+        count: Number(r.n) || 0
+      };
+    }
   });
+  return map;
+}
+
+function getLeagueWindows() {
+  const path = '/explorer?sql=' + encodeURIComponent(sqlFragments.LEAGUE_WINDOWS_SQL);
+  const direct = function () {
+    return cached(path, null, config.cacheTTL.leagueWindows).then(transformLeagueWindows);
+  };
+  if (cloudEnabled()) {
+    const m = ACTION_MAP.getLeagueWindows();
+    return cloudFetch(m.action, m.params).then(transformLeagueWindows).catch(function () { return direct(); });
+  }
+  return direct();
 }
 
 function getLeagueMatches(leagueId) {
   // 比赛结果频繁变动：较短新鲜窗口 + 较长硬 TTL；陈旧时后台按游标增量合并
-  return cachedFreshIncremental('/leagues/' + leagueId + '/matches', 'league', leagueId, 10 * 60, config.cacheTTL.leagueMatches);
+  const direct = function () {
+    return cachedFreshIncremental('/leagues/' + leagueId + '/matches', 'league', leagueId, 10 * 60, config.cacheTTL.leagueMatches);
+  };
+  if (cloudEnabled()) {
+    const m = ACTION_MAP.getLeagueMatches(leagueId);
+    return cloudFetch(m.action, m.params).catch(function () { return direct(); });
+  }
+  return direct();
+}
+
+function transformSearchTeams(list) {
+  return (list || [])
+    .filter((item) => item && item.team_id)
+    .map((item) => ({ team_id: item.team_id, name: item.name }))
+    .slice(0, 30);
 }
 
 function searchTeams(name) {
   // 搜索结果短时缓存，避免连续相同搜索重复消耗配额
-  return cached('/search', { q: name }, 5 * 60).then((list) => {
-    return (list || [])
-      .filter((item) => item && item.team_id)
-      .map((item) => ({ team_id: item.team_id, name: item.name }))
-      .slice(0, 30);
-  });
+  const direct = function () { return cached('/search', { q: name }, 5 * 60).then(transformSearchTeams); };
+  if (cloudEnabled()) {
+    const m = ACTION_MAP.searchTeams(name);
+    return cloudFetch(m.action, m.params).then(transformSearchTeams).catch(function () { return direct(); });
+  }
+  return direct();
 }
 
 function getTeam(teamId) {
-  return cachedFresh('/teams/' + teamId, null, 60 * 60, config.cacheTTL.team);
+  const direct = function () { return cachedFresh('/teams/' + teamId, null, 60 * 60, config.cacheTTL.team); };
+  if (cloudEnabled()) {
+    const m = ACTION_MAP.getTeam(teamId);
+    return cloudFetch(m.action, m.params).catch(function () { return direct(); });
+  }
+  return direct();
 }
 
 function getTeamPlayers(teamId) {
-  return cachedFresh('/teams/' + teamId + '/players', null, 60 * 60, config.cacheTTL.teamPlayers);
+  const direct = function () { return cachedFresh('/teams/' + teamId + '/players', null, 60 * 60, config.cacheTTL.teamPlayers); };
+  if (cloudEnabled()) {
+    const m = ACTION_MAP.getTeamPlayers(teamId);
+    return cloudFetch(m.action, m.params).catch(function () { return direct(); });
+  }
+  return direct();
 }
 
 function getTeamMatches(teamId) {
-  return cachedFreshIncremental('/teams/' + teamId + '/matches', 'team', teamId, 10 * 60, config.cacheTTL.teamMatches);
+  const direct = function () {
+    return cachedFreshIncremental('/teams/' + teamId + '/matches', 'team', teamId, 10 * 60, config.cacheTTL.teamMatches);
+  };
+  if (cloudEnabled()) {
+    const m = ACTION_MAP.getTeamMatches(teamId);
+    return cloudFetch(m.action, m.params).catch(function () { return direct(); });
+  }
+  return direct();
 }
 
 function getPlayer(accountId) {
-  return cachedFresh('/players/' + accountId, null, 60 * 60, config.cacheTTL.player);
+  const direct = function () { return cachedFresh('/players/' + accountId, null, 60 * 60, config.cacheTTL.player); };
+  if (cloudEnabled()) {
+    const m = ACTION_MAP.getPlayer(accountId);
+    return cloudFetch(m.action, m.params).catch(function () { return direct(); });
+  }
+  return direct();
 }
 
 function getPlayerMatches(accountId) {
-  return cachedFreshIncremental('/players/' + accountId + '/matches', 'player', accountId, 10 * 60, config.cacheTTL.playerMatches);
+  const direct = function () {
+    return cachedFreshIncremental('/players/' + accountId + '/matches', 'player', accountId, 10 * 60, config.cacheTTL.playerMatches);
+  };
+  if (cloudEnabled()) {
+    const m = ACTION_MAP.getPlayerMatches(accountId);
+    return cloudFetch(m.action, m.params).catch(function () { return direct(); });
+  }
+  return direct();
 }
 
 function getHeroes() {
-  return cached('/heroes', null, config.cacheTTL.heroes);
+  const direct = function () { return cached('/heroes', null, config.cacheTTL.heroes); };
+  if (cloudEnabled()) {
+    const m = ACTION_MAP.getHeroes();
+    return cloudFetch(m.action, m.params).catch(function () { return direct(); });
+  }
+  return direct();
 }
 
 // 批量查询队伍名（team_id -> name）。

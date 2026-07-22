@@ -25,6 +25,8 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const GOT = require('got');
 
 const BASE = 'https://api.opendota.com/api';
+// Keep in sync with utils/sqlFragments.js (single source of truth)
+const LEAGUE_WINDOWS_SQL = "SELECT leagueid, min(start_time) AS earliest, max(start_time) AS latest, count(*) AS n FROM matches WHERE start_time > extract(epoch FROM now() - interval '1 year') GROUP BY leagueid";
 const CACHE_COLL = 'aggregation_cache';
 const TTL = {
   leagues: 6 * 3600 * 1000,
@@ -83,11 +85,7 @@ function buildPath(action, params) {
     case 'getPlayerMatches':   return '/players/' + p.accountId + '/matches';
     case 'getHeroes':          return '/heroes';
     case 'searchTeams':        return '/search?q=' + encodeURIComponent(p.q || '');
-    case 'getLeagueWindows': {
-      const sql = 'SELECT leagueid, min(start_time) AS earliest, max(start_time) AS latest, count(*) AS n ' +
-        "FROM matches WHERE start_time > extract(epoch FROM now() - interval '1 year') GROUP BY leagueid";
-      return '/explorer?sql=' + encodeURIComponent(sql);
-    }
+    case 'getLeagueWindows':   return '/explorer?sql=' + encodeURIComponent(LEAGUE_WINDOWS_SQL);
     default: return null;
   }
 }
@@ -107,10 +105,7 @@ async function handleTimer() {
   const hotEndpoints = [
     '/leagues',
     '/heroes',
-    "/explorer?sql=" + encodeURIComponent(
-      'SELECT leagueid, min(start_time) AS earliest, max(start_time) AS latest, count(*) AS n ' +
-      "FROM matches WHERE start_time > extract(epoch FROM now() - interval '1 year') GROUP BY leagueid"
-    )
+    '/explorer?sql=' + encodeURIComponent(LEAGUE_WINDOWS_SQL)
   ];
   const results = [];
   for (const path of hotEndpoints) {

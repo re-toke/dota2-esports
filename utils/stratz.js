@@ -10,6 +10,9 @@
 
 const config = require('./config.js');
 const tiers = require('./tiers.js');
+const cache = require('./cache.js');
+const consensus = require('./consensus.js');
+const curation = require('./remoteCuration.js');
 
 const ENABLED = !!(config.stratz && config.stratz.enabled && config.stratz.apiKey);
 const BASE = (config.stratz && config.stratz.base) || 'https://api.stratz.com/graphql';
@@ -22,15 +25,28 @@ if (ENABLED) {
 }
 
 // STRATZ 的 LeagueTier 枚举 → 本项目的 grade/rank 模型
-// 常见值：UNRANKED / AMATEUR / PROFESSIONAL / PREMIER / MAJOR / MINOR
+// 完整枚举：UNRANKED / AMATEUR / PROFESSIONAL / PREMIER / MAJOR / MINOR /
+//           DPC_MAJOR / DPC_MINOR / FIRST_BLOOD / QUALIFIER / ONLINE / EVENT / UNKNOWN
 function mapStratzTier(tier) {
   if (!tier) return null;
   const t = String(tier).toUpperCase();
-  if (t === 'MAJOR' || t === 'PREMIER' || t === 'PROFESSIONAL') {
-    return { grade: t === 'MAJOR' ? 'SSS' : 'S', rank: t === 'MAJOR' ? 4 : 3, label: t === 'MAJOR' ? 'TI 顶级' : 'S级', source: 'stratz' };
+  // 顶级：DPC Major 与 Major 同级（TI 级别赛事）
+  if (t === 'DPC_MAJOR' || t === 'MAJOR') {
+    return { grade: 'SSS', rank: 4, label: 'TI 顶级', source: 'stratz' };
   }
-  if (t === 'MINOR') return { grade: 'B', rank: 1, label: 'B级', source: 'stratz' };
-  if (t === 'AMATEUR') return { grade: 'B', rank: 1, label: 'B级', source: 'stratz' };
+  // S 级：DPC Minor / Premier / Professional
+  if (t === 'DPC_MINOR' || t === 'PREMIER' || t === 'PROFESSIONAL') {
+    return { grade: 'S', rank: 3, label: 'S级', source: 'stratz' };
+  }
+  // B 级：Minor / First Blood / Online / Event / Amateur
+  if (t === 'MINOR' || t === 'FIRST_BLOOD' || t === 'ONLINE' || t === 'EVENT' || t === 'AMATEUR') {
+    return { grade: 'B', rank: 1, label: 'B级', source: 'stratz' };
+  }
+  // 预选赛：低于正式赛事
+  if (t === 'QUALIFIER') {
+    return { grade: 'C', rank: 0, label: '预选', source: 'stratz' };
+  }
+  // UNKNOWN / UNRANKED / 其它未识别 → null（交由 sources.js 回退其它源）
   return null;
 }
 
@@ -112,8 +128,14 @@ function gql(query, variables) {
 // 全部联赛（轻量字段），用于分级匹配
 // 注：STRATZ 新 schema 把 leagueId / teamId / matchId 等都统一改成 id；
 // 同时 leagues 字段新增必填参数 request: LeagueRequestType!，用于分页/排序
-function getLeagues() {
-  if (!ENABLED) return Promise.resolve([]);
+//
+// 缓存策略：league 列表变更极慢（赛季级），用 6h TTL 缓存到本地，
+// 避免「即将到来」Tab 每次渲染都触发数十次重复 GraphQL 查询。
+const LEAGUES_CACHE_KEY = 'stratz_leagues';
+const LEAGUES_CACHE_TTL = 6 * 3600;
+
+// 实际拉取（不走缓存）：失败时上层负责降级
+function fetchLeaguesRaw() {
   const q = `query { leagues(request: { take: 200 }) { id name tier displayName } }`;
   return gql(q).then((d) => {
     const list = (d && d.leagues) || [];
@@ -122,32 +144,88 @@ function getLeagues() {
       name: l.displayName || l.name,
       tier: l.tier
     }));
-  }).catch(() => []);
+  });
+}
+
+function getLeagues() {
+  if (!ENABLED) return Promise.resolve([]);
+  // 先取一份「不判过期」的兜底值（GraphQL 失败时回退用，避免缓存被 get 删除后无法兜底）
+  const stale = cache.get(LEAGUES_CACHE_KEY, 0);
+  // 新鲜命中：直接返回
+  const cached = cache.get(LEAGUES_CACHE_KEY, LEAGUES_CACHE_TTL);
+  if (cached) return Promise.resolve(cached);
+  // 未命中/过期：拉取并写缓存；失败时用过期缓存兜底，再不行返回 []
+  return fetchLeaguesRaw().then((list) => {
+    cache.set(LEAGUES_CACHE_KEY, list, LEAGUES_CACHE_TTL);
+    return list;
+  }).catch(() => {
+    return stale || [];
+  });
+}
+
+// 按赛事名精确匹配 STRATZ 联赛（替代旧的 indexOf 子串匹配，避免 "Major" 误命中多个联赛）
+// 流程：1) 归一名等值匹配；2) 回退到精选库 curation 的 canonical/aliases 反查 STRATZ 联赛
+function findLeagueByName(name) {
+  if (!ENABLED || !name) return Promise.resolve(null);
+  return getLeagues().then((list) => {
+    if (!list || !list.length) return null;
+    // 1) 归一名精确匹配（与 consensus.js 同一归一逻辑，避免分歧）
+    const key = consensus.normName(name);
+    if (key) {
+      for (let i = 0; i < list.length; i++) {
+        if (consensus.normName(list[i].name) === key) return list[i];
+      }
+    }
+    // 2) curation 别名回退：用精选库的 canonical/aliases 归一后反查 STRATZ 联赛
+    var curated = null;
+    try { curated = curation.curatedEventFor(name); } catch (e) { curated = null; }
+    if (curated) {
+      var aliases = [];
+      if (curated.canonical) aliases.push(curated.canonical);
+      if (Array.isArray(curated.aliases)) {
+        for (var k = 0; k < curated.aliases.length; k++) aliases.push(curated.aliases[k]);
+      }
+      for (var i = 0; i < aliases.length; i++) {
+        var ak = consensus.normName(aliases[i]);
+        if (!ak) continue;
+        for (var j = 0; j < list.length; j++) {
+          if (consensus.normName(list[j].name) === ak) return list[j];
+        }
+      }
+    }
+    return null;
+  }).catch(() => null);
 }
 
 // 按赛事名取分级（sources 调用）
 function getLeagueTier(name) {
   if (!ENABLED || !name) return Promise.resolve(null);
-  return getLeagues().then((list) => {
-    const key = name.toLowerCase();
-    const hit = list.find((l) => (l.name || '').toLowerCase().indexOf(key) >= 0);
+  return findLeagueByName(name).then((hit) => {
     if (!hit) return null;
     return mapStratzTier(hit.tier);
   }).catch(() => null);
 }
 
 // 单赛事比赛列表（可用于补充 OpenDota 的对阵数据）
+// 字段与 OpenDota /leagues/{id}/matches 直连接口对齐，确保 incremental.mergeMatches
+// 跨源合并时不会因字段名/结构差异而错位。
 function getLeagueMatches(leagueId) {
   if (!ENABLED) return Promise.resolve([]);
-  const q = `query ($id: Int!) { league(id: $id) { id matches { id radiantName direName radiantWin startDateTime } } }`;
+  const q = `query ($id: Int!) { league(id: $id) { id matches { id radiantWin startDateTime duration radiantScore direScore radiantTeam { id name } direTeam { id name } } } }`;
   return gql(q, { id: Number(leagueId) }).then((d) => {
     const ms = (d && d.league && d.league.matches) || [];
     return ms.map((m) => ({
       match_id: m.id,
-      radiant_name: m.radiantName,
-      dire_name: m.direName,
       radiant_win: m.radiantWin,
-      start_time: Math.floor((m.startDateTime || 0) / 1000)
+      start_time: Math.floor((m.startDateTime || 0) / 1000),
+      duration: m.duration,
+      leagueid: Number(leagueId),
+      radiant_score: m.radiantScore || 0,
+      dire_score: m.direScore || 0,
+      radiant_team_id: (m.radiantTeam && m.radiantTeam.id) || 0,
+      radiant_team_name: (m.radiantTeam && m.radiantTeam.name) || '',
+      dire_team_id: (m.direTeam && m.direTeam.id) || 0,
+      dire_team_name: (m.direTeam && m.direTeam.name) || ''
     }));
   }).catch(() => []);
 }
@@ -165,9 +243,7 @@ function getLeagueDisplayName(leagueId) {
 // 按赛事名取赛程窗口（startDateTime/endDateTime，STRATZ epoch 毫秒 → Unix 秒）
 function getLeagueWindow(name) {
   if (!ENABLED || !name) return Promise.resolve(null);
-  return getLeagues().then((list) => {
-    const key = String(name).toLowerCase();
-    const hit = list.find((l) => (l.name || '').toLowerCase().indexOf(key) >= 0);
+  return findLeagueByName(name).then((hit) => {
     if (!hit || !hit.id) return null;
     // 通过 id 二次查询拉取 startDateTime/endDateTime（epoch 毫秒）
     const q = `query ($id: Int!) { league(id: $id) { startDateTime endDateTime } }`;
