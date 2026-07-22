@@ -1,0 +1,12 @@
+{
+  "triggers": [
+    {
+      "name": "prewarm10min",
+      "type": "timer",
+      "config": "0 */10 * * * *"
+    }
+  ],
+  "permissions": {
+    "openapi": []
+  }
+}

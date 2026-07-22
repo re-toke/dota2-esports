@@ -1,0 +1,100 @@
+.container { padding: 24rpx; }
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16rpx;
+}
+
+.head-info { min-width: 0; }
+.head-info .title { font-size: 36rpx; }
+
+.liq-banner {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  background: #161b22;
+  border-radius: 12rpx;
+  padding: 14rpx 20rpx;
+  margin-bottom: 16rpx;
+  font-size: 24rpx;
+}
+
+.quality-bar {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  border-radius: 12rpx;
+  padding: 12rpx 20rpx;
+  margin-bottom: 12rpx;
+  font-size: 24rpx;
+}
+.quality-bar .q-dot { width: 14rpx; height: 14rpx; border-radius: 50%; }
+.quality-bar .q-text { font-weight: 600; }
+.quality-bar .q-fresh { margin-left: auto; }
+.quality-high { background: rgba(30, 200, 150, 0.12); color: #1ec896; }
+.quality-high .q-dot { background: #1ec896; }
+.quality-medium { background: rgba(255, 207, 92, 0.12); color: #ffcf5c; }
+.quality-medium .q-dot { background: #ffcf5c; }
+.quality-low { background: rgba(107, 114, 128, 0.16); color: #9aa3ad; }
+.quality-low .q-dot { background: #9aa3ad; }
+
+.name-fix {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  background: #161b22;
+  border-radius: 12rpx;
+  padding: 12rpx 20rpx;
+  margin-bottom: 12rpx;
+  font-size: 24rpx;
+}
+.name-fix-val { color: #5fd35f; font-weight: 600; }
+
+.agree { font-size: 22rpx; }
+
+.match-card {
+  background: #161b22;
+  border-radius: 16rpx;
+  padding: 20rpx 24rpx;
+  margin-bottom: 16rpx;
+}
+
+.match-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10rpx 0;
+}
+
+.team-name {
+  font-size: 28rpx;
+  color: #c9d2dd;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 70%;
+}
+
+.win-team .team-name { color: #f0f3f6; font-weight: 600; }
+
+.score { font-size: 30rpx; font-weight: 600; }
+
+.match-divider {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1rpx solid #232a33;
+  border-bottom: 1rpx solid #232a33;
+  padding: 8rpx 0;
+  margin: 4rpx 0;
+}
+
+.vs { font-size: 22rpx; color: #6b7280; letter-spacing: 2rpx; }
+.time { font-size: 22rpx; }
+
+.more-btn { width: 100%; }
+.loadmore { display: flex; justify-content: center; margin: 24rpx 0 8rpx; }
+.error-block { display: flex; flex-direction: column; align-items: center; }
+.retry-wrap { margin-top: 16rpx; }

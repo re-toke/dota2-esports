@@ -1,0 +1,68 @@
+<view class="container">
+  <view class="search-wrap">
+    <t-search value="{{keyword}}" placeholder="搜索战队名称" bind:change="onSearch" bind:clear="onClear" />
+  </view>
+
+  <!-- 本地搜索历史：仅在热门(未输入)模式且存在历史时展示 -->
+  <view class="hist" wx:if="{{mode === 'hot' && history.length > 0}}">
+    <view class="hist-head">
+      <text class="hist-title">最近搜索</text>
+      <text class="hist-clear" bindtap="onClearHistory">清空</text>
+    </view>
+    <view class="hist-chips">
+      <view
+        class="chip"
+        wx:for="{{history}}"
+        wx:key="*this"
+        data-kw="{{item}}"
+        bindtap="onTapHistory"
+      >{{item}}</view>
+    </view>
+  </view>
+
+  <view class="section-title" wx:if="{{mode === 'hot'}}">热门战队</view>
+
+  <!-- 搜索加载骨架屏 -->
+  <block wx:if="{{loading}}">
+    <view wx:for="{{[1,2,3,4,5]}}" wx:key="*this" style="margin-bottom:16rpx;">
+      <t-skeleton theme="paragraph" loading="{{true}}" />
+    </view>
+  </block>
+
+  <view wx:elif="{{error}}" class="error-block">
+    <t-empty icon="info-circle" description="{{error}}" />
+    <view class="retry-wrap">
+      <t-button theme="primary" size="medium" bindtap="onRetry">重试</t-button>
+    </view>
+  </view>
+
+  <view wx:elif="{{mode === 'result' && results.length === 0 && !loading}}" class="center muted">未找到相关战队</view>
+
+  <block wx:else>
+    <view class="team-list">
+      <view
+        class="team-item"
+        wx:for="{{mode === 'hot' ? hot : results}}"
+        wx:key="id"
+        bindtap="openTeam"
+        data-id="{{item.id}}"
+      >
+        <t-avatar size="medium" text="{{item.tag}}" />
+        <view class="team-name">{{item.name}}</view>
+        <t-icon
+          name="star"
+          size="44rpx"
+          color="{{item.followed ? '#ffcf5c' : '#5b626d'}}"
+          catchtap="toggleFollow"
+          data-id="{{item.id}}"
+          data-name="{{item.name}}"
+        />
+      </view>
+    </view>
+
+    <view class="loadmore" wx:if="{{mode === 'result' && hasMore}}">
+      <t-button theme="light" size="medium" bind:tap="appendPage" loading="{{loadingMore}}">加载更多战队</t-button>
+    </view>
+    <view wx:elif="{{mode === 'result' && results.length > pageSize}}" class="center muted">— 已显示全部 {{results.length}} 支 —</view>
+  </block>
+</view>

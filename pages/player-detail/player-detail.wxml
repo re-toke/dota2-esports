@@ -1,0 +1,73 @@
+<view class="container">
+  <!-- 骨架屏 -->
+  <block wx:if="{{loading}}">
+    <view wx:for="{{[1,2,3,4,5]}}" wx:key="*this" style="margin-bottom:16rpx;">
+      <t-skeleton theme="paragraph" loading="{{true}}" />
+    </view>
+  </block>
+  <!-- 错误态 -->
+  <view wx:elif="{{error}}" class="error-block">
+    <t-empty icon="info-circle" description="{{error}}" />
+    <view class="retry-wrap">
+      <t-button theme="primary" size="medium" bindtap="load">重试</t-button>
+    </view>
+  </view>
+  <block wx:else>
+    <view wx:if="{{updatedLabel}}" class="fresh-row muted">{{updatedLabel}}</view>
+    <!-- 资料 -->
+    <view class="card">
+      <view class="row" style="align-items:flex-start;">
+        <image wx:if="{{profile.avatar}}" class="avatar" src="{{profile.avatar}}" mode="aspectFit" />
+        <view style="flex:1;">
+          <text class="title">{{profile.name}}</text>
+          <view class="sub" style="margin-top:6rpx;">{{profile.realName}}</view>
+          <view class="row" style="margin-top:8rpx;">
+            <text class="sub" wx:if="{{profile.country}}">{{profile.country}} · </text>
+            <text class="sub">{{profile.rankTier}}</text>
+            <text class="sub" wx:if="{{profile.leaderboard}}" style="margin-left:12rpx;">{{profile.leaderboard}}</text>
+          </view>
+        </view>
+        <view class="star-btn" catchtap="toggleFollow">
+          <t-icon name="star" size="48rpx" color="{{followed ? '#ffcf5c' : '#5b626d'}}" />
+        </view>
+      </view>
+    </view>
+
+    <!-- 总览 -->
+    <view class="card">
+      <view class="row row-between">
+        <view class="stat"><text class="bold">{{stats.total}}</text><text class="sub">总场</text></view>
+        <view class="stat"><text class="bold win">{{stats.wins}}</text><text class="sub">胜</text></view>
+        <view class="stat"><text class="bold lose">{{stats.losses}}</text><text class="sub">负</text></view>
+        <view class="stat"><text class="bold">{{stats.winRate}}</text><text class="sub">胜率</text></view>
+      </view>
+    </view>
+
+    <!-- 常用英雄 -->
+    <view class="sub" style="margin:8rpx 0 16rpx;">常用英雄</view>
+    <view class="card hero" wx:for="{{topHeroes}}" wx:key="id">
+      <view class="row-between">
+        <text class="title">{{item.name}}</text>
+        <text class="sub">{{item.games}} 场</text>
+      </view>
+    </view>
+
+    <!-- 近期战绩 -->
+    <view class="sub" style="margin:24rpx 0 16rpx;">近期战绩</view>
+    <view class="card rec" wx:for="{{recent}}" wx:key="match_id">
+      <view class="row row-between">
+        <view class="row" style="flex:1;">
+          <text class="hero">{{item.heroName}}</text>
+          <text class="sub" style="margin-left:12rpx;">{{item.k}}/{{item.d}}/{{item.a}}</text>
+        </view>
+        <text class="tag {{item.win?'win bold':'lose bold'}}">{{item.win?'胜':'负'}}</text>
+      </view>
+      <view class="sub" style="margin-top:8rpx;">{{item.time}} · {{item.duration}} · {{item.league}}</view>
+    </view>
+
+    <view class="loadmore" wx:if="{{hasMore}}">
+      <t-button theme="light" size="medium" bind:tap="appendPage" loading="{{loadingMore}}">加载更多战绩</t-button>
+    </view>
+    <view wx:elif="{{recent.length > pageSize}}" class="center muted">— 已显示全部 {{recent.length}} 场 —</view>
+  </block>
+</view>

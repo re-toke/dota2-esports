@@ -1,0 +1,11 @@
+.avatar { width: 110rpx; height: 110rpx; border-radius: 50%; margin-right: 20rpx; background: #0e1116; }
+.fresh-row { font-size: 22rpx; text-align: right; margin-bottom: 12rpx; }
+.stat { display: flex; flex-direction: column; align-items: center; flex: 1; }
+.stat .bold { font-size: 34rpx; }
+.hero { padding: 22rpx 24rpx; }
+.rec { padding: 22rpx 24rpx; }
+.hero-name { font-size: 28rpx; }
+.star-btn { padding: 10rpx; margin-left: 8rpx; flex-shrink: 0; }
+.loadmore { display: flex; justify-content: center; margin: 24rpx 0 8rpx; }
+.error-block { display: flex; flex-direction: column; align-items: center; }
+.retry-wrap { margin-top: 16rpx; }

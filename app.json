@@ -1,0 +1,29 @@
+{
+  "pages": [
+    "pages/leagues/leagues",
+    "pages/league-detail/league-detail",
+    "pages/teams/teams",
+    "pages/team-detail/team-detail",
+    "pages/player-detail/player-detail",
+    "pages/follow/follow"
+  ],
+  "window": {
+    "backgroundTextStyle": "dark",
+    "navigationBarBackgroundColor": "#0e1116",
+    "navigationBarTitleText": "DOTA2 赛事通",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#0e1116"
+  },
+  "tabBar": {
+    "color": "#8a8f99",
+    "selectedColor": "#5fd35f",
+    "backgroundColor": "#161b22",
+    "borderStyle": "black",
+    "list": [
+      { "pagePath": "pages/leagues/leagues", "text": "赛事" },
+      { "pagePath": "pages/teams/teams", "text": "战队" },
+      { "pagePath": "pages/follow/follow", "text": "关注" }
+    ]
+  },
+  "sitemapLocation": "sitemap.json"
+}

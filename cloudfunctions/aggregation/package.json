@@ -1,0 +1,10 @@
+{
+  "name": "aggregation",
+  "version": "1.0.0",
+  "description": "DOTA2 赛事通 —— 聚合云函数（代理 OpenDota + 缓存 + 定时预热）",
+  "main": "index.js",
+  "dependencies": {
+    "got": "^11.8.6",
+    "wx-server-sdk": "latest"
+  }
+}

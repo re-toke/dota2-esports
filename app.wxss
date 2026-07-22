@@ -1,0 +1,190 @@
+/* ===== TDesign 设计变量（先引入完整 token 集，再强制暗色覆盖） ===== */
+@import 'miniprogram_npm/tdesign-miniprogram/common/style/theme/_index.wxss';
+
+/* 暗色极简风主题：深色底 + 等级彩条 + 天辉绿/夜魇红胜负语义 */
+page {
+  /* 天辉夜魇配色：胜=天辉绿 / 负=夜魇红 */
+  --radiant: #5fd35f;
+  --radiant-strong: #46c457;
+  --radiant-soft: rgba(95, 211, 95, 0.12);
+  --dire: #e8443b;
+  --dire-strong: #c9352d;
+  --dire-soft: rgba(232, 68, 59, 0.12);
+
+  /* 品牌色用天辉绿（暗底醒目） */
+  --td-brand-color: #5fd35f;
+  --td-brand-color-active: #46c457;
+  --td-brand-color-disabled: #3a5a3f;
+  --td-brand-color-light: rgba(95, 211, 95, 0.12);
+  --td-brand-color-light-active: rgba(95, 211, 95, 0.22);
+  --td-brand-color-focus: rgba(95, 211, 95, 0.12);
+  --td-primary-color-7: #5fd35f;
+  --td-primary-color-8: #7ee07e;
+  --td-text-color-brand: #5fd35f;
+  --td-text-color-link: #5fd35f;
+
+  /* 夜魇红：危险/错误/取消关注 */
+  --td-error-color: #e8443b;
+  --td-error-color-active: #c9352d;
+  --td-error-color-disabled: #5a2b28;
+  --td-error-color-light: rgba(232, 68, 59, 0.12);
+  --td-error-color-light-active: rgba(232, 68, 59, 0.22);
+  --td-text-color-error: #e8443b;
+
+  /* 背景（深色） */
+  --td-bg-color-page: #0e1116;
+  --td-bg-color-container: #161b22;
+  --td-bg-color-container-active: #1c232c;
+  --td-bg-color-secondarycontainer: #161b22;
+  --td-bg-color-component: #1c232c;
+  --td-bg-color-component-active: #232a33;
+  --td-bg-color-component-disabled: #161b22;
+  --td-bg-color-specialcomponent: #161b22;
+
+  /* 文字 */
+  --td-text-color-primary: #f0f3f6;
+  --td-text-color-secondary: #8a8f99;
+  --td-text-color-placeholder: #5b626d;
+  --td-text-color-disabled: #5b626d;
+  --td-text-color-anti: #f0f3f6;
+
+  /* 边框/分割线 */
+  --td-border-level-1-color: #232a33;
+  --td-component-stroke: #232a33;
+  --td-border-level-2-color: #2b333d;
+  --td-component-border: #2b333d;
+
+  /* 遮罩 */
+  --td-mask-active: rgba(0, 0, 0, 0.6);
+  --td-mask-background: rgba(14, 17, 22, 0.96);
+
+  /* 全局背景与文字 */
+  background: #0e1116;
+  color: #f0f3f6;
+  font-family: -apple-system, "PingFang SC", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 28rpx;
+}
+
+view, text { box-sizing: border-box; }
+
+/* 通用容器 */
+.container { padding: 24rpx; }
+
+/* 搜索栏上下间距 */
+.search-wrap { margin: 8rpx 0 20rpx; }
+
+/* 卡片（暗色底无边框，极简） */
+.card {
+  background: #161b22;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 16rpx;
+}
+
+/* 行布局 */
+.row { display: flex; align-items: center; }
+.row-between { display: flex; align-items: center; justify-content: space-between; }
+
+/* 文字 */
+.title { font-size: 32rpx; font-weight: 600; color: #f0f3f6; }
+.sub { font-size: 24rpx; color: #8a8f99; }
+.muted { color: #8a8f99; }
+.bold { font-weight: 600; }
+
+/* 等级标签（暗底上用半透明亮色） */
+.tag {
+  display: inline-block;
+  font-size: 22rpx;
+  padding: 2rpx 12rpx;
+  border-radius: 8rpx;
+  line-height: 1.6;
+}
+.tag-sss { background: rgba(240,170,40,.22); color: #ffcf5c; }
+.tag-s { background: rgba(95,211,95,.18); color: #5fd35f; }
+.tag-a { background: rgba(240,170,40,.18); color: #f0aa28; }
+.tag-b { background: rgba(120,140,160,.18); color: #9bb0c9; }
+.tag-c { background: rgba(120,140,160,.12); color: #7a8696; }
+
+/* 胜负色：天辉绿=胜 / 夜魇红=负 */
+.win { color: #5fd35f; }
+.lose { color: #e8443b; }
+
+/* 加载 / 空态 */
+.center { text-align: center; color: #8a8f99; padding: 80rpx 0; }
+
+/* 搜索框（TDesign 之外的兜底） */
+.search-bar {
+  display: flex;
+  align-items: center;
+  background: #161b22;
+  border: 1rpx solid #232a33;
+  border-radius: 12rpx;
+  padding: 12rpx 20rpx;
+  margin-bottom: 20rpx;
+}
+.search-bar input { flex: 1; margin-left: 12rpx; color: #f0f3f6; }
+
+/* 分段选择（筛选条）—— 暗色运动风：选中=天辉绿 */
+.filter-bar {
+  display: flex;
+  gap: 16rpx;
+  margin-bottom: 20rpx;
+}
+.filter-bar .chip {
+  flex: 1;
+  text-align: center;
+  padding: 14rpx 0;
+  font-size: 26rpx;
+  color: #8a8f99;
+  background: #161b22;
+  border: 1rpx solid #232a33;
+  border-radius: 12rpx;
+}
+.filter-bar .chip.active {
+  color: #0e1116;
+  background: #5fd35f;
+  border-color: #5fd35f;
+}
+
+/* 新鲜度标签（更新于 X 前）推到最右 */
+.filter-bar .fresh {
+  margin-left: auto;
+  align-self: center;
+  font-size: 22rpx;
+  white-space: nowrap;
+  padding-left: 8rpx;
+}
+
+/* 分段选择（通用，用于 现役/历史、关注分类等） */
+.seg {
+  display: flex;
+  background: #0e1116;
+  border: 1rpx solid #232a33;
+  border-radius: 14rpx;
+  padding: 6rpx;
+  margin-bottom: 20rpx;
+}
+.seg-item {
+  flex: 1;
+  text-align: center;
+  font-size: 28rpx;
+  color: #8a8f99;
+  padding: 14rpx 0;
+  border-radius: 10rpx;
+}
+.seg-item.active {
+  background: #5fd35f;
+  color: #0e1116;
+  font-weight: 600;
+}
+
+/* 加载更多按钮容器 */
+.loadmore { text-align: center; padding: 24rpx 0; }
+
+/* 天辉→夜魇 渐变签名条（页面可选使用） */
+.radiant-dire-bar {
+  height: 6rpx;
+  border-radius: 6rpx;
+  background: linear-gradient(90deg, #5fd35f 0%, #8a7d3b 50%, #e8443b 100%);
+  margin-bottom: 20rpx;
+}

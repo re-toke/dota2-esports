@@ -1,0 +1,50 @@
+.container { padding: 24rpx; }
+
+.hist { margin: 8rpx 4rpx 4rpx; }
+.hist-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 8rpx 0 12rpx;
+}
+.hist-title { font-size: 26rpx; color: #8a8f99; }
+.hist-clear { font-size: 24rpx; color: #5b9bff; }
+.hist-chips { display: flex; flex-wrap: wrap; gap: 16rpx; }
+.chip {
+  padding: 10rpx 24rpx;
+  background: #1c2230;
+  color: #c7ccd6;
+  border-radius: 28rpx;
+  font-size: 26rpx;
+}
+
+.section-title {
+  font-size: 28rpx;
+  color: #8a8f99;
+  margin: 16rpx 4rpx 12rpx;
+}
+
+.team-list { margin-top: 8rpx; }
+
+.team-item {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  background: #161b22;
+  border-radius: 16rpx;
+  padding: 20rpx 24rpx;
+  margin-bottom: 16rpx;
+}
+
+.team-name {
+  flex: 1;
+  font-size: 30rpx;
+  color: #f0f3f6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.loadmore { display: flex; justify-content: center; margin: 24rpx 0 8rpx; }
+.error-block { display: flex; flex-direction: column; align-items: center; }
+.retry-wrap { margin-top: 16rpx; }

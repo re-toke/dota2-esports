@@ -1,0 +1,12 @@
+{
+  "enablePullDownRefresh": true,
+  "backgroundTextStyle": "dark",
+  "usingComponents": {
+    "t-search": "tdesign-miniprogram/search/search",
+    "t-avatar": "tdesign-miniprogram/avatar/avatar",
+    "t-icon": "tdesign-miniprogram/icon/icon",
+    "t-empty": "tdesign-miniprogram/empty/empty",
+    "t-button": "tdesign-miniprogram/button/button",
+    "t-skeleton": "tdesign-miniprogram/skeleton/skeleton"
+  }
+}

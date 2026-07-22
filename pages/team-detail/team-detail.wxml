@@ -1,0 +1,128 @@
+<view class="container">
+  <t-skeleton wx:if="{{loading}}" theme="paragraph" loading="{{true}}" />
+
+  <view wx:elif="{{error}}" class="error-block">
+    <t-empty icon="info-circle" description="{{error}}" />
+    <view class="retry-wrap">
+      <t-button theme="primary" size="medium" bindtap="retry">重试</t-button>
+    </view>
+  </view>
+
+  <block wx:else>
+    <!-- 战队信息卡 -->
+    <view class="team-card">
+      <t-avatar size="large" image="{{team.logo}}" text="{{team.tag}}" />
+      <view class="team-meta">
+        <view class="title">
+          {{team.name}}
+          <text wx:if="{{logoSource}}" class="src-tag">logo·{{logoSource}}</text>
+        </view>
+        <view class="sub">
+          <text class="tag-tag">{{team.tag}}</text>
+          <text wx:if="{{team.country}}" class="muted"> · {{team.country}}</text>
+          <text wx:elif="{{team.rating}}" class="muted"> · 评分 {{team.rating}}</text>
+        </view>
+        <view class="team-stats">
+          <view class="stat-win">
+            <text class="stat-num win">{{team.wins}}</text>
+            <text class="stat-label">胜</text>
+          </view>
+          <view class="stat-divider"></view>
+          <view class="stat-lose">
+            <text class="stat-num lose">{{team.losses}}</text>
+            <text class="stat-label">负</text>
+          </view>
+          <view class="stat-divider"></view>
+          <view class="stat-rate">
+            <text class="stat-num">{{team.winRate}}</text>
+            <text class="stat-label">胜率</text>
+          </view>
+        </view>
+        <view wx:if="{{team.created}}" class="muted extra-info">成立 {{team.created}}</view>
+      </view>
+    </view>
+
+    <!-- 操作按钮 -->
+    <view class="actions">
+      <t-button
+        theme="{{followed ? 'light' : 'primary'}}"
+        size="medium"
+        bindtap="toggleFollow"
+        t-class="act-btn"
+      >{{followed ? '已关注' : '关注'}}</t-button>
+    </view>
+
+    <!-- 成员：现役 / 历史 分段控件 -->
+    <view class="seg">
+      <view class="seg-item {{tab === 'current' ? 'active' : ''}}" bindtap="onTab" data-key="current">现役成员</view>
+      <view class="seg-item {{tab === 'history' ? 'active' : ''}}" bindtap="onTab" data-key="history">历史成员</view>
+    </view>
+
+    <!-- 成员交叉验证可信度 -->
+    <view wx:if="{{memberQuality}}" class="quality-bar quality-{{memberQuality.confidence}}">
+      <text class="q-dot"></text>
+      <text class="q-text">成员可信度：{{memberQuality.text}}</text>
+      <text class="q-fresh muted">{{memberQuality.verifiedCount}}/{{memberQuality.total}} 已多源核实</text>
+    </view>
+
+    <block wx:if="{{tab === 'current'}}">
+      <t-empty wx:if="{{current.length === 0}}" description="暂无现役成员" />
+      <view class="member" wx:for="{{current}}" wx:key="account_id" bindtap="openPlayer" data-id="{{item.account_id}}">
+        <t-avatar size="medium" image="{{item.avatar}}" text="{{item.name}}" />
+        <view class="member-body">
+          <view class="member-name">
+            {{item.name}}
+            <text wx:if="{{item.verified}}" class="verify-badge">✓ 多源核实</text>
+          </view>
+          <view class="member-stats-row">
+            <text class="muted">{{item.games}} 场</text>
+            <text class="win">{{item.wins}} 胜</text>
+            <text class="muted">· {{item.winRate}}</text>
+          </view>
+          <view class="win-bar">
+            <view class="win-bar-fill" style="width:{{item.winPct}}%;"></view>
+          </view>
+        </view>
+        <t-icon name="chevron-right" size="40rpx" color="#5b626d" />
+      </view>
+    </block>
+
+    <block wx:else>
+      <t-empty wx:if="{{history.length === 0}}" description="暂无历史成员" />
+      <view class="member" wx:for="{{history}}" wx:key="account_id" bindtap="openPlayer" data-id="{{item.account_id}}">
+        <t-avatar size="medium" image="{{item.avatar}}" text="{{item.name}}" />
+        <view class="member-body">
+          <view class="member-name">
+            {{item.name}}
+            <text wx:if="{{item.verified}}" class="verify-badge">✓ 多源核实</text>
+          </view>
+          <view class="member-stats-row">
+            <text class="muted">{{item.games}} 场</text>
+            <text class="win">{{item.wins}} 胜</text>
+            <text class="muted">· {{item.winRate}}</text>
+          </view>
+          <view class="win-bar">
+            <view class="win-bar-fill" style="width:{{item.winPct}}%;"></view>
+          </view>
+        </view>
+        <t-icon name="chevron-right" size="40rpx" color="#5b626d" />
+      </view>
+    </block>
+
+    <!-- 近期战绩 -->
+    <view class="section-title">近期战绩</view>
+    <t-empty wx:if="{{matches.length === 0 && !matchLoading}}" description="暂无比赛数据" />
+    <view class="match-row" wx:for="{{matches}}" wx:key="match_id" bindtap="openTeam" data-id="{{item.oppId}}">
+      <view class="match-result {{item.won ? 'win' : 'lose'}}">{{item.won ? '胜' : '负'}}</view>
+      <view class="match-info">
+        <view class="opp">vs {{item.oppName}}</view>
+        <view class="muted">{{item.league}} · {{item.time}}</view>
+      </view>
+      <view class="match-score">{{item.score}}</view>
+    </view>
+
+    <view class="loadmore" wx:if="{{matchHasMore}}">
+      <t-button theme="light" size="medium" bindtap="appendMatches" t-class="more-btn">加载更多</t-button>
+    </view>
+  </block>
+</view>

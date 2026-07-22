@@ -1,0 +1,13 @@
+# Dependencies
+node_modules/
+
+# WeChat mini program npm build output (vendored, not tracked)
+miniprogram_npm/
+
+# TRAE spec/agent metadata
+.trae/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.log

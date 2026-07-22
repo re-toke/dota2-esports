@@ -1,0 +1,11 @@
+{
+  "navigationBarTitleText": "队员详情",
+  "enablePullDownRefresh": true,
+  "backgroundTextStyle": "dark",
+  "usingComponents": {
+    "t-icon": "tdesign-miniprogram/icon/icon",
+    "t-button": "tdesign-miniprogram/button/button",
+    "t-skeleton": "tdesign-miniprogram/skeleton/skeleton",
+    "t-empty": "tdesign-miniprogram/empty/empty"
+  }
+}

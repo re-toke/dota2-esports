@@ -1,0 +1,64 @@
+<view class="container">
+  <!-- 头部：赛事名 + 关注 -->
+  <view class="head">
+    <view class="head-info">
+      <view class="title">{{name}}</view>
+      <view class="sub">共 {{matches.length}} 场（持续加载更多）</view>
+    </view>
+    <view class="star-btn" catchtap="toggleFollow">
+      <t-icon name="star" size="48rpx" color="{{followed ? '#ffcf5c' : '#5b626d'}}" />
+    </view>
+  </view>
+
+  <!-- 数据可信度 + 新鲜度 -->
+  <view wx:if="{{quality}}" class="quality-bar quality-{{quality.level}}">
+    <text class="q-dot"></text>
+    <text class="q-text">数据可信度：{{quality.text}}</text>
+    <text wx:if="{{updatedLabel}}" class="q-fresh muted">{{updatedLabel}}</text>
+  </view>
+
+  <!-- 规范赛事名（多源交叉验证） -->
+  <view wx:if="{{nameInfo && nameInfo.differs}}" class="name-fix">
+    <text class="muted">规范名（{{nameInfo.sourceLabel}}）：</text>
+    <text class="name-fix-val">{{nameInfo.value}}</text>
+  </view>
+
+  <!-- 社区分级提示（多源交叉验证：本地精选 / 权威库 / OpenDota / STRATZ 计票） -->
+  <view wx:if="{{liqTier}}" class="liq-banner">
+    <text class="muted">分级（{{liqTier.sourceLabel}}）：</text>
+    <text class="{{liqTier.cls}} tag">{{liqTier.label}}</text>
+    <text wx:if="{{liqTier.agreement > 1}}" class="muted agree">· {{liqTier.agreement}} 源一致</text>
+  </view>
+
+  <t-skeleton wx:if="{{loading}}" theme="paragraph" loading="{{true}}" />
+
+  <view wx:elif="{{error}}" class="error-block">
+    <t-empty icon="info-circle" description="{{error}}" />
+    <view class="retry-wrap">
+      <t-button theme="primary" size="medium" bindtap="retry">重试</t-button>
+    </view>
+  </view>
+
+  <t-empty wx:elif="{{matches.length === 0}}" description="该赛事暂无比赛数据" />
+
+  <block wx:else>
+    <view class="match-card" wx:for="{{matches}}" wx:key="match_id">
+      <view class="match-row {{item.radiantWin ? 'win-team' : ''}}" bindtap="openTeam" data-id="{{item.radiantTeamId}}">
+        <text class="team-name">{{item.radiantName || '天辉'}}</text>
+        <text class="score {{item.radiantWin ? 'win' : 'lose'}}">{{item.radiantScore}}</text>
+      </view>
+      <view class="match-divider">
+        <text class="vs">VS</text>
+        <text class="time muted">{{item.time}}</text>
+      </view>
+      <view class="match-row {{item.radiantWin ? '' : 'win-team'}}" bindtap="openTeam" data-id="{{item.direTeamId}}">
+        <text class="team-name">{{item.direName || '夜魇'}}</text>
+        <text class="score {{item.radiantWin ? 'lose' : 'win'}}">{{item.direScore}}</text>
+      </view>
+    </view>
+
+    <view class="loadmore" wx:if="{{hasMore}}">
+      <t-button theme="light" size="medium" bindtap="appendPage" t-class="more-btn">加载更多</t-button>
+    </view>
+  </block>
+</view>
