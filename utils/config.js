@@ -68,14 +68,16 @@ module.exports = {
   },
 
   // 第四网络数据源：Liquipedia（独立人工策展电竞 wiki，MediaWiki action API）。
-  // 免费、无需 key，但要求描述性 User-Agent 并遵守速率限制（默认串行 + 1500ms 间隔）。
+  // 免费、无需 key，但要求描述性 User-Agent + Accept-Encoding: gzip 并遵守速率限制。
+  // 官方要求普通端点 ≤ 1 次/2 秒；action=parse 限流 1 次/30 秒（过严，已弃用）。
+  // → 本模块改用 action=query&prop=revisions 取 wikitext（2 秒限流，宽松 15 倍）。
   // 提供 OpenDota/STRATZ/Steam 均无的赛事元数据（规范名/日期/奖金池/地点/赛制/主办方），
   // 作为真正独立于 Valve 比赛数据的交叉验证来源。
   liquipedia: {
     enabled: true,
     base: 'https://liquipedia.net/dota2/api.php',
     userAgent: 'DOTA2-Esports-Hub/1.0 (WeChat Mini Program; contact: dev@local)',
-    rateLimitMs: 1500,
+    rateLimitMs: 2200,   // 官方要求 ≥ 2 秒，留 200ms 余量
     cacheTTL: 6 * 3600
   },
 
