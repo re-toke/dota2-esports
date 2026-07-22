@@ -54,6 +54,39 @@
 
 .agree { font-size: 22rpx; }
 
+/* 赛事元数据卡（Liquipedia + Steam 聚合：奖金池/地点/赛制/主办方） */
+.meta-card {
+  background: #161b22;
+  border-radius: 16rpx;
+  padding: 20rpx 24rpx;
+  margin-bottom: 16rpx;
+}
+.meta-prize {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-bottom: 12rpx;
+  margin-bottom: 12rpx;
+  border-bottom: 1rpx solid #232a33;
+}
+.meta-prize-val { font-size: 32rpx; font-weight: 700; color: #ffcf5c; }
+.meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8rpx 0;
+}
+.meta-sources {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12rpx;
+  padding-top: 12rpx;
+  border-top: 1rpx solid #232a33;
+}
+.meta-label { color: #6b7280; font-size: 24rpx; }
+.meta-value { color: #c9d2dd; font-size: 26rpx; }
+
 .match-card {
   background: #161b22;
   border-radius: 16rpx;

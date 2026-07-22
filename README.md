@@ -63,16 +63,18 @@ https://api.opendota.com
 
 ## 数据来源与分级口径
 
-全部数据来自 **OpenDota 公开 API**（https://docs.opendota.com/），免费、无需 key。
+核心比赛数据来自 **OpenDota 公开 API**（https://docs.opendota.com/，免费无需 key）。
 用到的主要端点：`/leagues`、`/explorer`（SQL 聚合查询赛事时间窗口）、`/leagues/{id}/matches`、
 `/search`、`/teams/{id}`、`/teams/{id}/players`、`/teams/{id}/matches`、`/players/{id}`、
 `/players/{id}/matches`、`/heroes`。
 
 为提升**赛事名、时间、队伍成员、选手ID 的准确性与完整性**，本小程序在 OpenDota 之外引入
-**多源交叉验证**（详见下文「多源交叉验证与信息可信度」）：
-- **本地权威库**（`utils/curation.js`，零网络永远可用）提供重大赛事的规范名/等级与知名战队的规范名/国家，
-  作为与 OpenDota 并行的「第二可信来源」，专门修正名称截断/缩写/大小写不一致。
-- 启用 **STRATZ / Steam**（需免费 key）后，关键字段会进一步做「并行采集 + 投票比对」。
+**多源交叉验证**（详见下文「多源交叉验证与信息可信度」），现有 5 个数据来源：
+- **本地权威库**（`utils/curation.js`，零网络永远可用）提供重大赛事的规范名/等级与知名战队的规范名/国家。
+- **STRATZ / Steam**（需免费 key）参与「并行采集 + 投票比对」。
+- **Liquipedia**（`utils/liquipedia.js`，免费、无需 key）—— 独立人工策展的电竞 wiki，
+  提供 OpenDota/STRATZ/Steam 均无的赛事元数据（规范名/日期/奖金池/地点/赛制/主办方）与战队名册，
+  作为**真正独立于 Valve 比赛数据**的交叉验证来源。
 
 ### 赛事分级（utils/tiers.js）
 
@@ -115,7 +117,10 @@ OpenDota 的 `tier` 是字符串枚举（`professional`/`premium`/`amateur`/`exc
 
 - **OpenDota**（主源，比赛/对阵/战队/选手，免费无需 key）
 - **STRATZ**（第二网络源，GraphQL，免费 key 启用；见下）
-- **Steam Web API**（第三网络源，Valve 官方 DOTA2 接口，免费 key；GetLiveLeagueGames 提供正在直播的比分）
+- **Steam Web API**（第三网络源，Valve 官方 DOTA2 接口，免费 key；GetLiveLeagueGames 提供正在直播的比分；
+  另扩展 GetTournamentPrizePool 奖金池 / GetTournamentPlayerStats 选手赛事统计 / GetMatchDetails 单场详情 / GetTopLiveGame 顶级实时比赛）
+- **Liquipedia**（第四网络源，独立人工策展电竞 wiki，MediaWiki action API，**免费无需 key**；
+  提供赛事元数据/奖金池/地点/赛制、战队名册、选手资料——**独立于 Valve 比赛数据**，是真正的交叉验证来源）
 - **本地精选**（`utils/tiers.js`，基于赛事名的规则，零网络永远可用，作为兜底与快速分级）
 
 `sources` 对 **logo / 头像 / 直播** 仍按 `config.sources` 的优先级顺序取「第一个有效值」；
@@ -144,6 +149,18 @@ OpenDota 的 `tier` 是字符串枚举（`professional`/`premium`/`amateur`/`exc
 
 未启用时 `sources.js` 不会调用 Steam，对现有行为零影响。
 
+### 启用 Liquipedia 作为第四网络源（默认已启用）
+
+Liquipedia 是独立人工策展的电竞 wiki，提供 OpenDota/STRATZ/Steam 均无的赛事元数据（规范名/日期/
+**奖金池**/地点/赛制/主办方）与战队名册。**免费、无需 key**，默认 `enabled: true`。
+
+1. 把 `https://liquipedia.net` 加入小程序 request 合法域名（微信公众平台 → 开发设置 → 服务器域名）；
+2. 启用后赛事详情页显示「奖金池」与多源徽标，战队详情页成员列表「多源核实」升级为三源（OpenDota/STRATZ/Liquipedia）。
+
+Liquipedia 要求描述性 `User-Agent` 头（已在 `config.liquipedia.userAgent` 配置）并遵守速率限制
+（默认串行 + 1500ms 间隔，6h 本地缓存）。请求失败优雅降级为 null/[]，不影响其它源。
+**注意**：Liquipedia 名册的 `account_id` 多为 null（HTML 不可靠），当前仅参与 name 匹配验证。
+
 ## 多源交叉验证与信息可信度
 
 针对「赛事信息和队伍队员信息不准确」的痛点，本小程序在 `utils/consensus.js` 实现了一个
@@ -152,10 +169,11 @@ OpenDota 的 `tier` 是字符串枚举（`professional`/`premium`/`amateur`/`exc
 
 | 关键字段 | 验证方式 | 对应函数 |
 |----------|----------|----------|
-| 赛事名称 | OpenDota / 本地权威库 / STRATZ 归一投票，取最完整原文 | `sources.getLeagueName()` |
+| 赛事名称 | OpenDota / 本地权威库 / STRATZ / Liquipedia 归一投票，取最完整原文 | `sources.getLeagueName()` |
 | 赛事分级 | 本地精选 / 本地权威库 / OpenDota / STRATZ 按等级计票 | `sources.getLeagueTier()` |
-| 赛事时间 | 本地权威库 / STRATZ / Steam 时间中位数比对（容差 3 天） | `sources.getLeagueWindow()` |
-| 队伍成员 | OpenDota / STRATZ 名册按 `account_id` 主键合并，≥2 源出现即「多源核实」 | `sources.crossTeamMembers()` |
+| 赛事时间 | 本地权威库 / STRATZ / Steam / Liquipedia 时间中位数比对（容差 3 天） | `sources.getLeagueWindow()` |
+| 赛事元数据 | Liquipedia（规范名/日期/奖金池/地点/赛制/主办方）+ Steam（奖金池兜底） | `sources.getLeagueMetadata()` |
+| 队伍成员 | OpenDota / STRATZ / Liquipedia 名册按 `account_id` 主键合并，≥2 源出现即「多源核实」 | `sources.crossTeamMembers()` |
 | 选手 ID | 正整数合法性校验 | `sources.validatePlayerId()` |
 
 **可信度口径（`consensus.confidenceOf`）**：仅当「全部来源一致」才算 `high`；多源（≥3）中多数一致算 `medium`；
@@ -259,8 +277,9 @@ dota2-esports/
 │   ├── curation.js     # 常驻权威库（重大赛事规范名/等级、知名战队），零网络第二可信源
 │   ├── tiers.js        # 社区分级规则（赛事名，零网络兜底）
 │   ├── stratz.js       # STRATZ GraphQL 第二网络源（需 key，默认关闭）
-│   ├── steam.js        # Steam Web API 第三网络源（需 key，默认关闭；实时比分）
-│   ├── sources.js      # 多数据源编排层：优先级聚合 + 多源交叉验证（名称/分级/时间/成员/直播）
+│   ├── steam.js        # Steam Web API 第三网络源（需 key；直播比分 + 奖金池/赛事统计/单场详情/顶级实时）
+│   ├── liquipedia.js   # Liquipedia 第四网络源（免费无 key；赛事元数据/奖金池/战队名册/选手资料）
+│   ├── sources.js      # 多数据源编排层：优先级聚合 + 多源交叉验证（名称/分级/时间/元数据/成员/直播）
 │   ├── follow.js       # 关注订阅的本地存储
 │   ├── subscribe.js    # 微信订阅消息脚手架
 │   └── util.js         # 格式化、胜负判定、统一分级 unifiedTier()、formatAgo 新鲜度

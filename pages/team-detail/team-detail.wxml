@@ -109,6 +109,11 @@
       </view>
     </block>
 
+    <!-- 数据来源（成员交叉验证：OpenDota / STRATZ / Liquipedia） -->
+    <view wx:if="{{memberQuality && memberQuality.sourceLabel}}" class="sources-footer">
+      <text class="muted">数据来源：{{memberQuality.sourceLabel}}</text>
+    </view>
+
     <!-- 近期战绩 -->
     <view class="section-title">近期战绩</view>
     <t-empty wx:if="{{matches.length === 0 && !matchLoading}}" description="暂无比赛数据" />

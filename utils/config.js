@@ -67,6 +67,18 @@ module.exports = {
     base: 'https://api.steampowered.com/IDOTA2Match_570'
   },
 
+  // 第四网络数据源：Liquipedia（独立人工策展电竞 wiki，MediaWiki action API）。
+  // 免费、无需 key，但要求描述性 User-Agent 并遵守速率限制（默认串行 + 1500ms 间隔）。
+  // 提供 OpenDota/STRATZ/Steam 均无的赛事元数据（规范名/日期/奖金池/地点/赛制/主办方），
+  // 作为真正独立于 Valve 比赛数据的交叉验证来源。
+  liquipedia: {
+    enabled: true,
+    base: 'https://liquipedia.net/dota2/api.php',
+    userAgent: 'DOTA2-Esports-Hub/1.0 (WeChat Mini Program; contact: dev@local)',
+    rateLimitMs: 1500,
+    cacheTTL: 6 * 3600
+  },
+
   // 远程 curation 配置（可选）：填入 url 后，小程序启动时自动拉取远端 JSON
   // 覆盖/追加本地 CURATED_EVENTS / CURATED_TEAMS，实现不发版热更新。
   // url 为空时仅用本地，不做任何网络请求。

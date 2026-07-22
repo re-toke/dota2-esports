@@ -25,6 +25,7 @@ const util = require('./util.js');
 const api = require('./api.js');
 const stratz = require('./stratz.js');
 const steam = require('./steam.js');
+const liquipedia = require('./liquipedia.js');
 const consensus = require('./consensus.js');
 const curation = require('./remoteCuration.js');
 
@@ -34,12 +35,34 @@ const SOURCE_LABEL = {
   curation: '权威库',
   stratz: 'STRATZ',
   opendota: 'OpenDota',
-  steam: 'Steam'
+  steam: 'Steam',
+  liquipedia: 'Liquipedia'
 };
 
 function labelOf(src) { return SOURCE_LABEL[src] || src; }
 function joinedLabels(sources) {
   return (sources || []).map(labelOf).join('/') || labelOf('opendota');
+}
+
+// 将 Liquipedia 返回的日期文本（如 '2025-08-15' / 'August 15, 2025'）归一为 Unix 秒。
+// consensus.voteTime 只接受数值候选（normNum > 0），故 Liquipedia 的字符串日期必须先转换。
+// 解析失败返回 null（该候选被跳过，不影响其它源）。
+function liquipediaDateToUnix(text) {
+  if (!text) return null;
+  const s = String(text).trim();
+  // 优先匹配 yyyy-MM-dd / yyyy/M/d（Liquipedia infobox 最常见的纯数字日期）
+  const m = s.match(/(\d{4})[-/](\d{1,2})(?:[-/](\d{1,2}))?/);
+  if (m) {
+    const y = Number(m[1]);
+    const mo = Number(m[2]);
+    const d = m[3] ? Number(m[3]) : 1;
+    if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) {
+      return Math.floor(Date.UTC(y, mo - 1, d) / 1000);
+    }
+  }
+  // 回退：原生 Date.parse（可解析 'August 15, 2025' 等英文形式）
+  const t = Date.parse(s);
+  return isFinite(t) ? Math.floor(t / 1000) : null;
 }
 
 // ===== 赛事分级：多源计票 =====
@@ -87,6 +110,14 @@ async function getLeagueName(league) {
     } catch (e) { /* 隔离 */ }
   }
 
+  // Liquipedia：独立人工策展源，提供规范名作为第四候选（与 Valve 数据链路无关）
+  if (liquipedia.ENABLED && name) {
+    try {
+      const meta = await liquipedia.getLeagueMetadata(name);
+      if (meta && meta.canonical) candidates.push({ value: meta.canonical, source: 'liquipedia' });
+    } catch (e) { /* 隔离 */ }
+  }
+
   const r = consensus.voteName(candidates);
   if (!r.value && name) {
     return { value: name, sources: ['opendota'], confidence: 'low', agreement: 1, total: 1 };
@@ -115,6 +146,24 @@ async function getLeagueWindow(league) {
     } catch (e) { /* 隔离 */ }
   }
 
+  // Liquipedia：返回的日期为文本字符串，需经 liquipediaDateToUnix 转为 Unix 秒
+  // 才能进入 voteTime（仅接受数值候选）；解析失败的字段被跳过，不影响其它源。
+  if (liquipedia.ENABLED && name) {
+    try {
+      const meta = await liquipedia.getLeagueMetadata(name);
+      if (meta) {
+        if (meta.startDate) {
+          const t = liquipediaDateToUnix(meta.startDate);
+          if (t != null) startC.push({ value: t, source: 'liquipedia' });
+        }
+        if (meta.endDate) {
+          const t = liquipediaDateToUnix(meta.endDate);
+          if (t != null) endC.push({ value: t, source: 'liquipedia' });
+        }
+      }
+    } catch (e) { /* 隔离 */ }
+  }
+
   const start = startC.length ? consensus.voteTime(startC).value : null;
   const end = endC.length ? consensus.voteTime(endC).value : null;
   if (start == null && end == null) return null;
@@ -129,6 +178,44 @@ async function getLeagueWindow(league) {
     sourceLabel: joinedLabels(sources),
     confidence: sources.length >= 2 ? 'medium' : 'low'
   };
+}
+
+// ===== 赛事元数据：Liquipedia + Steam 聚合 =====
+// Liquipedia 提供完整人工策展元数据（规范名/日期/奖金池/地点/赛制/主办方），
+// Steam 提供官方奖金池（OpenDota/STRATZ 均无），二者互补且可交叉校验奖金池。
+// Liquipedia 优先（人工策展更可靠），Steam 兜底。
+async function getLeagueMetadata(league) {
+  const name = (league && league.name) || '';
+  const id = league && (league.leagueid || league.id);
+  const result = { sources: [] };
+
+  // Liquipedia: full metadata (canonical name, dates, prize pool, location, format, organizer)
+  if (liquipedia.ENABLED && name) {
+    try {
+      const meta = await liquipedia.getLeagueMetadata(name);
+      if (meta) {
+        Object.assign(result, meta);
+        result.sources.push('liquipedia');
+      }
+    } catch (e) { /* 隔离 */ }
+  }
+
+  // Steam: prize pool (unique to Steam, complements/validates Liquipedia)
+  if (steam.ENABLED && id) {
+    try {
+      const pp = await steam.getTournamentPrizePool(id);
+      if (pp && pp.prizePool != null) {
+        // Liquipedia 优先（人工策展更可靠），Steam 兜底
+        if (result.prizePool == null) {
+          result.prizePool = pp.prizePool;
+          result.prizePoolCurrency = pp.prizePoolCurrency || 'USD';
+        }
+        result.sources.push('steam');
+      }
+    } catch (e) { /* 隔离 */ }
+  }
+
+  return Object.keys(result).length > 1 ? result : null;
 }
 
 // 多源增强战队 logo：优先级 [stratz]（已有 http logo 直接复用）
@@ -214,6 +301,21 @@ async function crossTeamMembers(teamId) {
     } catch (e) { /* 隔离 */ }
   }
 
+  // Liquipedia：按战队「名称」查询名册（非 id），故先用 curation 把 teamId 映射到规范队名。
+  // 已知限制：Liquipedia 名册 account_id 全部为 null（HTML 不可靠），而 consensus.crossMembers
+  // 以 account_id 为主键（normNum 为 null 的成员会被直接 return 丢弃），因此这些成员当前
+  // 不会出现在交叉验证结果中、也不会被标记 verified。要让 Liquipedia 名册真正生效，需在
+  // consensus.crossMembers 中增加基于 name 的回退匹配（属 consensus.js 改动，本次不动）。
+  // 现阶段保留采集以便未来增强，且任一源失败不影响其它源。
+  const cu = curation.curatedTeamFor(teamId);
+  const teamName = cu && cu.name;
+  if (liquipedia.ENABLED && teamName) {
+    try {
+      const rs = await liquipedia.getTeamRoster(teamName);
+      if (rs && rs.length) lists.push({ source: 'liquipedia', members: rs });
+    } catch (e) { /* 隔离 */ }
+  }
+
   if (lists.length === 0) return null;
   const r = consensus.crossMembers(lists);
   r.sourceLabel = joinedLabels(r.sources);
@@ -273,6 +375,7 @@ module.exports = {
   getLeagueTier: getLeagueTier,
   getLeagueName: getLeagueName,
   getLeagueWindow: getLeagueWindow,
+  getLeagueMetadata: getLeagueMetadata,
   enrichTeamLogo: enrichTeamLogo,
   enrichPlayerAvatar: enrichPlayerAvatar,
   enrichTeamInfo: enrichTeamInfo,

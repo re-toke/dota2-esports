@@ -35,7 +35,7 @@ global.wx = {
 };
 
 // ===== 2. 清除 module cache =====
-const purge = ['cache.js', 'config.js', 'tiers.js', 'api.js', 'util.js', 'stratz.js', 'steam.js', 'consensus.js', 'curation.js', 'sources.js'];
+const purge = ['cache.js', 'config.js', 'tiers.js', 'api.js', 'util.js', 'stratz.js', 'steam.js', 'consensus.js', 'curation.js', 'liquipedia.js', 'sources.js'];
 for (const k of Object.keys(require.cache)) {
   for (const name of purge) { if (k.indexOf(name) >= 0) delete require.cache[k]; }
 }
@@ -53,6 +53,7 @@ const steam = require(path.join(SRC, 'steam.js'));
 const consensus = require(path.join(SRC, 'consensus.js'));
 const curation = require(path.join(SRC, 'curation.js'));
 const sources = require(path.join(SRC, 'sources.js'));
+const liquipedia = require(path.join(SRC, 'liquipedia.js'));
 
 // ===== 4. 导出结构检查 =====
 section('\n--- 模块导出结构 ---');
@@ -348,6 +349,92 @@ check('stratz.getLeagueTier 精确名命中 DPC_MAJOR→SSS（非子串误命中
   } finally {
     requestHandler = defaultRequestHandler;
     cache.remove('stratz_leagues');
+  }
+});
+
+// ===== 13. sources.getLeagueMetadata 聚合 Liquipedia + Steam =====
+section('\n--- sources.getLeagueMetadata 聚合 Liquipedia + Steam ---');
+
+// 测试 6：Liquipedia 提供奖金池时优先采用，Steam 仅作为来源记录参与交叉验证。
+// monkeypatch liquipedia.getLeagueMetadata / steam.getTournamentPrizePool / steam.ENABLED，
+// 所有 patch 在 finally 中恢复原值，避免污染后续测试。
+check('sources.getLeagueMetadata 聚合 Liquipedia + Steam 奖金池', async () => {
+  const origLiq = liquipedia.getLeagueMetadata;
+  const origSteamEnabled = steam.ENABLED;
+  const origSteamPP = steam.getTournamentPrizePool;
+  liquipedia.getLeagueMetadata = async function () {
+    return {
+      canonical: 'TI 2024', prizePool: 1500000, prizePoolCurrency: 'USD',
+      startDate: null, endDate: null, location: null, format: null, organizer: null
+    };
+  };
+  steam.ENABLED = true;
+  steam.getTournamentPrizePool = async function () {
+    return { prizePool: 1600000, prizePoolCurrency: 'USD', leagueId: 1, source: 'steam' };
+  };
+  try {
+    const r = await sources.getLeagueMetadata({ name: 'TI 2024', leagueid: 1 });
+    assert(r !== null, '返回不应为 null');
+    assert(r.prizePool === 1500000, 'Liquipedia 奖金池应胜出（1500000），实际: ' + r.prizePool);
+    assert(r.sources.indexOf('liquipedia') >= 0,
+      'sources 应含 liquipedia，实际: ' + JSON.stringify(r.sources));
+    assert(r.sources.indexOf('steam') >= 0,
+      'sources 应含 steam，实际: ' + JSON.stringify(r.sources));
+  } finally {
+    liquipedia.getLeagueMetadata = origLiq;
+    steam.ENABLED = origSteamEnabled;
+    steam.getTournamentPrizePool = origSteamPP;
+  }
+});
+
+// 测试 7：Liquipedia 缺失奖金池（prizePool=null）时 Steam 兜底提供奖金池
+check('sources.getLeagueMetadata Steam 兜底（Liquipedia 缺失奖金池）', async () => {
+  const origLiq = liquipedia.getLeagueMetadata;
+  const origSteamEnabled = steam.ENABLED;
+  const origSteamPP = steam.getTournamentPrizePool;
+  liquipedia.getLeagueMetadata = async function () {
+    return {
+      canonical: 'TI 2024', prizePool: null, prizePoolCurrency: null,
+      startDate: null, endDate: null, location: null, format: null, organizer: null
+    };
+  };
+  steam.ENABLED = true;
+  steam.getTournamentPrizePool = async function () {
+    return { prizePool: 1600000, prizePoolCurrency: 'USD', leagueId: 1, source: 'steam' };
+  };
+  try {
+    const r = await sources.getLeagueMetadata({ name: 'TI 2024', leagueid: 1 });
+    assert(r !== null, '返回不应为 null');
+    assert(r.prizePool === 1600000, 'Steam 奖金池应兜底（1600000），实际: ' + r.prizePool);
+    assert(r.sources.indexOf('steam') >= 0,
+      'sources 应含 steam，实际: ' + JSON.stringify(r.sources));
+  } finally {
+    liquipedia.getLeagueMetadata = origLiq;
+    steam.ENABLED = origSteamEnabled;
+    steam.getTournamentPrizePool = origSteamPP;
+  }
+});
+
+// 测试 8：getLeagueName 包含 Liquipedia 候选
+// 传 { name: 'TI 2024' }（无 leagueid → stratz 分支跳过），curation 与 liquipedia 均返回
+// 'The International 2024'，voteName 归一后两源一致胜出，sources 含 liquipedia。
+check('sources.getLeagueName 包含 Liquipedia 候选', async () => {
+  const origLiq = liquipedia.getLeagueMetadata;
+  const origStratzDisp = stratz.getLeagueDisplayName;
+  liquipedia.getLeagueMetadata = async function () {
+    return { canonical: 'The International 2024' };
+  };
+  stratz.getLeagueDisplayName = async function () { return null; };
+  try {
+    const r = await sources.getLeagueName({ name: 'TI 2024' });
+    assert(r !== null, '返回不应为 null');
+    assert(r.value === 'The International 2024',
+      'value 应为 The International 2024，实际: ' + r.value);
+    assert(r.sources.indexOf('liquipedia') >= 0,
+      'sources 应含 liquipedia，实际: ' + JSON.stringify(r.sources));
+  } finally {
+    liquipedia.getLeagueMetadata = origLiq;
+    stratz.getLeagueDisplayName = origStratzDisp;
   }
 });
 

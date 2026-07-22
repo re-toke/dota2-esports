@@ -91,9 +91,94 @@ function getTeamInfo(teamId) {
   }).catch(() => null);
 }
 
+// 赛事奖金池（TI 奖金池，Steam 独有，OpenDota/STRATZ 无此数据）
+// 返回 prize_pool（美元浮点）与币种，未启用或失败时返回 null。
+function getTournamentPrizePool(leagueId) {
+  if (!ENABLED) return Promise.resolve(null);
+  return get('/GetTournamentPrizePool', { league_id: leagueId }).then((d) => {
+    const r = (d && d.result) || null;
+    if (!r) return null;
+    return {
+      prizePool: r.prize_pool != null ? Number(r.prize_pool) : 0,
+      prizePoolCurrency: r.prize_pool_currency || 'USD',
+      leagueId: leagueId,
+      source: 'steam'
+    };
+  }).catch(() => null);
+}
+
+// 赛事选手聚合统计（联赛维度的选手汇总：场次/K/D/A，字段可能缺失，做防御性解析）
+function getTournamentPlayerStats(leagueId, accountId) {
+  if (!ENABLED) return Promise.resolve(null);
+  return get('/GetTournamentPlayerStats', { league_id: leagueId, account_id: accountId }).then((d) => {
+    const r = (d && d.result) || null;
+    if (!r) return null;
+    return {
+      accountId: accountId,
+      leagueId: leagueId,
+      matchesPlayed: r.matches_played != null ? Number(r.matches_played) : 0,
+      kills: r.kills != null ? Number(r.kills) : 0,
+      deaths: r.deaths != null ? Number(r.deaths) : 0,
+      assists: r.assists != null ? Number(r.assists) : 0,
+      source: 'steam'
+    };
+  }).catch(() => null);
+}
+
+// 单场比赛详情（比 OpenDota match 列表字段更全，可用于交叉校验）
+function getMatchDetails(matchId) {
+  if (!ENABLED) return Promise.resolve(null);
+  return get('/GetMatchDetails', { match_id: matchId }).then((d) => {
+    const r = (d && d.result) || null;
+    if (!r) return null;
+    const players = (r.players || []).map((p) => ({
+      account_id: p.account_id || 0,
+      hero_id: p.hero_id || 0,
+      kills: p.kills || 0,
+      deaths: p.deaths || 0,
+      assists: p.assists || 0,
+      gpm: p.gold_per_min || 0,
+      xpm: p.xp_per_min || 0
+    }));
+    return {
+      match_id: matchId,
+      duration: r.duration || 0,
+      radiant_win: !!r.radiant_win,
+      radiant_score: r.radiant_score || 0,
+      dire_score: r.dire_score || 0,
+      players: players,
+      source: 'steam'
+    };
+  }).catch(() => null);
+}
+
+// 顶尖天梯直播比赛（GetLiveLeagueGames 仅覆盖职业联赛，本接口覆盖高 MMR 天梯对局）
+// 注意：响应字段为 team_id_radiant / team_id_dire（非 radiant_team_id）
+function getTopLiveGame() {
+  if (!ENABLED) return Promise.resolve([]);
+  return get('/GetTopLiveGame', { partner: 0 }).then((d) => {
+    const list = (d && d.game_list) || [];
+    return list.map((g) => ({
+      matchId: g.match_id,
+      serverSteamId: g.server_steam_id,
+      radiantTeamId: g.team_id_radiant || 0,
+      direTeamId: g.team_id_dire || 0,
+      radiantScore: g.radiant_score || 0,
+      direScore: g.dire_score || 0,
+      leagueId: g.league_id || 0,
+      live: true,
+      source: 'steam'
+    }));
+  }).catch(() => []);
+}
+
 module.exports = {
   ENABLED: ENABLED,
   getLiveLeagueGames: getLiveLeagueGames,
   getLeagues: getLeagues,
-  getTeamInfo: getTeamInfo
+  getTeamInfo: getTeamInfo,
+  getTournamentPrizePool: getTournamentPrizePool,
+  getTournamentPlayerStats: getTournamentPlayerStats,
+  getMatchDetails: getMatchDetails,
+  getTopLiveGame: getTopLiveGame
 };

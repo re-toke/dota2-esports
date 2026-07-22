@@ -93,7 +93,7 @@ Page({
         this.setData({ updatedAt: at, updatedLabel: util.formatAgo(at) });
 
         // 异步增强（多源聚合，不阻塞主流程）：
-        // 1) 成员交叉验证（OpenDota / STRATZ 名册按 account_id 比对）
+        // 1) 成员交叉验证（OpenDota / STRATZ / Liquipedia 名册按 account_id 比对）
         // 2) 战队扩展信息（curation 永远可用 / Steam 官方需 key）
         // 3) 战队 logo（STRATZ）
         // 4) 队员头像（STRATZ）

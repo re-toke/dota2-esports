@@ -30,6 +30,27 @@
     <text wx:if="{{liqTier.agreement > 1}}" class="muted agree">· {{liqTier.agreement}} 源一致</text>
   </view>
 
+  <!-- 赛事元数据：奖金池/地点/赛制/主办方/数据来源（Liquipedia + Steam 聚合） -->
+  <view class="meta-card" wx:if="{{metadata}}">
+    <view class="meta-prize" wx:if="{{metadata.prizePool}}">
+      <text class="meta-label">奖金池</text>
+      <text class="meta-value meta-prize-val">{{metadata.prizePoolCurrency}} {{metadata.prizePool}}</text>
+    </view>
+    <view class="meta-row" wx:if="{{metadata.location}}">
+      <text class="meta-label">地点</text><text class="meta-value">{{metadata.location}}</text>
+    </view>
+    <view class="meta-row" wx:if="{{metadata.format}}">
+      <text class="meta-label">赛制</text><text class="meta-value">{{metadata.format}}</text>
+    </view>
+    <view class="meta-row" wx:if="{{metadata.organizer}}">
+      <text class="meta-label">主办方</text><text class="meta-value">{{metadata.organizer}}</text>
+    </view>
+    <view class="meta-sources">
+      <text class="meta-label">数据来源</text>
+      <text class="meta-value">{{sourcesText}}</text>
+    </view>
+  </view>
+
   <t-skeleton wx:if="{{loading}}" theme="paragraph" loading="{{true}}" />
 
   <view wx:elif="{{error}}" class="error-block">

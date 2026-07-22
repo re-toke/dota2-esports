@@ -79,6 +79,12 @@
   font-weight: 600;
 }
 
+/* 数据来源脚注（成员交叉验证来源标注） */
+.sources-footer {
+  margin: 8rpx 4rpx 16rpx;
+  font-size: 22rpx;
+}
+
 /* 战队名来源小标 */
 .src-tag {
   font-size: 20rpx;

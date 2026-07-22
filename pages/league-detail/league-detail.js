@@ -31,7 +31,9 @@ Page({
     quality: null,     // 整体数据可信度徽标
     updatedAt: 0,      // 数据最后采集时间戳（新鲜度）
     updatedLabel: '',
-    followed: false
+    followed: false,
+    metadata: null,    // 赛事元数据（Liquipedia + Steam 聚合：奖金池/地点/赛制/主办方）
+    sourcesText: ''    // 元数据来源中文名拼接（如 'Liquipedia / Steam'）
   },
 
   onLoad(options) {
@@ -79,6 +81,21 @@ Page({
         this.refreshQuality();
       }
     });
+
+    // 赛事元数据增强：Liquipedia（完整人工策展元数据）+ Steam（官方奖金池）聚合。
+    // 提供奖金池/地点/赛制/主办方等，任一源失败不影响页面渲染。
+    sources.getLeagueMetadata({ name: name, leagueid: leagueId })
+      .then((meta) => {
+        if (meta) {
+          this.setData({
+            metadata: meta,
+            sourcesText: (meta.sources || []).map((s) => sources.SOURCE_LABEL[s] || s).join(' / ')
+          });
+        }
+      })
+      .catch(() => {
+        this.setData({ metadata: null });
+      });
   },
 
   // 汇总分级名与赛事名的可信度，给出整体徽标
