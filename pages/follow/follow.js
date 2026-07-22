@@ -63,13 +63,20 @@ Page({
 
   decorate(it, type) {
     const out = Object.assign({}, it);
+    out.type = type;
     if (type === 'teams') {
+      out.typeLabel = '战队';
+      out.iconText = (it.name || '?').slice(0, 1).toUpperCase();
       out.sub = '点击查看战队详情';
       out.target = '/pages/team-detail/team-detail?teamId=' + it.id;
     } else if (type === 'players') {
+      out.typeLabel = '选手';
+      out.iconText = (it.name || '?').slice(0, 1).toUpperCase();
       out.sub = '点击查看选手详情';
       out.target = '/pages/player-detail/player-detail?accountId=' + it.id;
     } else {
+      out.typeLabel = '赛事';
+      out.iconText = '';
       out.sub = '点击查看赛事详情';
       out.target = '/pages/league-detail/league-detail?leagueId=' + it.id;
     }

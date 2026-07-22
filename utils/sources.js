@@ -370,12 +370,203 @@ function validatePlayerId(id) {
   return consensus.validatePlayerId(id);
 }
 
+// ===== 赛事排名聚合 =====
+// 由 api.getLeagueMatches 提供的已结束比赛聚合每支队伍的胜负，
+// 不依赖 Liquipedia（避免 IP 风险）。
+// 入参 leagueId；返回 [{ team_id, name, tag, wins, losses, games, winRate }]
+// 按 胜场降序 -> 负场升序 排序。
+function getLeagueStandings(leagueId) {
+  if (!leagueId) return Promise.resolve([]);
+  return api.getLeagueMatches(leagueId).then(function (matches) {
+    const list = matches || [];
+    const stats = {};  // team_id -> { wins, losses, name }
+    list.forEach(function (m) {
+      const rId = m.radiant_team_id;
+      const dId = m.dire_team_id;
+      if (rId) {
+        if (!stats[rId]) stats[rId] = { wins: 0, losses: 0, name: m.radiant_team_name || ('Team ' + rId), tag: '' };
+        if (m.radiant_win) stats[rId].wins++;
+        else stats[rId].losses++;
+      }
+      if (dId) {
+        if (!stats[dId]) stats[dId] = { wins: 0, losses: 0, name: m.dire_team_name || ('Team ' + dId), tag: '' };
+        if (m.radiant_win) stats[dId].losses++;
+        else stats[dId].wins++;
+      }
+    });
+    const out = Object.keys(stats).map(function (id) {
+      const s = stats[id];
+      const games = s.wins + s.losses;
+      return {
+        team_id: Number(id),
+        name: s.name,
+        tag: (s.name || '').slice(0, 4).toUpperCase(),
+        wins: s.wins,
+        losses: s.losses,
+        games: games,
+        winRate: games ? Math.round(s.wins / games * 100) : 0
+      };
+    });
+    out.sort(function (a, b) {
+      if (b.wins !== a.wins) return b.wins - a.wins;
+      return a.losses - b.losses;
+    });
+    return out;
+  }).catch(function () { return []; });
+}
+
+// ===== 赛事选手统计聚合 =====
+// 入参 matchIds（数组）；返回 [{ account_id, name, games, kills, deaths, assists,
+//                                 kda, gpm, xpm, wins, winRate }]
+// 并发限制：3 个并行，避免一次请求过多触发 OpenDota 限流。
+function getPlayerStats(matchIds) {
+  const ids = (matchIds || []).filter(function (id) { return !!id; });
+  if (!ids.length) return Promise.resolve([]);
+  const agg = {};  // account_id -> {...}
+  function batch(start) {
+    if (start >= ids.length) return Promise.resolve();
+    const chunk = ids.slice(start, start + 3);
+    return Promise.all(chunk.map(function (mid) {
+      // 直接用 api.getMatch 一次拿到 match + players，避免重复请求
+      return api.getMatch(mid).then(function (m) {
+        if (!m || !m.players) return;
+        const radiantWin = !!m.radiant_win;
+        m.players.forEach(function (p) {
+          if (!p.account_id) return;
+          const isRadiant = (p.isRadiant != null) ? p.isRadiant : (p.player_slot < 128);
+          if (!agg[p.account_id]) {
+            agg[p.account_id] = {
+              account_id: p.account_id,
+              name: p.name || p.personaname || '',
+              games: 0, kills: 0, deaths: 0, assists: 0,
+              gpmSum: 0, xpmSum: 0, wins: 0
+            };
+          }
+          const a = agg[p.account_id];
+          a.games++;
+          a.kills += p.kills || 0;
+          a.deaths += p.deaths || 0;
+          a.assists += p.assists || 0;
+          a.gpmSum += p.gold_per_min || 0;
+          a.xpmSum += p.xp_per_min || 0;
+          // 胜负：天辉方 radiant_win 才算胜；夜魇方 !radiant_win 才算胜
+          if (isRadiant && radiantWin) a.wins++;
+          if (!isRadiant && !radiantWin) a.wins++;
+        });
+      }).catch(function () {});
+    })).then(function () { return batch(start + 3); });
+  }
+  return batch(0).then(function () {
+    return Object.keys(agg).map(function (id) {
+      const a = agg[id];
+      const kda = a.deaths > 0 ? (a.kills + a.assists) / a.deaths : (a.kills + a.assists);
+      return {
+        account_id: a.account_id,
+        name: a.name,
+        games: a.games,
+        kills: a.kills,
+        deaths: a.deaths,
+        assists: a.assists,
+        kda: Math.round(kda * 100) / 100,
+        gpm: a.games ? Math.round(a.gpmSum / a.games) : 0,
+        xpm: a.games ? Math.round(a.xpmSum / a.games) : 0,
+        wins: a.wins,
+        winRate: a.games ? Math.round(a.wins / a.games * 100) : 0
+      };
+    }).sort(function (x, y) { return y.kda - x.kda; });
+  });
+}
+
+// 系列赛聚合：把同一 series_id 的多场比赛归为一个系列卡。
+// 优先用 OpenDota 的 series_id（DPC/大型赛事 BO3/BO5 必有）；无 series_id 的单场独立成组（视为 BO1）。
+// 返回 series 数组，每个含 { key, games, scoreA, scoreB, boType, isLive, isRecent, isMulti, radiantName, direName, ... }
+// boType：series_type 0=BO1 / 1=BO3 / 2=BO5；无 series_type 时按 games 数推断。
+function groupSeries(matches) {
+  if (!matches || !matches.length) return [];
+  const groups = {};
+  const order = [];
+  matches.forEach(function (m) {
+    const sid = m.series_id;
+    const key = (sid != null && sid !== 0) ? ('s' + sid) : ('m' + m.match_id);
+    if (!groups[key]) {
+      groups[key] = [];
+      order.push(key);
+    }
+    groups[key].push(m);
+  });
+  const now = Date.now();
+  const list = order.map(function (key) {
+    const games = groups[key].slice().sort(function (a, b) {
+      return (a.start_time || 0) - (b.start_time || 0);
+    });
+    const first = games[0];
+    const last = games[games.length - 1];
+    const radiantName = first.radiant_team_name || '天辉';
+    const direName = first.dire_team_name || '夜魇';
+    let scoreA = 0, scoreB = 0;
+    let isLive = false;
+    games.forEach(function (g) {
+      if (g.radiant_win) scoreA++; else scoreB++;
+      // 进行中：无 duration 或 duration=0 且 start_time 在最近 24h
+      if ((!g.duration || g.duration === 0) && g.start_time && (now - g.start_time * 1000) < 24 * 3600 * 1000) {
+        isLive = true;
+      }
+    });
+    // 系列 BO 类型
+    // OpenDota series_type 枚举：0=BO1（但 BO2 也用 0）、1=BO3、2=BO5。
+    // 区分 BO2 与 BO3：series_type=0 且恰好 2 场 → BO2（双局积分制，可 1-1 平局）；
+    // series_type=1 无论几场（2 场=2-0 横扫，3 场=2-1）都是 BO3。
+    let boType = 'BO1';
+    const st = first.series_type;
+    if (st === 1) boType = 'BO3';
+    else if (st === 2) boType = 'BO5';
+    else if (games.length === 2) boType = 'BO2';
+    else if (games.length === 3) boType = 'BO3';
+    else if (games.length >= 4) boType = 'BO5';
+    // 赛制说明文案
+    const boLabel = boType === 'BO1' ? '单局制'
+      : boType === 'BO2' ? '双局积分'
+      : boType === 'BO3' ? '三局两胜'
+      : '五局三胜';
+    // BO2 可能平局（1-1）；其他赛制必有胜负
+    const isDraw = boType === 'BO2' && scoreA === scoreB;
+    // 最近 2h 内结束（用作 B 点缀判定）
+    const lastEnd = last.start_time && last.duration ? (last.start_time + last.duration) * 1000 : 0;
+    const isRecent = lastEnd && (now - lastEnd) < 2 * 3600 * 1000;
+    return {
+      key: key,
+      games: games,
+      scoreA: scoreA,
+      scoreB: scoreB,
+      boType: boType,
+      boLabel: boLabel,
+      isDraw: isDraw,
+      isLive: isLive,
+      isRecent: isRecent,
+      isMulti: games.length > 1,
+      radiantName: radiantName,
+      direName: direName,
+      radiantTeamId: first.radiant_team_id,
+      direTeamId: first.dire_team_id,
+      radiantWin: !isDraw && scoreA > scoreB,
+      direWin: !isDraw && scoreB > scoreA,
+      lastTime: last.start_time || 0
+    };
+  });
+  // 按最新比赛时间倒序
+  list.sort(function (a, b) { return b.lastTime - a.lastTime; });
+  return list;
+}
+
 module.exports = {
   SOURCE_LABEL: SOURCE_LABEL,
   getLeagueTier: getLeagueTier,
   getLeagueName: getLeagueName,
   getLeagueWindow: getLeagueWindow,
   getLeagueMetadata: getLeagueMetadata,
+  getLeagueStandings: getLeagueStandings,
+  getPlayerStats: getPlayerStats,
+  groupSeries: groupSeries,
   enrichTeamLogo: enrichTeamLogo,
   enrichPlayerAvatar: enrichPlayerAvatar,
   enrichTeamInfo: enrichTeamInfo,

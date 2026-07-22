@@ -188,3 +188,437 @@ view, text { box-sizing: border-box; }
   background: linear-gradient(90deg, #5fd35f 0%, #8a7d3b 50%, #e8443b 100%);
   margin-bottom: 20rpx;
 }
+
+/* ===================================================================
+   B+C 混合设计系统 · 共享 token 与组件类
+   - 移动动态卡片（B）用于列表/关注页：大圆角、左右对阵、状态脉冲
+   - 数据指挥台（C）用于详情页：KPI strip、表格化、来源溯源网格
+   - 决赛/重要赛事可叠加方案 A 局部强化（hero banner）
+   =================================================================== */
+
+page {
+  /* ===== 字体 token ===== */
+  /* 数字等宽：胜率/比分/KDA 等，确保数字对齐 */
+  --font-numeric: "SF Pro Display", "Inter", -apple-system, "PingFang SC", sans-serif;
+  /* 等宽代码：match_id / steam_id 等 */
+  --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  /* 显示字体：标题（仅详情页头部与决赛 hero 使用，列表页仍用系统字体保持性能） */
+  --font-display: "SF Pro Display", -apple-system, "PingFang SC", sans-serif;
+
+  /* ===== 间距 token ===== */
+  --space-1: 8rpx;
+  --space-2: 16rpx;
+  --space-3: 24rpx;
+  --space-4: 32rpx;
+  --space-5: 40rpx;
+  --space-6: 48rpx;
+
+  /* ===== 圆角 token ===== */
+  --radius-sm: 8rpx;
+  --radius-md: 12rpx;
+  --radius-lg: 16rpx;
+  --radius-xl: 24rpx;
+  --radius-pill: 999rpx;
+
+  /* ===== 状态色 token（统一全站语义） ===== */
+  --status-live: #1ec896;          /* 直播中：脉冲绿 */
+  --status-ongoing: #5fd35f;       /* 进行中：天辉绿 */
+  --status-upcoming: #f0aa28;      /* 即将到来：琥珀 */
+  --status-ended: #6b7280;         /* 已结束：灰 */
+  --status-verified: #5fd3a8;      /* 多源验证：青绿 */
+
+  /* ===== 来源溯源 token（数据可信度徽标） ===== */
+  --source-opendota: #5fd35f;
+  --source-stratz: #6054f1;
+  --source-steam: #1b2838;
+  --source-liquipedia: #ffcf5c;
+  --source-curation: #9bb0c9;
+
+  /* ===== 卡片层级（增加深度感，不再全平 #161b22） ===== */
+  --card-bg: #161b22;
+  --card-bg-elevated: #1c232c;     /* 浮起卡片：直播卡/KPI strip */
+  --card-bg-inset: #0f141b;         /* 内嵌区：表格行/cell */
+
+  /* ===== 数据指挥台 KPI 色（C 风格专用，仅用于强调单个 KPI） ===== */
+  --kpi-primary: #5fd35f;
+  --kpi-warning: #f0aa28;
+  --kpi-info: #6054f1;
+
+  /* 字体特性：tabular-nums 让数字对齐 */
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===================================================================
+   共享组件 1：KPI Strip（C 风格 · 详情页元数据多列展示）
+   用法：<view class="kpi-strip"> <view class="kpi-cell">...</view> ... </view>
+   =================================================================== */
+.kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160rpx, 1fr));
+  gap: var(--space-2);
+  background: var(--card-bg-elevated);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+.kpi-cell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.kpi-label {
+  font-size: 22rpx;
+  color: #8a8f99;
+  text-transform: uppercase;
+  letter-spacing: 1rpx;
+  line-height: 1.4;
+}
+.kpi-value {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #f0f3f6;
+  font-family: var(--font-numeric);
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kpi-value.accent { color: var(--kpi-primary); }
+.kpi-value.warning { color: var(--kpi-warning); }
+.kpi-value.info { color: var(--kpi-info); }
+.kpi-unit {
+  font-size: 22rpx;
+  color: #8a8f99;
+  font-weight: 400;
+  margin-left: 4rpx;
+}
+
+/* ===================================================================
+   共享组件 2：Source Badge（来源溯源徽标）
+   用法：<view class="src-badge src-opendota">OpenDota</view>
+   =================================================================== */
+.src-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6rpx;
+  font-size: 20rpx;
+  padding: 2rpx 10rpx;
+  border-radius: var(--radius-pill);
+  background: rgba(120, 140, 160, 0.12);
+  color: #9bb0c9;
+  line-height: 1.6;
+  border: 1rpx solid transparent;
+}
+.src-badge::before {
+  content: '';
+  width: 8rpx;
+  height: 8rpx;
+  border-radius: 50%;
+  background: currentColor;
+}
+.src-opendota { color: var(--source-opendota); background: rgba(95, 211, 95, 0.10); }
+.src-stratz { color: var(--source-stratz); background: rgba(96, 84, 241, 0.14); }
+.src-steam { color: #66c0f4; background: rgba(27, 40, 56, 0.45); }
+.src-liquipedia { color: var(--source-liquipedia); background: rgba(255, 207, 92, 0.12); }
+.src-curation { color: var(--source-curation); background: rgba(155, 176, 201, 0.12); }
+.src-verified { color: var(--status-verified); background: rgba(95, 211, 168, 0.12); }
+
+/* 来源溯源网格（详情页合并 quality-bar/name-fix/liq-banner/meta-card 为一区） */
+.source-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  align-items: center;
+}
+.source-grid .src-badge { margin-right: 4rpx; }
+
+/* ===================================================================
+   共享组件 3：Fresh Label（新鲜度标签，统一全站）
+   用法：<text class="fresh-label">{{updatedLabel}}</text>
+   =================================================================== */
+.fresh-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6rpx;
+  font-size: 20rpx;
+  color: #6b7280;
+  font-family: var(--font-mono);
+  line-height: 1.4;
+}
+.fresh-label::before {
+  content: '⟳';
+  font-size: 22rpx;
+}
+
+/* ===================================================================
+   共享组件 4：Match VS Card（B 风格 · 左右对阵紧凑式）
+   用法：<view class="vs-card"> <view class="vs-side home">...</view>
+        <view class="vs-center">...</view> <view class="vs-side away">...</view> </view>
+   替换原双行布局，横向利用屏幕宽度，比分居中突出
+   =================================================================== */
+.vs-card {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-2);
+  position: relative;
+  overflow: hidden;
+}
+.vs-card::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 4rpx;
+  background: var(--card-bg-inset);
+}
+.vs-card.radiant-win::before { background: var(--status-ongoing); }
+.vs-card.dire-win::before { background: var(--dire); }
+.vs-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.vs-side.away { align-items: flex-end; text-align: right; }
+.vs-team {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.vs-side.away .vs-team { flex-direction: row-reverse; }
+.vs-team-logo {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: var(--radius-md);
+  background: var(--card-bg-inset);
+  flex-shrink: 0;
+}
+.vs-team-name {
+  font-size: 28rpx;
+  font-weight: 500;
+  color: #f0f3f6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200rpx;
+}
+.vs-score {
+  font-size: 40rpx;
+  font-weight: 700;
+  font-family: var(--font-numeric);
+  line-height: 1;
+}
+.vs-score.win { color: var(--status-ongoing); }
+.vs-score.lose { color: var(--dire); }
+.vs-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4rpx;
+  min-width: 80rpx;
+}
+.vs-vs {
+  font-size: 22rpx;
+  color: #6b7280;
+  font-weight: 600;
+  letter-spacing: 1rpx;
+}
+.vs-meta {
+  font-size: 20rpx;
+  color: #6b7280;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+.vs-card.live .vs-center .vs-vs {
+  color: var(--status-live);
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+}
+.vs-card.live .vs-center .vs-vs::before {
+  content: '';
+  width: 10rpx;
+  height: 10rpx;
+  border-radius: 50%;
+  background: var(--status-live);
+  animation: livePulse 1.5s ease-in-out infinite;
+}
+
+/* ===================================================================
+   共享组件 5：Live Pulse Card（B 风格 · 直播卡升级版）
+   在 vs-card 基础上叠加 live 状态：脉冲点 + 绿色描边 + 可点击
+   =================================================================== */
+.live-pulse-card {
+  background: var(--card-bg-elevated);
+  border: 1rpx solid rgba(30, 200, 150, 0.25);
+  box-shadow: 0 0 0 1rpx rgba(30, 200, 150, 0.08);
+}
+.live-pulse-card.live {
+  border-color: rgba(30, 200, 150, 0.5);
+}
+.live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6rpx;
+  font-size: 20rpx;
+  font-weight: 600;
+  color: var(--status-live);
+  text-transform: uppercase;
+  letter-spacing: 1rpx;
+}
+.live-badge::before {
+  content: '';
+  width: 10rpx;
+  height: 10rpx;
+  border-radius: 50%;
+  background: var(--status-live);
+  animation: livePulse 1.5s ease-in-out infinite;
+}
+
+/* ===================================================================
+   共享组件 6：Stat Row（C 风格 · 表格化数据行）
+   用法：<view class="stat-row"> <text class="stat-label">胜率</text>
+        <view class="stat-bar"><view class="stat-bar-fill" style="width:65%"></view></view>
+        <text class="stat-value">65%</text> </view>
+   =================================================================== */
+.stat-row {
+  display: grid;
+  grid-template-columns: 120rpx 1fr 80rpx;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+}
+.stat-label {
+  font-size: 24rpx;
+  color: #8a8f99;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stat-bar {
+  height: 12rpx;
+  background: var(--card-bg-inset);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+.stat-bar-fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--status-ongoing);
+  transition: width 240ms ease;
+}
+.stat-bar-fill.warning { background: var(--status-upcoming); }
+.stat-bar-fill.danger { background: var(--dire); }
+.stat-value {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #f0f3f6;
+  font-family: var(--font-numeric);
+  text-align: right;
+}
+
+/* ===================================================================
+   共享组件 7：Hero Banner（方案 A 局部强化 · 仅 SSS 级赛事/TI 决赛）
+   用法：<view class="hero-banner" style="background-image:url(...)">
+        <view class="hero-overlay"></view>
+        <view class="hero-content">...</view> </view>
+   =================================================================== */
+.hero-banner {
+  position: relative;
+  width: 100%;
+  height: 280rpx;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin-bottom: var(--space-2);
+  background-size: cover;
+  background-position: center;
+  background-color: var(--card-bg-inset);
+}
+.hero-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(14, 17, 22, 0.3) 0%, rgba(14, 17, 22, 0.85) 100%);
+}
+.hero-content {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.hero-title {
+  font-size: 40rpx;
+  font-weight: 700;
+  color: #f0f3f6;
+  font-family: var(--font-display);
+  text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.6);
+  line-height: 1.2;
+}
+.hero-meta {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  font-size: 24rpx;
+  color: #c9d1d9;
+}
+
+/* ===================================================================
+   共享组件 8：Empty Hint Card（增强版空态引导）
+   用于无数据场景的引导卡片
+   =================================================================== */
+.hint-card-enhanced {
+  background: var(--card-bg-elevated);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin: var(--space-3) 0;
+  border-left: 6rpx solid var(--status-upcoming);
+}
+.hint-card-enhanced .hint-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--status-upcoming);
+  margin-bottom: var(--space-2);
+}
+.hint-card-enhanced .hint-desc {
+  font-size: 26rpx;
+  color: #9aa4b2;
+  line-height: 1.6;
+  margin-bottom: var(--space-3);
+}
+.hint-card-enhanced .hint-step {
+  font-size: 24rpx;
+  color: #7d8794;
+  line-height: 1.7;
+  margin-top: var(--space-1);
+}
+
+/* ===================================================================
+   共享组件 9：Section Header（统一区块标题）
+   用法：<view class="section-header"><text class="section-title">近期战绩</text>
+        <text class="section-action">查看全部</text></view>
+   =================================================================== */
+.section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-1);
+  margin-top: var(--space-3);
+}
+.section-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #f0f3f6;
+  letter-spacing: 1rpx;
+}
+.section-action {
+  font-size: 22rpx;
+  color: #6b7280;
+  font-family: var(--font-mono);
+}

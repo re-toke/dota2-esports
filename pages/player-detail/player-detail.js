@@ -6,12 +6,35 @@ const config = require('../../utils/config.js');
 const sources = require('../../utils/sources.js');
 const app = getApp();
 
+// 来源 key -> 中文标签
+const SOURCE_BADGES = {
+  opendota: 'OpenDota',
+  stratz: 'STRATZ',
+  steam: 'Steam',
+  liquipedia: 'Liquipedia',
+  curation: '本地策展'
+};
+
+function buildSourceBadges(srcArr) {
+  if (!srcArr || !srcArr.length) return [];
+  const seen = {};
+  const out = [];
+  for (let i = 0; i < srcArr.length; i++) {
+    const k = (srcArr[i] || '').toLowerCase();
+    if (!k || seen[k]) continue;
+    seen[k] = true;
+    out.push({ key: k, label: SOURCE_BADGES[k] || srcArr[i] });
+  }
+  return out;
+}
+
 Page({
   data: {
     accountId: '',
     profile: null,
     stats: null,
     recent: [],
+    totalRecent: 0,
     topHeroes: [],
     loading: true,
     loadingMore: false,
@@ -20,6 +43,7 @@ Page({
     pageSize: config.pageSize,
     error: '',
     followed: false,
+    sourceBadges: [],
     updatedAt: 0,
     updatedLabel: ''
   },
@@ -68,12 +92,27 @@ Page({
         const list = matches || [];
         const heroMap = app.globalData.heroMap || {};
         const heroCount = {};
+        const heroWins = {};
         let wins = 0;
 
-        list.forEach((m) => {
-          if (util.playerWon(m)) wins++;
+        // 合并两次遍历为一次：同时计算 stats 聚合 + 格式化 recent
+        const allRecent = list.map((m) => {
+          const won = util.playerWon(m);
+          if (won) wins++;
           const hid = m.hero_id;
           heroCount[hid] = (heroCount[hid] || 0) + 1;
+          if (won) heroWins[hid] = (heroWins[hid] || 0) + 1;
+          return {
+            match_id: m.match_id,
+            heroName: heroMap[hid] || ('英雄' + hid),
+            win: won,
+            k: m.kills,
+            d: m.deaths,
+            a: m.assists,
+            duration: util.formatDuration(m.duration),
+            time: util.formatTime(m.start_time),
+            league: m.league_name || ''
+          };
         });
 
         const total = list.length;
@@ -86,25 +125,21 @@ Page({
 
         this.playerName = profile.name;
 
-        // 全部战绩（按最近排序，OpenDota 默认即倒序）
-        const allRecent = list.map((m) => {
-          const won = util.playerWon(m);
-          return {
-            match_id: m.match_id,
-            heroName: heroMap[m.hero_id] || ('英雄' + m.hero_id),
-            win: won,
-            k: m.kills,
-            d: m.deaths,
-            a: m.assists,
-            duration: util.formatDuration(m.duration),
-            time: util.formatTime(m.start_time),
-            league: m.league_name || ''
-          };
-        });
-
-        // 常用英雄
+        // 常用英雄（含胜率）
         const topHeroes = Object.keys(heroCount)
-          .map((hid) => ({ id: hid, name: heroMap[hid] || ('英雄' + hid), games: heroCount[hid] }))
+          .map((hid) => {
+            const games = heroCount[hid];
+            const heroWinsCount = heroWins[hid] || 0;
+            const winPct = games > 0 ? Math.round(heroWinsCount / games * 100) : 0;
+            return {
+              id: hid,
+              name: heroMap[hid] || ('英雄' + hid),
+              games: games,
+              wins: heroWinsCount,
+              winPct: winPct,
+              winRate: util.winRate(heroWinsCount, games)
+            };
+          })
           .sort((a, b) => b.games - a.games)
           .slice(0, 5);
 
@@ -114,19 +149,30 @@ Page({
         const at = api.fetchedAtOf('player', this.data.accountId) || api.fetchedAtOf('playerMatches', this.data.accountId);
         this.setData({
           profile, stats, recent, topHeroes,
+          totalRecent: allRecent.length,
           loading: false,
           page: 0,
           hasMore: allRecent.length > recent.length,
           updatedAt: at,
-          updatedLabel: util.formatAgo(at)
+          updatedLabel: util.formatAgo(at),
+          sourceBadges: buildSourceBadges(['opendota'])
         });
 
         // 异步增强队员头像：多源聚合（STRATZ），不阻塞主流程
         sources.enrichPlayerAvatar({ accountId: this.data.accountId, avatar: profile.avatar })
           .then((r) => {
             if (r && r.avatar && r.avatar !== profile.avatar) {
-              const pf = Object.assign({}, profile, { avatar: r.avatar, avatarSource: r.source });
-              this.setData({ profile: pf });
+              // 路径更新：仅刷新 profile.avatar，不整体替换 profile 对象
+              const patch = { 'profile.avatar': r.avatar };
+              if (r.source) {
+                patch['profile.avatarSource'] = r.source;
+                const newBadges = (this.data.sourceBadges || []).slice();
+                if (!newBadges.find((b) => b.key === r.source)) {
+                  newBadges.push({ key: r.source, label: SOURCE_BADGES[r.source] || r.source });
+                }
+                patch.sourceBadges = newBadges;
+              }
+              this.setData(patch);
             }
           });
       })

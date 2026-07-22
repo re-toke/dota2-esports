@@ -1,13 +1,26 @@
 <view class="container">
-  <view class="header">
-    <view class="title">我的关注</view>
-    <view class="counts">
-      <text class="c-chip">战队 {{counts.teams}}</text>
-      <text class="c-chip">选手 {{counts.players}}</text>
-      <text class="c-chip">赛事 {{counts.leagues}}</text>
+  <!-- 头部 + 计数 KPI -->
+  <view class="head">
+    <view class="head-info">
+      <view class="title">我的关注</view>
+    </view>
+  </view>
+  <view class="kpi-strip">
+    <view class="kpi-cell" bindtap="switchTab" data-key="teams">
+      <text class="kpi-label">战队</text>
+      <text class="kpi-value {{activeTab === 'teams' ? 'accent' : ''}}">{{counts.teams}}</text>
+    </view>
+    <view class="kpi-cell" bindtap="switchTab" data-key="players">
+      <text class="kpi-label">选手</text>
+      <text class="kpi-value {{activeTab === 'players' ? 'accent' : ''}}">{{counts.players}}</text>
+    </view>
+    <view class="kpi-cell" bindtap="switchTab" data-key="leagues">
+      <text class="kpi-label">赛事</text>
+      <text class="kpi-value {{activeTab === 'leagues' ? 'accent' : ''}}">{{counts.leagues}}</text>
     </view>
   </view>
 
+  <!-- 分段控件 -->
   <view class="seg">
     <view
       wx:for="{{tabs}}"
@@ -18,16 +31,29 @@
     >{{item.label}}</view>
   </view>
 
-  <t-empty wx:if="{{items.length === 0}}" icon="star" description="还没有关注任何{{activeLabel}}" />
+  <!-- 空态 -->
+  <view wx:if="{{items.length === 0}}" class="hint-card-enhanced">
+    <view class="hint-title">还没有关注任何{{activeLabel}}</view>
+    <view class="hint-desc">在战队 / 选手 / 赛事列表页点击星标即可加入关注</view>
+  </view>
 
   <view wx:else class="list">
-    <view class="card" wx:for="{{items}}" wx:key="id">
-      <view class="card-main" bindtap="openItem" data-url="{{item.target}}">
-        <view class="name">{{item.name}}</view>
-        <view class="sub muted">{{item.sub}}</view>
+    <view class="follow-card" wx:for="{{items}}" wx:key="id" hover-class="follow-card-hover">
+      <view class="follow-card-main" bindtap="openItem" data-url="{{item.target}}">
+        <view class="follow-avatar follow-avatar-{{item.type}}">
+          <text wx:if="{{item.iconText}}">{{item.iconText}}</text>
+          <text wx:else class="follow-avatar-icon">★</text>
+        </view>
+        <view class="follow-info">
+          <view class="follow-name-row">
+            <text class="follow-name">{{item.name}}</text>
+            <text class="type-badge type-{{item.type}}">{{item.typeLabel}}</text>
+          </view>
+          <text class="follow-sub">{{item.sub}}</text>
+        </view>
       </view>
-      <view class="card-action" catchtap="removeItem" data-id="{{item.id}}">
-        <t-button theme="danger" size="small" t-class="rm-btn">取消关注</t-button>
+      <view class="follow-action" catchtap="removeItem" data-id="{{item.id}}">
+        <t-icon name="close" size="36rpx" color="#6b7280" />
       </view>
     </view>
 

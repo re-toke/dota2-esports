@@ -1,0 +1,1023 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>系列赛聚合 · 两种模板对比</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    background: #0e1116;
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: #f0f3f6;
+    padding: 24px 0;
+  }
+  .stage {
+    display: flex;
+    gap: 32px;
+    justify-content: center;
+    flex-wrap: wrap;
+    padding: 0 16px;
+  }
+  .phone {
+    width: 375px;
+    background: #0e1116;
+    border: 1px solid #232a33;
+    border-radius: 16px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .phone-head {
+    background: #161b22;
+    padding: 14px 16px;
+    border-bottom: 1px solid #232a33;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .phone-title { font-size: 15px; font-weight: 600; color: #f0f3f6; }
+  .phone-tag {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(95, 211, 95, 0.12);
+    color: #5fd35f;
+    border: 1px solid rgba(95, 211, 95, 0.3);
+  }
+  .phone-body { padding: 12px; }
+
+  /* 共用 */
+  .label-strip {
+    font-size: 11px;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin: 16px 4px 8px;
+    font-weight: 600;
+  }
+  .label-strip:first-child { margin-top: 0; }
+
+  /* ===== 模板1: HLTV 紧凑风格 ===== */
+  .hltv-series {
+    background: #161b22;
+    border-radius: 12px;
+    margin-bottom: 10px;
+    overflow: hidden;
+    border: 1px solid #232a33;
+  }
+  .hltv-series-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    background: linear-gradient(90deg, rgba(95,211,95,0.04), transparent);
+  }
+  .hltv-team {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+  }
+  .hltv-team.right { justify-content: flex-end; }
+  .hltv-team-logo {
+    width: 28px; height: 28px;
+    border-radius: 6px;
+    background: #0f141b;
+    border: 1px solid #232a33;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700; color: #8a8f99;
+    flex-shrink: 0;
+  }
+  .hltv-team-name {
+    font-size: 13px; font-weight: 600; color: #f0f3f6;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .hltv-team-name.win { color: #5fd35f; }
+  .hltv-score-box {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 12px;
+  }
+  .hltv-score {
+    font-size: 22px; font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    font-family: "SF Mono", "Roboto Mono", monospace;
+    line-height: 1;
+  }
+  .hltv-score.win { color: #5fd35f; }
+  .hltv-score.lose { color: #6b7280; }
+  .hltv-score-sep { color: #4b5563; font-size: 16px; }
+  .hltv-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 14px 10px;
+    flex-wrap: wrap;
+  }
+  .hltv-bo-tag {
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    background: rgba(96, 84, 241, 0.14);
+    color: #8b80ff;
+    border: 1px solid rgba(96, 84, 241, 0.3);
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+  .hltv-bo-tag.bo-bo2 {
+    background: rgba(91, 155, 255, 0.12);
+    color: #5b9bff;
+    border-color: rgba(91, 155, 255, 0.3);
+  }
+  .hltv-bo-tag.bo-bo5 {
+    background: rgba(255, 165, 70, 0.12);
+    color: #ffa546;
+    border-color: rgba(255, 165, 70, 0.3);
+  }
+  .hltv-bo-label {
+    font-size: 10px;
+    color: #6b7280;
+    font-weight: 500;
+    margin-left: 4px;
+  }
+  .hltv-bo-group {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+  }
+  .hltv-draw-badge {
+    position: absolute;
+    top: -6px;
+    right: -10px;
+    font-size: 9px;
+    font-weight: 700;
+    color: #ffcf5c;
+    background: rgba(255, 207, 92, 0.18);
+    border: 1px solid rgba(255, 207, 92, 0.45);
+    border-radius: 999px;
+    padding: 1px 6px;
+    line-height: 1.4;
+  }
+  .hltv-score.draw { color: #c9d2dd; }
+  .hltv-team-name.draw { color: #c9d2dd; }
+  .hltv-score-box { position: relative; }
+  .hltv-status {
+    font-size: 11px;
+    color: #5fd35f;
+  }
+  .hltv-dots {
+    display: flex;
+    gap: 4px;
+    margin-left: auto;
+  }
+  .hltv-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    border: 1px solid #4b5563;
+  }
+  .hltv-dot.a-win { background: #5fd35f; border-color: #5fd35f; }
+  .hltv-dot.b-win { background: #e8443b; border-color: #e8443b; }
+
+  .hltv-games {
+    border-top: 1px solid #232a33;
+    background: #131820;
+  }
+  .hltv-game {
+    display: flex;
+    align-items: center;
+    padding: 10px 14px;
+    gap: 10px;
+    border-bottom: 1px solid #1c232c;
+    cursor: pointer;
+  }
+  .hltv-game:last-child { border-bottom: none; }
+  .hltv-game:active { background: #1c232c; }
+  .hltv-game-idx {
+    font-size: 10px;
+    color: #6b7280;
+    width: 32px;
+    font-family: "SF Mono", monospace;
+    flex-shrink: 0;
+  }
+  .hltv-game-mini {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+  }
+  .hltv-mini-logo {
+    width: 18px; height: 18px;
+    border-radius: 4px;
+    background: #0f141b;
+    border: 1px solid #232a33;
+    font-size: 9px;
+    display: flex; align-items: center; justify-content: center;
+    color: #8a8f99; font-weight: 700;
+  }
+  .hltv-mini-score {
+    font-size: 13px; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    font-family: "SF Mono", monospace;
+  }
+  .hltv-mini-score.win { color: #5fd35f; }
+  .hltv-mini-score.lose { color: #6b7280; }
+  .hltv-heroes {
+    display: flex;
+    gap: 3px;
+  }
+  .hltv-hero-mini {
+    width: 22px; height: 22px;
+    border-radius: 4px;
+    background: #0f141b;
+    border: 1px solid #2a3340;
+    font-size: 9px;
+    display: flex; align-items: center; justify-content: center;
+    color: #8a8f99; font-weight: 600;
+  }
+  .hltv-game-time {
+    font-size: 10px;
+    color: #6b7280;
+    font-family: "SF Mono", monospace;
+    flex-shrink: 0;
+  }
+  .hltv-expand-hint {
+    font-size: 10px;
+    color: #5b9bff;
+    margin-left: 4px;
+  }
+
+  /* ===== 模板2: 小黑盒 大卡风格 ===== */
+  .xhb-series {
+    background: #161b22;
+    border-radius: 16px;
+    margin-bottom: 14px;
+    overflow: hidden;
+    border: 1px solid #232a33;
+    position: relative;
+  }
+  .xhb-series.radiant-win::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #5fd35f, transparent 60%);
+  }
+  .xhb-series-head {
+    padding: 18px 16px 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+  .xhb-teams-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    gap: 12px;
+  }
+  .xhb-team-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+  }
+  .xhb-team-logo {
+    width: 52px; height: 52px;
+    border-radius: 12px;
+    background: #0f141b;
+    border: 2px solid #232a33;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; font-weight: 800; color: #8a8f99;
+  }
+  .xhb-team-logo.win { border-color: #5fd35f; }
+  .xhb-team-name {
+    font-size: 12px; font-weight: 600; color: #c9d2dd;
+    text-align: center;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 100px;
+  }
+  .xhb-team-name.win { color: #5fd35f; }
+  .xhb-score-center {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 0 8px;
+  }
+  .xhb-score-big {
+    font-size: 36px; font-weight: 900;
+    font-family: "SF Mono", "Roboto Mono", monospace;
+    line-height: 1;
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    font-variant-numeric: tabular-nums;
+  }
+  .xhb-score-big .a { color: #5fd35f; }
+  .xhb-score-big .b { color: #e8443b; }
+  .xhb-score-big .sep { color: #4b5563; font-size: 24px; }
+  .xhb-bo-label {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(96, 84, 241, 0.14);
+    color: #8b80ff;
+    border: 1px solid rgba(96, 84, 241, 0.3);
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+  .xhb-status-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 16px 12px;
+    justify-content: center;
+  }
+  .xhb-status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: #5fd35f;
+    box-shadow: 0 0 0 3px rgba(95, 211, 95, 0.2);
+  }
+  .xhb-status-text {
+    font-size: 11px;
+    color: #8a8f99;
+  }
+  .xhb-status-text.live { color: #5fd35f; font-weight: 600; }
+
+  .xhb-games-strip {
+    display: flex;
+    gap: 8px;
+    padding: 0 12px 14px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .xhb-games-strip::-webkit-scrollbar { display: none; }
+  .xhb-game-card {
+    flex: 0 0 auto;
+    width: 88px;
+    background: #0f141b;
+    border: 1px solid #232a33;
+    border-radius: 10px;
+    padding: 10px 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .xhb-game-card.win { border-color: rgba(95, 211, 95, 0.4); }
+  .xhb-game-num {
+    font-size: 9px;
+    color: #6b7280;
+    font-family: "SF Mono", monospace;
+    font-weight: 600;
+  }
+  .xhb-game-result {
+    font-size: 11px;
+    font-weight: 700;
+    color: #5fd35f;
+  }
+  .xhb-game-result.lose { color: #6b7280; }
+  .xhb-game-heroes {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    align-items: center;
+  }
+  .xhb-hero-row {
+    display: flex;
+    gap: 2px;
+  }
+  .xhb-hero-icon {
+    width: 14px; height: 14px;
+    border-radius: 3px;
+    background: #1c232c;
+    border: 1px solid #2a3340;
+  }
+  .xhb-game-dur {
+    font-size: 9px;
+    color: #6b7280;
+    font-family: "SF Mono", monospace;
+  }
+
+  .xhb-footer {
+    padding: 10px 16px;
+    border-top: 1px solid #232a33;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #131820;
+  }
+  .xhb-footer-text {
+    font-size: 11px;
+    color: #5b9bff;
+  }
+  .xhb-footer-arrow {
+    color: #5b9bff;
+    font-size: 14px;
+  }
+
+  /* 对比说明 */
+  .compare-note {
+    max-width: 900px;
+    margin: 24px auto 0;
+    padding: 0 24px;
+    color: #8a8f99;
+    font-size: 13px;
+    line-height: 1.7;
+  }
+  .compare-note h3 {
+    color: #f0f3f6;
+    font-size: 15px;
+    margin: 16px 0 6px;
+  }
+  .compare-note strong { color: #5fd35f; }
+</style>
+</head>
+<body>
+
+<div class="stage">
+
+  <!-- ========== 模板1: HLTV 紧凑风格 ========== -->
+  <div class="phone">
+    <div class="phone-head">
+      <div class="phone-title">模板 A · HLTV 紧凑</div>
+      <div class="phone-tag">信息密度高</div>
+    </div>
+    <div class="phone-body">
+
+      <div class="label-strip">已结束系列赛</div>
+
+      <!-- 系列1: Tundra 2-1 Gaimin (BO3) -->
+      <div class="hltv-series">
+        <div class="hltv-series-head">
+          <div class="hltv-team">
+            <div class="hltv-team-logo">T</div>
+            <div class="hltv-team-name win">Tundra</div>
+          </div>
+          <div class="hltv-score-box">
+            <span class="hltv-score win">2</span>
+            <span class="hltv-score-sep">:</span>
+            <span class="hltv-score lose">1</span>
+          </div>
+          <div class="hltv-team right">
+            <div class="hltv-team-name">Gaimin</div>
+            <div class="hltv-team-logo">G</div>
+          </div>
+        </div>
+        <div class="hltv-meta-row">
+          <div class="hltv-bo-group">
+            <span class="hltv-bo-tag">BO3</span>
+            <span class="hltv-bo-label">三局两胜</span>
+          </div>
+          <span class="hltv-status">已结束 · 2h前</span>
+          <div class="hltv-dots">
+            <div class="hltv-dot a-win"></div>
+            <div class="hltv-dot b-win"></div>
+            <div class="hltv-dot a-win"></div>
+          </div>
+        </div>
+        <div class="hltv-games">
+          <div class="hltv-game">
+            <span class="hltv-game-idx">G1</span>
+            <div class="hltv-game-mini">
+              <div class="hltv-mini-logo">T</div>
+              <span class="hltv-mini-score win">2</span>
+              <span style="color:#4b5563;font-size:11px;">:</span>
+              <span class="hltv-mini-score lose">0</span>
+              <div class="hltv-mini-logo">G</div>
+            </div>
+            <div class="hltv-heroes">
+              <div class="hltv-hero-mini">Pud</div>
+              <div class="hltv-hero-mini">Inv</div>
+              <div class="hltv-hero-mini">Lina</div>
+            </div>
+            <span class="hltv-game-time">38:21</span>
+            <span class="hltv-expand-hint">▾</span>
+          </div>
+          <div class="hltv-game">
+            <span class="hltv-game-idx">G2</span>
+            <div class="hltv-game-mini">
+              <div class="hltv-mini-logo">T</div>
+              <span class="hltv-mini-score lose">1</span>
+              <span style="color:#4b5563;font-size:11px;">:</span>
+              <span class="hltv-mini-score win">2</span>
+              <div class="hltv-mini-logo">G</div>
+            </div>
+            <div class="hltv-heroes">
+              <div class="hltv-hero-mini">Snk</div>
+              <div class="hltv-hero-mini">Spec</div>
+              <div class="hltv-hero-mini">WK</div>
+            </div>
+            <span class="hltv-game-time">42:05</span>
+            <span class="hltv-expand-hint">▾</span>
+          </div>
+          <div class="hltv-game">
+            <span class="hltv-game-idx">G3</span>
+            <div class="hltv-game-mini">
+              <div class="hltv-mini-logo">T</div>
+              <span class="hltv-mini-score win">2</span>
+              <span style="color:#4b5563;font-size:11px;">:</span>
+              <span class="hltv-mini-score lose">1</span>
+              <div class="hltv-mini-logo">G</div>
+            </div>
+            <div class="hltv-heroes">
+              <div class="hltv-hero-mini">Mar</div>
+              <div class="hltv-hero-mini">Doom</div>
+              <div class="hltv-hero-mini">Nyq</div>
+            </div>
+            <span class="hltv-game-time">35:44</span>
+            <span class="hltv-expand-hint">▾</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 系列2: Team Liquid 2-0 OG (BO3) -->
+      <div class="hltv-series">
+        <div class="hltv-series-head">
+          <div class="hltv-team">
+            <div class="hltv-team-logo">L</div>
+            <div class="hltv-team-name win">Liquid</div>
+          </div>
+          <div class="hltv-score-box">
+            <span class="hltv-score win">2</span>
+            <span class="hltv-score-sep">:</span>
+            <span class="hltv-score lose">0</span>
+          </div>
+          <div class="hltv-team right">
+            <div class="hltv-team-name">OG</div>
+            <div class="hltv-team-logo">O</div>
+          </div>
+        </div>
+        <div class="hltv-meta-row">
+          <div class="hltv-bo-group">
+            <span class="hltv-bo-tag">BO3</span>
+            <span class="hltv-bo-label">三局两胜</span>
+          </div>
+          <span class="hltv-status">已结束 · 5h前</span>
+          <div class="hltv-dots">
+            <div class="hltv-dot a-win"></div>
+            <div class="hltv-dot a-win"></div>
+          </div>
+        </div>
+        <div class="hltv-games">
+          <div class="hltv-game">
+            <span class="hltv-game-idx">G1</span>
+            <div class="hltv-game-mini">
+              <div class="hltv-mini-logo">L</div>
+              <span class="hltv-mini-score win">2</span>
+              <span style="color:#4b5563;font-size:11px;">:</span>
+              <span class="hltv-mini-score lose">0</span>
+              <div class="hltv-mini-logo">O</div>
+            </div>
+            <div class="hltv-heroes">
+              <div class="hltv-hero-mini">Ember</div>
+              <div class="hltv-hero-mini">ES</div>
+              <div class="hltv-hero-mini">Lion</div>
+            </div>
+            <span class="hltv-game-time">31:12</span>
+            <span class="hltv-expand-hint">▾</span>
+          </div>
+          <div class="hltv-game">
+            <span class="hltv-game-idx">G2</span>
+            <div class="hltv-game-mini">
+              <div class="hltv-mini-logo">L</div>
+              <span class="hltv-mini-score win">2</span>
+              <span style="color:#4b5563;font-size:11px;">:</span>
+              <span class="hltv-mini-score lose">1</span>
+              <div class="hltv-mini-logo">O</div>
+            </div>
+            <div class="hltv-heroes">
+              <div class="hltv-hero-mini">TA</div>
+              <div class="hltv-hero-mini">Sk</div>
+              <div class="hltv-hero-mini">Rub</div>
+            </div>
+            <span class="hltv-game-time">28:55</span>
+            <span class="hltv-expand-hint">▾</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- BO2 平局示例: Entity 1-1 Talon (双局积分制) -->
+      <div class="hltv-series">
+        <div class="hltv-series-head">
+          <div class="hltv-team">
+            <div class="hltv-team-logo">E</div>
+            <div class="hltv-team-name draw">Entity</div>
+          </div>
+          <div class="hltv-score-box">
+            <span class="hltv-score draw">1</span>
+            <span class="hltv-score-sep">:</span>
+            <span class="hltv-score draw">1</span>
+            <span class="hltv-draw-badge">平</span>
+          </div>
+          <div class="hltv-team right">
+            <div class="hltv-team-name draw">Talon</div>
+            <div class="hltv-team-logo">T</div>
+          </div>
+        </div>
+        <div class="hltv-meta-row">
+          <div class="hltv-bo-group">
+            <span class="hltv-bo-tag bo-bo2">BO2</span>
+            <span class="hltv-bo-label">双局积分</span>
+          </div>
+          <span class="hltv-status">已结束 · 3h前</span>
+          <div class="hltv-dots">
+            <div class="hltv-dot a-win"></div>
+            <div class="hltv-dot b-win"></div>
+          </div>
+        </div>
+        <div class="hltv-games">
+          <div class="hltv-game">
+            <span class="hltv-game-idx">G1</span>
+            <div class="hltv-game-mini">
+              <div class="hltv-mini-logo">E</div>
+              <span class="hltv-mini-score win">1</span>
+              <span style="color:#4b5563;font-size:11px;">:</span>
+              <span class="hltv-mini-score lose">0</span>
+              <div class="hltv-mini-logo">T</div>
+            </div>
+            <div class="hltv-heroes">
+              <div class="hltv-hero-mini">Lc</div>
+              <div class="hltv-hero-mini">Wr</div>
+              <div class="hltv-hero-mini">Sk</div>
+            </div>
+            <span class="hltv-game-time">36:18</span>
+            <span class="hltv-expand-hint">▾</span>
+          </div>
+          <div class="hltv-game">
+            <span class="hltv-game-idx">G2</span>
+            <div class="hltv-game-mini">
+              <div class="hltv-mini-logo">E</div>
+              <span class="hltv-mini-score lose">0</span>
+              <span style="color:#4b5563;font-size:11px;">:</span>
+              <span class="hltv-mini-score win">1</span>
+              <div class="hltv-mini-logo">T</div>
+            </div>
+            <div class="hltv-heroes">
+              <div class="hltv-hero-mini">Drow</div>
+              <div class="hltv-hero-mini">Lich</div>
+              <div class="hltv-hero-mini">Rb</div>
+            </div>
+            <span class="hltv-game-time">41:55</span>
+            <span class="hltv-expand-hint">▾</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 单场(BO1) -->
+      <div class="hltv-series">
+        <div class="hltv-series-head">
+          <div class="hltv-team">
+            <div class="hltv-team-logo">S</div>
+            <div class="hltv-team-name">Secret</div>
+          </div>
+          <div class="hltv-score-box">
+            <span class="hltv-score lose">1</span>
+            <span class="hltv-score-sep">:</span>
+            <span class="hltv-score win">2</span>
+          </div>
+          <div class="hltv-team right">
+            <div class="hltv-team-name win">Nigma</div>
+            <div class="hltv-team-logo">N</div>
+          </div>
+        </div>
+        <div class="hltv-meta-row">
+          <div class="hltv-bo-group">
+            <span class="hltv-bo-tag">BO1</span>
+            <span class="hltv-bo-label">单局制</span>
+          </div>
+          <span class="hltv-status">已结束 · 8h前</span>
+        </div>
+      </div>
+
+      <div class="label-strip">进行中系列赛</div>
+
+      <!-- 进行中 -->
+      <div class="hltv-series" style="border-color: rgba(95,211,95,0.3);">
+        <div class="hltv-series-head" style="background: linear-gradient(90deg, rgba(95,211,95,0.08), transparent);">
+          <div class="hltv-team">
+            <div class="hltv-team-logo">B</div>
+            <div class="hltv-team-name">BetBoom</div>
+          </div>
+          <div class="hltv-score-box">
+            <span class="hltv-score lose">1</span>
+            <span class="hltv-score-sep">:</span>
+            <span class="hltv-score win">2</span>
+          </div>
+          <div class="hltv-team right">
+            <div class="hltv-team-name win">Spirit</div>
+            <div class="hltv-team-logo">S</div>
+          </div>
+        </div>
+        <div class="hltv-meta-row">
+          <span class="hltv-bo-tag">BO3</span>
+          <span class="hltv-status" style="color:#5fd35f;">● LIVE · G4 进行中</span>
+          <div class="hltv-dots">
+            <div class="hltv-dot a-win"></div>
+            <div class="hltv-dot b-win"></div>
+            <div class="hltv-dot b-win"></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========== 模板2: 小黑盒 大卡风格 ========== -->
+  <div class="phone">
+    <div class="phone-head">
+      <div class="phone-title">模板 B · 小黑盒大卡</div>
+      <div class="phone-tag">视觉冲击强</div>
+    </div>
+    <div class="phone-body">
+
+      <div class="label-strip">重点系列赛</div>
+
+      <!-- 系列1: Tundra 2-1 Gaimin (BO3) -->
+      <div class="xhb-series radiant-win">
+        <div class="xhb-series-head">
+          <div class="xhb-teams-row">
+            <div class="xhb-team-block">
+              <div class="xhb-team-logo win">T</div>
+              <div class="xhb-team-name win">Tundra</div>
+            </div>
+            <div class="xhb-score-center">
+              <div class="xhb-score-big">
+                <span class="a">2</span>
+                <span class="sep">:</span>
+                <span class="b">1</span>
+              </div>
+              <span class="xhb-bo-label">BO3</span>
+            </div>
+            <div class="xhb-team-block">
+              <div class="xhb-team-logo">G</div>
+              <div class="xhb-team-name">Gaimin</div>
+            </div>
+          </div>
+        </div>
+        <div class="xhb-status-row">
+          <div class="xhb-status-dot"></div>
+          <span class="xhb-status-text">已结束 · 2小时前</span>
+        </div>
+        <div class="xhb-games-strip">
+          <div class="xhb-game-card win">
+            <span class="xhb-game-num">G1</span>
+            <span class="xhb-game-result">Tundra WIN</span>
+            <div class="xhb-game-heroes">
+              <div class="xhb-hero-row">
+                <div class="xhb-hero-icon"></div>
+                <div class="xhb-hero-icon"></div>
+                <div class="xhb-hero-icon"></div>
+                <div class="xhb-hero-icon"></div>
+                <div class="xhb-hero-icon"></div>
+              </div>
+              <div class="xhb-hero-row">
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+              </div>
+            </div>
+            <span class="xhb-game-dur">38:21</span>
+          </div>
+          <div class="xhb-game-card">
+            <span class="xhb-game-num">G2</span>
+            <span class="xhb-game-result lose">Gaimin WIN</span>
+            <div class="xhb-game-heroes">
+              <div class="xhb-hero-row">
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+              </div>
+              <div class="xhb-hero-row">
+                <div class="xhb-hero-icon"></div>
+                <div class="xhb-hero-icon"></div>
+                <div class="xhb-hero-icon"></div>
+                <div class="xhb-hero-icon"></div>
+                <div class="xhb-hero-icon"></div>
+              </div>
+            </div>
+            <span class="xhb-game-dur">42:05</span>
+          </div>
+          <div class="xhb-game-card win">
+            <span class="xhb-game-num">G3</span>
+            <span class="xhb-game-result">Tundra WIN</span>
+            <div class="xhb-game-heroes">
+              <div class="xhb-hero-row">
+                <div class="xhb-hero-icon"></div>
+                <div class="xhb-hero-icon"></div>
+                <div class="xhb-hero-icon"></div>
+                <div class="xhb-hero-icon"></div>
+                <div class="xhb-hero-icon"></div>
+              </div>
+              <div class="xhb-hero-row">
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+              </div>
+            </div>
+            <span class="xhb-game-dur">35:44</span>
+          </div>
+        </div>
+        <div class="xhb-footer">
+          <span class="xhb-footer-text">查看完整战报 · KDA / GPM / XPM</span>
+          <span class="xhb-footer-arrow">›</span>
+        </div>
+      </div>
+
+      <!-- 系列2: Liquid 2-0 OG (BO3) -->
+      <div class="xhb-series radiant-win">
+        <div class="xhb-series-head">
+          <div class="xhb-teams-row">
+            <div class="xhb-team-block">
+              <div class="xhb-team-logo win">L</div>
+              <div class="xhb-team-name win">Liquid</div>
+            </div>
+            <div class="xhb-score-center">
+              <div class="xhb-score-big">
+                <span class="a">2</span>
+                <span class="sep">:</span>
+                <span class="b">0</span>
+              </div>
+              <span class="xhb-bo-label">BO3</span>
+            </div>
+            <div class="xhb-team-block">
+              <div class="xhb-team-logo">O</div>
+              <div class="xhb-team-name">OG</div>
+            </div>
+          </div>
+        </div>
+        <div class="xhb-status-row">
+          <div class="xhb-status-dot"></div>
+          <span class="xhb-status-text">已结束 · 5小时前</span>
+        </div>
+        <div class="xhb-games-strip">
+          <div class="xhb-game-card win">
+            <span class="xhb-game-num">G1</span>
+            <span class="xhb-game-result">Liquid WIN</span>
+            <div class="xhb-game-heroes">
+              <div class="xhb-hero-row">
+                <div class="xhb-hero-icon"></div>
+                <div class="xhb-hero-icon"></div>
+                <div class="xhb-hero-icon"></div>
+                <div class="xhb-hero-icon"></div>
+                <div class="xhb-hero-icon"></div>
+              </div>
+              <div class="xhb-hero-row">
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+              </div>
+            </div>
+            <span class="xhb-game-dur">31:12</span>
+          </div>
+          <div class="xhb-game-card win">
+            <span class="xhb-game-num">G2</span>
+            <span class="xhb-game-result">Liquid WIN</span>
+            <div class="xhb-game-heroes">
+              <div class="xhb-hero-row">
+                <div class="xhb-hero-icon"></div>
+                <div class="xhb-hero-icon"></div>
+                <div class="xhb-hero-icon"></div>
+                <div class="xhb-hero-icon"></div>
+                <div class="xhb-hero-icon"></div>
+              </div>
+              <div class="xhb-hero-row">
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+              </div>
+            </div>
+            <span class="xhb-game-dur">28:55</span>
+          </div>
+        </div>
+        <div class="xhb-footer">
+          <span class="xhb-footer-text">查看完整战报</span>
+          <span class="xhb-footer-arrow">›</span>
+        </div>
+      </div>
+
+      <!-- 进行中 -->
+      <div class="xhb-series">
+        <div class="xhb-series-head">
+          <div class="xhb-teams-row">
+            <div class="xhb-team-block">
+              <div class="xhb-team-logo">B</div>
+              <div class="xhb-team-name">BetBoom</div>
+            </div>
+            <div class="xhb-score-center">
+              <div class="xhb-score-big">
+                <span class="a">1</span>
+                <span class="sep">:</span>
+                <span class="b">2</span>
+              </div>
+              <span class="xhb-bo-label">BO3</span>
+            </div>
+            <div class="xhb-team-block">
+              <div class="xhb-team-logo win">S</div>
+              <div class="xhb-team-name win">Spirit</div>
+            </div>
+          </div>
+        </div>
+        <div class="xhb-status-row">
+          <div class="xhb-status-dot" style="background:#ffcf5c;box-shadow:0 0 0 3px rgba(255,207,92,0.2);"></div>
+          <span class="xhb-status-text live">● LIVE · G4 进行中</span>
+        </div>
+        <div class="xhb-games-strip">
+          <div class="xhb-game-card win">
+            <span class="xhb-game-num">G1</span>
+            <span class="xhb-game-result">BetBoom WIN</span>
+            <div class="xhb-game-heroes">
+              <div class="xhb-hero-row">
+                <div class="xhb-hero-icon"></div>
+                <div class="xhb-hero-icon"></div>
+                <div class="xhb-hero-icon"></div>
+                <div class="xhb-hero-icon"></div>
+                <div class="xhb-hero-icon"></div>
+              </div>
+              <div class="xhb-hero-row">
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+              </div>
+            </div>
+            <span class="xhb-game-dur">41:02</span>
+          </div>
+          <div class="xhb-game-card">
+            <span class="xhb-game-num">G2</span>
+            <span class="xhb-game-result lose">Spirit WIN</span>
+            <div class="xhb-game-heroes">
+              <div class="xhb-hero-row">
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+                <div class="xhb-hero-icon" style="opacity:0.5;"></div>
+              </div>
+              <div class="xhb-hero-row">
+                <div class="xhb-hero-icon"></div>
+                <div class="xhb-hero-icon"></div>
+                <div class="xhb-hero-icon"></div>
+                <div class="xhb-hero-icon"></div>
+                <div class="xhb-hero-icon"></div>
+              </div>
+            </div>
+            <span class="xhb-game-dur">37:18</span>
+          </div>
+          <div class="xhb-game-card" style="border-color:rgba(255,207,92,0.5);background:#13110a;">
+            <span class="xhb-game-num">G4</span>
+            <span class="xhb-game-result" style="color:#ffcf5c;">进行中</span>
+            <div class="xhb-game-heroes">
+              <div class="xhb-hero-row">
+                <div class="xhb-hero-icon" style="border-color:#ffcf5c;"></div>
+                <div class="xhb-hero-icon" style="border-color:#ffcf5c;"></div>
+                <div class="xhb-hero-icon" style="border-color:#ffcf5c;"></div>
+                <div class="xhb-hero-icon" style="border-color:#ffcf5c;"></div>
+                <div class="xhb-hero-icon" style="border-color:#ffcf5c;"></div>
+              </div>
+              <div class="xhb-hero-row">
+                <div class="xhb-hero-icon" style="border-color:#ffcf5c;opacity:0.5;"></div>
+                <div class="xhb-hero-icon" style="border-color:#ffcf5c;opacity:0.5;"></div>
+                <div class="xhb-hero-icon" style="border-color:#ffcf5c;opacity:0.5;"></div>
+                <div class="xhb-hero-icon" style="border-color:#ffcf5c;opacity:0.5;"></div>
+                <div class="xhb-hero-icon" style="border-color:#ffcf5c;opacity:0.5;"></div>
+              </div>
+            </div>
+            <span class="xhb-game-dur">15:33</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<div class="compare-note">
+  <h3>两种模板对比</h3>
+  <p><strong>模板 A · HLTV 紧凑</strong>：同一系列赛的多场折叠在一个卡片内，顶部大比分 + 小圆点序列直观展示各小场胜负。每小场一行（小场号 / mini 比分 / 英雄缩写 / 时长），点击展开英雄阵容。一屏可看 3-4 个系列赛，信息密度高，适合浏览大量比赛。</p>
+  <p><strong>模板 B · 小黑盒大卡</strong>：系列赛大比分超大字号，视觉冲击强。各小场横向滑动卡片展示，每张卡含双方英雄图标阵列（赢方高亮、输方半透明）。适合重点比赛，但一屏只能看 1-2 个系列赛，滚动较多。</p>
+  <h3>实现说明</h3>
+  <p>两种模板共用同一套数据层：在 <code>sources.js</code> 增加 <code>groupSeries(matches)</code> 聚合函数，按 <code>series_id</code>（OpenDota 字段）或 fallback（相同双方队伍 + start_time 间隔 &lt; 4h）归组，计算系列比分和各小场胜负。选定模板后我直接在 league-detail 实现。</p>
+</div>
+
+</body>
+</html>

@@ -2,6 +2,7 @@
   "pages": [
     "pages/leagues/leagues",
     "pages/league-detail/league-detail",
+    "pages/match-detail/match-detail",
     "pages/teams/teams",
     "pages/team-detail/team-detail",
     "pages/player-detail/player-detail",

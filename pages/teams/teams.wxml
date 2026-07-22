@@ -20,7 +20,15 @@
     </view>
   </view>
 
-  <view class="section-title" wx:if="{{mode === 'hot'}}">热门战队</view>
+  <!-- 区块标题 + 数据源说明 -->
+  <view class="section-header" wx:if="{{mode === 'hot'}}">
+    <text class="section-title">热门战队</text>
+    <text class="section-action" wx:if="{{hotEnriching}}">数据载入中…</text>
+  </view>
+  <view class="section-header" wx:elif="{{mode === 'result' && results.length > 0}}">
+    <text class="section-title">搜索结果 · {{results.length}}</text>
+    <text class="section-action" wx:if="{{resultEnriching}}">补全中…</text>
+  </view>
 
   <!-- 搜索加载骨架屏 -->
   <block wx:if="{{loading}}">
@@ -36,27 +44,82 @@
     </view>
   </view>
 
-  <view wx:elif="{{mode === 'result' && results.length === 0 && !loading}}" class="center muted">未找到相关战队</view>
+  <view wx:elif="{{mode === 'result' && results.length === 0 && !loading}}" class="hint-card-enhanced">
+    <view class="hint-title">未找到相关战队</view>
+    <view class="hint-desc">试试更通用的关键词，例如「LGD」「Spirit」「OG」</view>
+  </view>
 
   <block wx:else>
     <view class="team-list">
       <view
-        class="team-item"
+        class="team-card"
         wx:for="{{mode === 'hot' ? hot : results}}"
         wx:key="id"
         bindtap="openTeam"
         data-id="{{item.id}}"
+        hover-class="team-card-hover"
       >
-        <t-avatar size="medium" text="{{item.tag}}" />
-        <view class="team-name">{{item.name}}</view>
-        <t-icon
-          name="star"
-          size="44rpx"
-          color="{{item.followed ? '#ffcf5c' : '#5b626d'}}"
-          catchtap="toggleFollow"
-          data-id="{{item.id}}"
-          data-name="{{item.name}}"
-        />
+        <!-- 头部：logo + 信息 + 关注 -->
+        <view class="team-card-head">
+          <view class="team-logo">
+            <image
+              wx:if="{{item.logo}}"
+              class="team-logo-img"
+              src="{{item.logo}}"
+              mode="aspectFill"
+              lazy-load="{{true}}"
+            />
+            <view wx:else class="team-logo-ph">{{item.tag}}</view>
+          </view>
+
+          <view class="team-info">
+            <view class="team-info-row">
+              <text class="team-info-name">{{item.name}}</text>
+              <view wx:if="{{item.country}}" class="country-badge">{{item.country}}</view>
+            </view>
+            <view class="team-info-meta">
+              <text wx:if="{{item.tag}}" class="team-tag">#{{item.tag}}</text>
+              <text wx:if="{{item.lastMatchLabel}}" class="team-last">最近 {{item.lastMatchLabel}}</text>
+            </view>
+          </view>
+
+          <view
+            class="team-star"
+            catchtap="toggleFollow"
+            data-id="{{item.id}}"
+            data-name="{{item.name}}"
+          >
+            <t-icon
+              name="star"
+              size="44rpx"
+              color="{{item.followed ? '#ffcf5c' : '#5b626d'}}"
+            />
+          </view>
+        </view>
+
+        <!-- 数据行：仅在补全完成后展示 -->
+        <view wx:if="{{item.hasStats}}" class="team-stats">
+          <view class="stat-mini">
+            <view class="stat-mini-label">RATING</view>
+            <view class="stat-mini-value">{{item.rating}}</view>
+          </view>
+          <view class="stat-mini-divider"></view>
+          <view class="stat-mini">
+            <view class="stat-mini-label">胜负</view>
+            <view class="stat-mini-value">{{item.wins}}-{{item.losses}}</view>
+          </view>
+          <view class="stat-mini-divider"></view>
+          <view class="stat-mini">
+            <view class="stat-mini-label">胜率</view>
+            <view class="stat-mini-value {{item.winRateClass}}">{{item.winRate}}%</view>
+          </view>
+        </view>
+
+        <!-- 数据来源徽标 -->
+        <view wx:if="{{item.sourceLabel}}" class="team-source-row">
+          <view class="src-badge src-{{item.sourceKey}}">{{item.sourceLabel}}</view>
+          <text wx:if="{{item.lastMatchLabel}}" class="team-fresh">{{item.lastMatchLabel}}</text>
+        </view>
       </view>
     </view>
 

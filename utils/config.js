@@ -12,6 +12,7 @@ module.exports = {
     leagues: 6 * 3600,        // 全部赛事列表（变化慢，缓存久）
     leagueWindows: 2 * 3600,  // explorer 聚合的赛事时间窗口（earliest/latest/count）
     leagueMatches: 30 * 60,   // 单赛事比赛（cachedFresh 新鲜窗口 10min，硬 TTL 30min）
+    match: 30 * 60,           // 单场比赛详情（含 players 数组：英雄/KDA/GPM/XPM）
     team: 6 * 3600,           // 战队详情（新鲜窗口 1h）
     teamPlayers: 3 * 3600,    // 战队成员（新鲜窗口 1h）
     teamMatches: 30 * 60,     // 战队比赛历史（新鲜窗口 10min）
@@ -74,7 +75,7 @@ module.exports = {
   // 提供 OpenDota/STRATZ/Steam 均无的赛事元数据（规范名/日期/奖金池/地点/赛制/主办方），
   // 作为真正独立于 Valve 比赛数据的交叉验证来源。
   liquipedia: {
-    enabled: true,
+    enabled: false,
     base: 'https://liquipedia.net/dota2/api.php',
     userAgent: 'DOTA2-Esports-Hub/1.0 (WeChat Mini Program; contact: dev@local)',
     rateLimitMs: 2200,   // 官方要求 ≥ 2 秒，留 200ms 余量

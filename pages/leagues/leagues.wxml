@@ -8,34 +8,59 @@
     />
   </view>
 
-  <!-- 正在直播的比赛（Steam / STRATZ，实时比分） -->
+  <!-- 直播中区域（B 风格 · 左右对阵 + 脉冲动效） -->
   <block wx:if="{{liveGames.length > 0}}">
-    <view class="live-title">
-      <text class="live-dot"></text>
-      <text>直播中 · {{liveGames.length}} 场</text>
+    <view class="section-header">
+      <view class="live-badge">直播中 · {{liveGames.length}} 场</view>
+      <text class="fresh-label" wx:if="{{updatedLabel}}">{{updatedLabel}}</text>
     </view>
-    <view class="live-card" wx:for="{{liveGames}}" wx:key="lobbyId">
-      <view class="live-row">
-        <text class="live-team">{{item.radiantName}}</text>
-        <text class="live-score win">{{item.radiantScore}}</text>
+
+    <view
+      class="vs-card live live-pulse-card"
+      wx:for="{{liveGames}}"
+      wx:key="lobbyId"
+      bindtap="openLive"
+      data-league="{{item.leagueId}}"
+      data-name="{{item.leagueName}}"
+    >
+      <view class="vs-side home">
+        <view class="vs-team">
+          <image wx:if="{{item.radiantLogo}}" class="vs-team-logo" src="{{item.radiantLogo}}" mode="aspectFit" />
+          <view wx:else class="vs-team-logo vs-team-logo-placeholder">{{item.radiantName ? item.radiantName[0] : '?'}}</view>
+          <text class="vs-team-name">{{item.radiantName || '天辉'}}</text>
+        </view>
+        <text class="vs-score {{item.radiantScore > item.direScore ? 'win' : 'lose'}}">{{item.radiantScore}}</text>
       </view>
-      <view class="live-row">
-        <text class="live-team">{{item.direName}}</text>
-        <text class="live-score lose">{{item.direScore}}</text>
+      <view class="vs-center">
+        <text class="vs-vs">LIVE</text>
+        <text class="vs-meta" wx:if="{{item.gameState}}">{{item.gameState}}</text>
+        <text class="vs-meta" wx:elif="{{item.spectators > 0}}">{{item.spectators}} 在看</text>
+        <text class="vs-meta" wx:else>实时</text>
       </view>
-      <view class="live-meta">
-        <text wx:if="{{item.leagueName}}" class="muted">{{item.leagueName}} · </text>
-        <text wx:if="{{item.spectators > 0}}" class="muted">{{item.spectators}} 人在看</text>
-        <text wx:if="{{item.source}}" class="live-src">{{item.source}}</text>
+      <view class="vs-side away">
+        <view class="vs-team">
+          <image wx:if="{{item.direLogo}}" class="vs-team-logo" src="{{item.direLogo}}" mode="aspectFit" />
+          <view wx:else class="vs-team-logo vs-team-logo-placeholder">{{item.direName ? item.direName[0] : '?'}}</view>
+          <text class="vs-team-name">{{item.direName || '夜魇'}}</text>
+        </view>
+        <text class="vs-score {{item.direScore > item.radiantScore ? 'win' : 'lose'}}">{{item.direScore}}</text>
       </view>
+    </view>
+
+    <view class="live-source-row" wx:if="{{liveGames.length > 0}}">
+      <text class="muted live-source-text">数据来源：</text>
+      <block wx:for="{{liveGames}}" wx:key="lobbyId" wx:for-item="g">
+        <text class="src-badge src-{{g.source}}" wx:if="{{g.source}}">{{g.source === 'steam' ? 'Steam' : (g.source === 'stratz' ? 'STRATZ' : g.source)}}</text>
+      </block>
     </view>
   </block>
 
+  <!-- 筛选条 + 新鲜度（B 风格 · 移动友好 chips） -->
   <view class="filter-bar">
     <view class="chip {{filter==='all'?'active':''}}" data-f="all" bindtap="onFilter">全部</view>
     <view class="chip {{filter==='ongoing'?'active':''}}" data-f="ongoing" bindtap="onFilter">正在进行</view>
     <view class="chip {{filter==='upcoming'?'active':''}}" data-f="upcoming" bindtap="onFilter">即将到来</view>
-    
+    <view class="chip {{filter==='ended'?'active':''}}" data-f="ended" bindtap="onFilter">已结束</view>
   </view>
 
   <!-- 加载骨架 -->
@@ -64,7 +89,7 @@
   <!-- 即将到来为空且 STRATZ 未启用：明确告知需启用 STRATZ 才能获取赛程 -->
   <view wx:elif="{{filter==='upcoming' && list.length === 0 && !stratzEnabled}}" class="empty-hint">
     <t-empty icon="info-circle" description="无法获取即将到来的赛程数据" />
-    <view class="hint-card">
+    <view class="hint-card-enhanced">
       <view class="hint-title">赛程数据需要 STRATZ 支持</view>
       <view class="hint-desc">即将到来的比赛赛程主要来自 STRATZ GraphQL API，当前未启用，因此无法获取未来两个月的赛事赛程。</view>
       <view class="hint-step">在 <text class="hint-code">utils/config.js</text> 中填入 STRATZ apiKey 并设置 <text class="hint-code">enabled: true</text> 即可启用。</view>
@@ -87,15 +112,19 @@
       data-name="{{item.name}}"
     >
       <view class="league-main">
-        <view class="league-name">{{item.name}}</view>
-        <view class="league-meta">
-          <t-tag theme="{{item.tagTheme}}" variant="{{item.tagVariant}}" size="small">{{item.label}}</t-tag>
-          <text class="status-tag" style="color:{{item.statusColor}};border-color:{{item.statusColor}}">{{item.statusText}}</text>
-          <text class="muted src">{{item.source === 'community' ? '社区分级' : 'OpenDota'}}</text>
+        <view class="league-name-row">
+          <text class="league-name">{{item.name}}</text>
+          <view class="league-badges">
+            <t-tag theme="{{item.tagTheme}}" variant="{{item.tagVariant}}" size="small">{{item.label}}</t-tag>
+            <text class="status-tag" style="color:{{item.statusColor}};border-color:{{item.statusColor}}">{{item.statusText}}</text>
+          </view>
         </view>
-        <view class="league-sub muted" wx:if="{{item.dateRange}}">
-          <text class="date-range">{{item.dateRange}}</text>
+        <view class="league-sub muted" wx:if="{{item.dateRange || item.matchCount}}">
+          <text class="date-range" wx:if="{{item.dateRange}}">{{item.dateRange}}</text>
           <text wx:if="{{item.matchCount}}"> · {{item.matchCount}} 场</text>
+        </view>
+        <view class="league-source-row">
+          <text class="src-badge src-{{item.source === 'community' ? 'curation' : 'opendota'}}">{{item.source === 'community' ? '社区分级' : 'OpenDota'}}</text>
         </view>
       </view>
       <view class="star-btn" catchtap="toggleFollow" data-id="{{item.leagueid}}" data-name="{{item.name}}">
@@ -105,6 +134,10 @@
 
     <view class="loadmore" wx:if="{{hasMore}}">
       <t-button theme="light" size="medium" bindtap="appendPage" t-class="more-btn">加载更多</t-button>
+    </view>
+
+    <view class="fresh-bottom" wx:if="{{updatedLabel && !loading}}">
+      <text class="fresh-label">{{updatedLabel}}</text>
     </view>
   </block>
 </view>

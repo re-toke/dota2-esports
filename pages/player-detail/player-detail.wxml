@@ -1,5 +1,29 @@
 <view class="container">
-  <!-- 骨架屏 -->
+  <!-- 头部先行渲染：loading 期间也显示，避免首屏完全被骨架屏阻塞 -->
+  <block wx:if="{{!error}}">
+    <view class="head">
+      <view class="head-avatar">
+        <image wx:if="{{profile.avatar}}" class="head-avatar-img" src="{{profile.avatar}}" mode="aspectFill" lazy-load="{{true}}" />
+        <view wx:else class="head-avatar-ph">{{profile.name ? profile.name[0] : '?'}}</view>
+      </view>
+      <view class="head-info">
+        <view class="title">{{profile.name || '加载中…'}}</view>
+        <view class="head-meta">
+          <text wx:if="{{profile.country}}" class="country-badge">{{profile.country}}</text>
+          <text wx:if="{{profile.realName}}" class="sub">{{profile.realName}}</text>
+        </view>
+        <view class="head-meta" wx:if="{{profile.rankTier || profile.leaderboard}}">
+          <text wx:if="{{profile.rankTier}}" class="rank-tag">{{profile.rankTier}}</text>
+          <text wx:if="{{profile.leaderboard}}" class="leaderboard-tag">{{profile.leaderboard}}</text>
+        </view>
+      </view>
+      <view class="star-btn" catchtap="toggleFollow">
+        <t-icon name="star" size="48rpx" color="{{followed ? '#ffcf5c' : '#5b626d'}}" />
+      </view>
+    </view>
+  </block>
+
+  <!-- 骨架屏（仅主体内容） -->
   <block wx:if="{{loading}}">
     <view wx:for="{{[1,2,3,4,5]}}" wx:key="*this" style="margin-bottom:16rpx;">
       <t-skeleton theme="paragraph" loading="{{true}}" />
@@ -13,56 +37,86 @@
     </view>
   </view>
   <block wx:else>
-    <view wx:if="{{updatedLabel}}" class="fresh-row muted">{{updatedLabel}}</view>
-    <!-- 资料 -->
-    <view class="card">
-      <view class="row" style="align-items:flex-start;">
-        <image wx:if="{{profile.avatar}}" class="avatar" src="{{profile.avatar}}" mode="aspectFit" />
-        <view style="flex:1;">
-          <text class="title">{{profile.name}}</text>
-          <view class="sub" style="margin-top:6rpx;">{{profile.realName}}</view>
-          <view class="row" style="margin-top:8rpx;">
-            <text class="sub" wx:if="{{profile.country}}">{{profile.country}} · </text>
-            <text class="sub">{{profile.rankTier}}</text>
-            <text class="sub" wx:if="{{profile.leaderboard}}" style="margin-left:12rpx;">{{profile.leaderboard}}</text>
-          </view>
-        </view>
-        <view class="star-btn" catchtap="toggleFollow">
-          <t-icon name="star" size="48rpx" color="{{followed ? '#ffcf5c' : '#5b626d'}}" />
-        </view>
+    <!-- KPI Strip：战绩总览（C 风格） -->
+    <view class="kpi-strip" wx:if="{{stats}}">
+      <view class="kpi-cell">
+        <text class="kpi-label">总场</text>
+        <text class="kpi-value">{{stats.total}}</text>
+      </view>
+      <view class="kpi-cell">
+        <text class="kpi-label">胜</text>
+        <text class="kpi-value kpi-win">{{stats.wins}}</text>
+      </view>
+      <view class="kpi-cell">
+        <text class="kpi-label">负</text>
+        <text class="kpi-value kpi-lose">{{stats.losses}}</text>
+      </view>
+      <view class="kpi-cell">
+        <text class="kpi-label">胜率</text>
+        <text class="kpi-value accent">{{stats.winRate}}</text>
       </view>
     </view>
 
-    <!-- 总览 -->
-    <view class="card">
-      <view class="row row-between">
-        <view class="stat"><text class="bold">{{stats.total}}</text><text class="sub">总场</text></view>
-        <view class="stat"><text class="bold win">{{stats.wins}}</text><text class="sub">胜</text></view>
-        <view class="stat"><text class="bold lose">{{stats.losses}}</text><text class="sub">负</text></view>
-        <view class="stat"><text class="bold">{{stats.winRate}}</text><text class="sub">胜率</text></view>
+    <!-- 数据溯源合并区（C 风格） -->
+    <view class="source-section" wx:if="{{sourceBadges.length || updatedLabel}}">
+      <view class="source-section-head">
+        <text class="source-section-title">数据溯源</text>
+        <text wx:if="{{updatedLabel}}" class="fresh-label">{{updatedLabel}}</text>
+      </view>
+      <view class="source-section-body">
+        <view class="source-grid" wx:if="{{sourceBadges.length}}">
+          <text class="src-badge src-{{item.key}}" wx:for="{{sourceBadges}}" wx:key="key">{{item.label}}</text>
+        </view>
       </view>
     </view>
 
     <!-- 常用英雄 -->
-    <view class="sub" style="margin:8rpx 0 16rpx;">常用英雄</view>
-    <view class="card hero" wx:for="{{topHeroes}}" wx:key="id">
-      <view class="row-between">
-        <text class="title">{{item.name}}</text>
-        <text class="sub">{{item.games}} 场</text>
+    <view class="section-header">
+      <text class="section-title">常用英雄</text>
+      <text class="section-action" wx:if="{{topHeroes.length}}">Top {{topHeroes.length}}</text>
+    </view>
+    <view wx:if="{{topHeroes.length === 0}}" class="hint-card-enhanced">
+      <view class="hint-title">暂无英雄数据</view>
+      <view class="hint-desc">该选手近期暂无英雄使用记录</view>
+    </view>
+    <view class="hero-card" wx:for="{{topHeroes}}" wx:key="id">
+      <view class="hero-card-head">
+        <view class="hero-icon-ph">{{item.name ? item.name[0] : '?'}}</view>
+        <view class="hero-info">
+          <text class="hero-name">{{item.name}}</text>
+          <text class="hero-games">{{item.games}} 场 · {{item.winRate}}</text>
+        </view>
+        <view class="hero-win-bar">
+          <view class="hero-win-fill" style="transform:scaleX({{item.winPct / 100}});"></view>
+        </view>
       </view>
     </view>
 
     <!-- 近期战绩 -->
-    <view class="sub" style="margin:24rpx 0 16rpx;">近期战绩</view>
-    <view class="card rec" wx:for="{{recent}}" wx:key="match_id">
-      <view class="row row-between">
-        <view class="row" style="flex:1;">
-          <text class="hero">{{item.heroName}}</text>
-          <text class="sub" style="margin-left:12rpx;">{{item.k}}/{{item.d}}/{{item.a}}</text>
+    <view class="section-header">
+      <text class="section-title">近期战绩</text>
+      <text class="section-action" wx:if="{{recent.length}}">{{recent.length}} / {{totalRecent}}</text>
+    </view>
+    <view wx:if="{{recent.length === 0}}" class="hint-card-enhanced">
+      <view class="hint-title">暂无战绩</view>
+      <view class="hint-desc">该选手近期暂无比赛记录</view>
+    </view>
+    <view class="match-card {{item.win ? 'win' : 'lose'}}" wx:for="{{recent}}" wx:key="match_id">
+      <view class="match-card-head">
+        <view class="hero-icon-ph sm">{{item.heroName ? item.heroName[0] : '?'}}</view>
+        <view class="match-info">
+          <view class="match-info-row">
+            <text class="match-hero">{{item.heroName}}</text>
+            <text class="match-kda">{{item.k}}/{{item.d}}/{{item.a}}</text>
+          </view>
+          <view class="match-meta-row">
+            <text class="match-meta">{{item.time}}</text>
+            <text wx:if="{{item.duration}}" class="match-meta">· {{item.duration}}</text>
+            <text wx:if="{{item.league}}" class="match-meta">· {{item.league}}</text>
+          </view>
         </view>
-        <text class="tag {{item.win?'win bold':'lose bold'}}">{{item.win?'胜':'负'}}</text>
+        <text class="match-result {{item.win ? 'win' : 'lose'}}">{{item.win ? '胜' : '负'}}</text>
       </view>
-      <view class="sub" style="margin-top:8rpx;">{{item.time}} · {{item.duration}} · {{item.league}}</view>
     </view>
 
     <view class="loadmore" wx:if="{{hasMore}}">

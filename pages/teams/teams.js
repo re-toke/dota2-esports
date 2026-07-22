@@ -1,6 +1,8 @@
 const api = require('../../utils/api.js');
 const follow = require('../../utils/follow.js');
 const config = require('../../utils/config.js');
+const util = require('../../utils/util.js');
+const sources = require('../../utils/sources.js');
 const searchHistory = require('../../utils/searchHistory.js');
 
 // 关注的顶级战队预设（team_id 来自 OpenDota）
@@ -17,6 +19,59 @@ const HOT_TEAMS = [
   { team_id: 2506989, name: 'PSG.LGD', tag: 'PSG' }
 ];
 
+// 来源 key -> 中文标签
+const SOURCE_BADGES = {
+  opendota: 'OpenDota',
+  stratz: 'STRATZ',
+  steam: 'Steam',
+  liquipedia: 'Liquipedia',
+  curation: '本地策展',
+  community: '社区规则'
+};
+
+// 把 api.getTeam 原始数据合并进展示用的卡片对象
+// 保留 followed 状态；新增 logo / country / rating / wins / losses / winRate / lastMatchLabel
+function enrichItem(item, t) {
+  if (!t) return item;
+  const wins = t.wins || 0;
+  const losses = t.losses || 0;
+  const total = wins + losses;
+  const wr = total ? Math.round((wins / total) * 100) : 0;
+  const wrClass = wr >= 60 ? 'wr-high' : (wr >= 40 ? 'wr-mid' : 'wr-low');
+  const last = t.last_match_time ? util.formatAgo(t.last_match_time * 1000) : '';
+  return Object.assign({}, item, {
+    logo: t.logo_url || item.logo || '',
+    country: t.country_code || item.country || '',
+    rating: t.rating || 0,
+    wins: wins,
+    losses: losses,
+    winRate: wr,
+    winRateClass: wrClass,
+    lastMatchTime: t.last_match_time || 0,
+    lastMatchLabel: last,
+    hasStats: !!(t.rating || total),
+    sourceKey: 'opendota',
+    sourceLabel: SOURCE_BADGES.opendota
+  });
+}
+
+// 二次增强（curation + Steam）：补全 logo / 国家 / 规范名
+function applyExtra(item, info) {
+  if (!info) return item;
+  const next = Object.assign({}, item);
+  if (info.logo && /^https?:\/\//i.test(info.logo)) next.logo = info.logo;
+  if (info.country) next.country = info.country;
+  if (info.name && info.name !== item.name) {
+    // 仅当本地策展/Steam 提供了规范名且与原名不同时覆盖
+    next.name = info.name;
+  }
+  if (info.source) {
+    next.sourceKey = info.source;
+    next.sourceLabel = SOURCE_BADGES[info.source] || info.source;
+  }
+  return next;
+}
+
 Page({
   data: {
     keyword: '',
@@ -30,7 +85,9 @@ Page({
     pageSize: config.pageSize,
     searched: false,
     error: '',
-    history: []
+    history: [],
+    hotEnriching: false,      // 热门队伍异步补全中
+    resultEnriching: false    // 搜索结果异步补全中
   },
 
   onLoad() {
@@ -41,12 +98,58 @@ Page({
       })),
       history: searchHistory.get('teams')
     });
+    // 异步补全：每个热门队伍并行拉取详情（logo/rating/wins/losses/country/last_match_time）
+    this.enrichHot();
+  },
+
+  // 批量补全热门队伍详情：并行调用 api.getTeam，逐个更新（避免阻塞首屏）。
+  // 任一失败被隔离，不影响其它队伍或页面渲染。
+  enrichHot() {
+    this.setData({ hotEnriching: true });
+    const list = this.data.hot.slice();
+    const tasks = list.map((item) => {
+      return api.getTeam(item.id)
+        .then((t) => {
+          const merged = enrichItem(item, t);
+          // 二次增强：curation + Steam 补 logo / 国家
+          return sources.enrichTeamInfo({ id: item.id, name: item.name })
+            .then((info) => applyExtra(merged, info))
+            .catch(() => merged);
+        })
+        .catch(() => item); // 隔离错误，保持原样
+    });
+    Promise.all(tasks).then((enriched) => {
+      this.setData({ hot: enriched, hotEnriching: false });
+    });
+  },
+
+  // 批量补全搜索结果：仅对当前已展示的 slice 进行（避免对未展示项的无谓请求）
+  enrichResults() {
+    const list = this.data.results.slice();
+    if (!list.length) return;
+    this.setData({ resultEnriching: true });
+    const tasks = list.map((item) => {
+      return api.getTeam(item.id)
+        .then((t) => enrichItem(item, t))
+        .catch(() => item);
+    });
+    Promise.all(tasks).then((enriched) => {
+      // 注意：合并进 allResults，避免 appendPage 时丢失已增强的字段
+      if (this.allResults) {
+        const map = {};
+        enriched.forEach((it) => { map[it.id] = it; });
+        this.allResults = this.allResults.map((it) => map[it.id] || it);
+      }
+      this.setData({ results: enriched, resultEnriching: false });
+    });
   },
 
   onPullDownRefresh() {
     if (this.data.mode === 'result') {
       this.onRetry();
     } else {
+      // 热门模式：重新拉一次详情刷新数据
+      this.enrichHot();
       wx.stopPullDownRefresh();
     }
   },
@@ -104,6 +207,8 @@ Page({
           hasMore: all.length > slice.length,
           history: history
         });
+        // 异步补全搜索结果的详情字段
+        this.enrichResults();
       })
       .catch(() => {
         this.allResults = [];
@@ -143,6 +248,8 @@ Page({
       hasMore: this.allResults.length > slice.length,
       loadingMore: false
     });
+    // 对新加载的项也异步补全（仅对未增强过的）
+    this.enrichResults();
   },
 
   toggleFollow(e) {

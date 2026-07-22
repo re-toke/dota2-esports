@@ -222,6 +222,11 @@ Page({
       arr = (this.allLeagues || []).filter((x) => x.status === 'ongoing');
       // 进行中：按最近比赛时间倒序
       arr.sort((a, b) => (b.latest || 0) - (a.latest || 0));
+    } else if (f === 'ended') {
+      // 已结束：最近比赛在 7 天前的赛事，按最近比赛时间倒序
+      const cutoff = Date.now() / 1000 - 7 * 86400;
+      arr = (this.allLeagues || []).filter((x) => x.status === 'ended' && (x.latest || 0) < cutoff);
+      arr.sort((a, b) => (b.latest || 0) - (a.latest || 0));
     } else {
       // 全部：按最近比赛时间倒序（无 latest 的排最后）
       arr = (this.allLeagues || []).slice();
@@ -272,5 +277,19 @@ Page({
     wx.navigateTo({
       url: '/pages/league-detail/league-detail?leagueId=' + id + '&name=' + encodeURIComponent(name)
     });
+  },
+
+  // 点击直播卡跳转到对应赛事详情（如果有关联 leagueId）
+  openLive(e) {
+    const leagueId = e.currentTarget.dataset.league;
+    const name = e.currentTarget.dataset.name;
+    if (leagueId) {
+      wx.navigateTo({
+        url: '/pages/league-detail/league-detail?leagueId=' + leagueId + '&name=' + encodeURIComponent(name || '')
+      });
+    } else {
+      // 无 leagueId 关联，仅提示
+      wx.showToast({ title: '该直播无赛事详情', icon: 'none' });
+    }
   }
 });

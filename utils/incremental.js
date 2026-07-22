@@ -62,7 +62,8 @@ function buildMatchSql(resource, id, cursor) {
       'm.radiant_team_id, m.dire_team_id, ' +
       'COALESCE(m.radiant_team_name, tr.name) AS radiant_team_name, ' +
       'COALESCE(m.dire_team_name, td.name) AS dire_team_name, ' +
-      'm.radiant_score, m.dire_score ' +
+      'm.radiant_score, m.dire_score, ' +
+      'm.series_id, m.series_type ' +
       'FROM matches m ' +
       'LEFT JOIN teams tr ON m.radiant_team_id = tr.team_id ' +
       'LEFT JOIN teams td ON m.dire_team_id = td.team_id ' +

@@ -1,54 +1,74 @@
 <view class="container">
-  <!-- 头部：赛事名 + 关注 -->
+  <!-- 头部：赛事名 + 关注 + 比赛数 + 状态徽标 -->
   <view class="head">
     <view class="head-info">
       <view class="title">{{name}}</view>
-      <view class="sub">共 {{matches.length}} 场（持续加载更多）</view>
+      <view class="head-meta">
+        <text class="sub">共 {{totalSeries}} 组对阵{{hasMore ? '（持续加载）' : ''}}</text>
+        <text wx:if="{{liqTier}}" class="status-tag" style="color:{{liqTier.confidence === 'high' ? '#5fd35f' : '#f0aa28'}};border-color:{{liqTier.confidence === 'high' ? '#5fd35f' : '#f0aa28'}}">{{liqTier.label}}</text>
+      </view>
     </view>
     <view class="star-btn" catchtap="toggleFollow">
       <t-icon name="star" size="48rpx" color="{{followed ? '#ffcf5c' : '#5b626d'}}" />
     </view>
   </view>
 
-  <!-- 数据可信度 + 新鲜度 -->
-  <view wx:if="{{quality}}" class="quality-bar quality-{{quality.level}}">
-    <text class="q-dot"></text>
-    <text class="q-text">数据可信度：{{quality.text}}</text>
-    <text wx:if="{{updatedLabel}}" class="q-fresh muted">{{updatedLabel}}</text>
+  <!-- 数据溯源合并区（C 风格 · 把 quality / name-fix / liq-banner / sources 收敛为一区） -->
+  <view class="source-section" wx:if="{{quality || nameInfo || liqTier || metadata}}">
+    <view class="source-section-head">
+      <text class="source-section-title">数据溯源</text>
+      <text wx:if="{{updatedLabel}}" class="fresh-label">{{updatedLabel}}</text>
+    </view>
+    <view class="source-section-body">
+      <view wx:if="{{quality}}" class="quality-pill quality-{{quality.level}}">
+        <text class="q-dot"></text>
+        <text class="q-text">{{quality.text}}</text>
+        <text wx:if="{{quality.sources > 1}}" class="q-src">· {{quality.sources}} 源</text>
+      </view>
+      <view wx:if="{{nameInfo && nameInfo.differs}}" class="name-fix">
+        <text class="muted">规范名（{{nameInfo.sourceLabel}}）：</text>
+        <text class="name-fix-val">{{nameInfo.value}}</text>
+      </view>
+      <view class="source-grid" wx:if="{{sourceBadges.length}}">
+        <text class="src-badge src-{{item.key}}" wx:for="{{sourceBadges}}" wx:key="key">{{item.label}}</text>
+      </view>
+    </view>
   </view>
 
-  <!-- 规范赛事名（多源交叉验证） -->
-  <view wx:if="{{nameInfo && nameInfo.differs}}" class="name-fix">
-    <text class="muted">规范名（{{nameInfo.sourceLabel}}）：</text>
-    <text class="name-fix-val">{{nameInfo.value}}</text>
+  <!-- 赛事元数据 KPI Strip -->
+  <view class="kpi-strip" wx:if="{{metadata}}">
+    <view class="kpi-cell" wx:if="{{metadata.prizePool}}">
+      <text class="kpi-label">奖金池</text>
+      <view class="kpi-value-row">
+        <text class="kpi-value accent">{{metadata.prizePool}}</text>
+        <text class="kpi-unit">{{metadata.prizePoolCurrency || 'USD'}}</text>
+      </view>
+    </view>
+    <view class="kpi-cell" wx:if="{{metadata.location}}">
+      <text class="kpi-label">地点</text>
+      <text class="kpi-value">{{metadata.location}}</text>
+    </view>
+    <view class="kpi-cell" wx:if="{{metadata.format}}">
+      <text class="kpi-label">赛制</text>
+      <text class="kpi-value">{{metadata.format}}</text>
+    </view>
+    <view class="kpi-cell" wx:if="{{metadata.organizer}}">
+      <text class="kpi-label">主办方</text>
+      <text class="kpi-value">{{metadata.organizer}}</text>
+    </view>
+    <view class="kpi-cell" wx:if="{{metadata.startDate || metadata.endDate}}">
+      <text class="kpi-label">赛期</text>
+      <text class="kpi-value">{{metadata.startDate || '?'}} ~ {{metadata.endDate || '?'}}</text>
+    </view>
   </view>
 
-  <!-- 社区分级提示（多源交叉验证：本地精选 / 权威库 / OpenDota / STRATZ 计票） -->
-  <view wx:if="{{liqTier}}" class="liq-banner">
-    <text class="muted">分级（{{liqTier.sourceLabel}}）：</text>
-    <text class="{{liqTier.cls}} tag">{{liqTier.label}}</text>
-    <text wx:if="{{liqTier.agreement > 1}}" class="muted agree">· {{liqTier.agreement}} 源一致</text>
-  </view>
-
-  <!-- 赛事元数据：奖金池/地点/赛制/主办方/数据来源（Liquipedia + Steam 聚合） -->
-  <view class="meta-card" wx:if="{{metadata}}">
-    <view class="meta-prize" wx:if="{{metadata.prizePool}}">
-      <text class="meta-label">奖金池</text>
-      <text class="meta-value meta-prize-val">{{metadata.prizePoolCurrency}} {{metadata.prizePool}}</text>
+  <!-- 三 Tab 切换（C 风格 Tournament Center） -->
+  <view class="seg">
+    <view class="seg-item {{tab === 'matches' ? 'active' : ''}}" bindtap="switchTab" data-key="matches">
+      对阵<text class="seg-count">{{totalSeries}}</text>
     </view>
-    <view class="meta-row" wx:if="{{metadata.location}}">
-      <text class="meta-label">地点</text><text class="meta-value">{{metadata.location}}</text>
-    </view>
-    <view class="meta-row" wx:if="{{metadata.format}}">
-      <text class="meta-label">赛制</text><text class="meta-value">{{metadata.format}}</text>
-    </view>
-    <view class="meta-row" wx:if="{{metadata.organizer}}">
-      <text class="meta-label">主办方</text><text class="meta-value">{{metadata.organizer}}</text>
-    </view>
-    <view class="meta-sources">
-      <text class="meta-label">数据来源</text>
-      <text class="meta-value">{{sourcesText}}</text>
-    </view>
+    <view class="seg-item {{tab === 'players' ? 'active' : ''}}" bindtap="switchTab" data-key="players">选手排行</view>
+    <view class="seg-item {{tab === 'standings' ? 'active' : ''}}" bindtap="switchTab" data-key="standings">赛事排名</view>
   </view>
 
   <t-skeleton wx:if="{{loading}}" theme="paragraph" loading="{{true}}" />
@@ -60,26 +80,171 @@
     </view>
   </view>
 
-  <t-empty wx:elif="{{matches.length === 0}}" description="该赛事暂无比赛数据" />
+  <!-- ===== Tab 1: 对阵（系列赛聚合 · A 紧凑卡 + B 点缀） ===== -->
+  <block wx:elif="{{tab === 'matches'}}">
+    <view wx:if="{{series.length === 0}}" class="hint-card-enhanced">
+      <view class="hint-title">该赛事暂无比赛数据</view>
+      <view class="hint-desc">下拉刷新或稍后重试</view>
+    </view>
 
-  <block wx:else>
-    <view class="match-card" wx:for="{{matches}}" wx:key="match_id">
-      <view class="match-row {{item.radiantWin ? 'win-team' : ''}}" bindtap="openTeam" data-id="{{item.radiantTeamId}}">
-        <text class="team-name">{{item.radiantName || '天辉'}}</text>
-        <text class="score {{item.radiantWin ? 'win' : 'lose'}}">{{item.radiantScore}}</text>
+    <view
+      class="series-card {{s.isLive ? 'series-live' : (s.isRecent ? 'series-recent' : '')}}"
+      wx:for="{{series}}"
+      wx:for-item="s"
+      wx:for-index="si"
+      wx:key="key"
+    >
+      <!-- 系列头部：队A · 大比分 · 队B -->
+      <view class="series-head">
+        <view class="series-team" catchtap="openTeam" data-id="{{s.radiantTeamId}}">
+          <view class="series-team-logo {{s.radiantWin ? 'team-win' : ''}}">{{s.radiantName ? s.radiantName[0] : '?'}}</view>
+          <text class="series-team-name {{s.radiantWin ? 'win' : ''}} {{s.isDraw ? 'draw' : ''}}">{{s.radiantName || '天辉'}}</text>
+        </view>
+        <view class="series-score">
+          <text class="series-score-num {{s.radiantWin ? 'win' : (s.isDraw ? 'draw' : 'lose')}}">{{s.scoreA}}</text>
+          <text class="series-score-sep">:</text>
+          <text class="series-score-num {{s.direWin ? 'win' : (s.isDraw ? 'draw' : 'lose')}}">{{s.scoreB}}</text>
+          <text wx:if="{{s.isDraw}}" class="series-draw-badge">平</text>
+        </view>
+        <view class="series-team right" catchtap="openTeam" data-id="{{s.direTeamId}}">
+          <text class="series-team-name {{s.direWin ? 'win' : ''}} {{s.isDraw ? 'draw' : ''}}">{{s.direName || '夜魇'}}</text>
+          <view class="series-team-logo {{s.direWin ? 'team-win' : ''}}">{{s.direName ? s.direName[0] : '?'}}</view>
+        </view>
       </view>
-      <view class="match-divider">
-        <text class="vs">VS</text>
-        <text class="time muted">{{item.time}}</text>
+
+      <!-- 系列元信息：BO标签 + 赛制说明 + LIVE/时间 + 小圆点序列 -->
+      <view class="series-meta">
+        <view class="series-bo-group">
+          <text class="series-bo-tag {{s.boType === 'BO2' ? 'bo-bo2' : (s.boType === 'BO5' ? 'bo-bo5' : '')}}">{{s.boType}}</text>
+          <text class="series-bo-label">{{s.boLabel}}</text>
+        </view>
+        <text wx:if="{{s.isLive}}" class="series-live-tag">● LIVE</text>
+        <view class="series-dots" wx:if="{{s.isMulti}}">
+          <view wx:for="{{s.games}}" wx:for-item="g" wx:key="match_id" class="series-dot {{g.radiantWin ? 'a-win' : 'b-win'}}"></view>
+        </view>
+        <text wx:else class="series-time">{{s.games[0].time}}</text>
       </view>
-      <view class="match-row {{item.radiantWin ? '' : 'win-team'}}" bindtap="openTeam" data-id="{{item.direTeamId}}">
-        <text class="team-name">{{item.direName || '夜魇'}}</text>
-        <text class="score {{item.radiantWin ? 'lose' : 'win'}}">{{item.direScore}}</text>
+
+      <!-- 小场列表（单场也走此结构，BO1 仅显示时间行） -->
+      <view class="series-games">
+        <view
+          class="series-game {{expandedGame === (si + '-' + gi) ? 'expanded' : ''}}"
+          wx:for="{{s.games}}"
+          wx:for-item="g"
+          wx:for-index="gi"
+          wx:key="match_id"
+        >
+          <view class="series-game-main" bindtap="toggleGame" data-idx="{{si + '-' + gi}}">
+            <text class="series-game-idx" wx:if="{{s.isMulti}}">G{{gi + 1}}</text>
+            <view class="series-game-mini" wx:if="{{s.isMulti}}">
+              <text class="series-game-score {{g.radiantWin ? 'win' : 'lose'}}">{{g.radiantScore || 0}}</text>
+              <text class="series-game-sep">:</text>
+              <text class="series-game-score {{!g.radiantWin ? 'win' : 'lose'}}">{{g.direScore || 0}}</text>
+            </view>
+            <text class="series-game-time">{{g.time}}</text>
+            <text class="series-game-duration" wx:if="{{g.duration}}">· {{g.duration}}</text>
+            <text class="series-game-expand">{{expandedGame === (si + '-' + gi) ? '▴' : '▾'}}</text>
+          </view>
+
+          <!-- 展开态：英雄阵容 mini 卡 -->
+          <view class="series-game-expand-box" wx:if="{{expandedGame === (si + '-' + gi)}}">
+            <view wx:if="{{g.loadingDetail}}" class="expand-loading">加载英雄阵容中…</view>
+            <block wx:elif="{{g.detail}}">
+              <view class="mvp-row" wx:if="{{g.detail.mvp}}">
+                <text class="mvp-tag">★ MVP</text>
+                <text class="mvp-name">{{g.detail.mvp.name}}</text>
+                <text class="mvp-kda">{{g.detail.mvp.kda}} · GPM {{g.detail.mvp.gpm}}</text>
+              </view>
+              <view class="hero-lineup">
+                <view class="hero-side radiant">
+                  <text class="hero-side-label">{{s.radiantName}}</text>
+                  <view class="hero-icons">
+                    <view class="hero-icon" wx:for="{{g.detail.radiantHeroes}}" wx:for-item="h" wx:key="*this">
+                      <view class="hero-icon-box">{{h.short}}</view>
+                      <text class="hero-icon-kda">{{h.kda}}</text>
+                    </view>
+                  </view>
+                </view>
+                <view class="hero-side dire">
+                  <text class="hero-side-label">{{s.direName}}</text>
+                  <view class="hero-icons">
+                    <view class="hero-icon" wx:for="{{g.detail.direHeroes}}" wx:for-item="h" wx:key="*this">
+                      <view class="hero-icon-box">{{h.short}}</view>
+                      <text class="hero-icon-kda">{{h.kda}}</text>
+                    </view>
+                  </view>
+                </view>
+              </view>
+              <view class="report-link" catchtap="openMatch" data-id="{{g.match_id}}">
+                <text>查看完整战报（KDA 表 / GPM / XPM）</text>
+                <t-icon name="chevron-right" size="32rpx" color="#5b9bff" />
+              </view>
+            </block>
+            <view wx:else class="expand-empty">暂无英雄阵容数据</view>
+          </view>
+        </view>
       </view>
     </view>
 
     <view class="loadmore" wx:if="{{hasMore}}">
       <t-button theme="light" size="medium" bindtap="appendPage" t-class="more-btn">加载更多</t-button>
+    </view>
+  </block>
+
+  <!-- ===== Tab 2: 选手排行（C 风格） ===== -->
+  <block wx:elif="{{tab === 'players'}}">
+    <view wx:if="{{playersLoading}}" class="loading-row">聚合选手数据中…（{{totalSeries}} 组系列赛）</view>
+    <view wx:elif="{{playerStats.length === 0}}" class="hint-card-enhanced">
+      <view class="hint-title">暂无选手排行</view>
+      <view class="hint-desc">至少需要 1 场已结束比赛才能聚合选手数据</view>
+    </view>
+    <view wx:else class="player-table">
+      <view class="table-head">
+        <text class="col-rank">#</text>
+        <text class="col-name">选手</text>
+        <text class="col-num">场次</text>
+        <text class="col-num">KDA</text>
+        <text class="col-num">GPM</text>
+        <text class="col-num">胜率</text>
+      </view>
+      <view class="table-row" wx:for="{{playerStats}}" wx:key="account_id" bindtap="openPlayer" data-id="{{item.account_id}}">
+        <text class="col-rank rank-{{index < 3 ? index + 1 : 'n'}}">{{index + 1}}</text>
+        <text class="col-name">{{item.name || '匿名'}}</text>
+        <text class="col-num">{{item.games}}</text>
+        <text class="col-num kda">{{item.kda}}</text>
+        <text class="col-num">{{item.gpm}}</text>
+        <text class="col-num {{item.winRate >= 60 ? 'wr-high' : (item.winRate >= 40 ? 'wr-mid' : 'wr-low')}}">{{item.winRate}}%</text>
+      </view>
+    </view>
+  </block>
+
+  <!-- ===== Tab 3: 赛事排名（C 风格 · 仅已结束赛事展示） ===== -->
+  <block wx:elif="{{tab === 'standings'}}">
+    <view wx:if="{{standingsLoading}}" class="loading-row">聚合队伍排名中…</view>
+    <view wx:elif="{{standings.length === 0}}" class="hint-card-enhanced">
+      <view class="hint-title">暂无排名数据</view>
+      <view class="hint-desc">赛事进行中或尚未结束，排名需比赛完成后聚合</view>
+    </view>
+    <view wx:else class="standings-card">
+      <view class="stand-head">
+        <text class="col-rank">名次</text>
+        <text class="col-name">队伍</text>
+        <text class="col-num">胜</text>
+        <text class="col-num">负</text>
+        <text class="col-num">胜率</text>
+      </view>
+      <view class="stand-row" wx:for="{{standings}}" wx:key="team_id" bindtap="openTeam" data-id="{{item.team_id}}">
+        <text class="col-rank rank-{{index < 3 ? index + 1 : 'n'}}">
+          <text wx:if="{{index === 0}}">🥇</text>
+          <text wx:elif="{{index === 1}}">🥈</text>
+          <text wx:elif="{{index === 2}}">🥉</text>
+          <text wx:else>{{index + 1}}</text>
+        </text>
+        <text class="col-name">{{item.name}}</text>
+        <text class="col-num kda">{{item.wins}}</text>
+        <text class="col-num">{{item.losses}}</text>
+        <text class="col-num {{item.winRate >= 60 ? 'wr-high' : (item.winRate >= 40 ? 'wr-mid' : 'wr-low')}}">{{item.winRate}}%</text>
+      </view>
     </view>
   </block>
 </view>

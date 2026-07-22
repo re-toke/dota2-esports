@@ -2,7 +2,7 @@
 
 .skeleton-wrap { margin-bottom: 24rpx; }
 
-/* 直播中区域 */
+/* ===== 直播区（B 风格 · 左右对阵 + 脉冲） ===== */
 .live-title {
   display: flex; align-items: center; gap: 10rpx;
   font-size: 28rpx; font-weight: 600; color: #1ec896;
@@ -18,6 +18,31 @@
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.4; transform: scale(0.7); }
 }
+
+/* 直播卡缺省 logo 占位（圆角 + 首字母） */
+.vs-team-logo-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #8a8f99;
+  background: var(--card-bg-inset, #0f141b);
+  border: 1rpx solid #232a33;
+}
+
+/* 直播卡溯源行 */
+.live-source-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8rpx;
+  margin: -4rpx 0 16rpx 4rpx;
+  padding: 8rpx 12rpx;
+}
+.live-source-text { font-size: 22rpx; }
+
+/* 旧版 .live-card 样式保留作为兼容兜底（已用 vs-card 替代） */
 .live-card {
   background: #161b22;
   border: 1rpx solid rgba(30,200,150,.25);
@@ -65,6 +90,13 @@
 
 .league-main { flex: 1; min-width: 0; }
 
+.league-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+  flex-wrap: wrap;
+}
 .league-name {
   font-size: 30rpx;
   font-weight: 600;
@@ -72,6 +104,15 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.league-badges {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  flex-shrink: 0;
 }
 
 .league-meta {
@@ -99,6 +140,20 @@
   font-size: 22rpx;
 }
 .date-range { color: #9bb0c9; }
+
+/* 来源徽标行 */
+.league-source-row {
+  margin-top: 8rpx;
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+/* 底部新鲜度 */
+.fresh-bottom {
+  text-align: center;
+  padding: 16rpx 0 8rpx;
+}
 
 .star-btn { padding: 8rpx 0 8rpx 16rpx; }
 

@@ -241,6 +241,7 @@ const ACTION_MAP = {
   getLeagues: function () { return { action: 'getLeagues', params: {} }; },
   getLeagueWindows: function () { return { action: 'getLeagueWindows', params: {} }; },
   getLeagueMatches: function (id) { return { action: 'getLeagueMatches', params: { leagueId: id } }; },
+  getMatch: function (id) { return { action: 'getMatch', params: { matchId: id } }; },
   searchTeams: function (name) { return { action: 'searchTeams', params: { q: name } }; },
   getTeam: function (id) { return { action: 'getTeam', params: { teamId: id } }; },
   getTeamPlayers: function (id) { return { action: 'getTeamPlayers', params: { teamId: id } }; },
@@ -300,6 +301,49 @@ function getLeagueMatches(leagueId) {
     return cloudFetch(m.action, m.params).catch(function () { return direct(); });
   }
   return direct();
+}
+
+// 单场比赛详情（含 players 数组：英雄/KDA/GPM/XPM）。
+// OpenDota /matches/{match_id} 返回结构：
+//   match_id, duration, start_time, radiant_win, radiant_score, dire_score,
+//   radiant_team_id, dire_team_id, league, leagueid,
+//   players: [{ account_id, hero_id, kills, deaths, assists,
+//               gold_per_min, xp_per_min, player_slot, team, personaname, name }]
+function getMatch(matchId) {
+  const direct = function () { return cached('/matches/' + matchId, null, config.cacheTTL.match); };
+  if (cloudEnabled()) {
+    const m = ACTION_MAP.getMatch(matchId);
+    return cloudFetch(m.action, m.params).catch(function () { return direct(); });
+  }
+  return direct();
+}
+
+// 比赛双方选手明细：从 getMatch 结果中拆出 players 数组并按阵营分组。
+// 返回 { radiant: [...], dire: [...] }，每个元素含
+//   { account_id, hero_id, kills, deaths, assists, gpm, xpm, name, personaname }
+function getMatchPlayers(matchId) {
+  return getMatch(matchId).then(function (m) {
+    if (!m || !m.players) return { radiant: [], dire: [] };
+    const radiant = [];
+    const dire = [];
+    m.players.forEach(function (p) {
+      const item = {
+        account_id: p.account_id,
+        hero_id: p.hero_id,
+        kills: p.kills || 0,
+        deaths: p.deaths || 0,
+        assists: p.assists || 0,
+        gpm: p.gold_per_min || 0,
+        xpm: p.xp_per_min || 0,
+        name: p.name || p.personaname || '',
+        // OpenDota player_slot 0-4 天辉，128-132 夜魇
+        isRadiant: (p.isRadiant != null) ? p.isRadiant : (p.player_slot < 128)
+      };
+      if (item.isRadiant) radiant.push(item);
+      else dire.push(item);
+    });
+    return { radiant: radiant, dire: dire };
+  });
 }
 
 function transformSearchTeams(list) {
@@ -406,6 +450,8 @@ module.exports = {
   getLeagues: getLeagues,
   getLeagueWindows: getLeagueWindows,
   getLeagueMatches: getLeagueMatches,
+  getMatch: getMatch,
+  getMatchPlayers: getMatchPlayers,
   searchTeams: searchTeams,
   getTeam: getTeam,
   getTeamPlayers: getTeamPlayers,

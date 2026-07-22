@@ -18,6 +18,8 @@
   font-size: 26rpx;
 }
 
+/* 旧的 .section-title 已由全局 .section-header 组件覆盖，
+   这里保留以防有页面未迁移到新组件 */
 .section-title {
   font-size: 28rpx;
   color: #8a8f99;
@@ -26,25 +28,168 @@
 
 .team-list { margin-top: 8rpx; }
 
-.team-item {
+/* ===== B 风格：队伍卡片 ===== */
+.team-card {
+  background: var(--card-bg, #161b22);
+  border-radius: var(--radius-lg, 16rpx);
+  padding: 20rpx 24rpx;
+  margin-bottom: 16rpx;
+  transition: background 120ms ease, transform 120ms ease;
+}
+.team-card-hover {
+  background: var(--card-bg-elevated, #1c232c);
+  transform: scale(0.99);
+}
+
+.team-card-head {
   display: flex;
   align-items: center;
   gap: 20rpx;
-  background: #161b22;
-  border-radius: 16rpx;
-  padding: 20rpx 24rpx;
-  margin-bottom: 16rpx;
 }
 
-.team-name {
+/* Logo 区：固定 80rpx 圆角方块 */
+.team-logo {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: var(--radius-md, 12rpx);
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--card-bg-inset, #0f141b);
+  border: 1rpx solid #232a33;
+}
+.team-logo-img {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.team-logo-ph {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #8a8f99;
+  letter-spacing: 1rpx;
+  font-family: var(--font-mono, monospace);
+}
+
+/* 信息区：弹性增长 */
+.team-info {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+.team-info-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+.team-info-name {
   font-size: 30rpx;
+  font-weight: 600;
   color: #f0f3f6;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-family: var(--font-display, -apple-system, sans-serif);
+}
+.country-badge {
+  font-size: 20rpx;
+  padding: 2rpx 10rpx;
+  border-radius: var(--radius-pill, 999rpx);
+  background: rgba(95, 211, 95, 0.12);
+  color: #5fd35f;
+  border: 1rpx solid rgba(95, 211, 95, 0.3);
+  font-family: var(--font-mono, monospace);
+  letter-spacing: 1rpx;
+  flex-shrink: 0;
+}
+.team-info-meta {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  flex-wrap: wrap;
+}
+.team-tag {
+  font-size: 22rpx;
+  color: #7d8794;
+  font-family: var(--font-mono, monospace);
+}
+.team-last {
+  font-size: 22rpx;
+  color: #6b7280;
 }
 
+/* 关注星按钮 */
+.team-star {
+  padding: 8rpx 0 8rpx 16rpx;
+  flex-shrink: 0;
+}
+
+/* 底部统计行：3 列 stat-mini */
+.team-stats {
+  display: flex;
+  align-items: center;
+  margin-top: 16rpx;
+  padding-top: 16rpx;
+  border-top: 1rpx solid #232a33;
+}
+.stat-mini {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4rpx;
+}
+.stat-mini-label {
+  font-size: 20rpx;
+  color: #6b7280;
+  letter-spacing: 1rpx;
+  font-family: var(--font-mono, monospace);
+}
+.stat-mini-value {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #f0f3f6;
+  font-family: var(--font-numeric, "SF Pro Display", sans-serif);
+  font-variant-numeric: tabular-nums;
+}
+.stat-mini-divider {
+  width: 1rpx;
+  height: 36rpx;
+  background: #232a33;
+  flex-shrink: 0;
+}
+
+/* 胜率颜色分级 */
+.wr-high { color: var(--kpi-primary, #5fd35f); }
+.wr-mid { color: var(--kpi-warning, #f0aa28); }
+.wr-low { color: #8a8f99; }
+
+/* 数据来源徽标行 */
+.team-source-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12rpx;
+}
+.team-fresh {
+  font-size: 20rpx;
+  color: #6b7280;
+  font-family: var(--font-mono, monospace);
+}
+
+/* ===== 通用 ===== */
 .loadmore { display: flex; justify-content: center; margin: 24rpx 0 8rpx; }
 .error-block { display: flex; flex-direction: column; align-items: center; }
 .retry-wrap { margin-top: 16rpx; }
+.center.muted {
+  text-align: center;
+  color: #6b7280;
+  font-size: 24rpx;
+  padding: 24rpx 0;
+}

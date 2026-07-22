@@ -1,35 +1,175 @@
-.header {
+.container { padding: 24rpx; }
+
+/* ===== 头部 ===== */
+.head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: 20rpx;
-  flex-wrap: wrap;
-  gap: 12rpx;
+  margin-bottom: 16rpx;
 }
-.header .title { font-size: 36rpx; font-weight: 600; color: #f0f3f6; }
-.counts { display: flex; gap: 10rpx; }
-.c-chip {
-  font-size: 22rpx;
-  color: #c9d2dd;
-  background: #161b22;
-  border-radius: 999rpx;
-  padding: 6rpx 16rpx;
+.head-info { flex: 1; min-width: 0; }
+.head-info .title {
+  font-size: 40rpx;
+  font-weight: 700;
+  color: #f0f3f6;
+  font-family: var(--font-display, -apple-system, sans-serif);
 }
 
+/* ===== KPI Strip 局部：点击高亮 ===== */
+.kpi-cell { transition: background 120ms ease; }
+.kpi-cell:active { background: var(--card-bg-inset, #0f141b); }
+.kpi-value.accent { color: var(--kpi-primary, #5fd35f); }
+
+/* ===== 分段控件 ===== */
+.seg {
+  display: flex;
+  background: var(--card-bg-inset, #0f141b);
+  border-radius: var(--radius-md, 12rpx);
+  padding: 4rpx;
+  margin: 16rpx 0;
+}
+.seg-item {
+  flex: 1;
+  text-align: center;
+  padding: 14rpx 0;
+  font-size: 26rpx;
+  color: #8a8f99;
+  border-radius: 8rpx;
+  transition: background 120ms ease, color 120ms ease;
+}
+.seg-item.active {
+  background: var(--card-bg-elevated, #1c232c);
+  color: #f0f3f6;
+  font-weight: 600;
+}
+
+/* ===== 关注卡片（B 风格 · 卡片流） ===== */
 .list { margin-bottom: 24rpx; }
-.card {
+.follow-card {
   display: flex;
   align-items: center;
-  background: #161b22;
-  border-radius: 16rpx;
-  padding: 22rpx 24rpx;
-  margin-bottom: 14rpx;
+  background: var(--card-bg, #161b22);
+  border-radius: var(--radius-lg, 16rpx);
+  padding: 18rpx 20rpx;
+  margin-bottom: 12rpx;
+  transition: background 120ms ease;
 }
-.card-main { flex: 1; min-width: 0; }
-.card-main .name { font-size: 30rpx; color: #f0f3f6; }
-.card-main .sub { font-size: 24rpx; margin-top: 4rpx; }
-.card-action { margin-left: 16rpx; }
+.follow-card-hover {
+  background: var(--card-bg-elevated, #1c232c);
+}
+.follow-card-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
 
-.footer { margin-top: 8rpx; }
-.tip { font-size: 24rpx; line-height: 1.6; margin-bottom: 20rpx; }
+/* 头像/Logo 占位符：圆角方块，按类型染色 */
+.follow-avatar {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: var(--radius-md, 12rpx);
+  background: var(--card-bg-inset, #0f141b);
+  border: 1rpx solid #232a33;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #8a8f99;
+  font-family: var(--font-mono, monospace);
+  flex-shrink: 0;
+}
+.follow-avatar-teams {
+  background: rgba(95, 211, 95, 0.12);
+  color: #5fd35f;
+  border-color: rgba(95, 211, 95, 0.3);
+}
+.follow-avatar-players {
+  background: rgba(96, 84, 241, 0.12);
+  color: #8b80ff;
+  border-color: rgba(96, 84, 241, 0.3);
+  border-radius: 50%;
+}
+.follow-avatar-leagues {
+  background: rgba(255, 207, 92, 0.12);
+  color: #ffcf5c;
+  border-color: rgba(255, 207, 92, 0.3);
+}
+.follow-avatar-icon {
+  font-size: 32rpx;
+}
+
+.follow-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+.follow-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+.follow-name {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #f0f3f6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-display, -apple-system, sans-serif);
+}
+.type-badge {
+  font-size: 18rpx;
+  padding: 2rpx 8rpx;
+  border-radius: var(--radius-pill, 999rpx);
+  font-weight: 600;
+  flex-shrink: 0;
+  font-family: var(--font-mono, monospace);
+  letter-spacing: 0.5rpx;
+}
+.type-teams {
+  background: rgba(95, 211, 95, 0.14);
+  color: #5fd35f;
+}
+.type-players {
+  background: rgba(96, 84, 241, 0.14);
+  color: #8b80ff;
+}
+.type-leagues {
+  background: rgba(255, 207, 92, 0.14);
+  color: #ffcf5c;
+}
+.follow-sub {
+  font-size: 22rpx;
+  color: #6b7280;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 取消关注按钮 */
+.follow-action {
+  padding: 16rpx 8rpx 16rpx 16rpx;
+  flex-shrink: 0;
+}
+
+/* ===== 底部 ===== */
+.footer { margin-top: 16rpx; }
+.tip {
+  font-size: 24rpx;
+  line-height: 1.6;
+  margin-bottom: 20rpx;
+  color: #6b7280;
+}
+.muted { color: #6b7280; }
 .loadmore { display: flex; justify-content: center; margin: 24rpx 0 8rpx; }
+.center.muted {
+  text-align: center;
+  color: #6b7280;
+  font-size: 24rpx;
+  padding: 24rpx 0;
+}
