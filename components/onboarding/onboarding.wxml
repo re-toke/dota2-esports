@@ -1,0 +1,23 @@
+<view wx:if="{{visible}}" class="ob-mask">
+  <view class="ob-card">
+    <!-- 步骤指示点 -->
+    <view class="ob-dots">
+      <view
+        wx:for="{{steps}}"
+        wx:key="title"
+        class="ob-dot {{index <= step ? 'ob-dot--on' : ''}}"
+      />
+    </view>
+
+    <view class="ob-icon">{{steps[step].icon}}</view>
+    <view class="ob-title">{{steps[step].title}}</view>
+    <view class="ob-desc">{{steps[step].desc}}</view>
+
+    <view class="ob-actions">
+      <view class="ob-skip" bindtap="onSkip">跳过</view>
+      <view class="ob-next" bindtap="onNext">
+        {{step >= steps.length - 1 ? '开始使用' : '下一步'}}
+      </view>
+    </view>
+  </view>
+</view>

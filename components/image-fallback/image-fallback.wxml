@@ -1,0 +1,16 @@
+<view class="imgfb {{round ? 'imgfb--round' : ''}}">
+  <!-- 占位层：无图 / 加载中 / 加载失败 三种情况均展示 -->
+  <view wx:if="{{!src || !loaded || failed}}" class="imgfb-ph">
+    <text class="imgfb-ph-text">{{placeholder}}</text>
+  </view>
+  <!-- 真实图片：仅当存在地址且未失败时渲染，加载完成覆盖占位 -->
+  <image
+    wx:if="{{src && !failed}}"
+    class="imgfb-img"
+    src="{{src}}"
+    mode="{{mode}}"
+    lazy-load="{{true}}"
+    bindload="onLoad"
+    binderror="onError"
+  />
+</view>

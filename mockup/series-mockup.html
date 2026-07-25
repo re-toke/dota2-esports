@@ -64,12 +64,13 @@
     margin-bottom: 10px;
     overflow: hidden;
     border: 1px solid #232a33;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
   }
   .hltv-series-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 14px;
+    padding: 14px 14px 10px;
     background: linear-gradient(90deg, rgba(95,211,95,0.04), transparent);
   }
   .hltv-team {
@@ -96,19 +97,23 @@
   .hltv-team-name.win { color: #5fd35f; }
   .hltv-score-box {
     display: flex;
-    align-items: center;
+    align-items: baseline;
     gap: 6px;
-    padding: 0 12px;
+    padding: 3px 10px;
+    background: #0f141b;
+    border-radius: 8px;
+    border: 1px solid #1f262f;
   }
   .hltv-score {
-    font-size: 22px; font-weight: 800;
+    font-size: 24px; font-weight: 800;
     font-variant-numeric: tabular-nums;
-    font-family: "SF Mono", "Roboto Mono", monospace;
+    font-family: "SF Mono", "JetBrains Mono", monospace;
     line-height: 1;
+    letter-spacing: -0.5px;
   }
   .hltv-score.win { color: #5fd35f; }
-  .hltv-score.lose { color: #6b7280; }
-  .hltv-score-sep { color: #4b5563; font-size: 16px; }
+  .hltv-score.lose { color: #5b626d; }
+  .hltv-score-sep { color: #3a4250; font-size: 16px; font-weight: 400; }
   .hltv-meta-row {
     display: flex;
     align-items: center;

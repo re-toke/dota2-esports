@@ -2,7 +2,8 @@
   "usingComponents": {
     "t-button": "tdesign-miniprogram/button/button",
     "t-empty": "tdesign-miniprogram/empty/empty",
-    "t-icon": "tdesign-miniprogram/icon/icon"
+    "t-icon": "tdesign-miniprogram/icon/icon",
+    "empty-state": "../../components/empty-state/empty-state"
   },
   "navigationBarTitleText": "关注"
 }

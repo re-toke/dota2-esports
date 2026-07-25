@@ -1,0 +1,31 @@
+<view class="container">
+  <view class="brand-header">
+    <view class="brand-logo"><text class="brand-logo-text">D2</text></view>
+    <view class="brand-info">
+      <text class="brand-name">DOTA2赛事 · 资料库</text>
+      <text class="brand-sub">英雄属性 / 职业胜率 / 对位 · 物品价格 / 配方</text>
+    </view>
+  </view>
+
+  <view class="entry-grid">
+    <view class="entry-card entry-hero" hover-class="entry-card--hover" bindtap="goHero">
+      <view class="entry-icon"><t-icon name="user" size="56rpx" color="#C8A951" /></view>
+      <view class="entry-text">
+        <text class="entry-title">英雄数据库</text>
+        <text class="entry-desc">属性 · 定位 · 职业胜率 · 最佳/最差对位</text>
+      </view>
+      <t-icon name="chevron-right" size="40rpx" color="#5b626d" />
+    </view>
+
+    <view class="entry-card entry-item" hover-class="entry-card--hover" bindtap="goItem">
+      <view class="entry-icon"><t-icon name="shop" size="56rpx" color="#C8A951" /></view>
+      <view class="entry-text">
+        <text class="entry-title">物品数据库</text>
+        <text class="entry-desc">价格 · 配方 · 商店类型</text>
+      </view>
+      <t-icon name="chevron-right" size="40rpx" color="#5b626d" />
+    </view>
+  </view>
+
+  <view class="data-foot muted">数据来源 OpenDota（公开 API），更新于本地缓存</view>
+</view>

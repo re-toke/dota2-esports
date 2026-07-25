@@ -11,17 +11,23 @@ page {
   --dire-strong: #c9352d;
   --dire-soft: rgba(232, 68, 59, 0.12);
 
-  /* 品牌色用天辉绿（暗底醒目） */
-  --td-brand-color: #5fd35f;
-  --td-brand-color-active: #46c457;
-  --td-brand-color-disabled: #3a5a3f;
-  --td-brand-color-light: rgba(95, 211, 95, 0.12);
-  --td-brand-color-light-active: rgba(95, 211, 95, 0.22);
-  --td-brand-color-focus: rgba(95, 211, 95, 0.12);
-  --td-primary-color-7: #5fd35f;
-  --td-primary-color-8: #7ee07e;
-  --td-text-color-brand: #5fd35f;
-  --td-text-color-link: #5fd35f;
+  /* 品牌色：DOTA2 暗金 #C8A951（强调色，区别于 TDesign 默认蓝）
+     说明：胜/负语义色 --radiant(--dire) 保持不变，仅 UI 强调色（按钮/选中/链接）改用暗金 */
+  --dota-red: #A41E1E;
+  --dota-red-strong: #7a1414;
+  --dota-gold: #C8A951;
+  --dota-gold-strong: #b08a3e;
+  --dota-gold-soft: rgba(200, 169, 81, 0.14);
+  --td-brand-color: #C8A951;
+  --td-brand-color-active: #b08a3e;
+  --td-brand-color-disabled: #4a4228;
+  --td-brand-color-light: rgba(200, 169, 81, 0.14);
+  --td-brand-color-light-active: rgba(200, 169, 81, 0.24);
+  --td-brand-color-focus: rgba(200, 169, 81, 0.14);
+  --td-primary-color-7: #C8A951;
+  --td-primary-color-8: #d8be7a;
+  --td-text-color-brand: #C8A951;
+  --td-text-color-link: #C8A951;
 
   /* 夜魇红：危险/错误/取消关注 */
   --td-error-color: #e8443b;
@@ -142,8 +148,8 @@ view, text { box-sizing: border-box; }
 }
 .filter-bar .chip.active {
   color: #0e1116;
-  background: #5fd35f;
-  border-color: #5fd35f;
+  background: var(--dota-gold);
+  border-color: var(--dota-gold);
 }
 
 /* 新鲜度标签（更新于 X 前）推到最右 */
@@ -173,7 +179,7 @@ view, text { box-sizing: border-box; }
   border-radius: 10rpx;
 }
 .seg-item.active {
-  background: #5fd35f;
+  background: var(--dota-gold);
   color: #0e1116;
   font-weight: 600;
 }
@@ -435,54 +441,9 @@ page {
   font-family: var(--font-mono);
   white-space: nowrap;
 }
-.vs-card.live .vs-center .vs-vs {
-  color: var(--status-live);
-  display: flex;
-  align-items: center;
-  gap: 6rpx;
-}
-.vs-card.live .vs-center .vs-vs::before {
-  content: '';
-  width: 10rpx;
-  height: 10rpx;
-  border-radius: 50%;
-  background: var(--status-live);
-  animation: livePulse 1.5s ease-in-out infinite;
-}
 
 /* ===================================================================
-   共享组件 5：Live Pulse Card（B 风格 · 直播卡升级版）
-   在 vs-card 基础上叠加 live 状态：脉冲点 + 绿色描边 + 可点击
-   =================================================================== */
-.live-pulse-card {
-  background: var(--card-bg-elevated);
-  border: 1rpx solid rgba(30, 200, 150, 0.25);
-  box-shadow: 0 0 0 1rpx rgba(30, 200, 150, 0.08);
-}
-.live-pulse-card.live {
-  border-color: rgba(30, 200, 150, 0.5);
-}
-.live-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6rpx;
-  font-size: 20rpx;
-  font-weight: 600;
-  color: var(--status-live);
-  text-transform: uppercase;
-  letter-spacing: 1rpx;
-}
-.live-badge::before {
-  content: '';
-  width: 10rpx;
-  height: 10rpx;
-  border-radius: 50%;
-  background: var(--status-live);
-  animation: livePulse 1.5s ease-in-out infinite;
-}
-
-/* ===================================================================
-   共享组件 6：Stat Row（C 风格 · 表格化数据行）
+   共享组件 5：Stat Row（C 风格 · 表格化数据行）
    用法：<view class="stat-row"> <text class="stat-label">胜率</text>
         <view class="stat-bar"><view class="stat-bar-fill" style="width:65%"></view></view>
         <text class="stat-value">65%</text> </view>
@@ -621,4 +582,87 @@ page {
   font-size: 22rpx;
   color: #6b7280;
   font-family: var(--font-mono);
+}
+
+/* ===================================================================
+   共享组件 10：Brand Logo（DOTA2 风格纯 CSS 标识，无外部资源）
+   用法：<view class="brand-logo" /> 或 <view class="brand-logo brand-logo--sm" />
+   红盾 + 暗金描边 + “D2” 字样，用于关于页 / 启动页 / 列表页品牌栏
+   =================================================================== */
+.brand-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 88rpx;
+  height: 88rpx;
+  border-radius: 18rpx;
+  background: linear-gradient(155deg, var(--dota-red) 0%, var(--dota-red-strong) 100%);
+  border: 3rpx solid var(--dota-gold);
+  box-shadow: 0 4rpx 14rpx rgba(164, 30, 30, 0.35);
+  flex-shrink: 0;
+}
+.brand-logo::after {
+  content: 'D2';
+  font-family: var(--font-display, sans-serif);
+  font-size: 44rpx;
+  font-weight: 800;
+  color: var(--dota-gold);
+  letter-spacing: 1rpx;
+}
+.brand-logo--sm {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 12rpx;
+  border-width: 2rpx;
+}
+.brand-logo--sm::after { font-size: 28rpx; }
+
+/* 品牌栏（列表页顶部：Logo + 名称 + 副标题） */
+.brand-header {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin-bottom: 20rpx;
+}
+.brand-text { display: flex; flex-direction: column; gap: 2rpx; min-width: 0; }
+.brand-title {
+  font-size: 34rpx;
+  font-weight: 700;
+  color: #f0f3f6;
+  font-family: var(--font-display, sans-serif);
+  line-height: 1.2;
+}
+.brand-sub {
+  font-size: 22rpx;
+  color: #8a8f99;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ===================================================================
+   共享组件 11：动效工具类（V2 · 列表项入场 / 内容淡入 / 按压反馈）
+   - .anim-fade-up：错峰淡入 + 上滑（与 wxml 内联 animation-delay 配合）
+   - .anim-fade：内容出现时的一次性淡入（骨架屏 → 真实内容 cross-fade）
+   - .tap-scale：按压微缩放（作为无自有 hover 类的列表项 hover-class 使用）
+   说明：页面级转场需 Skyline 渲染引擎；WebView 下小程序系统控制转场，
+   故 V2 仅落地「列表/卡片入场 + 内容淡入 + 按压反馈」三项客户端可控动效。
+   =================================================================== */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16rpx); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.anim-fade-up {
+  animation: fadeUp 0.42s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+.anim-fade {
+  animation: fadeIn 0.35s ease both;
+}
+.tap-scale {
+  transform: scale(0.98);
+  transition: transform 0.12s ease;
 }

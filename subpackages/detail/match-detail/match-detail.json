@@ -1,0 +1,11 @@
+{
+  "navigationBarTitleText": "战报",
+  "usingComponents": {
+    "t-icon": "../../../miniprogram_npm/tdesign-miniprogram/icon/icon",
+    "t-button": "../../../miniprogram_npm/tdesign-miniprogram/button/button",
+    "t-empty": "../../../miniprogram_npm/tdesign-miniprogram/empty/empty",
+    "t-skeleton": "../../../miniprogram_npm/tdesign-miniprogram/skeleton/skeleton",
+    "live-card": "../../../components/live-card/live-card",
+    "chart": "../../../components/chart/chart"
+  }
+}

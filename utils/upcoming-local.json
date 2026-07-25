@@ -1,0 +1,103 @@
+{
+  "generatedAt": 1784966664,
+  "source": "liquipedia",
+  "note": "build-time snapshot, refresh via scripts/fetch-liquipedia-upcoming.js",
+  "events": [
+    {
+      "id": -1098610,
+      "name": "EPL Masters I: Play-In",
+      "grade": "A",
+      "rank": 2,
+      "label": "A级",
+      "tier": 2,
+      "start": 1784505600,
+      "end": 1785023999,
+      "date": "Jul 20–25, 2026",
+      "source": "liquipedia"
+    },
+    {
+      "id": -1188953,
+      "name": "EPL Masters I",
+      "grade": "A",
+      "rank": 2,
+      "label": "A级",
+      "tier": 2,
+      "start": 1785024000,
+      "end": 1786579199,
+      "date": "Jul 26 – Aug 12, 2026",
+      "source": "liquipedia"
+    },
+    {
+      "id": -1543739,
+      "name": "1win Essence II",
+      "grade": "A",
+      "rank": 2,
+      "label": "A级",
+      "tier": 2,
+      "start": 1785369600,
+      "end": 1785974399,
+      "date": "Jul 30 – Aug 05, 2026",
+      "source": "liquipedia"
+    },
+    {
+      "id": -1993122,
+      "name": "Games of the Future 2026",
+      "grade": "A",
+      "rank": 2,
+      "label": "A级",
+      "tier": 2,
+      "start": 1785456000,
+      "end": 1785974399,
+      "date": "Jul 31 – Aug 05, 2026",
+      "source": "liquipedia"
+    },
+    {
+      "id": -1973943,
+      "name": "PGL Wallachia Season 9",
+      "grade": "S",
+      "rank": 3,
+      "label": "S级",
+      "tier": 1,
+      "start": 1789603200,
+      "end": 1790553599,
+      "date": "Sep 17–27, 2026",
+      "source": "liquipedia"
+    },
+    {
+      "id": -1632240,
+      "name": "BLAST SLAM VIII",
+      "grade": "S",
+      "rank": 3,
+      "label": "S级",
+      "tier": 1,
+      "start": 1790640000,
+      "end": 1791763199,
+      "date": "Sep 29 – Oct 11, 2026",
+      "source": "liquipedia"
+    },
+    {
+      "id": -1237464,
+      "name": "Esports Nations Cup 2026",
+      "grade": "S",
+      "rank": 3,
+      "label": "S级",
+      "tier": 1,
+      "start": 1793577600,
+      "end": 1794182399,
+      "date": "Nov 02–08, 2026",
+      "source": "liquipedia"
+    },
+    {
+      "id": -1559188,
+      "name": "BLAST SLAM IX",
+      "grade": "S",
+      "rank": 3,
+      "label": "S级",
+      "tier": 1,
+      "start": 1794873600,
+      "end": 1795996799,
+      "date": "Nov 17–29, 2026",
+      "source": "liquipedia"
+    }
+  ]
+}

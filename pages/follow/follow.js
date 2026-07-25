@@ -1,6 +1,7 @@
 const follow = require('../../utils/follow.js');
 const subscribe = require('../../utils/subscribe.js');
 const config = require('../../utils/config.js');
+const experiment = require('../../utils/experiment.js');
 
 const TABS = [
   { key: 'teams', label: '战队' },
@@ -20,10 +21,13 @@ Page({
     page: 0,
     pageSize: config.pageSize,
     hasMore: false,
-    loadingMore: false
+    loadingMore: false,
+    ctaVariant: 'A'   // T6 A/B：关注页空态 CTA 文案分组
   },
 
   onShow() {
+    // T6 A/B：读取实验分组（云端已落本地缓存），驱动空态 CTA 文案
+    this.setData({ ctaVariant: experiment.getVariant('follow_cta_variant', 'A') });
     this.refresh();
   },
 
@@ -68,17 +72,17 @@ Page({
       out.typeLabel = '战队';
       out.iconText = (it.name || '?').slice(0, 1).toUpperCase();
       out.sub = '点击查看战队详情';
-      out.target = '/pages/team-detail/team-detail?teamId=' + it.id;
+      out.target = '/subpackages/detail/team-detail/team-detail?teamId=' + it.id;
     } else if (type === 'players') {
       out.typeLabel = '选手';
       out.iconText = (it.name || '?').slice(0, 1).toUpperCase();
       out.sub = '点击查看选手详情';
-      out.target = '/pages/player-detail/player-detail?accountId=' + it.id;
+      out.target = '/subpackages/detail/player-detail/player-detail?accountId=' + it.id;
     } else {
       out.typeLabel = '赛事';
       out.iconText = '';
       out.sub = '点击查看赛事详情';
-      out.target = '/pages/league-detail/league-detail?leagueId=' + it.id;
+      out.target = '/subpackages/detail/league-detail/league-detail?leagueId=' + it.id;
     }
     return out;
   },
@@ -100,6 +104,12 @@ Page({
     follow.unfollow(type, id);
     wx.showToast({ title: '已取消关注', icon: 'none' });
     this.refresh();
+  },
+
+  goExplore() {
+    // T6 A/B：记录 CTA 点击转化
+    experiment.track('follow_cta_variant', this.data.ctaVariant, 'click');
+    wx.switchTab({ url: '/pages/teams/teams' });
   },
 
   onSubscribe() {

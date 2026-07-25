@@ -1,5 +1,5 @@
 {
-  "description": "DOTA2 赛事通 —— 关注 S 级及以上赛事、战队成员与对战历史（TDesign 版）",
+  "description": "DOTA2赛事 —— 关注 S 级及以上赛事、战队成员与对战历史（TDesign 版）",
   "packOptions": {
     "ignore": [
       {
@@ -12,6 +12,7 @@
   "setting": {
     "urlCheck": false,
     "es6": true,
+    "lazyCodeLoading": "requiredComponents",
     "enhance": true,
     "postcss": true,
     "minified": true,
@@ -41,8 +42,8 @@
   "compileType": "miniprogram",
   "cloudfunctionRoot": "cloudfunctions/",
   "libVersion": "3.0.0",
-  "appid": "wx6625103427d03523",
-  "projectname": "dota2-esports",
+  "appid": "wx838148b512800a3a",
+  "projectname": "DOTA2赛事",
   "condition": {},
   "simulatorPluginLibVersion": {},
   "editorSetting": {}

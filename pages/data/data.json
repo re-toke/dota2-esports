@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "资料库",
+  "usingComponents": {
+    "t-icon": "tdesign-miniprogram/icon/icon"
+  }
+}

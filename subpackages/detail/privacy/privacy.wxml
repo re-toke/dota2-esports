@@ -1,0 +1,98 @@
+<view class="container">
+  <view class="header">
+    <view class="title">DOTA2赛事 隐私协议</view>
+    <view class="meta">版本 {{version}} · 更新于 {{updatedAt}}</view>
+  </view>
+
+  <view class="section">
+    <view class="section-title">一、协议范围</view>
+    <view class="section-body">
+      本协议适用于「DOTA2赛事」微信小程序（以下简称"本小程序"）。本小程序提供 DOTA2 职业赛事信息查询服务，包括赛事列表、战队/选手资料、比赛历史等公开电竞数据。
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-title">二、数据收集说明</view>
+    <view class="section-body">
+      <view class="para">本小程序 <text class="em">不收集</text> 用户的个人敏感信息，包括但不限于：</view>
+      <view class="list-item">· 不调用 wx.getUserInfo / wx.getUserProfile（不获取微信昵称/头像）</view>
+      <view class="list-item">· 不调用 wx.getLocation（不获取地理位置）</view>
+      <view class="list-item">· 不调用 wx.chooseAddress / wx.getWeRunData 等敏感接口</view>
+      <view class="list-item">· 不上传通讯录、相册、麦克风录音</view>
+    </view>
+    <view class="section-body">
+      <view class="para">本小程序在本地存储的数据（仅保存在用户设备，不上传服务器）：</view>
+      <view class="list-item">· 关注的赛事/战队/选手列表（wx.setStorageSync，用于「关注」tab 展示）</view>
+      <view class="list-item">· 搜索历史关键词（最多 10 条，可手动清除）</view>
+      <view class="list-item">· 赛事数据的本地缓存（用于离线浏览与降低请求量，含 TTL 自动过期）</view>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-title">三、第三方数据来源</view>
+    <view class="section-body">
+      <view class="para">本小程序的赛事/战队/选手数据来自以下公开 API（均为只读查询，不涉及用户身份）：</view>
+      <view class="list-item">· <text class="em">OpenDota</text>（api.opendota.com）—— 公开 DOTA2 比赛数据，无需 key</view>
+      <view class="list-item">· <text class="em">STRATZ</text>（api.stratz.com）—— DOTA2 GraphQL API，需 API Key（开发者持有）</view>
+      <view class="list-item">· <text class="em">Steam Web API</text>（api.steampowered.com）—— Valve 官方接口，需 API Key（开发者持有）</view>
+      <view class="list-item">· <text class="em">Liquipedia</text>（liquipedia.net）—— 人工策展电竞 wiki，遵循其服务条款</view>
+    </view>
+    <view class="section-body">
+      <view class="para">所有第三方 API 调用均由小程序直接发起（不经过自有服务器），请求参数仅含赛事/战队/选手 ID 等公开标识，<text class="em">不含任何用户身份信息</text>。第三方 API 的 API Key 由开发者持有，不随小程序分发给用户。</view>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-title">四、数据使用目的</view>
+    <view class="section-body">
+      <view class="list-item">· 展示 DOTA2 职业赛事赛程与结果</view>
+      <view class="list-item">· 展示战队成员、选手资料与历史战绩</view>
+      <view class="list-item">· 多源数据交叉验证，提升信息准确性（标注数据来源与可信度）</view>
+      <view class="list-item">· 本地缓存以降低网络请求量、支持离线浏览</view>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-title">五、用户权利</view>
+    <view class="section-body">
+      <view class="para">您对本地存储的数据享有完全控制权：</view>
+      <view class="list-item">· 可在「我 → 设置 → 清除缓存」一键清空所有本地缓存与搜索历史</view>
+      <view class="list-item">· 可在「关注」tab 手动取消关注任意赛事/战队/选手</view>
+      <view class="list-item">· 卸载小程序将自动清除所有本地数据</view>
+      <view class="list-item">· 本小程序不向任何服务器上传您的个人数据，无需"删除账户"操作</view>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-title">六、数据安全</view>
+    <view class="section-body">
+      本小程序的所有网络请求均使用 HTTPS 加密传输。第三方 API Key 由开发者保管，不随小程序代码分发给终端用户。本地存储数据保存在微信小程序沙箱内，其他应用无法访问。
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-title">七、未成年人保护</view>
+    <view class="section-body">
+      本小程序内容为电竞赛事信息，适合所有年龄段用户。不包含付费消费、诱导分享、不良信息等内容。未成年人可正常使用。
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-title">八、协议更新</view>
+    <view class="section-body">
+      本协议可能随小程序功能迭代或法律法规要求而更新。重大变更将在小程序内显著提示。继续使用即视为同意更新后的协议。
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-title">九、联系我们</view>
+    <view class="section-body">
+      如对本协议有任何疑问，可通过微信小程序「意见反馈」功能联系开发者。
+    </view>
+  </view>
+
+  <view class="footer">
+    <t-icon name="info-circle" size="32rpx" color="#5b626d" />
+    <text class="footer-text">本小程序为个人开发者作品，数据来源于公开 API，与 Valve / OpenDota / STRATZ / Liquipedia 无官方 affiliation 关系。</text>
+  </view>
+</view>

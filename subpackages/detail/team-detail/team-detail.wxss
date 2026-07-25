@@ -1,0 +1,304 @@
+.container { padding: 24rpx; }
+
+/* ===== 头部（C 风格 · logo + 名称 + 关注） ===== */
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-bottom: 16rpx;
+}
+.head-logo {
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: var(--radius-md, 12rpx);
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--card-bg-inset, #0f141b);
+  border: 1rpx solid #232a33;
+}
+.head-info { flex: 1; min-width: 0; }
+.head-info .title {
+  font-size: 36rpx;
+  font-weight: 700;
+  color: #f0f3f6;
+  line-height: 1.3;
+  font-family: var(--font-display, -apple-system, sans-serif);
+}
+.head-meta {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-top: 8rpx;
+  flex-wrap: wrap;
+}
+.head-meta .sub { font-size: 24rpx; color: #8a8f99; }
+.tag-tag {
+  font-size: 22rpx;
+  color: #c9d2dd;
+  background: #1c2433;
+  border-radius: 4rpx;
+  padding: 2rpx 8rpx;
+  font-family: var(--font-mono, monospace);
+}
+.country-badge {
+  font-size: 20rpx;
+  padding: 2rpx 10rpx;
+  border-radius: var(--radius-pill, 999rpx);
+  background: rgba(95, 211, 95, 0.12);
+  color: #5fd35f;
+  border: 1rpx solid rgba(95, 211, 95, 0.3);
+  font-family: var(--font-mono, monospace);
+  letter-spacing: 1rpx;
+}
+.star-btn { padding: 4rpx 0 4rpx 16rpx; flex-shrink: 0; }
+
+/* ===== KPI Strip 局部样式（win/lose 颜色） ===== */
+.kpi-win { color: var(--status-ongoing, #5fd35f); }
+.kpi-lose { color: #e8443b; }
+
+/* ===== 数据溯源合并区（C 风格 · 与 league-detail 一致） ===== */
+.source-section {
+  background: var(--card-bg-elevated, #1c232c);
+  border-radius: var(--radius-lg, 16rpx);
+  padding: 20rpx 24rpx;
+  margin-bottom: 16rpx;
+}
+.source-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 12rpx;
+}
+.source-section-title {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #8a8f99;
+  text-transform: uppercase;
+  letter-spacing: 1rpx;
+}
+.source-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+/* 可信度 pill */
+.quality-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8rpx;
+  font-size: 24rpx;
+  padding: 6rpx 16rpx;
+  border-radius: var(--radius-pill, 999rpx);
+  align-self: flex-start;
+}
+.quality-pill .q-dot {
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 50%;
+}
+.quality-pill .q-text { font-weight: 600; }
+.quality-pill .q-src { font-size: 22rpx; opacity: 0.85; }
+.quality-high { background: rgba(30, 200, 150, 0.12); color: #1ec896; }
+.quality-high .q-dot { background: #1ec896; }
+.quality-medium { background: rgba(255, 207, 92, 0.12); color: #ffcf5c; }
+.quality-medium .q-dot { background: #ffcf5c; }
+.quality-low { background: rgba(107, 114, 128, 0.16); color: #9aa3ad; }
+.quality-low .q-dot { background: #9aa3ad; }
+
+/* ===== 分段控件 ===== */
+.seg {
+  display: flex;
+  background: var(--card-bg-inset, #0f141b);
+  border-radius: var(--radius-md, 12rpx);
+  padding: 4rpx;
+  margin: 16rpx 0;
+}
+.seg-item {
+  flex: 1;
+  text-align: center;
+  padding: 14rpx 0;
+  font-size: 26rpx;
+  color: #8a8f99;
+  border-radius: 8rpx;
+  transition: background 120ms ease, color 120ms ease;
+}
+.seg-item.active {
+  background: var(--card-bg-elevated, #1c232c);
+  color: #f0f3f6;
+  font-weight: 600;
+}
+
+/* ===== 队员卡片 ===== */
+.member {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  background: var(--card-bg, #161b22);
+  border-radius: var(--radius-lg, 16rpx);
+  padding: 18rpx 20rpx;
+  margin-bottom: 12rpx;
+  transition: background 120ms ease;
+}
+.member-hover {
+  background: var(--card-bg-elevated, #1c232c);
+}
+.member-avatar {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--card-bg-inset, #0f141b);
+  border: 1rpx solid #232a33;
+}
+.member-body { flex: 1; min-width: 0; }
+.member-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  margin-bottom: 6rpx;
+}
+.member-name {
+  font-size: 28rpx;
+  color: #f0f3f6;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 多源核实徽标 */
+.verify-badge {
+  font-size: 20rpx;
+  color: var(--status-verified, #5fd3a8);
+  background: rgba(30, 200, 150, 0.14);
+  border-radius: 6rpx;
+  padding: 2rpx 10rpx;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+/* vs-team-logo-placeholder 在 app.wxss 没有定义，这里补充 */
+.vs-team-logo-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #8a8f99;
+  background: var(--card-bg-inset, #0f141b);
+  border: 1rpx solid #232a33;
+}
+
+/* ===== 通用 ===== */
+.more-btn { width: 100%; }
+.loadmore { display: flex; justify-content: center; margin: 24rpx 0 8rpx; }
+.error-block { display: flex; flex-direction: column; align-items: center; }
+.retry-wrap { margin-top: 16rpx; }
+
+/* ===== 对战记录 H2H ===== */
+.h2h-list {
+  margin-top: 12rpx;
+  background: #161b22;
+  border-radius: 16rpx;
+  overflow: hidden;
+}
+.h2h-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20rpx 24rpx;
+  border-bottom: 1rpx solid #1f262f;
+}
+.h2h-row:last-child { border-bottom: none; }
+.h2h-row-hover { background: #1c2330; }
+.h2h-opp {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  flex: 1;
+  min-width: 0;
+}
+.h2h-opp-tag {
+  font-size: 20rpx;
+  font-weight: 700;
+  color: #5fd3a8;
+  background: #0f141b;
+  border-radius: 6rpx;
+  padding: 4rpx 8rpx;
+  min-width: 56rpx;
+  text-align: center;
+}
+.h2h-opp-name {
+  font-size: 26rpx;
+  color: #e6edf3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.h2h-record {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  font-size: 30rpx;
+  font-weight: 700;
+  min-width: 100rpx;
+  justify-content: center;
+}
+.h2h-win { color: #5fd35f; }
+.h2h-lose { color: #e74c3c; }
+.h2h-sep { color: #5b626d; }
+.h2h-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4rpx;
+  min-width: 90rpx;
+}
+.h2h-games { font-size: 22rpx; color: #6b7280; }
+.h2h-winrate { font-size: 24rpx; font-weight: 600; }
+.h2h-winrate.positive { color: #5fd35f; }
+.h2h-winrate.negative { color: #e74c3c; }
+
+/* S-Tier / TI 优先级徽标（头部） */
+.priority-badge {
+  display: inline-block;
+  padding: 2rpx 12rpx;
+  border-radius: 8rpx;
+  font-size: 20rpx;
+  font-weight: 600;
+  margin-right: 8rpx;
+}
+.priority-badge.priority-ti {
+  background: rgba(255, 207, 92, 0.18);
+  color: #ffcf5c;
+  border: 1rpx solid rgba(255, 207, 92, 0.4);
+}
+.priority-badge.priority-s {
+  background: rgba(95, 211, 95, 0.15);
+  color: #5fd35f;
+  border: 1rpx solid rgba(95, 211, 95, 0.3);
+}
+
+/* H2H 卡片优先级样式（有 S 级以上对战记录时高亮） */
+.h2h-row-priority {
+  background: rgba(255, 207, 92, 0.04);
+}
+.h2h-tier-badge {
+  display: inline-block;
+  padding: 1rpx 8rpx;
+  border-radius: 6rpx;
+  font-size: 18rpx;
+  font-weight: 600;
+  margin-left: 8rpx;
+  background: rgba(255, 207, 92, 0.15);
+  color: #ffcf5c;
+  border: 1rpx solid rgba(255, 207, 92, 0.3);
+}
+.h2h-stier {
+  color: #ffcf5c;
+  font-weight: 500;
+  margin-left: 4rpx;
+}

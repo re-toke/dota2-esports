@@ -1,4 +1,4 @@
-# DOTA2 赛事通 · 微信小程序（TDesign 版）
+# DOTA2赛事 · 微信小程序（TDesign 版）
 
 关注 DOTA2 **S 级及以上赛事**、查看**战队成员 / 队员资料与历史**、对比**双方历史胜负**的轻量小程序。
 UI 基于 **TDesign 微信小程序组件库**，支持**关注订阅**、**社区分级**与**本地缓存 + 限流**。
@@ -97,19 +97,28 @@ OpenDota 的 `tier` 是字符串枚举（`professional`/`premium`/`amateur`/`exc
 
 - **全部**：所有 S 级及以上赛事，按最近比赛时间（`latest`）倒序排列，最近有比赛的在最前。包含已结束和正在进行的。
 - **正在进行**：已开赛且最近 7 天内仍有比赛的赛事（基于 OpenDota 比赛的 `start_time` 判定）。
-- **即将到来**：未来两个月内开赛的赛事。由于 OpenDota 只存比赛结果、不含未来赛程，
-  此 tab 首次切换时会**懒加载**查询赛程（启用 STRATZ 后从其 GraphQL 获取开始日期），筛选未来两个月内开赛的赛事，
-  按 `sdate` 升序排列。查询带进度提示，结果缓存 24 小时，二次进入秒开。
-  **STRATZ 未启用且本地精选无日期时，该 tab 为空** —— 页面会显示引导卡片提示在 `utils/config.js` 启用 STRATZ（填入 apiKey 并 `enabled: true`）后方可获取赛程。
+- **即将到来**：未来约半年（180 天）内开赛的赛事，按 `start` 升序排列。客户端按如下回退链取数，
+  任意一层命中即用，保证「即将到来」在任意部署形态（含完全不部署云函数）下都不为空：
+  1. **云端实时源（推荐，无需 STRATZ key）**：部署云函数 `aggregation` 后，`tryCloudUpcoming()` 优先读
+     云函数预热的 `upcoming_schedule` 缓存（秒开）；`preheatUpcoming()` 在**未配置 STRATZ_API_KEY 时自动改用
+     Liquipedia**（`action=parse` 解析 `Portal:Tournaments` 的「Upcoming」表格，取 Tier 1/2 赛事，6h 缓存），
+     **自动跟随 Liquipedia 实时赛程**——下半年 Tier 1 赛事（BLAST SLAM IX、Esports Nations Cup 2026、BLAST SLAM VIII、
+     PGL Wallachia S9 等）及近期 Tier 2 赛事（EPL Masters I、Games of the Future 2026 等）都会进入列表。
+  2. **本地预构建快照（零服务端，无需云函数）**：未部署云函数或云端不可用时，`tryLocalUpcoming()` 读取
+     `utils/upcoming-local.json`（由 `scripts/fetch-liquipedia-upcoming.js` 在构建前抓取 Liquipedia 生成，
+     当前含 8 个未来 Tier 1/2 赛事）。数据为「抓取那一刻」的**快照，非实时**，刷新需重跑脚本并重新构建发布。
+  3. **本地精选库（curation）+ 串行查询兜底**：兜底补充 OpenDota 已有未来比赛记录的赛事及重大赛事日期。
+  若已配置 STRATZ_API_KEY，则 `preheatUpcoming()` 优先走 STRATZ（数据最全，含真实联赛 id 便于跳转详情）。
 
 时间窗口的数据来源：
 - **OpenDota `/explorer`**：一条 SQL 聚合拿所有赛事近一年的 `{earliest, latest, count}`
   （`api.getLeagueWindows()`），避免逐个拉 `/leagues/{id}/matches`，单次请求即可覆盖全部赛事。
-- **STRATZ（经 sources）**：`sources.getLeagueWindow()` → STRATZ GraphQL 获取赛程窗口，
-  用于「即将到来」判定；未启用时返回 null，tab 为空并显示启用引导（见上）。
+- **云端 `getUpcomingSchedule`（Liquipedia / STRATZ）**：客户端 `tryCloudUpcoming()` 优先读云函数预热的
+  `upcoming_schedule` 缓存（秒开）；未命中则现场预热一次（Liquipedia 实时解析，无需 key）。
+- **curation 兜底**：云端不可达时，`mergeCurationUpcoming()` 用本地精选库补充未来赛事，保证 tab 不为空。
 
 判定逻辑见 `utils/util.js` 的 `isOngoing()` / `isUpcoming()` / `statusOf()`；
-判定参数（进行中缓冲 7 天、即将到来范围 60 天、查询上限）在 `utils/config.js` 的 `leagueWindow`。
+判定参数（进行中缓冲 7 天、即将到来范围 180 天、查询上限）在 `utils/config.js` 的 `leagueWindow`。
 
 ## 数据来源多元化（多数据源编排）
 
@@ -301,3 +310,94 @@ dota2-esports/
 - 信息更新及时性：SWR 后台刷新 + 「更新于 X 前」新鲜度提示，避免展示过期数据。
 - 关注数据存于本机，换设备/清缓存会丢失；如需跨设备同步，可接入云开发。
 - 可继续扩展：赛事直播（`/live`）、订阅消息实际推送、更细的社区分级、权威库数据扩充、数据预拉取。
+
+
+## 上线前检查清单（必做）
+
+### 1. 服务器域名白名单（小程序后台 → 开发 → 开发管理 → 服务器域名）
+
+在 `request 合法域名` 中添加以下域名（按启用的数据源配置）：
+
+| 域名 | 数据源 | 必需性 |
+|---|---|---|
+| `https://api.opendota.com` | OpenDota（主源） | ✅ 必需 |
+| `https://api.stratz.com` | STRATZ GraphQL | 启用 STRATZ 时必需 |
+| `https://api.steampowered.com` | Steam Web API | 启用 Steam 时必需 |
+| `https://liquipedia.net` | Liquipedia MediaWiki API | 启用 Liquipedia 时必需 |
+
+> 开发阶段可在微信开发者工具「详情 → 本地设置」勾选「不校验合法域名」临时跳过；
+> **上线前必须取消勾选并在后台配齐域名**，否则正式版无法发起请求。
+
+### 2. urlCheck 已开启
+
+`project.config.json` 的 `setting.urlCheck` 已设为 `true`，开发工具会校验请求域名是否在白名单内。
+若开发时需临时关闭，改回 `false`，但**上线前必须改回 `true`**。
+
+### 3. 隐私协议页
+
+小程序已包含 `pages/privacy/privacy` 隐私协议页，并在 `app.json` 配置 `__usePrivacyCheck__: true`。
+微信审核要求所有小程序必须声明隐私协议，即使不使用隐私 API（本小程序未使用 getUserInfo/getLocation 等敏感 API）。
+
+### 4. STRATZ / Steam / Liquipedia API Key 配置
+
+在 `utils/config.js` 中按需配置（参见各配置段顶部的步骤注释）：
+- `stratz.enabled: true` + `stratz.apiKey`（云函数环境变量）— 启用后「即将到来」优先走 STRATZ 赛程
+- `steam.enabled: true` + `steam.apiKey`（云函数环境变量）— 启用后可获取官方奖金池/战队信息
+- `liquipedia.enabled: true` — 启用后获取人工策展的赛事元数据（无需 key）；**且是「即将到来」tab 在无 STRATZ key 时的默认实时来源**（云函数 `aggregation` 的 `fetchLiquipediaUpcoming` 解析 `Portal:Tournaments`）
+
+**无需任何 key 即可获得「即将到来」实时赛程**：只要部署了云函数 `aggregation` 且 `cloudProxy.enabled: true`，
+「即将到来」tab 就会经 Liquipedia 自动填充下半年 Tier 1/2 赛事；本地 curation 仅在云端不可达时兜底。
+
+配置后在微信开发者工具 Console 顶部查看：
+- `[stratz] ✅ ENABLED: true` 确认 STRATZ 生效
+- `[liquipedia] ✅ ENABLED: true` 确认 Liquipedia 生效
+
+### 5. 直播功能已下线
+
+本小程序不含任何直播比赛功能（代码/页面/入口/数据源已全部清理）。
+Steam `GetLiveLeagueGames` / STRATZ `live.matches` / `sources.enrichLiveGames` 均已移除。
+
+### 6. 实时比分后端契约（T4）
+
+`utils/realtime.js` 已实现客户端连接层（WebSocket + 断线指数退避重连 + 超时降级为 30s 轮询 OpenDota）。
+未配置后端时自动降级轮询，**无需后端即可运行**；接入后端后体验为真正的实时推送。
+
+**部署后端后需做两件事：**
+
+1. 在 `utils/config.js` 的 `realtime.url` 填入 wss 地址，例如：
+   ```js
+   realtime: { url: 'wss://realtime.your-domain.com/realtime', pollInterval: 30000, heartbeat: 25000, maxReconnect: 5 }
+   ```
+2. 在微信公众平台「开发 → 开发管理 → 服务器域名 → socket 合法域名」添加该 `wss://` 域名。
+
+**消息契约：**
+
+- 客户端 → 服务端（连接后先发订阅，再按 heartbeat 周期发 ping）：
+  ```json
+  { "type": "subscribe", "matchId": 123456 }
+  { "type": "ping" }
+  ```
+- 服务端 → 客户端（比分变化时推送，match 为 OpenDota `/matches/{id}` 全量对象）：
+  ```json
+  { "type": "score", "match": { "radiant_score": 1, "dire_score": 0, "radiant_gold_advantage_timeline": [...], ... } }
+  ```
+- 数据源建议：后端定时（≤30s）轮询 OpenDota `/matches/{id}` → 聚合 → 经 WebSocket 推送给订阅该 matchId 的客户端；客户端 `match-detail` 在 `isLive` 时自动建立连接，`onUnload` 自动关闭。
+
+> 注意：微信小程序 WebSocket 必须走 `wss://` 且域名需备案并加入 socket 合法域名；CloudBase 原生不提供裸 WebSocket 服务端端点，需自建或使用第三方实时通道。
+
+### 7. A/B 实验后端契约（T6）
+
+`utils/experiment.js` 已实现客户端实验框架（启动拉取分组、本地缓存、variant 灰度开关、转化埋点）。
+无后端时回退到 `utils/experiment.js` 内 `DEFAULTS`，**离线可用**。
+
+**部署后端后：**
+
+1. 云函数 `cloudfunctions/aggregation` 已实现 `getExperiments` action，返回实验配置：
+   ```json
+   { "experiments": { "follow_cta_variant": { "variant": "A", "enabled": true } } }
+   ```
+2. 生产环境应改为读取云数据库 `experiments` collection，并按用户（openid）稳定分桶，保证同一用户分组不变。
+3. 客户端通过 `experiment.getVariant('follow_cta_variant', 'A')` 取分组、`experiment.track(...)` 记转化（当前本地缓存，生产应上报分析后端）。
+
+**已实装开关：** 关注页（`pages/follow`）空态 CTA 文案 A/B（`follow_cta_variant`：A=去发现战队 / B=浏览热门战队），在 `onShow` 读取分组并 `track` 点击转化。
+

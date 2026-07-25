@@ -1,0 +1,20 @@
+<view class="live-card {{live ? 'is-live' : ''}}">
+  <view class="live-head">
+    <view class="live-dot" wx:if="{{live}}"></view>
+    <text class="live-title">{{live ? '正在直播' : '看直播'}}</text>
+    <text class="live-sub">{{live ? '赛事进行中，去主流平台看直播' : '聚合主流平台 DOTA2 直播间'}}</text>
+  </view>
+  <view class="live-list">
+    <view
+      class="live-item"
+      wx:for="{{sources}}"
+      wx:key="key"
+      style="background:{{item.color}}"
+      data-url="{{item.url}}"
+      data-mini="{{item.miniApp}}"
+      bindtap="onTapSource"
+      hover-class="live-item-hover">
+      <text class="live-name">{{item.name}}</text>
+    </view>
+  </view>
+</view>

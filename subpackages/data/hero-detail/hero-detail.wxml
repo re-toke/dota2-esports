@@ -1,0 +1,118 @@
+<view class="container">
+  <t-skeleton wx:if="{{loading}}" theme="paragraph" loading="{{true}}" />
+
+  <empty-state wx:elif="{{error}}" type="error" title="加载失败" desc="{{error}}" actionText="重试" bind:action="onRetry" />
+
+  <block wx:else>
+    <!-- 头部 -->
+    <view class="head">
+      <view class="head-badge" style="background:{{hero.attrColor}}20;border-color:{{hero.attrColor}};">
+        <text class="head-initial" style="color:{{hero.attrColor}};">{{hero.initial}}</text>
+      </view>
+      <view class="head-info">
+        <text class="head-name">{{hero.localizedName}}</text>
+        <view class="head-meta">
+          <text class="head-attr" style="color:{{hero.attrColor}};">{{hero.attrLabel}}</text>
+          <text class="head-dot">·</text>
+          <text class="head-attr2">{{hero.attackLabel}}</text>
+        </view>
+        <view class="head-roles">
+          <text class="role-tag" wx:for="{{hero.roles}}" wx:key="*this">{{item}}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 职业赛场数据 -->
+    <view class="block" wx:if="{{hero.proPick}}">
+      <view class="block-title">职业赛场（近期样本）</view>
+      <view class="meta-row">
+        <view class="meta-cell">
+          <text class="meta-num">{{hero.winRate}}%</text>
+          <text class="meta-label">胜率</text>
+        </view>
+        <view class="meta-cell">
+          <text class="meta-num">{{hero.proPick}}</text>
+          <text class="meta-label">登场</text>
+        </view>
+        <view class="meta-cell">
+          <text class="meta-num">{{hero.proBan}}</text>
+          <text class="meta-label">禁用</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 基础属性 -->
+    <view class="block">
+      <view class="block-title">基础属性</view>
+      <view class="stat-grid">
+        <view class="stat-cell" wx:if="{{hero.baseStr != null}}">
+          <text class="stat-label">力量</text>
+          <text class="stat-value">{{hero.baseStr}} <text class="stat-gain">+{{hero.strGain}}</text></text>
+        </view>
+        <view class="stat-cell" wx:if="{{hero.baseAgi != null}}">
+          <text class="stat-label">敏捷</text>
+          <text class="stat-value">{{hero.baseAgi}} <text class="stat-gain">+{{hero.agiGain}}</text></text>
+        </view>
+        <view class="stat-cell" wx:if="{{hero.baseInt != null}}">
+          <text class="stat-label">智力</text>
+          <text class="stat-value">{{hero.baseInt}} <text class="stat-gain">+{{hero.intGain}}</text></text>
+        </view>
+        <view class="stat-cell" wx:if="{{hero.baseHealth != null}}">
+          <text class="stat-label">生命</text>
+          <text class="stat-value">{{hero.baseHealth}}</text>
+        </view>
+        <view class="stat-cell" wx:if="{{hero.baseMana != null}}">
+          <text class="stat-label">魔法</text>
+          <text class="stat-value">{{hero.baseMana}}</text>
+        </view>
+        <view class="stat-cell" wx:if="{{hero.baseArmor != null}}">
+          <text class="stat-label">护甲</text>
+          <text class="stat-value">{{hero.baseArmor}}</text>
+        </view>
+        <view class="stat-cell" wx:if="{{hero.attackMin != null}}">
+          <text class="stat-label">攻击</text>
+          <text class="stat-value">{{hero.attackMin}}-{{hero.attackMax}}</text>
+        </view>
+        <view class="stat-cell" wx:if="{{hero.attackRange != null}}">
+          <text class="stat-label">攻击距离</text>
+          <text class="stat-value">{{hero.attackRange}}</text>
+        </view>
+        <view class="stat-cell" wx:if="{{hero.moveSpeed != null}}">
+          <text class="stat-label">移速</text>
+          <text class="stat-value">{{hero.moveSpeed}}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 对位 -->
+    <view class="block" wx:if="{{matchups.best.length || matchups.worst.length}}">
+      <view class="block-title">对位胜率（同场样本 ≥ 20 场）</view>
+
+      <view class="matchup-group" wx:if="{{matchups.best.length}}">
+        <text class="matchup-head best">最佳对位</text>
+        <view class="matchup-item" wx:for="{{matchups.best}}" wx:key="heroId"
+          hover-class="matchup-item--hover" bindtap="openMatchup" data-id="{{item.heroId}}">
+          <text class="matchup-name">{{item.name}}</text>
+          <view class="matchup-bar-wrap">
+            <view class="matchup-bar best" style="width:{{item.winRate}}%;"></view>
+          </view>
+          <text class="matchup-rate">{{item.winRate}}%</text>
+        </view>
+      </view>
+
+      <view class="matchup-group" wx:if="{{matchups.worst.length}}">
+        <text class="matchup-head worst">最差对位</text>
+        <view class="matchup-item" wx:for="{{matchups.worst}}" wx:key="heroId"
+          hover-class="matchup-item--hover" bindtap="openMatchup" data-id="{{item.heroId}}">
+          <text class="matchup-name">{{item.name}}</text>
+          <view class="matchup-bar-wrap">
+            <view class="matchup-bar worst" style="width:{{item.winRate}}%;"></view>
+          </view>
+          <text class="matchup-rate">{{item.winRate}}%</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="detail-foot muted">对位数据来自 OpenDota 同场胜负样本，未区分同队/敌对；技能与克制详解需策展数据，后续补充。</view>
+  </block>
+</view>

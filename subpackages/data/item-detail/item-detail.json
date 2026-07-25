@@ -1,0 +1,9 @@
+{
+  "navigationBarTitleText": "物品详情",
+  "usingComponents": {
+    "t-icon": "tdesign-miniprogram/icon/icon",
+    "t-skeleton": "tdesign-miniprogram/skeleton/skeleton",
+    "empty-state": "../../../components/empty-state/empty-state",
+    "image-fallback": "../../../components/image-fallback/image-fallback"
+  }
+}

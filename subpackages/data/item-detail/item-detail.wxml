@@ -1,0 +1,46 @@
+<view class="container">
+  <t-skeleton wx:if="{{loading}}" theme="paragraph" loading="{{true}}" />
+
+  <empty-state wx:elif="{{error}}" type="error" title="加载失败" desc="{{error}}" actionText="重试" bind:action="onRetry" />
+
+  <block wx:else>
+    <!-- 头部 -->
+    <view class="head">
+      <view class="head-icon">
+        <image-fallback src="{{item.img}}" placeholder="{{item.initial}}" round="{{false}}" />
+      </view>
+      <view class="head-info">
+        <text class="head-name">{{item.localizedName}}</text>
+        <text class="head-sub">{{item.name}}</text>
+      </view>
+    </view>
+
+    <!-- 基础信息 -->
+    <view class="block">
+      <view class="block-title">基础信息</view>
+      <view class="info-row">
+        <text class="info-label">价格</text>
+        <text class="info-value" wx:if="{{item.cost}}">{{item.cost}}</text>
+        <text class="info-value muted" wx:else>免费</text>
+      </view>
+      <view class="info-row">
+        <text class="info-label">是否配方</text>
+        <text class="info-value" style="color:{{item.recipe ? '#C8A951' : '#8a8f99'}};">{{item.recipe ? '是（合成组件）' : '否'}}</text>
+      </view>
+      <view class="info-row">
+        <text class="info-label">购买渠道</text>
+        <text class="info-value">{{item.secretShop ? '神秘商店' : (item.sideShop ? '边路商店' : '常规商店')}}</text>
+      </view>
+    </view>
+
+    <!-- 深度数据：待补充 -->
+    <view class="block pending">
+      <view class="block-title">深度数据（待补充）</view>
+      <view class="pending-item"><t-icon name="info-circle" size="28rpx" color="#6b7280" /><text>合成树：需策展配方数据（OpenDota 未直接提供组件清单）</text></view>
+      <view class="pending-item"><t-icon name="info-circle" size="28rpx" color="#6b7280" /><text>适用英雄：需赛后出装样本分析</text></view>
+      <view class="pending-item"><t-icon name="info-circle" size="28rpx" color="#6b7280" /><text>赛事出装率：需职业比赛物品统计</text></view>
+    </view>
+
+    <view class="detail-foot muted">物品图标来自 Steam CDN；如需显示，请在小程序后台将 cdn.cloudflare.steamstatic.com 加入 request 合法域名。</view>
+  </block>
+</view>

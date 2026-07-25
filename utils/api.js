@@ -11,6 +11,7 @@ const cache = require('./cache.js');
 const config = require('./config.js');
 const inc = require('./incremental.js');
 const sqlFragments = require('./sqlFragments.js');
+const breaker = require('./cloudBreaker.js');
 
 const BASE = 'https://api.opendota.com/api';
 
@@ -78,8 +79,11 @@ function validateResponse(path, data) {
   if (path.indexOf('/explorer') === 0) {
     return !!(data && Array.isArray(data.rows));
   }
-  // 数组型端点：/leagues, /search, /heroes, /teams/{id}/matches, /teams/{id}/players, /leagues/{id}/matches, /players/{id}/matches
+  // 数组型端点：/leagues, /search, /heroes, /heroStats, /items, /heroes/{id}/matchups,
+  //              /teams/{id}/matches, /teams/{id}/players, /leagues/{id}/matches, /players/{id}/matches
   if (path === '/leagues' || path === '/search' || path === '/heroes' ||
+      path === '/heroStats' || path === '/items' ||
+      /^\/heroes\/\d+\/matchups$/.test(path) ||
       /^\/teams\/\d+\/matches$/.test(path) || /^\/teams\/\d+\/players$/.test(path) ||
       /^\/leagues\/\d+\/matches$/.test(path) || /^\/players\/\d+\/matches$/.test(path)) {
     return Array.isArray(data);
@@ -220,20 +224,27 @@ function cachedFreshIncremental(resPath, resource, id, freshSec, ttlSec) {
 // 注意：cloudProxy.js 顶部 require('./api.js') 用于回退，故 api.js 顶部不可
 // 反向 require('./cloudProxy.js')，否则循环依赖。cloudFetch 内联了相同逻辑。
 function cloudFetch(action, params) {
+  const threshold = (config.cloudProxy && config.cloudProxy.circuitBreakerThreshold) || 0;
   return wx.cloud.callFunction({
     name: 'aggregation',
     data: { action: action, params: params || {} }
   }).then((res) => {
     const r = res && res.result;
     if (r && !r.error && r.data) {
+      breaker.markSuccess();
       return r.data;
     }
+    breaker.markFailure(threshold);
     throw new Error((r && r.error) || 'cloud proxy error');
+  }).catch((err) => {
+    breaker.markFailure(threshold);
+    throw err;
   });
 }
 
 function cloudEnabled() {
-  return !!(config.cloudProxy && config.cloudProxy.enabled);
+  const threshold = (config.cloudProxy && config.cloudProxy.circuitBreakerThreshold) || 0;
+  return breaker.isAvailable(config.cloudProxy && config.cloudProxy.enabled, threshold);
 }
 
 // 方法名 → (action, params-builder)，与 cloudProxy.js 的 PARAM_MAP 对齐
@@ -353,12 +364,27 @@ function transformSearchTeams(list) {
     .slice(0, 30);
 }
 
+function transformSearchPlayers(list) {
+  return (list || [])
+    .filter((item) => item && item.account_id)
+    .map((item) => ({ account_id: item.account_id, name: item.personaname || item.name || ('ID:' + item.account_id) }))
+    .slice(0, 30);
+}
+
 function searchTeams(name) {
   // 搜索结果短时缓存，避免连续相同搜索重复消耗配额
   const direct = function () { return cached('/search', { q: name }, 5 * 60).then(transformSearchTeams); };
   if (cloudEnabled()) {
     const m = ACTION_MAP.searchTeams(name);
     return cloudFetch(m.action, m.params).then(transformSearchTeams).catch(function () { return direct(); });
+  }
+  return direct();
+}
+
+function searchPlayers(name) {
+  const direct = function () { return cached('/search', { q: name }, 5 * 60).then(transformSearchPlayers); };
+  if (cloudEnabled()) {
+    return cloudFetch('searchTeams', { q: name }).then(transformSearchPlayers).catch(function () { return direct(); });
   }
   return direct();
 }
@@ -421,6 +447,19 @@ function getHeroes() {
   return direct();
 }
 
+// 职业赛场英雄统计（登场 / 胜场 / 禁用）。返回数组，元素含
+//   { id, pro_pick, pro_win, pro_ban, ... }。用于英雄页排序与详情页胜率/登场率。
+function getHeroStats() {
+  return cached('/heroStats', null, config.cacheTTL.heroes);
+}
+
+// 英雄对位数据：该英雄与另一英雄同场时的胜负样本。返回数组，元素含
+//   { hero_id, games_played, wins }。winRate = wins / games_played。
+// 用于详情页「最佳 / 最差对位」（OpenDota 不区分同队/敌对，统一按同场胜率呈现）。
+function getHeroMatchups(id) {
+  return cached('/heroes/' + id + '/matchups', null, config.cacheTTL.heroes);
+}
+
 // 批量查询队伍名（team_id -> name）。
 // 用途：OpenDota /leagues/{id}/matches 直连端点返回的 radiant_team_name / dire_team_name
 // 普遍为 null（matches 表未存队名），需用 team_id 反查 teams 表补全，否则联赛比赛列表
@@ -440,6 +479,28 @@ function getTeamNames(teamIds) {
   });
 }
 
+// 物品表（id -> { name, img, dname }）：OpenDota /constants/items 返回 { name: { id, img, dname } }，
+// 反转为 id 索引便于比赛详情页按 item_0~5 数字 id 查物品名/图标。长缓存（物品几乎不变）。
+function getItems() {
+  return cached('/constants/items', null, 24 * 3600).then((data) => {
+    const map = {};
+    if (!data) return map;
+    Object.keys(data).forEach((name) => {
+      const it = data[name];
+      if (it && it.id != null) {
+        map[it.id] = { name: name, img: it.img || ('items/' + name + '.png'), dname: it.dname || name };
+      }
+    });
+    return map;
+  });
+}
+
+// 物品基础表（数组）：OpenDota /items 返回 [{ id, name, cost, secret_shop, side_shop, recipe, localized_name }]。
+// 含价格 / 是否配方 / 商店类型，用于物品浏览与详情；与 getItems() 的 img/dname 合并补全显示信息。
+function getItemsList() {
+  return cached('/items', null, config.cacheTTL.heroes);
+}
+
 module.exports = {
   BASE: BASE,
   TIER_RANK: TIER_RANK,
@@ -453,11 +514,16 @@ module.exports = {
   getMatch: getMatch,
   getMatchPlayers: getMatchPlayers,
   searchTeams: searchTeams,
+  searchPlayers: searchPlayers,
   getTeam: getTeam,
   getTeamPlayers: getTeamPlayers,
   getTeamMatches: getTeamMatches,
   getPlayer: getPlayer,
   getPlayerMatches: getPlayerMatches,
   getHeroes: getHeroes,
-  getTeamNames: getTeamNames
+  getHeroStats: getHeroStats,
+  getHeroMatchups: getHeroMatchups,
+  getTeamNames: getTeamNames,
+  getItems: getItems,
+  getItemsList: getItemsList
 };

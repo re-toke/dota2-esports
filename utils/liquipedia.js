@@ -15,6 +15,12 @@
 //   4. 必须缓存复用结果（默认 6h TTL）
 //   5. 不得抓取非 API 端点（HTML 页面）
 //
+// ★★ 微信小程序限制（重要）★★
+//   wx.request 禁止设置 "User-Agent" header（运行时会报 Refused to set unsafe header）。
+//   这与 Liquipedia 官方要求"必须设置描述性 User-Agent"存在根本冲突。
+//   解决方案：通过微信云函数（Node.js 环境，可自由设置 header）代理 Liquipedia 请求。
+//   云函数基础设施已就绪：cloudfunctions/aggregation/
+//
 // 早期版本误用 action=parse + 1500ms 限流（违反 30 秒规则）→ IP 被封、返回 CAPTCHA 拦截页
 // 而非 JSON → 数据永远拿不到。本版本已修复：改用 revisions 端点 + 2 秒限流 + wikitext 模板解析。
 //
@@ -23,6 +29,7 @@
 var config = require('./config.js');
 var cache = require('./cache.js');
 var consensus = require('./consensus.js');
+var cloudProxy = require('./cloudProxy.js');
 
 var ENABLED = !!(config.liquipedia && config.liquipedia.enabled);
 var BASE = (config.liquipedia && config.liquipedia.base) || 'https://liquipedia.net/dota2/api.php';
@@ -51,7 +58,9 @@ function isRetriable(statusCode) {
 
 // 内部请求：调用 MediaWiki action API，返回解析后的 JSON。
 // 始终 resolve（失败时 resolve null），绝不 reject —— 优雅降级。
-// 必带 User-Agent + Accept-Encoding: gzip（官方强制要求）。
+// 注意：wx.request 禁止设置 "User-Agent"（微信运行时会报 Refused to set unsafe header），
+//       只保留 Accept-Encoding: gzip（官方要求 + 微信允许）。
+//       Liquipedia 官方要求描述性 UA → 需通过云函数代理（Node.js 可设 UA）。
 function request(params) {
   if (!ENABLED) return Promise.resolve(null);
 
@@ -76,8 +85,8 @@ function attempt(params, retryCount) {
       method: 'GET',
       header: {
         'Accept': 'application/json',
-        'Accept-Encoding': 'gzip',          // 官方强制要求支持 gzip
-        'User-Agent': USER_AGENT            // 官方强制要求描述性 UA
+        'Accept-Encoding': 'gzip'           // 官方强制要求支持 gzip（微信允许此 header）
+        // 注意：不设置 User-Agent —— wx.request 禁止设置该 header
       },
       success: function (res) {
         // 成功：200~299 且有 body

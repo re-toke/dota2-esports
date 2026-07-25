@@ -1,0 +1,136 @@
+<view class="container">
+  <!-- 数据溯源先行渲染：loading 期间也显示来源标识 -->
+  <view wx:if="{{!error}}" class="source-row">
+    <text class="src-badge src-opendota">OpenDota</text>
+    <text wx:if="{{updatedLabel}}" class="fresh-label">{{updatedLabel}}</text>
+  </view>
+
+  <!-- F1 直播聚合入口（isLive 时高亮置顶） -->
+  <live-card wx:if="{{liveSources.length}}" sources="{{liveSources}}" live="{{isLive}}" event-name="{{league}}" />
+
+  <t-skeleton wx:if="{{loading}}" theme="paragraph" loading="{{true}}" />
+  <view wx:elif="{{error}}" class="error-block">
+    <t-empty icon="info-circle" description="{{error}}" />
+    <view class="retry-wrap">
+      <t-button theme="primary" size="medium" bindtap="retry">重试</t-button>
+    </view>
+  </view>
+
+  <block wx:else>
+    <!-- 顶部：胜方横幅 + 比分 -->
+    <view class="hero-banner report-hero {{radiantWin ? 'radiant-win' : 'dire-win'}}">
+      <view class="hero-overlay">
+        <view class="hero-content">
+          <view class="hero-title">{{radiantWin ? radiantName : direName}} WIN</view>
+          <view class="hero-meta">
+            <text class="hero-meta-item">{{radiantName}} {{radiantScore}} : {{direScore}} {{direName}}</text>
+          </view>
+          <view class="hero-meta">
+            <text wx:if="{{duration}}" class="hero-meta-item">{{duration}}</text>
+            <text wx:if="{{time}}" class="hero-meta-item">· {{time}}</text>
+            <text wx:if="{{league}}" class="hero-meta-item">· {{league}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- MVP 标记 -->
+    <view class="mvp-card" wx:if="{{mvp}}">
+      <view class="mvp-tag">★ 本场 MVP</view>
+      <view class="mvp-body">
+        <view class="mvp-hero">{{mvp.heroName}}</view>
+        <view class="mvp-player">{{mvp.name}}</view>
+      </view>
+      <view class="mvp-stats">
+        <text class="mvp-stat">{{mvp.kda}}</text>
+        <text class="mvp-stat">GPM {{mvp.gpm}}</text>
+        <text class="mvp-stat">XPM {{mvp.xpm}}</text>
+      </view>
+    </view>
+
+    <!-- 天辉方 KDA 表 -->
+    <view class="section-header">
+      <text class="section-title {{radiantWin ? 'win-tag' : ''}}">{{radiantName}}</text>
+      <text class="section-action {{radiantWin ? 'win-tag' : 'lose-tag'}}">{{radiantWin ? 'WIN' : 'LOSE'}} · {{radiantScore}}</text>
+    </view>
+    <view class="kda-table">
+      <view class="kda-head">
+        <text class="c-hero">英雄</text>
+        <text class="c-player">选手</text>
+        <text class="c-kda">K/D/A</text>
+        <text class="c-net">GPM</text>
+        <text class="c-net">XPM</text>
+      </view>
+      <view class="kda-row" wx:for="{{radiant}}" wx:key="account_id" bindtap="openPlayer" data-id="{{item.account_id}}" hover-class="kda-row-hover">
+        <view class="c-hero">
+          <view class="hero-box {{radiantWin ? 'win-side' : ''}}">{{item.heroShort}}</view>
+        </view>
+        <text class="c-player">{{item.name}}</text>
+        <text class="c-kda">{{item.kda}}</text>
+        <text class="c-net">{{item.gpm}}</text>
+        <text class="c-net">{{item.xpm}}</text>
+      </view>
+    </view>
+    <!-- 天辉方出装栏 -->
+    <view class="items-block">
+      <view class="items-row" wx:for="{{radiant}}" wx:key="account_id" wx:for-item="p">
+        <view class="items-hero">{{p.heroShort}}</view>
+        <view class="items-list">
+          <image wx:for="{{p.items}}" wx:key="name" wx:for-item="it" class="item-icon" src="{{it.img}}" mode="aspectFit" lazy-load="{{true}}" />
+          <text wx:if="{{p.items.length === 0}}" class="muted items-empty">无出装数据</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 夜魇方 KDA 表 -->
+    <view class="section-header">
+      <text class="section-title {{!radiantWin ? 'win-tag' : ''}}">{{direName}}</text>
+      <text class="section-action {{!radiantWin ? 'win-tag' : 'lose-tag'}}">{{!radiantWin ? 'WIN' : 'LOSE'}} · {{direScore}}</text>
+    </view>
+    <view class="kda-table">
+      <view class="kda-head">
+        <text class="c-hero">英雄</text>
+        <text class="c-player">选手</text>
+        <text class="c-kda">K/D/A</text>
+        <text class="c-net">GPM</text>
+        <text class="c-net">XPM</text>
+      </view>
+      <view class="kda-row" wx:for="{{dire}}" wx:key="account_id" bindtap="openPlayer" data-id="{{item.account_id}}" hover-class="kda-row-hover">
+        <view class="c-hero">
+          <view class="hero-box {{!radiantWin ? 'win-side' : ''}}">{{item.heroShort}}</view>
+        </view>
+        <text class="c-player">{{item.name}}</text>
+        <text class="c-kda">{{item.kda}}</text>
+        <text class="c-net">{{item.gpm}}</text>
+        <text class="c-net">{{item.xpm}}</text>
+      </view>
+    </view>
+    <!-- 夜魇方出装栏 -->
+    <view class="items-block">
+      <view class="items-row" wx:for="{{dire}}" wx:key="account_id" wx:for-item="p">
+        <view class="items-hero">{{p.heroShort}}</view>
+        <view class="items-list">
+          <image wx:for="{{p.items}}" wx:key="name" wx:for-item="it" class="item-icon" src="{{it.img}}" mode="aspectFit" lazy-load="{{true}}" />
+          <text wx:if="{{p.items.length === 0}}" class="muted items-empty">无出装数据</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 经济/经验曲线（V4 折线图：双队对比 + 事件标记 + 点击 tooltip） -->
+    <view class="section-header" wx:if="{{goldAdv.length > 0}}">
+      <text class="section-title">经济 / 经验曲线</text>
+      <text class="section-action {{goldFinal > 0 ? 'win-tag' : 'lose-tag'}}">{{goldFinal > 0 ? '天辉 +' + goldFinal : '夜魇 +' + (-goldFinal)}}</text>
+    </view>
+    <view class="chart-card" wx:if="{{goldAdv.length > 0}}">
+      <chart type="line" height="220" series="{{chartSeries}}" categories="{{chartCats}}" events="{{chartEvents}}" zero-line="{{true}}" />
+      <view class="chart-legend">
+        <view class="lg-item"><view class="lg-dot" style="background:#C8A951;"></view><text>经济差</text></view>
+        <view class="lg-item"><view class="lg-dot" style="background:#3FB950;"></view><text>经验差</text></view>
+        <view class="lg-item" wx:for="{{chartEvents}}" wx:key="index"><view class="lg-dot" style="background:{{item.color}};"></view><text>{{item.label}}</text></view>
+      </view>
+      <view class="chart-axis muted">每 5 分钟采样 · 正=天辉领先 / 负=夜魇领先 · 点击曲线查看数值</view>
+    </view>
+
+    <view class="footer-tip muted">数据由 OpenDota 提供，单击选手行可跳转详情页</view>
+  </block>
+</view>

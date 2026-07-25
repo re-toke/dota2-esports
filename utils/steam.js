@@ -5,16 +5,22 @@
 // 启用条件：config.steam.enabled === true 且填了 apiKey。
 // 未启用 → 所有方法优雅降级（resolve null/[]）。
 //
-// 核心价值：GetLiveLeagueGames 能拿到「正在直播的职业比赛」（队名+比分+观众数），
-// 这是 OpenDota 没有的实时数据维度。
+// 核心价值：提供赛事奖金池（GetTournamentPrizePool，OpenDota/STRATZ 无此数据）、
+// 战队官方信息、比赛详情等官方维度数据，作为 OpenDota/STRATZ 的交叉补充。
 
 const config = require('./config.js');
+const cloudProxy = require('./cloudProxy.js');
 
-const ENABLED = !!(config.steam && config.steam.enabled && config.steam.apiKey);
+// 启用条件（二选一）：
+//   A) 云代理模式（上线推荐）：config.cloudProxy.enabled=true → Steam key 由云函数环境变量注入，
+//      客户端只传 path + params，绝不持 key。
+//   B) 直连模式（本地调试 fallback）：config.steam.apiKey 有值（仅本地，绝不上传）。
+const cloudOk = !!(config.cloudProxy && config.cloudProxy.enabled);
+const ENABLED = !!(config.steam && config.steam.enabled) && (cloudOk || !!(config.steam && config.steam.apiKey));
 const BASE = (config.steam && config.steam.base) || 'https://api.steampowered.com/IDOTA2Match_570';
 
-function get(path, params) {
-  if (!ENABLED) return Promise.resolve(null);
+function getDirect(path, params) {
+  if (!config.steam || !config.steam.apiKey) return Promise.resolve(null);
   const ps = Object.assign({ key: config.steam.apiKey }, params || {});
   const qs = Object.keys(ps).map((k) => k + '=' + encodeURIComponent(ps[k])).join('&');
   const url = BASE + path + '/v1/?' + qs;
@@ -35,29 +41,14 @@ function get(path, params) {
   });
 }
 
-// 正在直播的职业比赛（实时比分 + 队伍 + 观众数）
-// Steam API 返回约 5-20 条正在打的天梯/职业比赛，含 lobby_id、radiant/dire 队名、比分、观众数、阶段
-function getLiveLeagueGames() {
-  if (!ENABLED) return Promise.resolve([]);
-  return get('/GetLiveLeagueGames').then((d) => {
-    const games = (d && d.result && d.result.games) || [];
-    return games.map((g) => ({
-      lobbyId: g.lobby_id,
-      radiantName: g.radiant_team ? (g.radiant_team.team_name || '天辉') : '天辉',
-      direName: g.dire_team ? (g.dire_team.team_name || '夜魇') : '夜魇',
-      radiantScore: g.radiant_score || 0,
-      direScore: g.dire_score || 0,
-      radiantLogo: g.radiant_team ? g.radiant_team.team_logo : '',
-      direLogo: g.dire_team ? g.dire_team.team_logo : '',
-      radiantTeamId: g.radiant_team ? g.radiant_team.team_id : 0,
-      direTeamId: g.dire_team ? g.dire_team.team_id : 0,
-      spectators: g.spectators || 0,
-      stage: g.stage_name || '',
-      leagueId: g.league_id,
-      leagueName: g.league_name || '',
-      live: true
-    }));
-  }).catch(() => []);
+// 统一入口：云代理优先（key 安全），直连兜底（需本地 apiKey）。
+function get(path, params) {
+  if (!ENABLED) return Promise.resolve(null);
+  if (cloudProxy.isAvailable()) {
+    return cloudProxy.steamProxy(path, params)
+      .catch(() => getDirect(path, params));
+  }
+  return getDirect(path, params);
 }
 
 // 联赛列表（Valve 官方注册联赛，可用于交叉校验）
@@ -152,33 +143,11 @@ function getMatchDetails(matchId) {
   }).catch(() => null);
 }
 
-// 顶尖天梯直播比赛（GetLiveLeagueGames 仅覆盖职业联赛，本接口覆盖高 MMR 天梯对局）
-// 注意：响应字段为 team_id_radiant / team_id_dire（非 radiant_team_id）
-function getTopLiveGame() {
-  if (!ENABLED) return Promise.resolve([]);
-  return get('/GetTopLiveGame', { partner: 0 }).then((d) => {
-    const list = (d && d.game_list) || [];
-    return list.map((g) => ({
-      matchId: g.match_id,
-      serverSteamId: g.server_steam_id,
-      radiantTeamId: g.team_id_radiant || 0,
-      direTeamId: g.team_id_dire || 0,
-      radiantScore: g.radiant_score || 0,
-      direScore: g.dire_score || 0,
-      leagueId: g.league_id || 0,
-      live: true,
-      source: 'steam'
-    }));
-  }).catch(() => []);
-}
-
 module.exports = {
   ENABLED: ENABLED,
-  getLiveLeagueGames: getLiveLeagueGames,
   getLeagues: getLeagues,
   getTeamInfo: getTeamInfo,
   getTournamentPrizePool: getTournamentPrizePool,
   getTournamentPlayerStats: getTournamentPlayerStats,
-  getMatchDetails: getMatchDetails,
-  getTopLiveGame: getTopLiveGame
+  getMatchDetails: getMatchDetails
 };

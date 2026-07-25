@@ -1,0 +1,10 @@
+<view class="es">
+  <view class="es-icon">
+    <t-icon name="{{iconName}}" size="88rpx" color="#C8A951" />
+  </view>
+  <view class="es-title">{{title}}</view>
+  <view class="es-desc" wx:if="{{desc}}">{{desc}}</view>
+  <view class="es-action" wx:if="{{actionText}}">
+    <t-button theme="primary" size="medium" bind:tap="onAction">{{actionText}}</t-button>
+  </view>
+</view>

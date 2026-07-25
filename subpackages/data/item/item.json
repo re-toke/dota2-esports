@@ -1,0 +1,9 @@
+{
+  "navigationBarTitleText": "物品数据库",
+  "usingComponents": {
+    "t-search": "tdesign-miniprogram/search/search",
+    "t-icon": "tdesign-miniprogram/icon/icon",
+    "t-skeleton": "tdesign-miniprogram/skeleton/skeleton",
+    "empty-state": "../../../components/empty-state/empty-state"
+  }
+}

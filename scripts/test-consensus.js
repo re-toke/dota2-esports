@@ -6,11 +6,25 @@
 
 let passed = 0;
 let failed = 0;
+const pending = [];  // 异步测试挂起队列
 function check(label, fn) {
+  const t = { label: label };
   try {
-    fn();
-    passed++;
-    console.log('PASS  ' + label);
+    const ret = fn();
+    if (ret && typeof ret.then === 'function') {
+      // 异步测试：挂到 pending，等待 runAll 收尾
+      t.promise = ret.then(() => {
+        passed++;
+        console.log('PASS  ' + label);
+      }).catch((e) => {
+        failed++;
+        console.log('FAIL  ' + label + '  ->  ' + e.message);
+      });
+      pending.push(t.promise);
+    } else {
+      passed++;
+      console.log('PASS  ' + label);
+    }
   } catch (e) {
     failed++;
     console.log('FAIL  ' + label + '  ->  ' + e.message);
@@ -173,7 +187,8 @@ check('curatedTeamFor 名命中', () => {
 });
 check('curatedEventFor 新赛事命中 (RIYADH)', () => {
   const e = curation.curatedEventFor('Riyadh Masters 2024');
-  assert(e && e.tier.grade === 'A', 'Riyadh 2024 A级');
+  // Riyadh Masters 提升为 S 级（顶级第三方，史上非 TI 最高奖金）
+  assert(e && e.tier.grade === 'S', 'Riyadh 2024 S级');
   assert(e.start > 0 && e.end > 0, 'Riyadh 2024 有日期');
 });
 check('curatedEventFor 新赛事命中 (Elite League)', () => {
@@ -240,8 +255,93 @@ check('OpenDota 单源 -> 返回成员但 verifiedCount=0', async () => {
   assert(r.members[0].account_id === 111, 'account_id 保留');
 });
 
+// ===== 13. 战队优先级判定（新增：S-Tier / TI 参赛队优先覆盖）=====
+console.log('\n--- 战队优先级判定（isHighPriorityTeam / getTeamPriority）---');
+check('isTIContestantTeam: TI 2024 参赛队 ID（15=LGD）-> true', () => {
+  assert(curation.isTIContestantTeam(15) === true, 'LGD 在 TI 名单');
+});
+check('isTIContestantTeam: 未参赛 ID（999999）-> false', () => {
+  assert(curation.isTIContestantTeam(999999) === false, '不在 TI 名单');
+});
+check('isHighPriorityTeam: TI 参赛队（按 id 7119388=Team Spirit）-> true', () => {
+  assert(curation.isHighPriorityTeam(7119388) === true, 'Team Spirit 是 TI 参赛队');
+});
+check('isHighPriorityTeam: S-Tier 战队（按 id 15=LGD）-> true', () => {
+  assert(curation.isHighPriorityTeam(15) === true, 'LGD tier=S');
+});
+check('isHighPriorityTeam: 普通战队（按 id 999999）-> false', () => {
+  assert(curation.isHighPriorityTeam(999999) === false, '普通战队');
+});
+check('isHighPriorityTeam: 按名匹配（Team Spirit）-> true', () => {
+  assert(curation.isHighPriorityTeam('Team Spirit') === true, '按名命中');
+});
+check('isHighPriorityTeam: null / 空值 -> false', () => {
+  assert(curation.isHighPriorityTeam(null) === false, 'null 安全');
+  assert(curation.isHighPriorityTeam('') === false, '空串安全');
+});
+check('sources.getTeamPriority: TI 参赛队 -> isTI=true', () => {
+  const p = sources.getTeamPriority(7119388);  // Team Spirit
+  assert(p.isHighPriority === true, '应高优先级');
+  assert(p.isTI === true, '应标识为 TI 参赛队');
+  assert(p.tier && p.tier.grade === 'SSS', '应为 SSS 级');
+  assert(p.label === 'TI 参赛', 'label 应为 TI 参赛');
+});
+check('sources.getTeamPriority: S-Tier 战队（Azure Ray，未参加 TI）-> isTI=false, isHighPriority=true', () => {
+  const p = sources.getTeamPriority(5026801);  // Azure Ray (tier=S, 不在 TI 名单)
+  assert(p.isHighPriority === true, '应高优先级');
+  assert(p.isTI === false, '非 TI 参赛队');
+  assert(p.tier && p.tier.grade === 'S', '应为 S 级');
+});
+check('sources.getTeamPriority: 普通战队 -> isHighPriority=false', () => {
+  const p = sources.getTeamPriority(999999);
+  assert(p.isHighPriority === false, '非高优先级');
+  assert(p.isTI === false, '非 TI');
+  assert(p.tier === null, 'tier 为 null');
+});
+
+// ===== 14. 单场比赛赛事等级判定（getMatchTier）=====
+console.log('\n--- 单场比赛赛事等级判定（getMatchTier）---');
+check('getMatchTier: TI -> SSS', () => {
+  const t = sources.getMatchTier('The International 2025');
+  assert(t && t.grade === 'SSS' && t.rank === 4, 'TI 应为 SSS 级');
+});
+check('getMatchTier: Riyadh Masters -> S', () => {
+  const t = sources.getMatchTier('Riyadh Masters 2024');
+  assert(t && t.grade === 'S' && t.rank === 3, 'Riyadh 应为 S 级');
+});
+check('getMatchTier: Minor -> A', () => {
+  const t = sources.getMatchTier('DPC SEA Minor 2024');
+  assert(t && t.grade === 'A' && t.rank === 2, 'Minor 应为 A 级');
+});
+check('getMatchTier: 未知赛事 -> null', () => {
+  const t = sources.getMatchTier('Some Random Cup');
+  assert(t === null, '未知赛事应返回 null');
+});
+check('getMatchTier: 空名 -> null', () => {
+  const t = sources.getMatchTier('');
+  assert(t === null, '空名应返回 null');
+});
+
+// ===== 15. enrichPlayerProfile：Liquipedia 接入（mock 网络失败 -> null 降级）=====
+console.log('\n--- enrichPlayerProfile（Liquipedia 接入）---');
+check('enrichPlayerProfile: 网络失败降级 null（不抛错）', async () => {
+  // 默认 mock 网络返回 404，Liquipedia 应返回 null，函数应再包一层 null
+  const r = await sources.enrichPlayerProfile({ name: 'Yatoro', accountId: 12345 });
+  assert(r === null, '网络失败时应返回 null，不抛错');
+});
+check('enrichPlayerProfile: 空名直接返回 null', async () => {
+  const r = await sources.enrichPlayerProfile({ name: '', accountId: 12345 });
+  assert(r === null, '空名应跳过');
+});
+check('enrichPlayerProfile: null 参数安全', async () => {
+  const r = await sources.enrichPlayerProfile(null);
+  assert(r === null, 'null 参数应安全返回 null');
+});
+
 // ===== 汇总 =====
-console.log('\n=== 结果 ===');
-console.log('通过: ' + passed + '  失败: ' + failed);
-console.log(failed === 0 ? '全部通过 ✅' : '存在失败 ❌');
-process.exit(failed === 0 ? 0 : 1);
+Promise.all(pending).then(() => {
+  console.log('\n=== 结果 ===');
+  console.log('通过: ' + passed + '  失败: ' + failed);
+  console.log(failed === 0 ? '全部通过 ✅' : '存在失败 ❌');
+  process.exit(failed === 0 ? 0 : 1);
+});

@@ -1,0 +1,8 @@
+{
+  "navigationBarTitleText": "英雄详情",
+  "usingComponents": {
+    "t-icon": "tdesign-miniprogram/icon/icon",
+    "t-skeleton": "tdesign-miniprogram/skeleton/skeleton",
+    "empty-state": "../../../components/empty-state/empty-state"
+  }
+}

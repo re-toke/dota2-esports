@@ -1,0 +1,9 @@
+<view class="chart-wrap">
+  <canvas
+    type="2d"
+    id="chartCanvas"
+    class="chart-canvas"
+    style="width:100%;height:{{height}}px;"
+    bindtap="onTap"
+  ></canvas>
+</view>

@@ -1,0 +1,36 @@
+<!--pages/stratz-test/stratz-test.wxml-->
+<view class="container">
+  <view class="header">
+    <text class="title">STRATZ API 连通性诊断</text>
+    <text class="desc">验证微信小程序 wx.request 是否能绕过 Cloudflare 访问 STRATZ GraphQL</text>
+  </view>
+
+  <view class="config-box">
+    <text class="config-label">配置状态</text>
+    <text class="config-value">enabled: {{enabled ? 'true' : 'false'}}</text>
+    <text class="config-value">base: {{base}}</text>
+    <text class="config-value">apiKey: {{apiKeyLen > 0 ? apiKeyLen + ' 字符' : '未配置'}}</text>
+  </view>
+
+  <button class="run-btn {{testing ? 'testing' : ''}}" bindtap="runAll" disabled="{{testing}}">
+    {{testing ? '测试中...' : '一键运行全部测试'}}
+  </button>
+
+  <view class="results" wx:if="{{results.length > 0}}">
+    <text class="results-title">测试结果</text>
+    <view wx:for="{{results}}" wx:key="name" class="result-item {{item.status}}">
+      <view class="result-head">
+        <text class="result-name">{{item.name}}</text>
+        <text class="result-status {{item.status}}">
+          {{item.status === 'pass' ? '✓ 通过' : '✗ 失败'}}
+        </text>
+      </view>
+      <view class="result-detail">
+        <text class="detail-row">HTTP: {{item.statusCode}}</text>
+        <text class="detail-row">耗时: {{item.elapsed}}</text>
+        <text class="detail-row" wx:if="{{item.isCloudflare}}">⚠️ Cloudflare 拦截</text>
+      </view>
+      <view class="result-summary">{{item.summary}}</view>
+    </view>
+  </view>
+</view>

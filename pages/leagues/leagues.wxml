@@ -1,4 +1,13 @@
 <view class="container">
+  <!-- 品牌标识栏 -->
+  <view class="brand-header">
+    <view class="brand-logo brand-logo--sm" />
+    <view class="brand-text">
+      <text class="brand-title">DOTA2赛事</text>
+      <text class="brand-sub">赛事 · 战队 · 对战</text>
+    </view>
+  </view>
+
   <view class="search-wrap">
     <t-search
       value="{{keyword}}"
@@ -8,59 +17,31 @@
     />
   </view>
 
-  <!-- 直播中区域（B 风格 · 左右对阵 + 脉冲动效） -->
-  <block wx:if="{{liveGames.length > 0}}">
-    <view class="section-header">
-      <view class="live-badge">直播中 · {{liveGames.length}} 场</view>
-      <text class="fresh-label" wx:if="{{updatedLabel}}">{{updatedLabel}}</text>
-    </view>
-
-    <view
-      class="vs-card live live-pulse-card"
-      wx:for="{{liveGames}}"
-      wx:key="lobbyId"
-      bindtap="openLive"
-      data-league="{{item.leagueId}}"
-      data-name="{{item.leagueName}}"
-    >
-      <view class="vs-side home">
-        <view class="vs-team">
-          <image wx:if="{{item.radiantLogo}}" class="vs-team-logo" src="{{item.radiantLogo}}" mode="aspectFit" />
-          <view wx:else class="vs-team-logo vs-team-logo-placeholder">{{item.radiantName ? item.radiantName[0] : '?'}}</view>
-          <text class="vs-team-name">{{item.radiantName || '天辉'}}</text>
-        </view>
-        <text class="vs-score {{item.radiantScore > item.direScore ? 'win' : 'lose'}}">{{item.radiantScore}}</text>
-      </view>
-      <view class="vs-center">
-        <text class="vs-vs">LIVE</text>
-        <text class="vs-meta" wx:if="{{item.gameState}}">{{item.gameState}}</text>
-        <text class="vs-meta" wx:elif="{{item.spectators > 0}}">{{item.spectators}} 在看</text>
-        <text class="vs-meta" wx:else>实时</text>
-      </view>
-      <view class="vs-side away">
-        <view class="vs-team">
-          <image wx:if="{{item.direLogo}}" class="vs-team-logo" src="{{item.direLogo}}" mode="aspectFit" />
-          <view wx:else class="vs-team-logo vs-team-logo-placeholder">{{item.direName ? item.direName[0] : '?'}}</view>
-          <text class="vs-team-name">{{item.direName || '夜魇'}}</text>
-        </view>
-        <text class="vs-score {{item.direScore > item.radiantScore ? 'win' : 'lose'}}">{{item.direScore}}</text>
-      </view>
-    </view>
-
-    <view class="live-source-row" wx:if="{{liveGames.length > 0}}">
-      <text class="muted live-source-text">数据来源：</text>
-      <block wx:for="{{liveGames}}" wx:key="lobbyId" wx:for-item="g">
-        <text class="src-badge src-{{g.source}}" wx:if="{{g.source}}">{{g.source === 'steam' ? 'Steam' : (g.source === 'stratz' ? 'STRATZ' : g.source)}}</text>
-      </block>
-    </view>
-  </block>
-
   <!-- 筛选条 + 新鲜度（B 风格 · 移动友好 chips） -->
   <view class="filter-bar">
     <view class="chip {{filter==='all'?'active':''}}" data-f="all" bindtap="onFilter">全部</view>
     <view class="chip {{filter==='ongoing'?'active':''}}" data-f="ongoing" bindtap="onFilter">正在进行</view>
     <view class="chip {{filter==='upcoming'?'active':''}}" data-f="upcoming" bindtap="onFilter">即将到来</view>
     <view class="chip {{filter==='ended'?'active':''}}" data-f="ended" bindtap="onFilter">已结束</view>
+  </view>
+
+  <!-- 等级筛选条（第二行）：纯字母标签 + 品牌色渐变 + 精致选中态 -->
+  <view class="grade-bar">
+    <view class="gc {{gradeFilter==='all'?'gc--active':''}} gc--all" data-g="all" bindtap="onGradeFilter">
+      <text class="gc__label">ALL</text>
+    </view>
+    <view class="gc {{gradeFilter==='sss'?'gc--active':''}} gc--sss" data-g="sss" bindtap="onGradeFilter">
+      <text class="gc__label">SSS</text>
+    </view>
+    <view class="gc {{gradeFilter==='s'?'gc--active':''}} gc--s" data-g="s" bindtap="onGradeFilter">
+      <text class="gc__label">S</text>
+    </view>
+    <view class="gc {{gradeFilter==='a'?'gc--active':''}} gc--a" data-g="a" bindtap="onGradeFilter">
+      <text class="gc__label">A</text>
+    </view>
+    <view class="gc {{gradeFilter==='b'?'gc--active':''}} gc--b" data-g="b" bindtap="onGradeFilter">
+      <text class="gc__label">B</text>
+    </view>
   </view>
 
   <!-- 加载骨架 -->
@@ -70,12 +51,7 @@
     </view>
   </block>
 
-  <view wx:elif="{{error}}" class="error-block">
-    <t-empty icon="info-circle" description="{{error}}" />
-    <view class="retry-wrap">
-      <t-button theme="primary" size="medium" bindtap="retry">重试</t-button>
-    </view>
-  </view>
+  <empty-state wx:elif="{{error}}" type="error" title="加载失败" desc="{{error}}" actionText="重试" bind:action="retry" />
 
   <!-- 即将到来懒加载进度 -->
   <block wx:elif="{{filter==='upcoming' && upcomingLoading}}">
@@ -86,45 +62,56 @@
     </view>
   </block>
 
-  <!-- 即将到来为空且 STRATZ 未启用：明确告知需启用 STRATZ 才能获取赛程 -->
-  <view wx:elif="{{filter==='upcoming' && list.length === 0 && !stratzEnabled}}" class="empty-hint">
+  <!-- 即将到来为空：赛程来自 STRATZ / Liquipedia（云端代理），本地精选兜底 -->
+  <view wx:elif="{{filter==='upcoming' && list.length === 0}}" class="empty-hint">
     <t-empty icon="info-circle" description="无法获取即将到来的赛程数据" />
     <view class="hint-card-enhanced">
-      <view class="hint-title">赛程数据需要 STRATZ 支持</view>
-      <view class="hint-desc">即将到来的比赛赛程主要来自 STRATZ GraphQL API，当前未启用，因此无法获取未来两个月的赛事赛程。</view>
-      <view class="hint-step">在 <text class="hint-code">utils/config.js</text> 中填入 STRATZ apiKey 并设置 <text class="hint-code">enabled: true</text> 即可启用。</view>
-      <view class="hint-step">免费申请 apiKey：stratz.com/api</view>
+      <view class="hint-title">赛程数据来自 STRATZ / Liquipedia（云端代理）</view>
+      <view class="hint-desc">即将到来的赛事主要来自 STRATZ 或 Liquipedia 实时数据（经云函数聚合，无需客户端持有 key）。若云端未部署或网络不可用，已知重大赛事（如 TI 2026）仍会通过本地精选兜底展示。</view>
+      <view class="hint-step">在云函数 aggregation 配置 STRATZ_API_KEY 与 Liquipedia 代理即可启用实时赛程。</view>
+      <view class="hint-step">免费申请 STRATZ key：stratz.com/api</view>
     </view>
   </view>
 
-  <t-empty
+  <empty-state
     wx:elif="{{list.length === 0}}"
-    description="{{filter==='upcoming' ? '暂无未来两个月内开赛的赛事' : '暂无符合条件的赛事'}}"
+    type="empty"
+    title="{{filter==='upcoming' ? '暂无未来两个月内开赛的赛事' : '暂无符合条件的赛事'}}"
+    desc="试试切换筛选条件或下拉刷新"
   />
 
   <block wx:else>
     <view
-      class="league-item {{item.tierClass}}"
+      class="league-item {{item.tierClass}} anim-fade-up"
       wx:for="{{list}}"
       wx:key="leagueid"
       bindtap="openLeague"
       data-id="{{item.leagueid}}"
       data-name="{{item.name}}"
+      style="animation-delay: {{ (index % 12) * 50 }}ms"
+      hover-class="tap-scale"
     >
       <view class="league-main">
         <view class="league-name-row">
           <text class="league-name">{{item.name}}</text>
           <view class="league-badges">
-            <t-tag theme="{{item.tagTheme}}" variant="{{item.tagVariant}}" size="small">{{item.label}}</t-tag>
-            <text class="status-tag" style="color:{{item.statusColor}};border-color:{{item.statusColor}}">{{item.statusText}}</text>
+            <t-tag theme="{{item.tagTheme}}" variant="{{item.tagVariant}}" size="small">{{item.displayLabel}}</t-tag>
+            <text wx:if="{{item.valve}}" class="hl-badge hl-valve">Valve官方</text>
+            <text wx:if="{{item.topThirdParty}}" class="hl-badge hl-tp">顶级第三方</text>
+            <text wx:if="{{item.defunct}}" class="status-tag defunct-tag">已停办</text>
+            <text wx:if="{{!item.defunct}}" class="status-tag" style="color:{{item.statusColor}};border-color:{{item.statusColor}}">{{item.statusText}}</text>
           </view>
         </view>
         <view class="league-sub muted" wx:if="{{item.dateRange || item.matchCount}}">
           <text class="date-range" wx:if="{{item.dateRange}}">{{item.dateRange}}</text>
           <text wx:if="{{item.matchCount}}"> · {{item.matchCount}} 场</text>
         </view>
+        <!-- 即将到来：突出显示倒计时 -->
+        <view class="league-countdown" wx:if="{{filter === 'upcoming' && item.countdownText}}">
+          <text class="countdown-text">{{item.countdownText}}</text>
+        </view>
         <view class="league-source-row">
-          <text class="src-badge src-{{item.source === 'community' ? 'curation' : 'opendota'}}">{{item.source === 'community' ? '社区分级' : 'OpenDota'}}</text>
+          <text class="src-badge src-{{item.source === 'community' ? 'curation' : (item.source === 'liquipedia' ? 'liquipedia' : (item.source === 'stratz' ? 'stratz' : 'opendota'))}}">{{item.source === 'community' ? '社区分级' : (item.source === 'liquipedia' ? 'Liquipedia' : (item.source === 'stratz' ? 'STRATZ' : 'OpenDota'))}}</text>
         </view>
       </view>
       <view class="star-btn" catchtap="toggleFollow" data-id="{{item.leagueid}}" data-name="{{item.name}}">
@@ -136,8 +123,48 @@
       <t-button theme="light" size="medium" bindtap="appendPage" t-class="more-btn">加载更多</t-button>
     </view>
 
-    <view class="fresh-bottom" wx:if="{{updatedLabel && !loading}}">
-      <text class="fresh-label">{{updatedLabel}}</text>
+    <!-- 已停办赛事归档区（defunct）：与主列表分离，置底展示 -->
+    <view class="archive-block" wx:if="{{archived.length}}">
+      <view class="archive-head">
+        <text class="archive-title">已停办赛事（归档）</text>
+        <text class="archive-count">{{archived.length}}</text>
+      </view>
+      <view
+        class="league-item {{item.tierClass}} is-defunct anim-fade-up"
+        wx:for="{{archived}}"
+        wx:key="leagueid"
+        bindtap="openLeague"
+        data-id="{{item.leagueid}}"
+        data-name="{{item.name}}"
+        style="animation-delay: {{ (index % 12) * 50 }}ms"
+        hover-class="tap-scale"
+      >
+        <view class="league-main">
+          <view class="league-name-row">
+            <text class="league-name">{{item.name}}</text>
+            <view class="league-badges">
+              <t-tag theme="{{item.tagTheme}}" variant="{{item.tagVariant}}" size="small">{{item.displayLabel}}</t-tag>
+              <text wx:if="{{item.valve}}" class="hl-badge hl-valve">Valve官方</text>
+              <text wx:if="{{item.topThirdParty}}" class="hl-badge hl-tp">顶级第三方</text>
+              <text class="status-tag defunct-tag">已停办</text>
+            </view>
+          </view>
+          <view class="league-sub muted" wx:if="{{item.dateRange || item.matchCount}}">
+            <text class="date-range" wx:if="{{item.dateRange}}">{{item.dateRange}}</text>
+            <text wx:if="{{item.matchCount}}"> · {{item.matchCount}} 场</text>
+          </view>
+        </view>
+        <view class="star-btn" catchtap="toggleFollow" data-id="{{item.leagueid}}" data-name="{{item.name}}">
+          <t-icon name="star" size="44rpx" color="{{item.followed ? '#ffcf5c' : '#5b626d'}}" />
+        </view>
+      </view>
     </view>
+
+      <view class="fresh-bottom" wx:if="{{updatedLabel && !loading}}">
+        <text class="fresh-label">{{updatedLabel}}</text>
+      </view>
   </block>
+
+  <!-- 首次启动引导（仅首次自动展示，完成后写入 Storage） -->
+  <onboarding />
 </view>

@@ -1,0 +1,53 @@
+<view class="container">
+  <t-search
+    class="search"
+    value="{{keyword}}"
+    placeholder="搜索英雄（中/英文）"
+    bind:change="onSearch"
+  />
+
+  <view class="filter-bar">
+    <view class="chip {{attrFilter === item.key ? 'active' : ''}}" wx:for="{{attrChips}}" wx:key="key"
+      data-key="{{item.key}}" bindtap="onAttr">{{item.label}}</view>
+  </view>
+  <view class="filter-bar">
+    <view class="chip {{attackFilter === item.key ? 'active' : ''}}" wx:for="{{attackChips}}" wx:key="key"
+      data-key="{{item.key}}" bindtap="onAttack">{{item.label}}</view>
+    <view class="filter-spacer"></view>
+    <view class="chip {{sort === item.key ? 'active' : ''}}" wx:for="{{sortChips}}" wx:key="key"
+      data-key="{{item.key}}" bindtap="onSort">{{item.label}}</view>
+  </view>
+
+  <block wx:if="{{loading}}">
+    <view wx:for="{{[1,2,3,4,5,6,7,8]}}" wx:key="*this" class="hero-card skel">
+      <t-skeleton theme="paragraph" loading="{{true}}" />
+    </view>
+  </block>
+
+  <empty-state wx:elif="{{error}}" type="error" title="加载失败" desc="{{error}}" actionText="重试" bind:action="onRetry" />
+
+  <empty-state wx:elif="{{list.length === 0}}" type="search" title="未找到英雄" desc="试试调整筛选条件或搜索关键词" />
+
+  <view wx:else class="hero-grid">
+    <view class="hero-card anim-fade-up" wx:for="{{list}}" wx:key="id"
+      style="animation-delay:{{ (index % 12) * 40 }}ms"
+      hover-class="hero-card--hover" bindtap="openHero" data-id="{{item.id}}">
+      <view class="hero-badge" style="background:{{item.attrColor}}20;border-color:{{item.attrColor}};">
+        <text class="hero-initial" style="color:{{item.attrColor}};">{{item.initial}}</text>
+      </view>
+      <view class="hero-body">
+        <text class="hero-name">{{item.localizedName}}</text>
+        <view class="hero-tags">
+          <text class="hero-attr" style="color:{{item.attrColor}};">{{item.attrLabel}}</text>
+          <text class="hero-dot">·</text>
+          <text class="hero-attr2">{{item.attackLabel}}</text>
+        </view>
+        <text class="hero-role" wx:if="{{item.roles.length}}">{{item.roles[0]}}</text>
+      </view>
+      <view class="hero-win" wx:if="{{item.proPick}}">
+        <text class="hero-win-num">{{item.winRate}}%</text>
+        <text class="hero-win-label">职业胜率</text>
+      </view>
+    </view>
+  </view>
+</view>

@@ -1,0 +1,13 @@
+{
+  "navigationBarTitleText": "队员详情",
+  "enablePullDownRefresh": true,
+  "backgroundTextStyle": "dark",
+  "usingComponents": {
+    "image-fallback": "../../../components/image-fallback/image-fallback",
+    "chart": "../../../components/chart/chart",
+    "t-icon": "../../../miniprogram_npm/tdesign-miniprogram/icon/icon",
+    "t-button": "../../../miniprogram_npm/tdesign-miniprogram/button/button",
+    "t-skeleton": "../../../miniprogram_npm/tdesign-miniprogram/skeleton/skeleton",
+    "t-empty": "../../../miniprogram_npm/tdesign-miniprogram/empty/empty"
+  }
+}

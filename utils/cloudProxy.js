@@ -1,17 +1,52 @@
 // utils/cloudProxy.js
 // CloudBase 云函数代理层：当 config.cloudProxy.enabled 时，优先通过云函数调用
-// OpenDota（国内加速 + 共享缓存），云函数不可用时静默回退到 api.js 直连。
-// 导出接口与 api.js 完全一致（getLeagues / getLeagueMatches / getTeam…等），
-// 调用方无需知道底层走云函数还是直连。
+// OpenDota / STRATZ / Steam / Liquipedia（国内加速 + 共享缓存 + key 不上客户端），
+// 云函数不可用时静默回退到 api.js / stratz.js / steam.js / liquipedia.js 直连。
+//
+// 本文件统一导出两类接口：
+//   1) 与 api.js 方法对齐的代理方法（getLeagues / getMatch …）—— 调用方无需感知底层。
+//   2) 通用 call(action, params) + 各源的便捷方法（steamProxy …）。
+//
+// 熔断逻辑见 utils/cloudBreaker.js（独立模块，避免与 api.js 循环依赖）。
 
 const api = require('./api.js');
 const config = require('./config.js');
+const breaker = require('./cloudBreaker.js');
 
-// 参数映射：api.js 的 (id) → cloud function 的 { params }
+const THRESHOLD = (config.cloudProxy && config.cloudProxy.circuitBreakerThreshold) || 0;
+
+function isAvailable() {
+  return breaker.isAvailable(config.cloudProxy && config.cloudProxy.enabled, THRESHOLD);
+}
+
+// 通用云函数调用：返回 Promise<data>；失败（含熔断）reject，由调用方决定回退。
+function call(action, params) {
+  if (!isAvailable()) {
+    return Promise.reject(new Error('cloud proxy unavailable'));
+  }
+  return wx.cloud.callFunction({
+    name: 'aggregation',
+    data: { action: action, params: params || {} }
+  }).then((res) => {
+    const r = res && res.result;
+    if (r && !r.error && r.data !== undefined) {
+      breaker.markSuccess();
+      return r.data;
+    }
+    breaker.markFailure(THRESHOLD);
+    throw new Error((r && r.error) || 'cloud proxy empty');
+  }).catch((err) => {
+    if (isAvailable()) breaker.markFailure(THRESHOLD);
+    throw err;
+  });
+}
+
+// ===== OpenDota 代理（与 api.js 方法名对齐）=====
 const PARAM_MAP = {
   getLeagues: function () { return {}; },
   getLeagueWindows: function () { return {}; },
   getLeagueMatches: function (id) { return { leagueId: id }; },
+  getMatch: function (id) { return { matchId: id }; },
   searchTeams: function (name) { return { q: name }; },
   getTeam: function (id) { return { teamId: id }; },
   getTeamPlayers: function (id) { return { teamId: id }; },
@@ -25,32 +60,28 @@ const PARAM_MAP = {
 function wrap(methodName) {
   return function () {
     var args = arguments;
-    if (!config.cloudProxy.enabled) {
+    if (!isAvailable()) {
       return api[methodName].apply(api, args);
     }
     var params = (PARAM_MAP[methodName] || function () { return {}; }).apply(null, args);
-    return new Promise(function (resolve, reject) {
-      wx.cloud.callFunction({
-        name: 'aggregation',
-        data: { action: methodName, params: params }
-      }).then(function (res) {
-        var r = res && res.result;
-        if (r && !r.error && r.data) {
-          resolve(r.data);
-        } else {
-          throw new Error(r && r.error || 'cloud proxy error');
-        }
-      }).catch(function () {
-        // 云函数失败 → 直连回退
-        api[methodName].apply(api, args).then(resolve).catch(reject);
-      });
-    });
+    return call(methodName, params)
+      .catch(function () { return api[methodName].apply(api, args); });
   };
 }
 
-// 自动生成所有导出（与 api.js 的方法名对齐）
 var METHOD_NAMES = Object.keys(PARAM_MAP);
 var proxy = {};
 METHOD_NAMES.forEach(function (name) { proxy[name] = wrap(name); });
+
+// ===== 便捷方法：Steam / Liquipedia 代理（T1 扩展）=====
+// Steam Web API：云端用 STEAM_API_KEY 签名后转发 Valve 接口。
+// 客户端只传 path + params，绝不持 key。
+proxy.steamProxy = function (path, params) {
+  return call('steamProxy', { path: path, params: params || {} });
+};
+
+// 暴露给其它模块（api.js / stratz.js / leagues.js 复用）
+proxy.isAvailable = isAvailable;
+proxy.call = call;
 
 module.exports = proxy;

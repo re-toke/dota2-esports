@@ -63,13 +63,11 @@ check('stratz.getLeagueTier exists', () => assert(typeof stratz.getLeagueTier ==
 check('stratz.getTeamLogo exists', () => assert(typeof stratz.getTeamLogo === 'function'));
 check('stratz.getPlayerAvatar exists', () => assert(typeof stratz.getPlayerAvatar === 'function'));
 check('steam.ENABLED (目前关闭)', () => assert(steam.ENABLED === false));
-check('steam.getLiveLeagueGames exists', () => assert(typeof steam.getLiveLeagueGames === 'function'));
 check('sources.getLeagueTier exists', () => assert(typeof sources.getLeagueTier === 'function'));
 check('sources.getLeagueWindow exists', () => assert(typeof sources.getLeagueWindow === 'function'));
 check('sources.enrichTeamLogo exists', () => assert(typeof sources.enrichTeamLogo === 'function'));
 check('sources.enrichPlayerAvatar exists', () => assert(typeof sources.enrichPlayerAvatar === 'function'));
 check('sources.enrichTeamInfo exists', () => assert(typeof sources.enrichTeamInfo === 'function'));
-check('sources.enrichLiveGames exists', () => assert(typeof sources.enrichLiveGames === 'function'));
 
 // ===== 5. 分级回退链测试 =====
 section('\n--- 分级回退链（sources.getLeagueTier）---');
@@ -133,10 +131,6 @@ check('stratz.getTeamLogo disabled -> null', async () => {
   assert(r === null, 'disabled should return null');
 });
 check('steam.ENABLED === false', () => assert(!steam.ENABLED));
-check('steam.getLiveLeagueGames disabled -> []', async () => {
-  const r = await steam.getLiveLeagueGames();
-  assert(Array.isArray(r) && r.length === 0, '应返回空数组');
-});
 
 // ===== 8. 战队 logo / 队员头像多源增强 =====
 section('\n--- 战队 logo / 队员头像多源增强 ---');
@@ -164,10 +158,6 @@ section('\n--- 战队扩展信息 / 直播聚合 ---');
 check('enrichTeamInfo 无可用源 -> null', async () => {
   const r = await sources.enrichTeamInfo({ name: 'Test Team' });
   assert(r === null, '应返回 null');
-});
-check('enrichLiveGames 全部禁用 -> 空数组', async () => {
-  const r = await sources.enrichLiveGames();
-  assert(Array.isArray(r) && r.length === 0, '应返回空数组');
 });
 
 // ===== 10. 响应校验（api.cached 拒绝畸形 body 并回退）=====
@@ -243,89 +233,11 @@ check('cached() 拒绝列表端点返回非数组（错误对象）', async () =
   }
 });
 
-// ===== 11. 直播聚合去重（enrichLiveGames 复合键）=====
-section('\n--- 直播聚合去重（enrichLiveGames 复合键）---');
-
-// 通过临时 monkeypatch steam.getLiveLeagueGames / stratz.getLiveMatches 注入数据，
-// 验证 enrichLiveGames 的跨源去重逻辑。所有 patch 在 finally 中恢复原值。
-check('enrichLiveGames 跨源去重（同一局合并）', async () => {
-  const origSteam = steam.getLiveLeagueGames;
-  const origStratz = stratz.getLiveMatches;
-  steam.getLiveLeagueGames = function () {
-    return Promise.resolve([{ lobbyId: 1, radiantTeamId: 10, direTeamId: 20, leagueId: 5, radiantName: 'A', direName: 'B' }]);
-  };
-  stratz.getLiveMatches = function () {
-    return Promise.resolve([{ matchId: 99, radiantTeamId: 10, direTeamId: 20, leagueId: 5, radiantName: 'A', direName: 'B' }]);
-  };
-  try {
-    const r = await sources.enrichLiveGames();
-    assert(Array.isArray(r), '应返回数组');
-    assert(r.length === 1, '同一局跨源应去重为 1，实际: ' + r.length);
-  } finally {
-    steam.getLiveLeagueGames = origSteam;
-    stratz.getLiveMatches = origStratz;
-  }
-});
-
-check('enrichLiveGames 保留不同比赛', async () => {
-  const origSteam = steam.getLiveLeagueGames;
-  const origStratz = stratz.getLiveMatches;
-  steam.getLiveLeagueGames = function () {
-    return Promise.resolve([{ radiantTeamId: 10, direTeamId: 20, leagueId: 5 }]);
-  };
-  stratz.getLiveMatches = function () {
-    return Promise.resolve([{ radiantTeamId: 30, direTeamId: 40, leagueId: 5 }]);
-  };
-  try {
-    const r = await sources.enrichLiveGames();
-    assert(r.length === 2, '不同比赛应保留为 2，实际: ' + r.length);
-  } finally {
-    steam.getLiveLeagueGames = origSteam;
-    stratz.getLiveMatches = origStratz;
-  }
-});
-
-check('enrichLiveGames 归一队伍槽位顺序', async () => {
-  const origSteam = steam.getLiveLeagueGames;
-  const origStratz = stratz.getLiveMatches;
-  steam.getLiveLeagueGames = function () {
-    return Promise.resolve([{ radiantTeamId: 20, direTeamId: 10, leagueId: 5 }]);
-  };
-  stratz.getLiveMatches = function () {
-    return Promise.resolve([{ radiantTeamId: 10, direTeamId: 20, leagueId: 5 }]);
-  };
-  try {
-    const r = await sources.enrichLiveGames();
-    assert(r.length === 1, '槽位顺序不同但同一局应合并为 1，实际: ' + r.length);
-  } finally {
-    steam.getLiveLeagueGames = origSteam;
-    stratz.getLiveMatches = origStratz;
-  }
-});
-
-check('enrichLiveGames 全 0 id 时回退源私有 id', async () => {
-  const origSteam = steam.getLiveLeagueGames;
-  const origStratz = stratz.getLiveMatches;
-  steam.getLiveLeagueGames = function () {
-    return Promise.resolve([{ lobbyId: 1, radiantTeamId: 0, direTeamId: 0, leagueId: 0 }]);
-  };
-  stratz.getLiveMatches = function () {
-    return Promise.resolve([{ matchId: 2, radiantTeamId: 0, direTeamId: 0, leagueId: 0 }]);
-  };
-  try {
-    const r = await sources.enrichLiveGames();
-    assert(r.length === 2, '不同源私有 id 不应合并，应为 2，实际: ' + r.length);
-  } finally {
-    steam.getLiveLeagueGames = origSteam;
-    stratz.getLiveMatches = origStratz;
-  }
-});
-
 // ===== 12. STRATZ 精确名匹配（findLeagueByName 经 getLeagueTier）=====
 // findLeagueByName 未导出，但可通过 stratz.getLeagueTier(name) + mock wx.request 间接验证：
-// 返回包含两个名称相近的联赛，查询精确名应命中对应联赛（证明归一等值匹配优于子串匹配）。
+// 返回包含两个名称相近的联赛，查询精确名应命中对应赛事（证明归一等值匹配优于子串匹配）。
 section('\n--- STRATZ 精确名匹配（精确归一 > 子串）---');
-check('stratz.getLeagueTier 精确名命中 DPC_MAJOR→SSS（非子串误命中）', async () => {
+check('stratz.getLeagueTier 精确名命中 DPC_MAJOR→S（非子串误命中）', async () => {
   // 清除 stratz 联赛缓存，强制走 mock wx.request
   cache.remove('stratz_leagues');
   requestHandler = function (opts) {
@@ -344,8 +256,9 @@ check('stratz.getLeagueTier 精确名命中 DPC_MAJOR→SSS（非子串误命中
   try {
     const r = await stratz.getLeagueTier('ESL One Birmingham 2024');
     assert(r !== null, '应命中 Birmingham 联赛');
-    assert(r.grade === 'SSS', 'DPC_MAJOR 应映射为 SSS，实际: ' + (r && r.grade));
-    assert(r.label === 'TI 顶级', 'label 应为 TI 顶级');
+    // DPC_MAJOR 现映射为 S 级（原 SSS 仅保留给 TI，由 communityTierFromName 精确匹配）
+    assert(r.grade === 'S', 'DPC_MAJOR 应映射为 S，实际: ' + (r && r.grade));
+    assert(r.label === 'S级', 'label 应为 S级');
   } finally {
     requestHandler = defaultRequestHandler;
     cache.remove('stratz_leagues');

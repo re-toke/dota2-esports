@@ -1,6 +1,12 @@
 <view class="container">
   <view class="search-wrap">
-    <t-search value="{{keyword}}" placeholder="搜索战队名称" bind:change="onSearch" bind:clear="onClear" />
+    <t-search value="{{keyword}}" placeholder="{{searchType === 'players' ? '搜索选手名称' : '搜索战队名称'}}" bind:change="onSearch" bind:clear="onClear" />
+  </view>
+
+  <!-- 搜索类型切换 -->
+  <view class="search-type-bar">
+    <view class="type-chip {{searchType === 'teams' ? 'active' : ''}}" data-type="teams" bindtap="onSearchType">战队</view>
+    <view class="type-chip {{searchType === 'players' ? 'active' : ''}}" data-type="players" bindtap="onSearchType">选手</view>
   </view>
 
   <!-- 本地搜索历史：仅在热门(未输入)模式且存在历史时展示 -->
@@ -17,6 +23,14 @@
         data-kw="{{item}}"
         bindtap="onTapHistory"
       >{{item}}</view>
+    </view>
+  </view>
+
+  <!-- 热门搜索推荐词（点击直接搜索） -->
+  <view class="hot-words" wx:if="{{mode === 'hot'}}">
+    <text class="hot-words-label">热门搜索</text>
+    <view class="hot-words-chips">
+      <view class="chip" wx:for="{{hotWords}}" wx:key="*this" data-kw="{{item}}" bindtap="onTapHotWord">{{item}}</view>
     </view>
   </view>
 
@@ -37,27 +51,25 @@
     </view>
   </block>
 
-  <view wx:elif="{{error}}" class="error-block">
-    <t-empty icon="info-circle" description="{{error}}" />
-    <view class="retry-wrap">
-      <t-button theme="primary" size="medium" bindtap="onRetry">重试</t-button>
-    </view>
-  </view>
+  <empty-state wx:elif="{{error}}" type="error" title="加载失败" desc="{{error}}" actionText="重试" bind:action="onRetry" />
 
-  <view wx:elif="{{mode === 'result' && results.length === 0 && !loading}}" class="hint-card-enhanced">
-    <view class="hint-title">未找到相关战队</view>
-    <view class="hint-desc">试试更通用的关键词，例如「LGD」「Spirit」「OG」</view>
+  <view wx:elif="{{mode === 'result' && results.length === 0 && !loading}}">
+    <empty-state type="search" title="未找到相关战队" desc="试试更通用的关键词，例如「LGD」「Spirit」「OG」" actionText="重新搜索" bind:action="onClear" />
+    <view wx:if="{{suggestion}}" class="sug" bindtap="onTapSuggestion" data-kw="{{suggestion}}">
+      你是不是想搜：<text class="sug-kw">{{suggestion}}</text>
+    </view>
   </view>
 
   <block wx:else>
     <view class="team-list">
       <view
-        class="team-card"
+        class="team-card anim-fade-up"
         wx:for="{{mode === 'hot' ? hot : results}}"
         wx:key="id"
         bindtap="openTeam"
         data-id="{{item.id}}"
         hover-class="team-card-hover"
+        style="animation-delay: {{ (index % 12) * 50 }}ms"
       >
         <!-- 头部：logo + 信息 + 关注 -->
         <view class="team-card-head">
@@ -127,5 +139,29 @@
       <t-button theme="light" size="medium" bind:tap="appendPage" loading="{{loadingMore}}">加载更多战队</t-button>
     </view>
     <view wx:elif="{{mode === 'result' && results.length > pageSize}}" class="center muted">— 已显示全部 {{results.length}} 支 —</view>
+
+    <!-- 选手搜索结果 -->
+    <block wx:if="{{searchType === 'players' && playerResults.length > 0}}">
+      <view class="player-list">
+        <view class="player-card anim-fade-up" wx:for="{{playerResults}}" wx:key="id" bindtap="openPlayer" data-id="{{item.id}}" hover-class="card-hover" style="animation-delay: {{ (index % 12) * 50 }}ms">
+          <view class="player-info">
+            <text class="player-name">{{item.name}}</text>
+            <text class="player-id muted">ID: {{item.id}}</text>
+          </view>
+          <view class="player-meta">
+            <t-icon name="{{item.followed ? 'star' : 'star'}}" size="36rpx" color="{{item.followed ? '#ffcf5c' : '#5b626d'}}" catchtap="toggleFollowPlayer" data-id="{{item.id}}" data-name="{{item.name}}" />
+          </view>
+        </view>
+      </view>
+      <view class="loadmore" wx:if="{{hasMore}}">
+        <t-button theme="light" size="medium" bind:tap="appendPage" loading="{{loadingMore}}">加载更多选手</t-button>
+      </view>
+    </block>
+    <block wx:elif="{{searchType === 'players' && playerResults.length === 0 && !loading && searched}}">
+      <empty-state type="search" title="未找到选手" desc="换个名字再试试，或看看热门选手" actionText="重新搜索" bind:action="onClear" />
+      <view wx:if="{{suggestion}}" class="sug sug--center" bindtap="onTapSuggestion" data-kw="{{suggestion}}">
+        你是不是想搜：<text class="sug-kw">{{suggestion}}</text>
+      </view>
+    </block>
   </block>
 </view>

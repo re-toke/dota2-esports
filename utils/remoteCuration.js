@@ -54,6 +54,28 @@ function buildEffective(remote) {
 function curatedEventFor(name) { return ensure().eventFor(name); }
 function curatedTeamFor(nameOrId) { return ensure().teamFor(nameOrId); }
 
+// 判断 team_id 是否为历届 TI 参赛队（直接透传本地名单，不依赖远程覆盖）
+function isTIContestantTeam(teamId) { return curation.isTIContestantTeam(teamId); }
+
+// 判断 team_id/队名 是否为高优先级战队（S-Tier 或 TI 参赛队）。
+// 优先用 TI 名单快速判定，再用「生效集合」（远程覆盖后）的 tier 字段判定。
+function isHighPriorityTeam(nameOrId) {
+  if (nameOrId == null) return false;
+  // 1) TI 名单快速判定（按 id，直接走本地静态名单）
+  if (curation.isTIContestantTeam(nameOrId)) return true;
+  // 2) 生效集合的 tier 字段判定（用 ensure() 以使用远程覆盖后的数据）
+  const t = ensure().teamFor(nameOrId);
+  if (t && t.tier && (t.tier.grade === 'SSS' || t.tier.grade === 'S')) return true;
+  return false;
+}
+
+// 返回当前生效的事件数组（本地兜底或远程覆盖后的集合）。
+// 用于遍历所有已知赛事（如「即将到来」补充未举办的重大赛事 TI 主赛事）。
+function getEffectiveEvents() {
+  ensure();
+  return effectiveEvents || curation.CURATED_EVENTS || [];
+}
+
 // 拉取远程配置（异步、幂等、失败静默回退）。
 //   - url 为空 → 仅用本地，返回 false（无网络）；
 //   - 缓存新鲜且非强制 → 直接读缓存，返回 false；
@@ -91,6 +113,9 @@ function load(force) {
 module.exports = {
   curatedEventFor: curatedEventFor,
   curatedTeamFor: curatedTeamFor,
+  isTIContestantTeam: isTIContestantTeam,
+  isHighPriorityTeam: isHighPriorityTeam,
+  getEffectiveEvents: getEffectiveEvents,
   buildEffective: buildEffective,
   load: load
 };

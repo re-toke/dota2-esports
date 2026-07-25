@@ -185,11 +185,95 @@
 
 /* ===== 通用 ===== */
 .loadmore { display: flex; justify-content: center; margin: 24rpx 0 8rpx; }
-.error-block { display: flex; flex-direction: column; align-items: center; }
-.retry-wrap { margin-top: 16rpx; }
 .center.muted {
   text-align: center;
   color: #6b7280;
   font-size: 24rpx;
   padding: 24rpx 0;
+}
+
+/* ===== 搜索类型切换 ===== */
+.search-type-bar {
+  display: flex;
+  gap: 12rpx;
+  margin: 0 0 16rpx;
+}
+.type-chip {
+  font-size: 24rpx;
+  color: #8a8f99;
+  padding: 8rpx 24rpx;
+  border-radius: 20rpx;
+  background: #161b22;
+  border: 1rpx solid #232a33;
+  transition: all .2s;
+}
+.type-chip.active {
+  color: #5fd35f;
+  background: rgba(95,211,95,.08);
+  border-color: rgba(95,211,95,.25);
+}
+
+/* ===== 选手搜索结果卡片 ===== */
+.player-list {
+  margin-top: 8rpx;
+}
+.player-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20rpx 24rpx;
+  background: #161b22;
+  border-radius: 12rpx;
+  margin-bottom: 12rpx;
+  border: 1rpx solid #1f262f;
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+.card-hover { background: #1c2330; transform: scale(0.99); }
+.player-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+.player-name {
+  font-size: 28rpx;
+  color: #e6edf3;
+  font-weight: 500;
+}
+.player-id {
+  font-size: 22rpx;
+}
+.player-meta {
+  display: flex;
+  align-items: center;
+}
+
+/* ===== 热门搜索推荐词 ===== */
+.hot-words {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin: 4rpx 4rpx 12rpx;
+}
+.hot-words-label {
+  font-size: 24rpx;
+  color: #8a8f99;
+}
+.hot-words-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+
+/* ===== 搜索纠错建议 ===== */
+.sug {
+  margin-top: 16rpx;
+  font-size: 26rpx;
+  color: #9aa4b2;
+}
+.sug--center { text-align: center; }
+.sug-kw {
+  color: var(--dota-gold, #C8A951);
+  font-weight: 600;
+  margin-left: 4rpx;
 }

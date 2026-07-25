@@ -1,0 +1,7 @@
+.chart-wrap {
+  width: 100%;
+}
+.chart-canvas {
+  display: block;
+  width: 100%;
+}

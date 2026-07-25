@@ -1,29 +1,62 @@
 {
   "pages": [
     "pages/leagues/leagues",
-    "pages/league-detail/league-detail",
-    "pages/match-detail/match-detail",
     "pages/teams/teams",
-    "pages/team-detail/team-detail",
-    "pages/player-detail/player-detail",
-    "pages/follow/follow"
+    "pages/follow/follow",
+    "pages/data/data",
+    "pages/stratz-test/stratz-test"
   ],
+  "subpackages": [
+    {
+      "root": "subpackages/detail",
+      "name": "detail",
+      "pages": [
+        "league-detail/league-detail",
+        "match-detail/match-detail",
+        "team-detail/team-detail",
+        "player-detail/player-detail",
+        "privacy/privacy"
+      ]
+    },
+    {
+      "root": "subpackages/data",
+      "name": "data",
+      "pages": [
+        "hero/hero",
+        "hero-detail/hero-detail",
+        "item/item",
+        "item-detail/item-detail"
+      ]
+    }
+  ],
+  "preloadRule": {
+    "pages/leagues/leagues": {
+      "network": "all",
+      "packages": ["detail"]
+    },
+    "pages/teams/teams": {
+      "network": "all",
+      "packages": ["detail"]
+    }
+  },
+  "__usePrivacyCheck__": true,
   "window": {
     "backgroundTextStyle": "dark",
     "navigationBarBackgroundColor": "#0e1116",
-    "navigationBarTitleText": "DOTA2 赛事通",
+    "navigationBarTitleText": "DOTA2赛事",
     "navigationBarTextStyle": "white",
     "backgroundColor": "#0e1116"
   },
   "tabBar": {
     "color": "#8a8f99",
-    "selectedColor": "#5fd35f",
+    "selectedColor": "#C8A951",
     "backgroundColor": "#161b22",
     "borderStyle": "black",
     "list": [
       { "pagePath": "pages/leagues/leagues", "text": "赛事" },
       { "pagePath": "pages/teams/teams", "text": "战队" },
-      { "pagePath": "pages/follow/follow", "text": "关注" }
+      { "pagePath": "pages/follow/follow", "text": "关注" },
+      { "pagePath": "pages/data/data", "text": "资料库" }
     ]
   },
   "sitemapLocation": "sitemap.json"

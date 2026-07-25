@@ -5,8 +5,8 @@
     "t-search": "tdesign-miniprogram/search/search",
     "t-avatar": "tdesign-miniprogram/avatar/avatar",
     "t-icon": "tdesign-miniprogram/icon/icon",
-    "t-empty": "tdesign-miniprogram/empty/empty",
     "t-button": "tdesign-miniprogram/button/button",
-    "t-skeleton": "tdesign-miniprogram/skeleton/skeleton"
+    "t-skeleton": "tdesign-miniprogram/skeleton/skeleton",
+    "empty-state": "../../components/empty-state/empty-state"
   }
 }

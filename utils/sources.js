@@ -28,6 +28,7 @@ const steam = require('./steam.js');
 const liquipedia = require('./liquipedia.js');
 const consensus = require('./consensus.js');
 const curation = require('./remoteCuration.js');
+const imageUtil = require('./image.js');
 
 // 源中文名（用于 UI 标注数据来源 / 可信度）
 const SOURCE_LABEL = {
@@ -132,18 +133,34 @@ async function getLeagueWindow(league) {
   const name = (league && league.name) || '';
   const startC = [];
   const endC = [];
+  const diag = { name: name, curation: null, stratz: null, liquipedia: null };
 
   const cu = curation.curatedEventFor(name);
-  if (cu && cu.start) startC.push({ value: cu.start, source: 'curation' });
+  if (cu && cu.start) {
+    startC.push({ value: cu.start, source: 'curation' });
+    diag.curation = 'hit(' + cu.start + ')';
+  } else {
+    diag.curation = cu ? 'no-date' : 'miss';
+  }
   if (cu && cu.end) endC.push({ value: cu.end, source: 'curation' });
 
   // STRATZ 当前 schema 不直接提供赛事起止时间，留接口；启用且可用时补充
   if (stratz.ENABLED && name) {
     try {
       const s = await stratz.getLeagueWindow(name);
-      if (s && s.start) startC.push({ value: s.start, source: 'stratz' });
+      if (s && s.start) {
+        startC.push({ value: s.start, source: 'stratz' });
+        diag.stratz = 'hit(' + s.start + ')';
+      } else {
+        diag.stratz = s ? 'no-start' : 'null/fail';
+      }
       if (s && s.end) endC.push({ value: s.end, source: 'stratz' });
-    } catch (e) { /* 隔离 */ }
+    } catch (e) {
+      diag.stratz = 'error';
+      /* 隔离 */
+    }
+  } else {
+    diag.stratz = stratz.ENABLED ? 'skip(no-name)' : 'disabled';
   }
 
   // Liquipedia：返回的日期为文本字符串，需经 liquipediaDateToUnix 转为 Unix 秒
@@ -154,15 +171,34 @@ async function getLeagueWindow(league) {
       if (meta) {
         if (meta.startDate) {
           const t = liquipediaDateToUnix(meta.startDate);
-          if (t != null) startC.push({ value: t, source: 'liquipedia' });
+          if (t != null) {
+            startC.push({ value: t, source: 'liquipedia' });
+            diag.liquipedia = 'hit';
+          } else {
+            diag.liquipedia = 'date-parse-fail';
+          }
+        } else {
+          diag.liquipedia = 'no-date';
         }
         if (meta.endDate) {
           const t = liquipediaDateToUnix(meta.endDate);
           if (t != null) endC.push({ value: t, source: 'liquipedia' });
         }
+      } else {
+        diag.liquipedia = 'null';
       }
-    } catch (e) { /* 隔离 */ }
+    } catch (e) {
+      diag.liquipedia = 'error';
+      /* 隔离 */
+    }
+  } else {
+    diag.liquipedia = 'disabled';
   }
+
+  // 诊断日志：一次性输出全部源的查询结果
+  console.log('[sources.getLeagueWindow]', diag.name, '→',
+    'curation:', diag.curation, '| stratz:', diag.stratz, '| liquipedia:', diag.liquipedia,
+    '| 最终候选数:', startC.length + endC.length);
 
   const start = startC.length ? consensus.voteTime(startC).value : null;
   const end = endC.length ? consensus.voteTime(endC).value : null;
@@ -178,6 +214,37 @@ async function getLeagueWindow(league) {
     sourceLabel: joinedLabels(sources),
     confidence: sources.length >= 2 ? 'medium' : 'low'
   };
+}
+
+// ===== curation 库的「即将到来」补充 =====
+// 解决痛点：OpenDota /leagues 接口只返回有比赛记录的赛事；尚未举办的重大赛事
+//（如 TI 2026 主赛事）不会出现在 allLeagues 中，导致「即将到来」Tab 无数据可显。
+// 本函数遍历 curation 生效事件集合，返回所有 startDate 在未来 N 秒内的赛事
+//（不发网络、永远可用），作为 loadUpcomingSerial 的补充数据源。
+//
+// 入参（可选）：now（unix 秒），不传取当前时间
+// 返回：[{ name, startDate, endDate, tier:{grade,rank,label}, year, source:'curation' }]
+//       按 startDate 升序
+function getUpcomingFromCuration(now) {
+  now = now || Math.floor(Date.now() / 1000);
+  const horizon = now + config.leagueWindow.upcomingRangeSec;
+  const list = [];
+  const events = curation.getEffectiveEvents ? curation.getEffectiveEvents() : [];
+  (events || []).forEach((ev) => {
+    if (!ev || !ev.start) return;
+    if (ev.start > now && ev.start <= horizon) {
+      list.push({
+        name: ev.canonical,
+        startDate: ev.start,
+        endDate: ev.end || null,
+        tier: ev.tier || { grade: 'S', rank: 3, label: 'S级' },
+        year: ev.year || null,
+        source: 'curation'
+      });
+    }
+  });
+  list.sort((a, b) => (a.startDate || 0) - (b.startDate || 0));
+  return list;
 }
 
 // ===== 赛事元数据：Liquipedia + Steam 聚合 =====
@@ -223,12 +290,12 @@ async function enrichTeamLogo(team) {
   const name = (team && team.name) || '';
   const id = (team && team.id);
   const existing = (team && team.logo) || (team && team.logo_url) || '';
-  if (existing && /^https?:\/\//i.test(existing)) return { logo: existing, source: 'opendota' };
+  if (existing && /^https?:\/\//i.test(existing)) return { logo: imageUtil.optimizeImageUrl(existing), source: 'opendota' };
 
   if (stratz.ENABLED && id) {
     try {
       const r = await stratz.getTeamLogo(id);
-      if (r && /^https?:\/\//i.test(r)) return { logo: r, source: 'stratz' };
+      if (r && /^https?:\/\//i.test(r)) return { logo: imageUtil.optimizeImageUrl(r), source: 'stratz' };
     } catch (e) { /* 隔离 */ }
   }
   return null;
@@ -238,12 +305,12 @@ async function enrichTeamLogo(team) {
 async function enrichPlayerAvatar(player) {
   const accountId = (player && player.accountId);
   const existing = (player && player.avatar) || '';
-  if (existing && /^https?:\/\//i.test(existing)) return { avatar: existing, source: 'opendota' };
+  if (existing && /^https?:\/\//i.test(existing)) return { avatar: imageUtil.optimizeImageUrl(existing), source: 'opendota' };
 
   if (stratz.ENABLED && accountId) {
     try {
       const r = await stratz.getPlayerAvatar(accountId);
-      if (r && /^https?:\/\//i.test(r)) return { avatar: r, source: 'stratz' };
+      if (r && /^https?:\/\//i.test(r)) return { avatar: imageUtil.optimizeImageUrl(r), source: 'stratz' };
     } catch (e) { /* 隔离 */ }
   }
   return null;
@@ -322,52 +389,67 @@ async function crossTeamMembers(teamId) {
   return r;
 }
 
-// 多源聚合「正在直播/进行中」的比赛（实时比分+队伍）：
-// ✓ 从所有启用的源并行收集（steam + stratz），按 lobbyId/matchId 去重合并。
-// ✓ 任一源失败不影响其它；全部失败返回空数组。
-async function enrichLiveGames() {
-  const order = (config.sources && config.sources.livePriority) || ['steam', 'stratz'];
-  const allUnmerged = [];
-  for (let i = 0; i < order.length; i++) {
-    const src = order[i];
-    try {
-      let list = [];
-      if (src === 'steam') list = await steam.getLiveLeagueGames();
-      else if (src === 'stratz') list = await stratz.getLiveMatches();
-      if (list && list.length > 0) {
-        list.forEach((g) => { g.source = src; allUnmerged.push(g); });
-      }
-    } catch (e) { /* 隔离 */ }
-  }
-  // 去重：steam 的 lobbyId 与 stratz 的 matchId 属不同 ID 空间，无法跨源去重。
-  // 改用跨源稳定的复合键 (radiantTeamId, direTeamId, leagueId)，并对两个队伍 id
-  // 升序归一，避免两端天辉/夜魇槽位顺序不同导致同一局被判为两场。
-  // 三个标识全部 0/缺失时，回退到源私有 id（前缀 src_），避免误合并两场无法识别的局。
-  const seen = {};
-  const merged = [];
-  allUnmerged.forEach((g) => {
-    const radiant = g.radiantTeamId || 0;
-    const dire = g.direTeamId || 0;
-    const league = g.leagueId || 0;
-    let dedupKey;
-    if (radiant === 0 && dire === 0 && league === 0) {
-      dedupKey = 'src_' + (g.lobbyId != null ? 'lobby_' + g.lobbyId : ('match_' + (g.matchId || '')));
-    } else {
-      const teamA = Math.min(radiant, dire);
-      const teamB = Math.max(radiant, dire);
-      dedupKey = teamA + '_' + teamB + '_' + league;
-    }
-    if (!seen[dedupKey]) {
-      seen[dedupKey] = true;
-      merged.push(g);
-    }
-  });
-  return merged;
-}
-
 // 选手ID 校验（包装 consensus）
 function validatePlayerId(id) {
   return consensus.validatePlayerId(id);
+}
+
+// ===== 战队优先级判定（用于 H2H/资料功能优先覆盖 S-Tier 与 TI 参赛队）=====
+// 包装 curation.isHighPriorityTeam：返回 { isHighPriority, isTI, tier, label }
+//   - tier.grade === 'SSS' → TI 参赛队
+//   - tier.grade === 'S'   → S-Tier 顶级战队
+//   - 否则 → 普通战队（isHighPriority=false）
+function getTeamPriority(nameOrId) {
+  const isTI = curation.isTIContestantTeam(nameOrId);
+  const cu = curation.curatedTeamFor(nameOrId);
+  const t = cu && cu.tier;
+  const isHP = isTI || (t && (t.grade === 'SSS' || t.grade === 'S'));
+  if (isTI) {
+    return { isHighPriority: true, isTI: true, tier: { grade: 'SSS', label: 'TI 参赛' }, label: 'TI 参赛' };
+  }
+  if (t && t.grade === 'S') {
+    return { isHighPriority: true, isTI: false, tier: t, label: t.label || 'S-Tier' };
+  }
+  return { isHighPriority: false, isTI: false, tier: null, label: '' };
+}
+
+// ===== 单场比赛的赛事等级判定（用于 H2H 按 S-Tier 优先聚合）=====
+// 包装 tiers.communityTierFromName，返回 { grade, rank, label } 或 null。
+// 不发网络，零开销，可直接在 fmtMatch 中调用。
+function getMatchTier(leagueName) {
+  if (!leagueName) return null;
+  const t = tiers.communityTierFromName(leagueName);
+  return t || null;
+}
+
+// ===== 选手资料多源增强：接入 Liquipedia getPlayerProfile =====
+// 解决痛点：player-detail.js 此前完全未调用 liquipedia.getPlayerProfile，
+// 选手真实姓名/国籍/位置/队伍履历/成就均缺失（ASSESSMENT.md P1 待办）。
+// 数据接入以 OpenDota + Liquipedia 为主，本函数封装 Liquipedia 调用，
+// 失败静默回退，不阻塞主流程。
+//
+// 入参：{ name, accountId }（优先按 name 查询，缺失则用 OpenDota 比赛的玩家名）
+// 返回：{ realName, country, role, team, teamHistory, achievements, source, confidence } 或 null
+async function enrichPlayerProfile(player) {
+  const name = (player && player.name) || '';
+  if (!name || !liquipedia.ENABLED) return null;
+  try {
+    const p = await liquipedia.getPlayerProfile(name);
+    if (!p) return null;
+    return {
+      realName: p.name || '',
+      country: p.country || '',
+      role: p.role || '',
+      team: p.team || '',
+      teamHistory: Array.isArray(p.teamHistory) ? p.teamHistory : [],
+      achievements: Array.isArray(p.achievements) ? p.achievements : [],
+      source: 'liquipedia',
+      confidence: 'medium'
+    };
+  } catch (e) {
+    /* 隔离 Liquipedia 异常，不影响其它源 */
+    return null;
+  }
 }
 
 // ===== 赛事排名聚合 =====
@@ -415,68 +497,6 @@ function getLeagueStandings(leagueId) {
   }).catch(function () { return []; });
 }
 
-// ===== 赛事选手统计聚合 =====
-// 入参 matchIds（数组）；返回 [{ account_id, name, games, kills, deaths, assists,
-//                                 kda, gpm, xpm, wins, winRate }]
-// 并发限制：3 个并行，避免一次请求过多触发 OpenDota 限流。
-function getPlayerStats(matchIds) {
-  const ids = (matchIds || []).filter(function (id) { return !!id; });
-  if (!ids.length) return Promise.resolve([]);
-  const agg = {};  // account_id -> {...}
-  function batch(start) {
-    if (start >= ids.length) return Promise.resolve();
-    const chunk = ids.slice(start, start + 3);
-    return Promise.all(chunk.map(function (mid) {
-      // 直接用 api.getMatch 一次拿到 match + players，避免重复请求
-      return api.getMatch(mid).then(function (m) {
-        if (!m || !m.players) return;
-        const radiantWin = !!m.radiant_win;
-        m.players.forEach(function (p) {
-          if (!p.account_id) return;
-          const isRadiant = (p.isRadiant != null) ? p.isRadiant : (p.player_slot < 128);
-          if (!agg[p.account_id]) {
-            agg[p.account_id] = {
-              account_id: p.account_id,
-              name: p.name || p.personaname || '',
-              games: 0, kills: 0, deaths: 0, assists: 0,
-              gpmSum: 0, xpmSum: 0, wins: 0
-            };
-          }
-          const a = agg[p.account_id];
-          a.games++;
-          a.kills += p.kills || 0;
-          a.deaths += p.deaths || 0;
-          a.assists += p.assists || 0;
-          a.gpmSum += p.gold_per_min || 0;
-          a.xpmSum += p.xp_per_min || 0;
-          // 胜负：天辉方 radiant_win 才算胜；夜魇方 !radiant_win 才算胜
-          if (isRadiant && radiantWin) a.wins++;
-          if (!isRadiant && !radiantWin) a.wins++;
-        });
-      }).catch(function () {});
-    })).then(function () { return batch(start + 3); });
-  }
-  return batch(0).then(function () {
-    return Object.keys(agg).map(function (id) {
-      const a = agg[id];
-      const kda = a.deaths > 0 ? (a.kills + a.assists) / a.deaths : (a.kills + a.assists);
-      return {
-        account_id: a.account_id,
-        name: a.name,
-        games: a.games,
-        kills: a.kills,
-        deaths: a.deaths,
-        assists: a.assists,
-        kda: Math.round(kda * 100) / 100,
-        gpm: a.games ? Math.round(a.gpmSum / a.games) : 0,
-        xpm: a.games ? Math.round(a.xpmSum / a.games) : 0,
-        wins: a.wins,
-        winRate: a.games ? Math.round(a.wins / a.games * 100) : 0
-      };
-    }).sort(function (x, y) { return y.kda - x.kda; });
-  });
-}
-
 // 系列赛聚合：把同一 series_id 的多场比赛归为一个系列卡。
 // 优先用 OpenDota 的 series_id（DPC/大型赛事 BO3/BO5 必有）；无 series_id 的单场独立成组（视为 BO1）。
 // 返回 series 数组，每个含 { key, games, scoreA, scoreB, boType, isLive, isRecent, isMulti, radiantName, direName, ... }
@@ -512,17 +532,40 @@ function groupSeries(matches) {
         isLive = true;
       }
     });
-    // 系列 BO 类型
-    // OpenDota series_type 枚举：0=BO1（但 BO2 也用 0）、1=BO3、2=BO5。
-    // 区分 BO2 与 BO3：series_type=0 且恰好 2 场 → BO2（双局积分制，可 1-1 平局）；
-    // series_type=1 无论几场（2 场=2-0 横扫，3 场=2-1）都是 BO3。
+    // 系列 BO 类型判定（基于胜负场数，比 series_type 更可靠）
+    // 规则：
+    //   一方赢3局 → BO5（五局三胜，BO3 不可能出现3胜）
+    //   一方赢2局 → BO3（三局两胜），除非 series_type=0 且恰好2场→BO2（双局积分全胜）
+    //   1-1 平局 → BO2（双局积分制，BO3 不可能平局）
+    //   1场 → BO1
     let boType = 'BO1';
     const st = first.series_type;
-    if (st === 1) boType = 'BO3';
-    else if (st === 2) boType = 'BO5';
-    else if (games.length === 2) boType = 'BO2';
-    else if (games.length === 3) boType = 'BO3';
-    else if (games.length >= 4) boType = 'BO5';
+    const maxScore = Math.max(scoreA, scoreB);
+    const minScore = Math.min(scoreA, scoreB);
+    const totalGames = games.length;
+    if (st === 2 || maxScore >= 3) {
+      // series_type=2 明确标记 BO5，或一方赢3局（BO3 不可能出现3胜）
+      boType = 'BO5';
+    } else if (maxScore === 2) {
+      // 一方赢2局
+      // series_type=0 且恰好2场 → BO2（双局积分制全胜 2-0）
+      // 否则 → BO3（三局两胜，2-0 横扫或 2-1）
+      if (st === 0 && totalGames === 2) {
+        boType = 'BO2';
+      } else {
+        boType = 'BO3';
+      }
+    } else if (maxScore === 1) {
+      // 一方赢1局
+      if (totalGames === 2 && scoreA === 1 && scoreB === 1) {
+        // 1-1 平局，一定是 BO2（双局积分制）
+        boType = 'BO2';
+      } else {
+        boType = 'BO1';
+      }
+    } else {
+      boType = 'BO1';
+    }
     // 赛制说明文案
     const boLabel = boType === 'BO1' ? '单局制'
       : boType === 'BO2' ? '双局积分'
@@ -530,6 +573,14 @@ function groupSeries(matches) {
       : '五局三胜';
     // BO2 可能平局（1-1）；其他赛制必有胜负
     const isDraw = boType === 'BO2' && scoreA === scoreB;
+    // 预计算 class 名（避免 WXML 嵌套三元表达式导致渲染异常）
+    const scoreACls = isDraw ? 'draw' : (scoreA > scoreB ? 'win' : 'lose');
+    const scoreBCls = isDraw ? 'draw' : (scoreB > scoreA ? 'win' : 'lose');
+    const teamACls = isDraw ? 'draw' : (scoreA > scoreB ? 'win' : '');
+    const teamBCls = isDraw ? 'draw' : (scoreB > scoreA ? 'win' : '');
+    const teamALogoCls = !isDraw && scoreA > scoreB ? 'team-win' : '';
+    const teamBLogoCls = !isDraw && scoreB > scoreA ? 'team-win' : '';
+    const boTagCls = boType === 'BO2' ? 'bo-bo2' : (boType === 'BO5' ? 'bo-bo5' : '');
     // 最近 2h 内结束（用作 B 点缀判定）
     const lastEnd = last.start_time && last.duration ? (last.start_time + last.duration) * 1000 : 0;
     const isRecent = lastEnd && (now - lastEnd) < 2 * 3600 * 1000;
@@ -540,6 +591,7 @@ function groupSeries(matches) {
       scoreB: scoreB,
       boType: boType,
       boLabel: boLabel,
+      boTagCls: boTagCls,
       isDraw: isDraw,
       isLive: isLive,
       isRecent: isRecent,
@@ -550,6 +602,12 @@ function groupSeries(matches) {
       direTeamId: first.dire_team_id,
       radiantWin: !isDraw && scoreA > scoreB,
       direWin: !isDraw && scoreB > scoreA,
+      scoreACls: scoreACls,
+      scoreBCls: scoreBCls,
+      teamACls: teamACls,
+      teamBCls: teamBCls,
+      teamALogoCls: teamALogoCls,
+      teamBLogoCls: teamBLogoCls,
       lastTime: last.start_time || 0
     };
   });
@@ -563,14 +621,16 @@ module.exports = {
   getLeagueTier: getLeagueTier,
   getLeagueName: getLeagueName,
   getLeagueWindow: getLeagueWindow,
+  getUpcomingFromCuration: getUpcomingFromCuration,
   getLeagueMetadata: getLeagueMetadata,
   getLeagueStandings: getLeagueStandings,
-  getPlayerStats: getPlayerStats,
   groupSeries: groupSeries,
   enrichTeamLogo: enrichTeamLogo,
   enrichPlayerAvatar: enrichPlayerAvatar,
   enrichTeamInfo: enrichTeamInfo,
   crossTeamMembers: crossTeamMembers,
-  enrichLiveGames: enrichLiveGames,
-  validatePlayerId: validatePlayerId
+  validatePlayerId: validatePlayerId,
+  getTeamPriority: getTeamPriority,
+  getMatchTier: getMatchTier,
+  enrichPlayerProfile: enrichPlayerProfile
 };

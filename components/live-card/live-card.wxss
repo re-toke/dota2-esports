@@ -1,0 +1,72 @@
+.live-card {
+  margin: 16rpx 24rpx;
+  padding: 20rpx 24rpx;
+  background: #161b22;
+  border: 1rpx solid #232a33;
+  border-radius: 16rpx;
+}
+
+.live-card.is-live {
+  border-color: #ff4d4f;
+  box-shadow: 0 0 0 2rpx rgba(255, 77, 79, 0.35);
+}
+
+.live-head {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16rpx;
+}
+
+.live-dot {
+  width: 16rpx;
+  height: 16rpx;
+  border-radius: 50%;
+  background: #ff4d4f;
+  margin-right: 12rpx;
+  animation: live-pulse 1.2s infinite;
+}
+
+@keyframes live-pulse {
+  0% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.7); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.live-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #e6edf3;
+  margin-right: 16rpx;
+}
+
+.live-sub {
+  font-size: 22rpx;
+  color: #8a8f99;
+}
+
+.live-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+}
+
+.live-item {
+  flex: 1 1 30%;
+  min-width: 180rpx;
+  height: 72rpx;
+  border-radius: 12rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.95;
+}
+
+.live-item-hover {
+  opacity: 0.75;
+}
+
+.live-name {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #ffffff;
+}

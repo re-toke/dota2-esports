@@ -2,68 +2,6 @@
 
 .skeleton-wrap { margin-bottom: 24rpx; }
 
-/* ===== 直播区（B 风格 · 左右对阵 + 脉冲） ===== */
-.live-title {
-  display: flex; align-items: center; gap: 10rpx;
-  font-size: 28rpx; font-weight: 600; color: #1ec896;
-  margin: 0 0 16rpx 4rpx;
-}
-.live-dot {
-  width: 14rpx; height: 14rpx;
-  border-radius: 50%;
-  background: #1ec896;
-  animation: livePulse 1.5s ease-in-out infinite;
-}
-@keyframes livePulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.4; transform: scale(0.7); }
-}
-
-/* 直播卡缺省 logo 占位（圆角 + 首字母） */
-.vs-team-logo-placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24rpx;
-  font-weight: 700;
-  color: #8a8f99;
-  background: var(--card-bg-inset, #0f141b);
-  border: 1rpx solid #232a33;
-}
-
-/* 直播卡溯源行 */
-.live-source-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8rpx;
-  margin: -4rpx 0 16rpx 4rpx;
-  padding: 8rpx 12rpx;
-}
-.live-source-text { font-size: 22rpx; }
-
-/* 旧版 .live-card 样式保留作为兼容兜底（已用 vs-card 替代） */
-.live-card {
-  background: #161b22;
-  border: 1rpx solid rgba(30,200,150,.25);
-  border-radius: 16rpx;
-  padding: 16rpx 20rpx;
-  margin-bottom: 12rpx;
-}
-.live-row {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 6rpx 0;
-}
-.live-team { font-size: 28rpx; color: #e6edf3; }
-.live-score { font-size: 32rpx; font-weight: 700; }
-.live-meta { display: flex; gap: 6rpx; margin-top: 6rpx; font-size: 22rpx; }
-.live-src {
-  margin-left: auto;
-  font-size: 20rpx; color: #5b626d;
-  background: #111820; border-radius: 6rpx;
-  padding: 2rpx 8rpx;
-}
-
 .league-item {
   display: flex;
   align-items: center;
@@ -141,6 +79,23 @@
 }
 .date-range { color: #9bb0c9; }
 
+/* 即将到来：倒计时高亮 */
+.league-countdown {
+  margin-top: 8rpx;
+  display: inline-flex;
+  align-items: center;
+  background: rgba(95, 211, 95, 0.10);
+  border: 1rpx solid rgba(95, 211, 95, 0.3);
+  border-radius: var(--radius-pill, 999rpx);
+  padding: 4rpx 16rpx;
+}
+.countdown-text {
+  font-size: 22rpx;
+  font-weight: 600;
+  color: #5fd35f;
+  letter-spacing: 0.5rpx;
+}
+
 /* 来源徽标行 */
 .league-source-row {
   margin-top: 8rpx;
@@ -159,8 +114,6 @@
 
 .more-btn { width: 100%; }
 .loadmore { display: flex; justify-content: center; margin: 24rpx 0 8rpx; }
-.error-block { display: flex; flex-direction: column; align-items: center; }
-.retry-wrap { margin-top: 16rpx; }
 
 /* 即将到来懒加载进度 */
 .progress-box {
@@ -225,3 +178,169 @@
   border-radius: 6rpx;
   font-size: 22rpx;
 }
+
+/* ===== 等级筛选条（第二行）· 品牌色渐变芯片 ===== */
+.grade-bar {
+  display: flex;
+  justify-content: center;
+  gap: 16rpx;
+  margin-bottom: 24rpx;
+  padding: 0 4rpx;
+}
+/* 芯片基础：暗底 + 细边框 + 品牌色描边 */
+.gc {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  height: 64rpx;
+  padding: 0 28rpx;
+  border-radius: 16rpx;
+  font-size: 0;
+  background: #161b22;
+  border: 1.5rpx solid #2d3748;
+  cursor: pointer;
+  overflow: hidden;
+  transition:
+    transform 0.20s cubic-bezier(.25,.46,.45,.94),
+    border-color 0.22s ease,
+    box-shadow   0.22s ease,
+    background   0.25s ease;
+}
+/* hover 微缩放反馈 */
+.gc:active {
+  transform: scale(0.95);
+}
+/* 标签文字 */
+.gc__label {
+  font-size: 26rpx;
+  font-weight: 700;
+  letter-spacing: 2rpx;
+  color: #8b949e;
+  transition: color 0.22s ease, text-shadow 0.22s ease;
+  line-height: 1;
+}
+
+/* ── 各等级默认态（未选中）：淡品牌色边框 + 淡文字 ── */
+.gc--all   { border-color: #3d4a5c; }
+.gc--sss   { border-color: rgba(255,207,92,.40); }
+.gc--s     { border-color: rgba(95,211,95,.40); }
+.gc--a     { border-color: rgba(240,170,40,.40); }
+.gc--b     { border-color: rgba(155,176,201,.40); }
+
+.gc--sss .gc__label { color: rgba(255,207,92,.80); }
+.gc--s   .gc__label { color: rgba(95,211,95,.80); }
+.gc--a   .gc__label { color: rgba(240,170,40,.80); }
+.gc--b   .gc__label { color: rgba(155,176,201,.80); }
+
+/* ── 选中态：渐变背景 + 发光阴影 + 白/深色高对比文字 ── */
+.gc--active {
+  border-color: transparent;
+  box-shadow:
+    0 4rpx 16rpx rgba(0,0,0,.30),
+    0 0 20rpx var(--gc-glow, rgba(255,255,255,.08));
+  transform: translateY(-2rpx);
+}
+.gc--active:active {
+  transform: scale(0.97) translateY(0);
+}
+
+/* ALL 选中：中性亮灰 */
+.gc--all.gc--active {
+  background: linear-gradient(135deg, #3d4a5c 0%, #2d3748 100%);
+  box-shadow:
+    0 4rpx 16rpx rgba(0,0,0,.30),
+    0 0 18rpx rgba(100,120,150,.15);
+}
+.gc--all.gc--active .gc__label {
+  color: #e6edf3;
+  text-shadow: 0 1rpx 3rpx rgba(0,0,0,.35);
+}
+
+/* SSS 选中：金琥珀渐变 */
+.gc--sss.gc--active {
+  --gc-glow: rgba(255,207,92,.28);
+  background: linear-gradient(135deg, #ffcf5c 0%, #f0a020 100%);
+  box-shadow:
+    0 4rpx 18rpx rgba(255,160,32,.38),
+    0 0 24rpx rgba(255,207,92,.22);
+}
+.gc--sss.gc--active .gc__label {
+  color: #1a1400;
+  text-shadow: 0 1rpx 2rpx rgba(255,207,92,.5);
+}
+
+/* S 选中：翠绿渐变 */
+.gc--s.gc--active {
+  --gc-glow: rgba(95,211,95,.28);
+  background: linear-gradient(135deg, #5fd35f 0%, #2ecc71 100%);
+  box-shadow:
+    0 4rpx 18rpx rgba(46,204,113,.38),
+    0 0 24rpx rgba(95,211,95,.22);
+}
+.gc--s.gc--active .gc__label {
+  color: #0a1f0a;
+  text-shadow: 0 1rpx 2rpx rgba(95,211,95,.5);
+}
+
+/* A 选中：橙金渐变 */
+.gc--a.gc--active {
+  --gc-glow: rgba(240,170,40,.28);
+  background: linear-gradient(135deg, #f0aa28 0%, #e67e22 100%);
+  box-shadow:
+    0 4rpx 18rpx rgba(230,126,34,.38),
+    0 0 24rpx rgba(240,170,40,.22);
+}
+.gc--a.gc--active .gc__label {
+  color: #1a0f00;
+  text-shadow: 0 1rpx 2rpx rgba(240,170,40,.5);
+}
+
+/* B 选中：钢蓝渐变 */
+.gc--b.gc--active {
+  --gc-glow: rgba(155,176,201,.28);
+  background: linear-gradient(135deg, #9bb0c9 0%, #7f8fa4 100%);
+  box-shadow:
+    0 4rpx 18rpx rgba(127,143,164,.38),
+    0 0 24rpx rgba(155,176,201,.22);
+}
+.gc--b.gc--active .gc__label {
+  color: #0d1117;
+  text-shadow: 0 1rpx 2rpx rgba(155,176,201,.5);
+}
+
+/* 来源高亮徽标（Valve 官方 / 顶级第三方） */
+.hl-badge {
+  font-size: 20rpx;
+  padding: 2rpx 10rpx;
+  border-radius: 6rpx;
+  line-height: 1.6;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.hl-valve { color: #ffcf5c; background: rgba(255, 207, 92, 0.12); border: 1rpx solid rgba(255, 207, 92, 0.4); }
+.hl-tp    { color: #5fd3ff; background: rgba(95, 211, 255, 0.12); border: 1rpx solid rgba(95, 211, 255, 0.4); }
+
+/* 已停办徽标（灰） */
+.defunct-tag { color: #8a8f99 !important; border-color: #5b626d !important; background: rgba(91, 98, 109, 0.10); }
+
+/* 已停办赛事归档区 */
+.archive-block { margin-top: 24rpx; }
+.archive-head {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin: 8rpx 4rpx 16rpx;
+}
+.archive-title { font-size: 26rpx; font-weight: 600; color: #8a8f99; }
+.archive-count {
+  font-size: 20rpx;
+  color: #0e1116;
+  background: #8a8f99;
+  border-radius: 999rpx;
+  padding: 0 12rpx;
+}
+/* 归档项整体置灰 */
+.league-item.is-defunct { opacity: 0.62; }
+.league-item.is-defunct .league-name { color: #aeb6c2; }

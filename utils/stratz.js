@@ -13,8 +13,14 @@ const tiers = require('./tiers.js');
 const cache = require('./cache.js');
 const consensus = require('./consensus.js');
 const curation = require('./remoteCuration.js');
+const cloudProxy = require('./cloudProxy.js');
 
-const ENABLED = !!(config.stratz && config.stratz.enabled && config.stratz.apiKey);
+const cloudEnabled = !!(config.cloudProxy && config.cloudProxy.enabled);
+// 启用条件（二选一）：
+//   A) 直连模式：config.stratz.apiKey 有值（key 随小程序分发，适合开发测试）
+//   B) 云代理模式：config.cloudProxy.enabled=true + 云函数环境变量配 STRATZ_API_KEY
+//      （key 不上传到客户端，上线推荐；云函数需部署 stratzGql action）
+const ENABLED = !!(config.stratz && config.stratz.enabled && (config.stratz.apiKey || cloudEnabled));
 const BASE = (config.stratz && config.stratz.base) || 'https://api.stratz.com/graphql';
 
 // 启动日志：在开发者工具 Console 中一眼确认配置是否生效
@@ -30,16 +36,21 @@ if (ENABLED) {
 function mapStratzTier(tier) {
   if (!tier) return null;
   const t = String(tier).toUpperCase();
-  // 顶级：DPC Major 与 Major 同级（TI 级别赛事）
+  // SSS 级：TI 国际邀请赛（由 communityTierFromName 精确匹配，STRATZ 不单独判 SSS）
+  // S 级：DPC Major / Major（官方顶级积分赛）
   if (t === 'DPC_MAJOR' || t === 'MAJOR') {
-    return { grade: 'SSS', rank: 4, label: 'TI 顶级', source: 'stratz' };
-  }
-  // S 级：DPC Minor / Premier / Professional
-  if (t === 'DPC_MINOR' || t === 'PREMIER' || t === 'PROFESSIONAL') {
     return { grade: 'S', rank: 3, label: 'S级', source: 'stratz' };
   }
-  // B 级：Minor / First Blood / Online / Event / Amateur
-  if (t === 'MINOR' || t === 'FIRST_BLOOD' || t === 'ONLINE' || t === 'EVENT' || t === 'AMATEUR') {
+  // S 级：Premier / Professional（顶级第三方 S-Tier 巡回赛）
+  if (t === 'PREMIER' || t === 'PROFESSIONAL') {
+    return { grade: 'S', rank: 3, label: 'S级', source: 'stratz' };
+  }
+  // A 级：DPC Minor / First Blood（A-Tier 第三方 + DPC Minor 乙级联赛）
+  if (t === 'DPC_MINOR' || t === 'FIRST_BLOOD') {
+    return { grade: 'A', rank: 2, label: 'A级', source: 'stratz' };
+  }
+  // B 级：Minor / Online / Event / Amateur（B-Tier 区域联赛 + 次级国际赛）
+  if (t === 'MINOR' || t === 'ONLINE' || t === 'EVENT' || t === 'AMATEUR') {
     return { grade: 'B', rank: 1, label: 'B级', source: 'stratz' };
   }
   // 预选赛：低于正式赛事
@@ -65,7 +76,7 @@ function isRetriable(statusCode) {
   return statusCode === 429 || (statusCode >= 500 && statusCode < 600);
 }
 
-function gql(query, variables) {
+function gqlDirect(query, variables) {
   if (!ENABLED) return Promise.resolve(null);
 
   function attempt(retryCount) {
@@ -123,6 +134,50 @@ function gql(query, variables) {
     });
   }
   return attempt(0);
+}
+
+// 云代理模式：通过 wx.cloud.callFunction 中转，key 从云函数环境变量 STRATZ_API_KEY 读取。
+// 客户端不存 key，适合上线环境。失败返回 null，由上层回退到直连或降级。
+function gqlCloud(query, variables) {
+  // 熔断态下直接跳过云调用（避免无云环境时每次都失败一次）
+  if (!cloudProxy.isAvailable()) return Promise.resolve(null);
+  try {
+    return wx.cloud.callFunction({
+      name: 'aggregation',
+      data: { action: 'stratzGql', query: query, variables: variables }
+    }).then((r) => {
+      const result = r && r.result;
+      if (result && result.data) {
+        console.log('[stratz] ✓ cloud', query);
+        return result.data;
+      }
+      console.warn('[stratz] cloud 返回空:', result && result.error);
+      return null;
+    }).catch((e) => {
+      console.warn('[stratz] cloud 调用失败:', e && e.errMsg);
+      return null;
+    });
+  } catch (e) {
+    // cloud未初始化（wx.cloud 不可用）时直接回退
+    return Promise.resolve(null);
+  }
+}
+
+// GraphQL 请求入口：云代理优先（key 安全），直连兜底。
+function gql(query, variables) {
+  if (!ENABLED) return Promise.resolve(null);
+  // 纯云代理模式：无本地 key，完全依赖云函数
+  if (cloudEnabled && !config.stratz.apiKey) {
+    return gqlCloud(query, variables);
+  }
+  // 混合模式：有本地 key + 云代理，优先云函数加速，失败回退直连
+  if (cloudEnabled) {
+    return gqlCloud(query, variables)
+      .then((d) => d || gqlDirect(query, variables))
+      .catch(() => gqlDirect(query, variables));
+  }
+  // 纯直连模式
+  return gqlDirect(query, variables);
 }
 
 // 全部联赛（轻量字段），用于分级匹配
@@ -292,30 +347,6 @@ function getPlayerAvatar(accountId) {
   }).catch(() => null);
 }
 
-// 正在进行的比赛（STRATZ live，与 Steam GetLiveLeagueGames 互补）
-// 注：STRATZ GraphQL schema 中 MatchLiveType 没有顶层 leagueName 字段，
-// 需用 league 子对象取名（schema 错误信息提示 leagueId / league 二选一）
-function getLiveMatches() {
-  if (!ENABLED) return Promise.resolve([]);
-  const q = `query { live { matches { matchId radiantTeam { id name } direTeam { id name } radiantScore direScore gameState league { id name } } } }`;
-  return gql(q).then((d) => {
-    const ms = (d && d.live && d.live.matches) || [];
-    return ms.map((m) => ({
-      matchId: m.matchId,
-      radiantName: (m.radiantTeam && m.radiantTeam.name) || '天辉',
-      direName: (m.direTeam && m.direTeam.name) || '夜魇',
-      radiantScore: m.radiantScore,
-      direScore: m.direScore,
-      radiantTeamId: (m.radiantTeam && m.radiantTeam.id) || 0,
-      direTeamId: (m.direTeam && m.direTeam.id) || 0,
-      gameState: m.gameState,
-      leagueName: (m.league && m.league.name) || '',
-      leagueId: (m.league && m.league.id) || 0,
-      live: true
-    }));
-  }).catch(() => []);
-}
-
 module.exports = {
   ENABLED: ENABLED,
   getLeagues: getLeagues,
@@ -325,6 +356,5 @@ module.exports = {
   getLeagueWindow: getLeagueWindow,
   getTeamRoster: getTeamRoster,
   getTeamLogo: getTeamLogo,
-  getPlayerAvatar: getPlayerAvatar,
-  getLiveMatches: getLiveMatches
+  getPlayerAvatar: getPlayerAvatar
 };

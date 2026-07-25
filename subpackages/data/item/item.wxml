@@ -1,0 +1,48 @@
+<view class="container">
+  <t-search
+    class="search"
+    value="{{keyword}}"
+    placeholder="搜索物品（中/英文）"
+    bind:change="onSearch"
+  />
+
+  <view class="filter-bar">
+    <view class="chip {{sort === item.key ? 'active' : ''}}" wx:for="{{sortChips}}" wx:key="key"
+      data-key="{{item.key}}" bindtap="onSort">{{item.label}}</view>
+    <view class="filter-spacer"></view>
+    <view class="chip {{recipeOnly ? 'active' : ''}}" bindtap="onRecipeToggle">仅看配方</view>
+  </view>
+
+  <block wx:if="{{loading}}">
+    <view wx:for="{{[1,2,3,4,5,6,7,8]}}" wx:key="*this" class="item-row skel">
+      <t-skeleton theme="paragraph" loading="{{true}}" />
+    </view>
+  </block>
+
+  <empty-state wx:elif="{{error}}" type="error" title="加载失败" desc="{{error}}" actionText="重试" bind:action="onRetry" />
+
+  <empty-state wx:elif="{{list.length === 0}}" type="search" title="未找到物品" desc="试试调整筛选条件或搜索关键词" />
+
+  <view wx:else class="item-list">
+    <view class="item-row anim-fade-up" wx:for="{{list}}" wx:key="id"
+      style="animation-delay:{{ (index % 12) * 40 }}ms"
+      hover-class="item-row--hover" bindtap="openItem" data-id="{{item.id}}">
+      <view class="item-badge">
+        <text class="item-initial">{{item.initial}}</text>
+      </view>
+      <view class="item-body">
+        <text class="item-name">{{item.localizedName}}</text>
+        <view class="item-tags">
+          <text class="item-tag recipe" wx:if="{{item.recipe}}">配方</text>
+          <text class="item-tag shop" wx:if="{{item.secretShop}}">神秘商店</text>
+          <text class="item-tag shop" wx:if="{{item.sideShop}}">边路商店</text>
+          <text class="item-tag" wx:if="{{!item.recipe && !item.secretShop && !item.sideShop}}">普通</text>
+        </view>
+      </view>
+      <view class="item-cost">
+        <text class="item-cost-num" wx:if="{{item.cost}}">{{item.cost}}</text>
+        <text class="item-cost-num free" wx:else>免费</text>
+      </view>
+    </view>
+  </view>
+</view>

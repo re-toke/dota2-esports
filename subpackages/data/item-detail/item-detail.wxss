@@ -1,0 +1,30 @@
+.container { padding: 24rpx; }
+
+/* ===== 头部 ===== */
+.head { display: flex; align-items: center; gap: 20rpx; margin-bottom: 24rpx; }
+.head-icon { width: 110rpx; height: 110rpx; border-radius: 20rpx; overflow: hidden; flex-shrink: 0; }
+.head-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6rpx; }
+.head-name { font-size: 36rpx; font-weight: 800; color: #f0f3f6; }
+.head-sub { font-size: 22rpx; color: #6b7280; font-family: var(--font-mono, monospace); }
+
+/* ===== 区块 ===== */
+.block { background: var(--card-bg, #161b22); border: 1rpx solid #1f262f; border-radius: var(--radius-lg, 16rpx); padding: 20rpx 24rpx; margin-bottom: 16rpx; }
+.block-title { font-size: 26rpx; font-weight: 700; color: #f0f3f6; margin-bottom: 16rpx; }
+
+.info-row { display: flex; align-items: center; justify-content: space-between; padding: 12rpx 0; border-bottom: 1rpx solid #1a2029; }
+.info-row:last-child { border-bottom: none; }
+.info-label { font-size: 26rpx; color: #9aa4b2; }
+.info-value { font-size: 26rpx; font-weight: 600; color: #f0f3f6; font-family: var(--font-mono, monospace); }
+.info-value.muted { color: #8a8f99; font-weight: 400; }
+
+/* 待补充 */
+.block.pending { background: #14181f; border-style: dashed; }
+.pending-item { display: flex; align-items: flex-start; gap: 10rpx; padding: 8rpx 0; font-size: 24rpx; color: #8a8f99; line-height: 1.5; }
+.pending-item t-icon { margin-top: 2rpx; flex-shrink: 0; }
+
+.detail-foot {
+  font-size: 22rpx;
+  color: #6b7280;
+  padding: 12rpx 0 8rpx;
+  line-height: 1.5;
+}
