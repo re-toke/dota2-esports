@@ -27,9 +27,17 @@
         <text class="info-label">是否配方</text>
         <text class="info-value" style="color:{{item.recipe ? '#C8A951' : '#8a8f99'}};">{{item.recipe ? '是（合成组件）' : '否'}}</text>
       </view>
-      <view class="info-row">
+      <view class="info-row" wx:if="{{item.category !== 'neutral'}}">
         <text class="info-label">购买渠道</text>
         <text class="info-value">{{item.secretShop ? '神秘商店' : (item.sideShop ? '边路商店' : '常规商店')}}</text>
+      </view>
+      <view class="info-row" wx:if="{{item.category === 'neutral'}}">
+        <text class="info-label">获取方式</text>
+        <text class="info-value">野怪掉落（中立物品）</text>
+      </view>
+      <view class="info-row" wx:if="{{item.category === 'neutral'}}">
+        <text class="info-label">层级</text>
+        <text class="info-value">{{item.tierName}}</text>
       </view>
     </view>
 
@@ -41,6 +49,6 @@
       <view class="pending-item"><t-icon name="info-circle" size="28rpx" color="#6b7280" /><text>赛事出装率：需职业比赛物品统计</text></view>
     </view>
 
-    <view class="detail-foot muted">物品图标来自 Steam CDN；如需显示，请在小程序后台将 cdn.cloudflare.steamstatic.com 加入 request 合法域名。</view>
+    <view class="detail-foot muted">物品图标来自 Steam CDN；如需显示，请在小程序后台将 cdn.cloudflare.steamstatic.com 加入 downloadFile 合法域名（图片组件走「下载域名」白名单，非 request 域名）。未配置时图标自动回退为文字占位，不影响功能。</view>
   </block>
 </view>

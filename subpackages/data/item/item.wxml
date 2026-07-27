@@ -6,6 +6,15 @@
     bind:change="onSearch"
   />
 
+  <!-- 分类筛选 -->
+  <scroll-view class="cat-bar" scroll-x enable-flex>
+    <view
+      class="cat {{category === item.key ? 'active' : ''}}"
+      wx:for="{{catChips}}" wx:key="key"
+      data-key="{{item.key}}" bindtap="onCategory">{{item.label}}</view>
+  </scroll-view>
+
+  <!-- 排序 + 仅看配方 -->
   <view class="filter-bar">
     <view class="chip {{sort === item.key ? 'active' : ''}}" wx:for="{{sortChips}}" wx:key="key"
       data-key="{{item.key}}" bindtap="onSort">{{item.label}}</view>
@@ -27,18 +36,24 @@
     <view class="item-row anim-fade-up" wx:for="{{list}}" wx:key="id"
       style="animation-delay:{{ (index % 12) * 40 }}ms"
       hover-class="item-row--hover" bindtap="openItem" data-id="{{item.id}}">
-      <view class="item-badge">
-        <text class="item-initial">{{item.initial}}</text>
+
+      <!-- 图标（未配 downloadFile 域名时自动回退为文字占位） -->
+      <view class="item-icon">
+        <image-fallback src="{{item.img}}" placeholder="{{item.initial}}" round="{{false}}" />
       </view>
+
       <view class="item-body">
-        <text class="item-name">{{item.localizedName}}</text>
+        <text class="item-name">{{item.name}}</text>
+        <text class="item-sub" wx:if="{{item.nameEn && item.nameEn !== item.name}}">{{item.nameEn}}</text>
         <view class="item-tags">
           <text class="item-tag recipe" wx:if="{{item.recipe}}">配方</text>
           <text class="item-tag shop" wx:if="{{item.secretShop}}">神秘商店</text>
           <text class="item-tag shop" wx:if="{{item.sideShop}}">边路商店</text>
-          <text class="item-tag" wx:if="{{!item.recipe && !item.secretShop && !item.sideShop}}">普通</text>
+          <text class="item-tag neutral" wx:if="{{item.category === 'neutral'}}">{{item.tierName}}</text>
+          <text class="item-tag" wx:if="{{item.category !== 'neutral' && !item.recipe && !item.secretShop && !item.sideShop}}">常规</text>
         </view>
       </view>
+
       <view class="item-cost">
         <text class="item-cost-num" wx:if="{{item.cost}}">{{item.cost}}</text>
         <text class="item-cost-num free" wx:else>免费</text>

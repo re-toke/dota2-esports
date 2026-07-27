@@ -1,8 +1,8 @@
-<view class="container">
+<view class="container with-tab-bar">
   <view class="brand-header">
-    <view class="brand-logo"><text class="brand-logo-text">D2</text></view>
-    <view class="brand-info">
-      <text class="brand-name">DOTA2赛事 · 资料库</text>
+    <view class="brand-logo"></view>
+    <view class="brand-text">
+      <text class="brand-title">DOTA2赛事 · 资料库</text>
       <text class="brand-sub">英雄属性 / 职业胜率 / 对位 · 物品价格 / 配方</text>
     </view>
   </view>

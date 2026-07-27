@@ -6,8 +6,9 @@
   <block wx:else>
     <!-- 头部 -->
     <view class="head">
-      <view class="head-badge" style="background:{{hero.attrColor}}20;border-color:{{hero.attrColor}};">
-        <text class="head-initial" style="color:{{hero.attrColor}};">{{hero.initial}}</text>
+      <view class="head-badge" style="background:{{hero.avatar ? 'transparent' : hero.attrColor + '20'}};border-color:{{hero.attrColor}};">
+        <image wx:if="{{hero.avatar}}" class="head-avatar" src="{{hero.avatar}}" mode="aspectFill" binderror="onAvatarError" />
+        <text wx:else class="head-initial" style="color:{{hero.attrColor}};">{{hero.initial}}</text>
       </view>
       <view class="head-info">
         <text class="head-name">{{hero.localizedName}}</text>

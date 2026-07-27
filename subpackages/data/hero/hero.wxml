@@ -32,8 +32,9 @@
     <view class="hero-card anim-fade-up" wx:for="{{list}}" wx:key="id"
       style="animation-delay:{{ (index % 12) * 40 }}ms"
       hover-class="hero-card--hover" bindtap="openHero" data-id="{{item.id}}">
-      <view class="hero-badge" style="background:{{item.attrColor}}20;border-color:{{item.attrColor}};">
-        <text class="hero-initial" style="color:{{item.attrColor}};">{{item.initial}}</text>
+      <view class="hero-badge" style="background:{{item.avatar ? 'transparent' : item.attrColor + '20'}};border-color:{{item.attrColor}};">
+        <image wx:if="{{item.avatar}}" class="hero-avatar" src="{{item.avatar}}" mode="aspectFill" lazy-load data-id="{{item.id}}" binderror="onAvatarError" />
+        <text wx:else class="hero-initial" style="color:{{item.attrColor}};">{{item.initial}}</text>
       </view>
       <view class="hero-body">
         <text class="hero-name">{{item.localizedName}}</text>

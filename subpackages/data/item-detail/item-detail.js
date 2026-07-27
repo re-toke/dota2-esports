@@ -16,7 +16,7 @@ Page({
       this.setData({ loading: false, error: '缺少物品参数' });
       return;
     }
-    this.itemId = Number(id);
+    this.itemId = id;   // 保留原始字符串：常规/中立物品均为 OpenDota 数字 id 字符串（已合并，无 'n_' 前缀）
     this.load();
   },
 

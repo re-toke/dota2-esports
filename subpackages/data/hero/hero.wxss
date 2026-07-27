@@ -1,4 +1,4 @@
-.container { padding: 24rpx; }
+.container { padding: 24rpx; padding-bottom: calc(24rpx + env(safe-area-inset-bottom)); }
 
 .search { margin-bottom: 16rpx; }
 
@@ -31,6 +31,8 @@
   display: flex;
   align-items: center;
   gap: 16rpx;
+  min-width: 0;
+  overflow: hidden;
   background: var(--card-bg, #161b22);
   border: 1rpx solid #1f262f;
   border-radius: var(--radius-lg, 16rpx);
@@ -51,6 +53,7 @@
   flex-shrink: 0;
 }
 .hero-initial { font-size: 34rpx; font-weight: 800; font-family: var(--font-mono, monospace); }
+.hero-avatar { width: 68rpx; height: 68rpx; border-radius: 50%; display: block; background: #0f141b; }
 
 .hero-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4rpx; }
 .hero-name {
@@ -73,6 +76,6 @@
   white-space: nowrap;
 }
 
-.hero-win { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; }
-.hero-win-num { font-size: 28rpx; font-weight: 700; color: var(--dota-gold, #C8A951); font-family: var(--font-mono, monospace); }
+.hero-win { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; min-width: 0; overflow: hidden; }
+.hero-win-num { font-size: 28rpx; font-weight: 700; color: var(--dota-gold, #C8A951); font-family: var(--font-mono, monospace); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 110rpx; }
 .hero-win-label { font-size: 18rpx; color: #6b7280; }
