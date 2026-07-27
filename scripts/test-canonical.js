@@ -3,13 +3,16 @@
 // 不联网，mock wx 环境，复用 test-sources 的 check/assert/runAll 运行器范式。
 //
 // 校验目标：
-//  ① canonicalLeagueName 映射：EPL Masters 2026 / EPL 2026 → EPL Masters I（alias 命中）
+//  ① canonicalLeagueName：未匹配 curation 的联赛名原样返回（避免误覆盖）。
+//     ⚠️ 2026-07-27 修复：EPL 别名已收敛，'EPL Masters 2026' / 'EPL 2026' 不再被误冠为
+//     "EPL Masters I"（此前过宽别名把 OpenDota 低级别联赛误映射，导致列表重复卡 + 队伍错位）。
 //  ② 无匹配名原样返回（避免误覆盖）
 //  ③ leagueDisplayName 形状无关单一出口（{name}/{league_name}/{league.name}/字符串 均返回规范名）
 //     —— 这是 G1 的结构性防护：新增展示位只需传 league 对象，无需记忆字段名。
 //  ④ curation 完整赛期：start=7/20、end=8/12（UTC），且 ≠ 比赛窗口（7/27 结束）
 //     —— 修复 P3「赛期用比赛窗口而非权威完整赛期」的回归闸门。
-//  ⑤ curation 快照：EPL canonical/status/alias 正确（P3 数据层 + P1 列表/详情状态硬覆盖的信任源）
+//  ⑤ curation 快照：EPL canonical/status 正确；且过宽别名(epl2026/eplmasters2026)已移除（回归防护）
+//     （P3 数据层 + P1 列表/详情状态硬覆盖的信任源）
 //
 // 任何一条失败即代表 P3（展示名/赛期）或 P1（状态源）回归 —— 首次复现即红。
 
@@ -55,13 +58,14 @@ const monitor = require(path.join(SRC, 'monitor.js'));
 
 // ===== 4. 断言 =====
 section('\n--- 赛事展示名映射（P3 展示名）---');
-check('canonicalLeagueName("EPL Masters 2026") → "EPL Masters I"', () => {
+check('canonicalLeagueName("EPL Masters 2026") 不再误冠 "EPL Masters I"（2026-07-27 修复）', () => {
   const r = sources.canonicalLeagueName('EPL Masters 2026');
-  assert(r === 'EPL Masters I', '应为 EPL Masters I，实际: ' + r);
+  assert(r === 'EPL Masters 2026', '过宽别名已移除，应原样返回，实际: ' + r);
+  assert(r !== 'EPL Masters I', '回归：EPL 别名不应再把低级别联赛误映射为 EPL Masters I');
 });
-check('canonicalLeagueName("EPL 2026") → "EPL Masters I"（别名 epl2026）', () => {
+check('canonicalLeagueName("EPL 2026") 不再误冠 "EPL Masters I"', () => {
   const r = sources.canonicalLeagueName('EPL 2026');
-  assert(r === 'EPL Masters I', '应为 EPL Masters I，实际: ' + r);
+  assert(r === 'EPL 2026', '过宽别名 epl2026 已移除，应原样返回，实际: ' + r);
 });
 check('canonicalLeagueName(未知名) 原样返回', () => {
   const raw = 'A Totally Unknown League 2099';
@@ -69,10 +73,10 @@ check('canonicalLeagueName(未知名) 原样返回', () => {
 });
 
 section('\n--- leagueDisplayName 形状无关单一出口（G1 结构防护）---');
-check('leagueDisplayName({name})', () => assert(sources.leagueDisplayName({ name: 'EPL Masters 2026' }) === 'EPL Masters I'));
-check('leagueDisplayName({league_name})', () => assert(sources.leagueDisplayName({ league_name: 'EPL Masters 2026' }) === 'EPL Masters I'));
-check('leagueDisplayName({league:{name}})', () => assert(sources.leagueDisplayName({ league: { name: 'EPL Masters 2026' } }) === 'EPL Masters I'));
-check('leagueDisplayName(字符串)', () => assert(sources.leagueDisplayName('EPL Masters 2026') === 'EPL Masters I'));
+check('leagueDisplayName({name})', () => assert(sources.leagueDisplayName({ name: 'EPL Masters 2026' }) === 'EPL Masters 2026'));
+check('leagueDisplayName({league_name})', () => assert(sources.leagueDisplayName({ league_name: 'EPL Masters 2026' }) === 'EPL Masters 2026'));
+check('leagueDisplayName({league:{name}})', () => assert(sources.leagueDisplayName({ league: { name: 'EPL Masters 2026' } }) === 'EPL Masters 2026'));
+check('leagueDisplayName(字符串)', () => assert(sources.leagueDisplayName('EPL Masters 2026') === 'EPL Masters 2026'));
 check('leagueDisplayName("") 不为 undefined', () => assert(sources.leagueDisplayName('') === '', '空串应返回空串，实际: ' + sources.leagueDisplayName('')));
 check('leagueDisplayName(未知名 对象) 原样返回', () => {
   const raw = { name: 'Whatever League X' };
@@ -80,8 +84,8 @@ check('leagueDisplayName(未知名 对象) 原样返回', () => {
 });
 
 section('\n--- curation 完整赛期（P3 赛期窗口）---');
-const cur = remoteCuration.curatedEventFor('EPL Masters 2026');
-check('curation 命中 EPL 条目', () => assert(cur && cur.canonical === 'EPL Masters I', '应命中 EPL Masters I 条目'));
+const cur = remoteCuration.curatedEventFor('EPL Masters I');
+check('curation 命中 EPL 条目（按 canonical 字面名）', () => assert(cur && cur.canonical === 'EPL Masters I', '应命中 EPL Masters I 条目'));
 check('curation 完整赛期：start=7/20、end=8/12（UTC）', () => {
   const s = new Date(cur.start * 1000);
   const e = new Date(cur.end * 1000);
@@ -104,7 +108,11 @@ check('赛期不等于比赛窗口（7/27 结束）', () => {
 section('\n--- curation 快照（P3 数据层 + P1 状态硬覆盖信任源）---');
 check('EPL canonical === "EPL Masters I"', () => assert(cur.canonical === 'EPL Masters I'));
 check('EPL status === "进行中"', () => assert(cur.status === '进行中', 'EPL 2026 状态应为 进行中，实际: ' + cur.status));
-check('EPL 含别名 epl2026', () => assert((cur.aliases || []).indexOf('epl2026') >= 0, '应含别名 epl2026'));
+check('EPL 不再含过宽别名 epl2026 / eplmasters2026（2026-07-27 修复回归防护）', () => {
+  const al = cur.aliases || [];
+  assert(al.indexOf('epl2026') < 0, '不应再含过宽别名 epl2026（曾导致 19080 误冠）');
+  assert(al.indexOf('eplmasters2026') < 0, '不应再含过宽别名 eplmasters2026（曾导致 19944 误冠）');
+});
 
 // ===== G4：云函数与小程序共用同一份规范映射（消除双源漂移）=====
 section('\n--- G4 单一数据源：小程序 / 云函数规范映射一致 ---');
@@ -114,19 +122,28 @@ let cloudCanon = null;
 try { cloudCanon = require(path.resolve(__dirname, '..', 'cloudfunctions', 'aggregation', 'league-canon-map.js')); }
 catch (e) { cloudCanon = null; }
 
-check('G4: 小程序 league-canon-map 已加载且含 EPL 映射', () => {
-  assert(miniCanon && miniCanon.resolveCanonical('EPL Masters 2026') === 'EPL Masters I', 'mini 映射缺失');
+check('G4: 小程序 league-canon-map 已加载；canonical 字面 "EPL Masters I" 仍可解析', () => {
+  assert(miniCanon && miniCanon.resolveCanonical('EPL Masters I') === 'EPL Masters I', 'mini 应解析字面 canonical');
+});
+check('G4: 修复回归 — "EPL Masters 2026" 不应再映射到 EPL Masters I', () => {
+  assert(!miniCanon || miniCanon.resolveCanonical('EPL Masters 2026') !== 'EPL Masters I', 'EPL 过宽别名回归');
 });
 check('G4: 云函数 league-canon-map 已加载', () => {
   assert(cloudCanon, '云函数 league-canon-map 未找到，请运行 npm run sync:canon 并部署');
 });
 if (cloudCanon) {
-  const eplAliases = ['eplmasters2026', 'eplmasters', 'eplmasters1', 'epl2026', 'eplmastersi'];
-  check('G4: 小程序与云函数对 EPL 别名解析完全一致', () => {
-    eplAliases.forEach((a) => {
+  const eplCanonKey = 'eplmastersi';
+  const eplOverBroad = ['epl2026', 'eplmasters2026'];
+  check('G4: 小程序与云函数对 EPL canonical 自映射一致', () => {
+    const m = miniCanon.resolveCanonical(eplCanonKey);
+    const c = cloudCanon.resolveCanonical(eplCanonKey);
+    assert(m === 'EPL Masters I' && c === 'EPL Masters I', 'EPL canonical 不一致: mini=' + m + ' cloud=' + c);
+  });
+  check('G4: 小程序与云函数对 EPL 过宽别名一致地「不映射」', () => {
+    eplOverBroad.forEach((a) => {
       const m = miniCanon.resolveCanonical(a);
       const c = cloudCanon.resolveCanonical(a);
-      assert(m === 'EPL Masters I' && c === 'EPL Masters I', 'EPL 别名 ' + a + ' 不一致: mini=' + m + ' cloud=' + c);
+      assert(m !== 'EPL Masters I' && c !== 'EPL Masters I', 'EPL 过宽别名回归: ' + a + ' mini=' + m + ' cloud=' + c);
     });
   });
   check('G4: 两侧 curation-shared.js 模块等价（无双源漂移）', () => {
@@ -167,17 +184,19 @@ check('G6: status（若有）取值合法', () => {
 });
 
 // 跨游戏隔离：DOTA2 curation 绝不可混入 CS2 同名「EPL Masters 2026」
-// （P3 根因：OpenDota 显示 "EPL Masters 2026"，权威 Liquipedia 名为 "EPL Masters I"）
+// （P3 根因：OpenDota 显示 "EPL Masters 2026"，但权威 DOTA2 赛事实为 Liquipedia "EPL Masters I"；
+//  而 OpenDota 中同名 "EPL Masters 2026 / EPL 2026" 实为低级别联赛，过宽别名会误冠。2026-07-27 修复：
+//  收敛别名，使这些联赛回退原始名，不再被错误冠名。）
 check('G6: 跨游戏隔离 — DOTA2 curation 不含 CS2 同名 canonical "EPL Masters 2026"', () => {
   const clash = ALL_EVENTS.filter((ev) => ev.canonical === 'EPL Masters 2026');
   assert(clash.length === 0, 'DOTA2 curation 误含 CS2 同名赛事');
 });
 
-check('G6: 跨游戏隔离 — 展示层 "EPL Masters 2026" 解析为 DOTA2 的 "EPL Masters I"', () => {
+check('G6: 修复回归 — 展示层 "EPL Masters 2026" 不再误解析为 "EPL Masters I"', () => {
   const r = sources.canonicalLeagueName('EPL Masters 2026');
-  assert(r === 'EPL Masters I', '跨游戏隔离失败，实际: ' + r);
+  assert(r !== 'EPL Masters I', 'EPL 过宽别名回归，实际: ' + r);
   const dn = sources.leagueDisplayName('EPL Masters 2026');
-  assert(dn === 'EPL Masters I', 'leagueDisplayName 跨游戏隔离失败，实际: ' + dn);
+  assert(dn !== 'EPL Masters I', 'leagueDisplayName EPL 过宽别名回归，实际: ' + dn);
 });
 
 // ===== G8：运行时监控安全降级（无 wx / 无 reportAnalytics 时不得影响主流程）=====

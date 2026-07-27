@@ -5,9 +5,9 @@
 // cannot load .json directly).
 module.exports = {
   "version": 1,
-  "generatedAt": "2026-07-27T13:59:29.506Z",
+  "generatedAt": "2026-07-27T14:35:46.387Z",
   "source": "utils/curation.js#CURATED_EVENTS",
-  "eventCount": 228,
+  "eventCount": 224,
   "map": {
     "theinternational2025": "The International 2025",
     "ti2025": "The International 2025",
@@ -81,10 +81,6 @@ module.exports = {
     "ewc2026": "Esports World Cup 2026",
     "ewcdota2026": "Esports World Cup 2026",
     "eplmastersi": "EPL Masters I",
-    "eplmasters2026": "EPL Masters I",
-    "eplmasters": "EPL Masters I",
-    "eplmasters1": "EPL Masters I",
-    "epl2026": "EPL Masters I",
     "pglwallachiaseason9": "PGL Wallachia Season 9",
     "pglwallachia9": "PGL Wallachia Season 9",
     "wallachia2026": "PGL Wallachia Season 9",

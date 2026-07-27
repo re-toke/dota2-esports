@@ -83,11 +83,19 @@ function main() {
     process.exit(1);
   }
 
-  // EPL 关键覆盖自检（P3 回归防护）
-  const eplAliases = ['eplmasters2026', 'eplmasters', 'eplmasters1', 'epl2026', 'eplmastersi'];
-  const missing = eplAliases.filter((k) => map[k] !== 'EPL Masters I');
-  if (missing.length) {
-    console.error('[sync-canon-map] 致命：EPL 规范映射缺失/漂移: ' + missing.join(', '));
+  // EPL 覆盖自检（2026-07-27 修复后语义变更）：
+  // 现仅保留窄别名 'epl masters i'（normKey='eplmastersi'）。
+  // 1) canonical 自身必须映射回 'EPL Masters I'；
+  // 2) 回归防护：过宽别名 'epl2026' / 'eplmasters2026' 不得再映射到 EPL ——
+  //    它们曾把 OpenDota 低级别联赛（19080/19944）误冠为 "EPL Masters I"，造成列表重复 + 队伍错位。
+  const eplSelfOk = map['eplmastersi'] === 'EPL Masters I';
+  const eplOverBroad = ['epl2026', 'eplmasters2026'].filter((k) => map[k] === 'EPL Masters I');
+  if (!eplSelfOk) {
+    console.error('[sync-canon-map] 致命：EPL canonical 自映射缺失（eplmastersi -> EPL Masters I）');
+    process.exit(1);
+  }
+  if (eplOverBroad.length) {
+    console.error('[sync-canon-map] 致命：EPL 过宽别名回归（不应映射到 EPL Masters I）: ' + eplOverBroad.join(', '));
     process.exit(1);
   }
 

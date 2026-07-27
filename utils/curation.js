@@ -103,12 +103,20 @@ const CURATED_EVENTS = [
     participants: 16, status: '已结束', liquipediaSlug: 'Esports_World_Cup/2026/Dota_2',
     valve: false, topThirdParty: true },
   // EPL Masters I（ESL / European Pro League Masters 第一季）：DOTA2 线上赛事
-  // ⚠️ 注意：CS2 也有同名「EPL Masters 2026」（=ESL Pro League Season 24/EPT Masters），
-  //   10月波兰线下、$1M 奖金。两者名称极易混淆，本条目仅限 DOTA2。
-  //   OpenDota 中该联赛名显示为「EPL Masters 2026」，Liquipedia 标准名为「EPL Masters I」。
-  //   数据源交叉验证：Liquipedia + GosuGamers + e-rankings + Offstage（2026-07-27 确认）。
+  // ⚠️ 别名收敛（2026-07-27 修复，对应「EPL Masters I 列表重复 + 参赛队伍错误」Bug）：
+  //   原别名 'epl2026' / 'eplmasters2026' 过宽，会把 OpenDota 中两个低级别联赛也误映射为
+  //   "EPL Masters I"：
+  //     • leagueid 19080 "EPL 2026"（tier=excluded、0 场）→ 列表出现第二张重复卡；
+  //     • leagueid 19944 "EPL Masters 2026 "（专业级、86 场，但参赛队为 Nemiga/PuckChamp/
+  //       Team Lynx/Team Spirit Academy 等低级别队）→ 被强行冠以权威名，导致详情页队伍错位。
+  //   两联赛真实队伍均与本条目标注的 $100K A-Tier ESL EPL Masters I 不符；且本条目引用的
+  //   Liquipedia slug 'EPL/Masters/I' 实测不存在（页面无内容），交叉验证失效。
+  //   故收敛为仅命中字面 "EPL Masters I" 的窄别名，使上述联赛回退到 OpenDota 原始名，
+  //   不再被错误冠名（重复卡与队伍错位一并消除）。
+  //   —— 若确有正确的 ESL EPL Masters I leagueid，应改为「显式 pin（leagueId 字段）」而非模糊别名，
+  //      避免再次因 OpenDota 联赛名漂移而误关联。
   { canonical: 'EPL Masters I', tier: { grade: 'A', rank: 8, label: 'A-Tier' },
-    aliases: ['eplmasters2026', 'eplmasters', 'eplmasters1', 'epl2026', 'epl masters i'], year: 2026,
+    aliases: ['epl masters i'], year: 2026,
     start: Math.floor(Date.UTC(2026, 6, 20) / 1000), end: Math.floor(Date.UTC(2026, 7, 12) / 1000),
     prizePool: '$100,000', organizer: 'ESL / EPL', region: '欧洲/CIS · 线上',
     format: '小组赛(Bo3) + 双败淘汰(Bo3/Bo5决赛)',

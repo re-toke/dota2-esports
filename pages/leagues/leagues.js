@@ -102,6 +102,24 @@ function mergeAllWithUpcoming(allLeagues, upcomingList) {
   return out;
 }
 
+// 按 displayName（curation 规范名）去重：当 OpenDota 返回多个 leagueid 都映射到
+// 同一规范名时（如 "EPL Masters 2026" + 另一变体 → 都是 "EPL Masters I"），
+// 只保留数据最完整的一条（matchCount 最高 > 有 curation 覆盖 > 任意）。
+// 用途：进行中 / 已结束 Tab 的去重（全部 Tab 已有 mergeAllWithUpcoming 按 leagueid 去重）。
+function dedupeByDisplayName(arr) {
+  const groups = Object.create(null);
+  (arr || []).forEach((x) => {
+    const key = x.displayName || x.name || ('' + x.leagueid);
+    const prev = groups[key];
+    if (!prev) { groups[key] = x; return; }
+    // 选优：matchCount 高者优先；平局则选有 curation 元数据更丰富的（有 dateRange 说明赛期已解析）
+    const aScore = (x.matchCount || 0) * 1000 + (x.dateRange ? 1 : 0) + (x.grade ? 1 : 0);
+    const bScore = (prev.matchCount || 0) * 1000 + (prev.dateRange ? 1 : 0) + (prev.grade ? 1 : 0);
+    if (aScore > bScore) groups[key] = x;
+  });
+  return Object.keys(groups).map((k) => groups[k]);
+}
+
 // 将「赛程原始条目」统一转换为渲染卡片对象。
 // 云端缓存（getUpcomingSchedule）与本地预构建快照（upcoming-local.json）共用此构造器，
 // 保证两路数据源渲染字段完全一致；后续增删字段只需改这一处（可维护性/可扩展性）。
@@ -829,13 +847,13 @@ Page({
     if (f === 'upcoming') {
       arr = (this.upcomingList || []).filter(gradeMatch).slice();
     } else if (f === 'ongoing') {
-      arr = (this.allLeagues || []).filter((x) => x.status === 'ongoing' && gradeMatch(x));
+      arr = dedupeByDisplayName((this.allLeagues || []).filter((x) => x.status === 'ongoing' && gradeMatch(x)));
     } else if (f === 'ended') {
       // 已结束：直接信任归一化时计算的 status（statusOf 已用真实结束时间 + 缓冲判定）。
       // 移除冗余的「末场开赛须早于 7 天前」cutoff：短期赛事（1–2 天赛程）打完不久时，
       // latest(末场开赛) 尚未超过 7 天，会被错误剔除，导致既不在「正在进行」也不在
       // 「已结束」、只在「全部」能看到（RC2/RC3）。SQL 窗口已限定近 1 年，无需再 cutoff。
-      arr = (this.allLeagues || []).filter((x) => x.status === 'ended' && gradeMatch(x));
+      arr = dedupeByDisplayName((this.allLeagues || []).filter((x) => x.status === 'ended' && gradeMatch(x)));
     } else {
       // 全部：allLeagues（已结束+正在进行）+ upcomingList（未来赛事）按 leagueid 去重合并，
       // 未来赛事（OpenDota 暂无比赛记录）一并展示（RC1 / P0-1）。
@@ -909,8 +927,23 @@ Page({
   },
 
   openLeague(e) {
-    const id = e.currentTarget.dataset.id;
+    let id = e.currentTarget.dataset.id;
     const name = e.currentTarget.dataset.name;
+    // 复发防护（2026-07-27）：若同一展示名存在多条联赛（curation 别名漂移导致），
+    // 优先跳转数据最完整（matchCount 最高）的那条，避免落入低级别/占位联赛看到错位队伍。
+    // 列表本身已按 dedupeByDisplayName 去重，此处主要兜底深层链接/缓存/其它入口传入的次级 id。
+    const arr = this.allLeagues || [];
+    const nid = Number(id);
+    if (nid > 0 && arr.length) {
+      const self = arr.find((x) => Number(x.leagueid) === nid);
+      if (self && self.displayName) {
+        const peers = arr.filter((x) => x.displayName === self.displayName && Number(x.leagueid) !== nid);
+        if (peers.length) {
+          const best = peers.reduce((a, b) => ((b.matchCount || 0) > (a.matchCount || 0) ? b : a));
+          if ((best.matchCount || 0) > (self.matchCount || 0)) id = best.leagueid;
+        }
+      }
+    }
     wx.navigateTo({
       url: '/subpackages/detail/league-detail/league-detail?leagueId=' + id + '&name=' + encodeURIComponent(name)
     });
