@@ -139,7 +139,7 @@ check('enrichTeamLogo no logo + STRATZ disabled -> null', async () => {
   assert(r === null, 'should return null');
 });
 check('enrichTeamLogo existing logo -> return directly', async () => {
-  const r = await sources.enrichTeamLogo({ name: 'LGD', id: 15, logo: 'https://existing.example/logo.png' });
+  const r = await sources.enrichTeamLogo({ name: 'LGD', id: 10150538, logo: 'https://existing.example/logo.png' });
   assert(r !== null && r.logo === 'https://existing.example/logo.png', 'should return existing');
   assert(r.source === 'opendota', 'source should be opendota');
 });

@@ -6,6 +6,10 @@ const subscribe = require('../../../utils/subscribe.js');
 const config = require('../../../utils/config.js');
 const liveSources = require('../../../utils/liveSources.js');
 const remoteCuration = require('../../../utils/remoteCuration.js');
+const heroes = require('../../../utils/heroes.js');
+
+// Steam CDN 英雄头像基址（_sb.png = 小横幅图，约 59x33，aspectFill 裁切填满方形框）
+const HERO_IMG_BASE = 'https://cdn.cloudflare.steamstatic.com/apps/dota2/images/heroes/';
 
 // 可信度数值化，取两者中最保守者作为整体可信度
 const CONF_RANK = { low: 1, medium: 2, high: 3 };
@@ -42,6 +46,31 @@ function buildSourceBadges(srcArr) {
   return out;
 }
 
+// 状态 -> 中文标签 + 颜色（与赛事列表页 leagues.js 的 statusBadgeOf 保持一致）
+function statusBadgeOf(status) {
+  if (status === 'ongoing') return { text: '进行中', color: '#1ec896' };
+  if (status === 'upcoming') return { text: '即将到来', color: '#ffcf5c' };
+  return { text: '已结束', color: '#6b7280' };
+}
+
+// 生成 metadata 骨架：确保 KPI Strip 每个字段都有 key，无数据时统一展示 '--'。
+function buildMetadataSkeleton() {
+  return {
+    canonical: null,
+    prizePool: null,
+    prizePoolCurrency: null,
+    location: null,
+    format: null,
+    organizer: null,
+    startDate: null,
+    endDate: null,
+    participants: null,
+    status: null,
+    liquipediaSlug: null,
+    sources: []
+  };
+}
+
 // 当 Liquipedia / Steam 元数据缺失（禁用或拉取失败）时，用 curation 本地策展字段兜底，
 // 拼成与 kpi-strip 兼容的 metadata 结构（奖金池/地点/赛制/主办方/赛期/参赛队/状态/Liquipedia slug）。
 function buildCurationFallback(cur) {
@@ -49,6 +78,7 @@ function buildCurationFallback(cur) {
   const fmt = function (sec) { return sec ? util.formatTime(sec) : null; };
   return {
     source: 'curation',
+    sources: ['curation'],
     canonical: cur.canonical || '',
     prizePool: cur.prizePool != null ? String(cur.prizePool) : null,
     prizePoolCurrency: cur.prizePoolCurrency || null,
@@ -63,10 +93,18 @@ function buildCurationFallback(cur) {
   };
 }
 
+// 合并已有网络元数据与 curation 兜底，确保返回完整骨架。
+function mergeMetadataWithFallback(meta, name) {
+  const cur = remoteCuration.curatedEventFor(name);
+  const fb = cur ? buildCurationFallback(cur) : buildMetadataSkeleton();
+  return Object.assign({}, fb, meta || {});
+}
+
 Page({
   data: {
     leagueId: '',
-    name: '',
+    name: '',           // OpenDota 原始联赛名（导航参数传入）
+    displayName: '',    // 展示用名称：优先取多源共识名/curation canonical，回退 raw name
     series: [],
     totalSeries: 0,
     loading: true,
@@ -80,9 +118,9 @@ Page({
     updatedAt: 0,      // 数据最后采集时间戳（新鲜度）
     updatedLabel: '',
     followed: false,
-    metadata: null,    // 赛事元数据（Liquipedia + Steam 聚合：奖金池/地点/赛制/主办方）
-    sourcesText: '',   // 元数据来源中文名拼接（如 'Liquipedia / Steam'）
-    sourceBadges: [],  // 数据来源徽标列表（统一展示）
+    metadata: buildMetadataSkeleton(),  // 赛事元数据（Liquipedia + Steam + curation 兜底）
+    sourcesText: '',                    // 元数据来源中文名拼接（如 'Liquipedia / Steam'）
+    sourceBadges: [],                   // 数据来源徽标列表（统一展示）
     // F1 直播聚合入口
     liveSources: [],   // 各平台直播搜索入口
     isLive: false,     // 赛事是否正在进行（卡片高亮置顶）
@@ -92,7 +130,9 @@ Page({
     // 赛事排名
     standings: [],
     standingsLoading: false,
-    standingsLoaded: false
+    standingsLoaded: false,
+    // 参赛队伍（从比赛数据推导）
+    participantsList: []
   },
 
   onLoad(options) {
@@ -101,6 +141,7 @@ Page({
     this.setData({
       leagueId: leagueId,
       name: name,
+      displayName: name,
       followed: follow.isFollowed('leagues', leagueId)
     });
     wx.setNavigationBarTitle({ title: name || '赛事详情' });
@@ -116,15 +157,37 @@ Page({
     const finalize = () => {
       this._pendingCount++;
       if (this._pendingCount < this._pendingTotal) return;
-      // 所有源返回，统一刷新一次
+      // 所有源返回，清理超时 timer 并统一刷新一次
+      if (this._pendingTimer) {
+        clearTimeout(this._pendingTimer);
+        this._pendingTimer = null;
+      }
       const p = this._pending || {};
       const patch = {};
       if (p.tier) patch.liqTier = p.tier;
       if (p.name) patch.nameInfo = p.name;
-      if (p.meta) {
-        patch.metadata = p.meta;
-        patch.sourcesText = (p.meta.sources || []).map((s) => sources.SOURCE_LABEL[s] || s).join(' / ');
+      // 展示名优先级：curation canonical（人工校正，最高）> 多源共识名 > 原始 OpenDota 名
+      // 理由：curation 条目是人工核实的权威名称（如 "EPL Masters 2026" 实为 "EPL Masters I"），
+      //       consensus 投票在名称归一化后分组的票数相同时可能选错（如选了更长的原始名）
+      // G5：p.name 来自 voteLeagueNameForMatch（共识投票名），仅在本分支②作为兜底，
+      //     展示首选恒为 curation canonical（分支①），绝不直接以共识名作主展示。
+      const raw = this.data.name;
+      const cur2 = remoteCuration.curatedEventFor(raw);
+      let display = raw;
+      if (cur2 && cur2.canonical && cur2.canonical !== raw) {
+        display = cur2.canonical;                           // ① curation 显式校正
+      } else if (p.name && p.name.value && p.name.value !== raw) {
+        display = p.name.value;                             // ② 多源共识名与原始名不同
       }
+      if (display !== raw) {
+        patch.displayName = display;
+        // 异步更新导航栏标题（避免在 setData 之前调用）
+        setTimeout(() => wx.setNavigationBarTitle({ title: display }), 0);
+      }
+      // 元数据：Liquipedia/Steam 结果 与 curation 兜底合并，确保所有赛事都有完整 KPI 结构
+      const mergedMeta = mergeMetadataWithFallback(p.meta, this.data.name);
+      patch.metadata = mergedMeta;
+      patch.sourcesText = (mergedMeta.sources || []).map((s) => sources.SOURCE_LABEL[s] || s).join(' / ');
       // 合并 quality + sourceBadges 计算
       const t = p.tier, n = p.name, m = p.meta;
       const level = worstConfidence(t && t.confidence, n && n.confidence);
@@ -139,6 +202,8 @@ Page({
       if (m && m.sources) m.sources.forEach((s) => arr.push(s));
       patch.sourceBadges = buildSourceBadges(arr);
       this.setData(patch);
+      // 元数据兜底后再用比赛窗口/参赛队伍推导一次，保证与 load() 结果最终一致
+      this.refreshMetadataDerived();
     };
     // 8s 超时兜底，避免某个源 hang 住导致永远不刷新
     this._pendingTimer = setTimeout(finalize, 8000);
@@ -158,7 +223,9 @@ Page({
       finalize();
     }).catch(finalize);
 
-    sources.getLeagueName({ name: name, leagueid: leagueId }).then((n) => {
+    // G5：voteLeagueNameForMatch 是共识投票名，仅作「无 curation canonical 时的兜底」，
+    // 展示首选由 finalize() 的 curation canonical 优先级①保证，切勿直接当主展示名。
+    sources.voteLeagueNameForMatch({ name: name, leagueid: leagueId }).then((n) => {
       if (n && n.value) {
         this._pending.name = {
           value: n.value,
@@ -188,6 +255,14 @@ Page({
         if (fb) this._pending.meta = fb;
         finalize();
       });
+  },
+
+  onUnload() {
+    // 清理超时 timer，避免离开页面后 setData 触发「Page not exist」错误
+    if (this._pendingTimer) {
+      clearTimeout(this._pendingTimer);
+      this._pendingTimer = null;
+    }
   },
 
   // refreshQuality / refreshSourceBadges 已内联到 onLoad 的 finalize，
@@ -242,6 +317,33 @@ Page({
         const isLive = (raw || []).some((m) =>
           (m.radiant_win == null) && m.start_time && (nowSec - m.start_time) > 0 && (nowSec - m.start_time) < 12 * 3600
         );
+        // 统一赛事窗口（与列表页一致）：用真实比赛数据 min(start_time) ~ max(start_time + duration)。
+        // 有比赛时，覆盖 curation/Liquipedia 的"嘉年华"宽窗口（如 EWC 全代 07-06~08-23），
+        // 避免与列表的 7/20-7/25 冲突；状态同样基于真实结束时间，已结束即显示"已结束"。
+        const mList = raw || [];
+        let mStart = 0, mEnd = 0;
+        mList.forEach((m) => {
+          const st = m.start_time || 0;
+          const en = st + (m.duration || 0);
+          if (st && (!mStart || st < mStart)) mStart = st;
+          if (en > mEnd) mEnd = en;
+        });
+        let eventWindow = null;
+        if (mStart && mEnd) {
+          const wn = { earliest: mStart, latest: mStart, lastEnd: mEnd };
+          const st = util.statusOf(wn);
+          const badge = statusBadgeOf(st);
+          eventWindow = {
+            start: mStart,
+            end: mEnd,
+            range: util.formatDateRange(mStart, mEnd),                        // M/D，与列表一致
+            fullRange: util.formatTime(mStart) + ' ~ ' + util.formatTime(mEnd), // KPI 全日期
+            status: st,
+            statusText: badge.text,
+            statusColor: badge.color
+          };
+        }
+        this._matchWindow = eventWindow ? { start: mStart, end: mEnd } : null;
         // 合并为单次 setData
         this.setData({
           totalSeries: this.allSeries.length,
@@ -251,8 +353,10 @@ Page({
           loading: false,
           updatedAt: at,
           updatedLabel: util.formatAgo(at),
-          isLive: isLive
+          isLive: isLive,
+          eventWindow: eventWindow
         });
+        this.refreshMetadataDerived();
         this.enrichTeamNames();
       })
       .catch((err) => {
@@ -271,6 +375,11 @@ Page({
         if (m.radiantTeamId != null && !m.radiantName) need[m.radiantTeamId] = true;
         if (m.direTeamId != null && !m.direName) need[m.direTeamId] = true;
       });
+    });
+    // 参赛队伍（participantsList）中"Team {id}"占位名的 id 一并加入查询，避免漏网。
+    // 仅占位被命中，真名（如"Team Secret"）不会被误匹配（/^Team \d+$/ 要求纯数字 id）。
+    (this.data.participantsList || []).forEach((t) => {
+      if (t && /^Team \d+$/.test(t.name) && t.id != null) need[t.id] = true;
     });
     const ids = Object.keys(need).filter((x) => x !== 'null' && x !== '');
     if (!ids.length) return;
@@ -306,6 +415,18 @@ Page({
           if (s.radiantName === '天辉' && fg && nameMap[fg.radiantTeamId]) s.radiantName = nameMap[fg.radiantTeamId];
           if (s.direName === '夜魇' && fg && nameMap[fg.direTeamId]) s.direName = nameMap[fg.direTeamId];
         });
+        // 参赛队伍（participantsList）占位名补全：同步覆盖"Team {id}"为真实队名
+        const curParticipants = this.data.participantsList || [];
+        if (curParticipants.length) {
+          const patchedParticipants = curParticipants.map((t) => {
+            if (t && /^Team \d+$/.test(t.name) && nameMap[t.id]) {
+              return Object.assign({}, t, { name: nameMap[t.id] });
+            }
+            return t;
+          });
+          const participantsChanged = patchedParticipants.some((t, i) => t.name !== curParticipants[i].name);
+          if (participantsChanged) patch.participantsList = patchedParticipants;
+        }
         if (Object.keys(patch).length) this.setData(patch);
       })
       .catch(() => {});
@@ -324,6 +445,52 @@ Page({
       time: util.formatTime(m.start_time),
       duration: m.duration ? util.formatDuration(m.duration) : ''
     };
+  },
+
+  // 从比赛数据推导参赛队伍，并补充 metadata 中缺失的字段（状态/日期/参赛队数）。
+  // 在 load() 和 finalize() 都会调用，保证无论网络源快慢最终状态一致。
+  refreshMetadataDerived() {
+    const meta = Object.assign({}, buildMetadataSkeleton(), this.data.metadata || {});
+    const raw = this.allMatches || [];
+
+    // 1) 参赛队伍列表：按 team_id 去重，优先用已有队名，占位名后续 enrichTeamNames 会回填
+    const teamMap = {};
+    raw.forEach((m) => {
+      if (m.radiant_team_id != null) teamMap[m.radiant_team_id] = m.radiant_team_name || null;
+      if (m.dire_team_id != null) teamMap[m.dire_team_id] = m.dire_team_name || null;
+    });
+    // 防 finalize 后调用覆盖 enrichTeamNames 的真实名：
+    // 仅当 t.id 在 raw 中出现过（teamMap 已有该 key）时，才用 prev 的真名填补 raw 缺的 name。
+    // "待定队伍 N"（id 为负，不在 teamMap 中）会被正确丢弃，避免混入真实参赛队列表。
+    (this.data.participantsList || []).forEach((t) => {
+      if (!t || t.id == null || !(t.id in teamMap)) return;
+      if (!teamMap[t.id] && t.name && !/^Team \d+$/.test(t.name)) {
+        teamMap[t.id] = t.name;
+      }
+    });
+    // 占位兜底：仍无名的用 "Team {id}"，等 enrichTeamNames 回填
+    Object.keys(teamMap).forEach((k) => { if (!teamMap[k]) teamMap[k] = 'Team ' + k; });
+    let participantsList = Object.keys(teamMap).map((id) => ({ id: Number(id), name: teamMap[id] }));
+
+    // 1.5) 无比赛数据时，用 curation/Liquipedia 提供的参赛队数生成占位列表，避免页面内容过短且显示"暂无数据"
+    if (!participantsList.length && meta.participants && Number(meta.participants) > 0) {
+      const n = Number(meta.participants);
+      participantsList = Array.from({ length: n }, (_, i) => ({ id: -1 - i, name: '待定队伍 ' + (i + 1) }));
+    }
+
+    // 2) 用真实比赛窗口补齐 metadata
+    const ew = this.data.eventWindow;
+    if (ew) {
+      meta.status = meta.status || ew.statusText;
+      meta.startDate = meta.startDate || util.formatTime(ew.start);
+      meta.endDate = meta.endDate || util.formatTime(ew.end);
+    }
+    // 3) 参赛队数：curation/Liquipedia 优先；无则用比赛数据推导
+    if ((meta.participants == null || meta.participants === '') && participantsList.length) {
+      meta.participants = participantsList.length;
+    }
+
+    this.setData({ metadata: meta, participantsList: participantsList });
   },
 
   slicePage(reset) {
@@ -380,7 +547,32 @@ Page({
   loadStandings() {
     this.setData({ standingsLoading: true });
     sources.getLeagueStandings(this.data.leagueId).then((list) => {
-      this.setData({ standings: list || [], standingsLoading: false, standingsLoaded: true });
+      const standings = list || [];
+      // 队名补全：OpenDota /api/matches 返回的 radiant_team_name / dire_team_name
+      // 可能为空，导致 getLeagueStandings 回退为 "Team {id}" 占位符。
+      // 收集所有占位名称的 team_id，一次 explorer SQL 批量查 teams.name 回填（与 enrichTeamNames 同模式）。
+      const need = {};
+      standings.forEach((row) => {
+        if (row.name && /^Team \d+$/.test(row.name) && row.team_id) {
+          need[row.team_id] = true;
+        }
+      });
+      const ids = Object.keys(need).filter((x) => x !== 'null' && x !== '');
+      if (ids.length) {
+        api.getTeamNames(ids).then((nameMap) => {
+          const patched = standings.map((row) => {
+            if (row.team_id != null && nameMap[row.team_id]) {
+              return Object.assign({}, row, { name: nameMap[row.team_id], tag: (nameMap[row.team_id] || '').slice(0, 4).toUpperCase() });
+            }
+            return row;
+          });
+          this.setData({ standings: patched, standingsLoading: false, standingsLoaded: true });
+        }).catch(() => {
+          this.setData({ standings: standings, standingsLoading: false, standingsLoaded: true });
+        });
+      } else {
+        this.setData({ standings: standings, standingsLoading: false, standingsLoaded: true });
+      }
     }).catch(() => {
       this.setData({ standingsLoading: false, standingsLoaded: true });
     });
@@ -404,11 +596,30 @@ Page({
     const path = 'series[' + si + '].games[' + gi + ']';
     this.setData({ [path + '.loadingDetail']: true });
 
-    api.getMatch(m.match_id).then((detail) => {
+    // 并行取比赛详情 + 英雄库（英雄库已内存缓存，二次调用零网络）。
+    // 注意：OpenDota /matches/{id} 的 player 仅含 hero_id（数字），不含 hero 对象，
+    // 故头像 URL 必须靠 hero_id → 英雄内部名（antimage/luna）映射，再拼 Steam CDN。
+    const detailP = api.getMatch(m.match_id);
+    const heroesP = heroes.getHeroes().catch(() => []);
+    Promise.all([detailP, heroesP]).then((res) => {
+      const detail = res[0];
+      const heroList = res[1] || [];
       if (!detail || !detail.players) {
         this.setData({ [path + '.loadingDetail']: false, [path + '.detail']: null });
         return;
       }
+      // id -> 内部名（拼 CDN 头像 URL）
+      // 注意：OpenDota /heroes 的 name 带 npc_dota_hero_ 前缀（如 npc_dota_hero_antimage），
+      // Steam CDN 路径不需要此前缀（只需 antimage），故需 strip。
+      const NPC_PREFIX = 'npc_dota_hero_';
+      const internalMap = {};
+      heroList.forEach((h) => {
+        if (h && h.id != null) {
+          let n = h.name || '';
+          if (n.indexOf(NPC_PREFIX) === 0) n = n.slice(NPC_PREFIX.length);
+          internalMap[h.id] = n;
+        }
+      });
       const heroMap = (getApp().globalData && getApp().globalData.heroMap) || {};
       const radiantHeroes = [];
       const direHeroes = [];
@@ -418,10 +629,16 @@ Page({
         const isRadiant = (p.isRadiant != null) ? p.isRadiant : (p.player_slot < 128);
         const kda = p.deaths > 0 ? (p.kills + p.assists) / p.deaths : (p.kills + p.assists);
         const heroName = heroMap[p.hero_id] || ('H' + p.hero_id);
+        // Steam CDN 英雄头像：hero_id → 内部名（已 strip npc_dota_hero_ 前缀，如 antimage/luna）
+        const heroInternalName = internalMap[p.hero_id] || '';
+        const heroImg = heroInternalName
+          ? (HERO_IMG_BASE + encodeURIComponent(heroInternalName) + '_sb.png')
+          : '';
         const item = {
           hero_id: p.hero_id,
           name: heroName,
           short: (heroName || '?').slice(0, 4),
+          img: heroImg,
           kda: (p.kills || 0) + '/' + (p.deaths || 0) + '/' + (p.assists || 0),
           kdaScore: Math.round(kda * 100) / 100,
           gpm: p.gold_per_min || 0,

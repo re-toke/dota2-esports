@@ -46,7 +46,7 @@ global.wx = {
         ]
       });
     } else if (url.indexOf('/teams/') >= 0) {
-      opts.success({ statusCode: 200, data: { team_id: 15, name: 'LGD Gaming', tag: 'LGD', rating: 1800, wins: 100, losses: 40, country_code: 'CN' } });
+      opts.success({ statusCode: 200, data: { team_id: 10150538, name: 'LGD Gaming', tag: 'LGD', rating: 1800, wins: 100, losses: 40, country_code: 'CN' } });
     } else {
       opts.success({ statusCode: 404, data: null });
     }
@@ -178,7 +178,7 @@ check('curatedEventFor 别名命中', () => {
   assert(e && e.canonical === 'The International 2025', '别名命中');
 });
 check('curatedTeamFor id 命中', () => {
-  const t = curation.curatedTeamFor(15);
+  const t = curation.curatedTeamFor(10150538);
   assert(t && t.name === 'LGD Gaming', 'LGD Gaming');
 });
 check('curatedTeamFor 名命中', () => {
@@ -248,7 +248,7 @@ check('getLeagueWindow ESL Birmingham 含日期', async () => {
 // ===== 12. crossTeamMembers（OpenDota 单源，mock 网络）=====
 console.log('\n--- crossTeamMembers ---');
 check('OpenDota 单源 -> 返回成员但 verifiedCount=0', async () => {
-  const r = await sources.crossTeamMembers(15);
+  const r = await sources.crossTeamMembers(10150538);
   assert(r && r.members && r.members.length === 2, '成员数 2 实际 ' + (r && r.members && r.members.length));
   assert(r.verifiedCount === 0, '单源无核实');
   assert(r.confidence === 'low', 'low');
@@ -257,8 +257,8 @@ check('OpenDota 单源 -> 返回成员但 verifiedCount=0', async () => {
 
 // ===== 13. 战队优先级判定（新增：S-Tier / TI 参赛队优先覆盖）=====
 console.log('\n--- 战队优先级判定（isHighPriorityTeam / getTeamPriority）---');
-check('isTIContestantTeam: TI 2024 参赛队 ID（15=LGD）-> true', () => {
-  assert(curation.isTIContestantTeam(15) === true, 'LGD 在 TI 名单');
+check('isTIContestantTeam: TI 2024 参赛队 ID（10150538=LGD）-> true', () => {
+  assert(curation.isTIContestantTeam(10150538) === true, 'LGD 在 TI 名单');
 });
 check('isTIContestantTeam: 未参赛 ID（999999）-> false', () => {
   assert(curation.isTIContestantTeam(999999) === false, '不在 TI 名单');
@@ -266,8 +266,8 @@ check('isTIContestantTeam: 未参赛 ID（999999）-> false', () => {
 check('isHighPriorityTeam: TI 参赛队（按 id 7119388=Team Spirit）-> true', () => {
   assert(curation.isHighPriorityTeam(7119388) === true, 'Team Spirit 是 TI 参赛队');
 });
-check('isHighPriorityTeam: S-Tier 战队（按 id 15=LGD）-> true', () => {
-  assert(curation.isHighPriorityTeam(15) === true, 'LGD tier=S');
+check('isHighPriorityTeam: S-Tier 战队（按 id 10150538=LGD）-> true', () => {
+  assert(curation.isHighPriorityTeam(10150538) === true, 'LGD tier=S');
 });
 check('isHighPriorityTeam: 普通战队（按 id 999999）-> false', () => {
   assert(curation.isHighPriorityTeam(999999) === false, '普通战队');
@@ -287,7 +287,7 @@ check('sources.getTeamPriority: TI 参赛队 -> isTI=true', () => {
   assert(p.label === 'TI 参赛', 'label 应为 TI 参赛');
 });
 check('sources.getTeamPriority: S-Tier 战队（Azure Ray，未参加 TI）-> isTI=false, isHighPriority=true', () => {
-  const p = sources.getTeamPriority(5026801);  // Azure Ray (tier=S, 不在 TI 名单)
+  const p = sources.getTeamPriority(8574561);  // Azure Ray (tier=S, 不在 TI 名单)
   assert(p.isHighPriority === true, '应高优先级');
   assert(p.isTI === false, '非 TI 参赛队');
   assert(p.tier && p.tier.grade === 'S', '应为 S 级');

@@ -105,7 +105,7 @@ async function main() {
   } catch (e) { /* 用默认 */ }
 
   await checkResource('LEAGUE', BASE + '/leagues/' + leagueId + '/matches', 'league', leagueId);
-  await checkResource('TEAM', BASE + '/teams/15/matches', 'team', 15);
+  await checkResource('TEAM', BASE + '/teams/10150538/matches', 'team', 10150538);
   await checkResource('PLAYER', BASE + '/players/70388657/matches?limit=20', 'player', 70388657);
 
   console.log('\n=== 结果 ===  ' + pass + ' passed, ' + fail + ' failed');

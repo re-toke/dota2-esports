@@ -45,7 +45,7 @@ function main() {
   });
 
   check('本地兜底: curatedTeamFor 按 id 命中本地战队', function () {
-    const t = remoteCuration.curatedTeamFor(15);
+    const t = remoteCuration.curatedTeamFor(10150538);
     assert(t && t.name === 'LGD Gaming', 'name=' + (t && t.name));
   });
 
@@ -58,7 +58,7 @@ function main() {
   check('buildEffective: 空远程 = 本地不变', function () {
     const eff = remoteCuration.buildEffective({ events: [], teams: {} });
     assert(eff.events.length > 10, 'events 应保留本地全部: ' + eff.events.length);
-    assert(eff.teams[15] && eff.teams[15].name === 'LGD Gaming', 'teams 应保留本地');
+    assert(eff.teams[10150538] && eff.teams[10150538].name === 'LGD Gaming', 'teams 应保留本地');
   });
 
   check('buildEffective: 远程覆盖同键事件', function () {
