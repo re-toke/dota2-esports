@@ -1,0 +1,29 @@
+<view class="anchor-card">
+  <view class="ac-head">
+    <text wx:if="{{tierLabel}}" class="ac-tier {{tierClass}}">{{tierLabel}}</text>
+    <text wx:if="{{title}}" class="ac-title">{{title}}</text>
+  </view>
+
+  <!-- 对战模式：大字号比分 -->
+  <view wx:if="{{bigValue === ''}}" class="ac-score">
+    <view class="ac-team {{winSide === 'A' ? 'is-win' : ''}}">
+      <text class="ac-name">{{nameA}}</text>
+      <text class="ac-num">{{live ? '—' : scoreA}}</text>
+    </view>
+    <view class="ac-vs">{{live ? '进行中' : ':'}}</view>
+    <view class="ac-team {{winSide === 'B' ? 'is-win' : ''}}">
+      <text class="ac-num">{{live ? '—' : scoreB}}</text>
+      <text class="ac-name">{{nameB}}</text>
+    </view>
+  </view>
+
+  <!-- 单体档案模式：居中大数字关键指标 -->
+  <view wx:else class="ac-profile">
+    <text class="ac-big">{{bigValue}}</text>
+    <text class="ac-big-label">{{bigLabel}}</text>
+  </view>
+
+  <view wx:if="{{metaList.length}}" class="ac-meta">
+    <text wx:for="{{metaList}}" wx:key="label" class="ac-meta-item">{{item.label}}{{item.value ? ' · ' + item.value : ''}}</text>
+  </view>
+</view>

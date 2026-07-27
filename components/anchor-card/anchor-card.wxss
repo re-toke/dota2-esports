@@ -1,0 +1,116 @@
+/* components/anchor-card/anchor-card.wxss — 关键指标锚点卡（spec 4.1） */
+.anchor-card {
+  background: linear-gradient(135deg, rgba(200, 169, 81, 0.10), rgba(0, 0, 0, 0.22));
+  border: 1rpx solid rgba(200, 169, 81, 0.28);
+  border-radius: 20rpx;
+  padding: 26rpx 28rpx 22rpx;
+  margin: 16rpx 0;
+}
+
+.ac-head {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  margin-bottom: 16rpx;
+}
+
+.ac-tier {
+  font-size: 22rpx;
+  font-weight: 700;
+  color: #1a1a1a;
+  padding: 4rpx 14rpx;
+  border-radius: 999rpx;
+  flex-shrink: 0;
+}
+.ac-tier.tier-sss { background: var(--tier-sss); }
+.ac-tier.tier-s   { background: var(--tier-s); }
+.ac-tier.tier-a   { background: var(--tier-a); }
+.ac-tier.tier-b   { background: var(--tier-b); }
+
+.ac-title {
+  font-size: 28rpx;
+  color: #e8e8e8;
+  font-weight: 600;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ac-score {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ac-team {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.ac-name {
+  font-size: 26rpx;
+  color: #b9b9b9;
+  margin: 6rpx 0;
+  text-align: center;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ac-num {
+  font-size: 66rpx;
+  font-weight: 800;
+  color: #f0f0f0;
+  line-height: 1.1;
+}
+
+.ac-team.is-win .ac-num {
+  color: #C8A951;
+}
+.ac-team.is-win .ac-name {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.ac-vs {
+  font-size: 30rpx;
+  color: #8a8a8a;
+  font-weight: 700;
+  padding: 0 22rpx;
+  flex-shrink: 0;
+}
+
+.ac-profile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8rpx 0 4rpx;
+}
+.ac-big {
+  font-size: 72rpx;
+  font-weight: 800;
+  color: #C8A951;
+  line-height: 1.1;
+}
+.ac-big-label {
+  font-size: 24rpx;
+  color: #b9b9b9;
+  margin-top: 4rpx;
+}
+
+.ac-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  margin-top: 16rpx;
+}
+
+.ac-meta-item {
+  font-size: 22rpx;
+  color: #9a9a9a;
+}

@@ -1,12 +1,20 @@
-<view class="container">
+<view class="container with-tab-bar">
   <view class="search-wrap">
-    <t-search value="{{keyword}}" placeholder="{{searchType === 'players' ? '搜索选手名称' : '搜索战队名称'}}" bind:change="onSearch" bind:clear="onClear" />
+    <t-search value="{{keyword}}" placeholder="搜索战队名称 / 缩写" bind:change="onSearch" bind:clear="onClear" />
   </view>
 
-  <!-- 搜索类型切换 -->
-  <view class="search-type-bar">
-    <view class="type-chip {{searchType === 'teams' ? 'active' : ''}}" data-type="teams" bindtap="onSearchType">战队</view>
-    <view class="type-chip {{searchType === 'players' ? 'active' : ''}}" data-type="players" bindtap="onSearchType">选手</view>
+  <!-- 实时联想（输入即提示：基于本地战队索引 名/缩写/别名） -->
+  <view class="sug-list" wx:if="{{mode === 'hot' && liveSuggestions.length > 0}}">
+    <view
+      class="sug-item"
+      wx:for="{{liveSuggestions}}"
+      wx:key="id"
+      data-kw="{{item.name}}"
+      bindtap="onTapSuggestion"
+    >
+      <text class="sug-name">{{item.name}}</text>
+      <text class="sug-tag" wx:if="{{item.tag}}">{{item.tag}}</text>
+    </view>
   </view>
 
   <!-- 本地搜索历史：仅在热门(未输入)模式且存在历史时展示 -->
@@ -68,6 +76,7 @@
         wx:key="id"
         bindtap="openTeam"
         data-id="{{item.id}}"
+        data-navigable="{{item.navigable}}"
         hover-class="team-card-hover"
         style="animation-delay: {{ (index % 12) * 50 }}ms"
       >
@@ -140,28 +149,5 @@
     </view>
     <view wx:elif="{{mode === 'result' && results.length > pageSize}}" class="center muted">— 已显示全部 {{results.length}} 支 —</view>
 
-    <!-- 选手搜索结果 -->
-    <block wx:if="{{searchType === 'players' && playerResults.length > 0}}">
-      <view class="player-list">
-        <view class="player-card anim-fade-up" wx:for="{{playerResults}}" wx:key="id" bindtap="openPlayer" data-id="{{item.id}}" hover-class="card-hover" style="animation-delay: {{ (index % 12) * 50 }}ms">
-          <view class="player-info">
-            <text class="player-name">{{item.name}}</text>
-            <text class="player-id muted">ID: {{item.id}}</text>
-          </view>
-          <view class="player-meta">
-            <t-icon name="{{item.followed ? 'star' : 'star'}}" size="36rpx" color="{{item.followed ? '#ffcf5c' : '#5b626d'}}" catchtap="toggleFollowPlayer" data-id="{{item.id}}" data-name="{{item.name}}" />
-          </view>
-        </view>
-      </view>
-      <view class="loadmore" wx:if="{{hasMore}}">
-        <t-button theme="light" size="medium" bind:tap="appendPage" loading="{{loadingMore}}">加载更多选手</t-button>
-      </view>
-    </block>
-    <block wx:elif="{{searchType === 'players' && playerResults.length === 0 && !loading && searched}}">
-      <empty-state type="search" title="未找到选手" desc="换个名字再试试，或看看热门选手" actionText="重新搜索" bind:action="onClear" />
-      <view wx:if="{{suggestion}}" class="sug sug--center" bindtap="onTapSuggestion" data-kw="{{suggestion}}">
-        你是不是想搜：<text class="sug-kw">{{suggestion}}</text>
-      </view>
-    </block>
   </block>
 </view>

@@ -165,11 +165,6 @@
   flex-shrink: 0;
 }
 
-/* 胜率颜色分级 */
-.wr-high { color: var(--kpi-primary, #5fd35f); }
-.wr-mid { color: var(--kpi-warning, #f0aa28); }
-.wr-low { color: #8a8f99; }
-
 /* 数据来源徽标行 */
 .team-source-row {
   display: flex;
@@ -190,27 +185,6 @@
   color: #6b7280;
   font-size: 24rpx;
   padding: 24rpx 0;
-}
-
-/* ===== 搜索类型切换 ===== */
-.search-type-bar {
-  display: flex;
-  gap: 12rpx;
-  margin: 0 0 16rpx;
-}
-.type-chip {
-  font-size: 24rpx;
-  color: #8a8f99;
-  padding: 8rpx 24rpx;
-  border-radius: 20rpx;
-  background: #161b22;
-  border: 1rpx solid #232a33;
-  transition: all .2s;
-}
-.type-chip.active {
-  color: #5fd35f;
-  background: rgba(95,211,95,.08);
-  border-color: rgba(95,211,95,.25);
 }
 
 /* ===== 选手搜索结果卡片 ===== */
@@ -276,4 +250,31 @@
   color: var(--dota-gold, #C8A951);
   font-weight: 600;
   margin-left: 4rpx;
+}
+
+/* ===== 实时联想下拉 ===== */
+.sug-list {
+  background: #11161d;
+  border: 1rpx solid #232a33;
+  border-radius: 16rpx;
+  margin: 10rpx 0 4rpx;
+  overflow: hidden;
+}
+.sug-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20rpx 24rpx;
+  border-bottom: 1rpx solid #1c232c;
+}
+.sug-item:last-child { border-bottom: none; }
+.sug-item:active { background: #161b22; }
+.sug-name { font-size: 28rpx; color: #e8e8e8; }
+.sug-tag {
+  font-size: 22rpx;
+  color: #8a8f99;
+  background: #1a2029;
+  border: 1rpx solid #2a323d;
+  border-radius: 8rpx;
+  padding: 2rpx 12rpx;
 }
