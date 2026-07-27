@@ -1,0 +1,12 @@
+{
+  "navigationBarTitleText": "全局搜索",
+  "backgroundColor": "#0e1116",
+  "navigationBarBackgroundColor": "#0e1116",
+  "navigationBarTextStyle": "white",
+  "usingComponents": {
+    "t-search": "../../miniprogram_npm/tdesign-miniprogram/search/search",
+    "t-icon": "../../miniprogram_npm/tdesign-miniprogram/icon/icon",
+    "t-empty": "../../miniprogram_npm/tdesign-miniprogram/empty/empty",
+    "empty-state": "../../components/empty-state/empty-state"
+  }
+}

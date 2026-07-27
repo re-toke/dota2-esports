@@ -1,0 +1,25 @@
+<view class="tab-bar" style="background-color: {{backgroundColor}};">
+  <view class="tab-bar__border"></view>
+  <view
+    wx:for="{{list}}"
+    wx:key="index"
+    class="tab-bar__item {{selected === index ? 'tab-bar__item--active' : ''}}"
+    data-index="{{index}}"
+    data-path="{{item.pagePath}}"
+    hover-class="tab-bar__item--pressed"
+    hover-start-time="0"
+    hover-stay-time="120"
+    bindtap="switchTab"
+  >
+    <view class="tab-bar__icon-wrap">
+      <t-icon
+        class="tab-bar__icon"
+        name="{{item.icon}}"
+        size="{{selected === index ? '52rpx' : '44rpx'}}"
+        color="{{selected === index ? selectedColor : color}}"
+      />
+      <view wx:if="{{selected === index}}" class="tab-bar__dot"></view>
+    </view>
+    <text class="tab-bar__text">{{item.text}}</text>
+  </view>
+</view>

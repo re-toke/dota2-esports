@@ -1,0 +1,85 @@
+<view class="container">
+  <!-- 常驻搜索框（5.2） -->
+  <view class="search-bar">
+    <t-search
+      value="{{keyword}}"
+      placeholder="搜索赛事 / 战队 / 物品"
+      bind:change="onSearch"
+      bind:clear="clearSearch"
+      focus="{{true}}"
+    />
+  </view>
+
+  <!-- 初始态引导 -->
+  <view wx:if="{{!searched}}" class="search-intro">
+    <t-icon name="search" size="72rpx" color="#3a4150" />
+    <text class="intro-title">全局搜索</text>
+    <text class="intro-sub">输入关键词，跨赛事 / 战队 / 物品 一次性检索</text>
+  </view>
+
+  <!-- B-3 命令面板 · 快捷入口（最近搜索 / 热门） -->
+  <view wx:if="{{!searched}}" class="search-quick">
+    <view class="qk-block" wx:if="{{history.length}}">
+      <view class="qk-head">
+        <text class="qk-title">最近搜索</text>
+        <text class="qk-clear" bindtap="clearHistory">清空</text>
+      </view>
+      <view class="qk-tags">
+        <view class="qk-tag" wx:for="{{history}}" wx:key="*this" data-kw="{{item}}" bindtap="onQuickTap">{{item}}</view>
+      </view>
+    </view>
+    <view class="qk-block">
+      <view class="qk-head"><text class="qk-title">热门搜索</text></view>
+      <view class="qk-tags">
+        <view class="qk-tag" wx:for="{{hotTerms}}" wx:key="*this" data-kw="{{item}}" bindtap="onQuickTap">{{item}}</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 加载态 -->
+  <view wx:elif="{{loading}}" class="search-loading">
+    <view class="spinner" />
+    <text class="loading-text">搜索中...</text>
+  </view>
+
+  <!-- 无结果 -->
+  <empty-state
+    wx:elif="{{total === 0}}"
+    type="empty"
+    title="没有找到相关内容"
+    desc="换个关键词试试，或检查是否有拼写"
+  />
+
+  <!-- 分组结果 -->
+  <block wx:else>
+    <view class="result-summary">共 {{total}} 条结果</view>
+
+    <!-- 赛事 -->
+    <view wx:if="{{leagues.length}}" class="result-group">
+      <view class="group-head"><text class="group-title">赛事</text><text class="group-count">{{leagues.length}}</text></view>
+      <view class="result-item" wx:for="{{leagues}}" wx:key="id" data-type="league" data-id="{{item.id}}" data-name="{{item.displayName || item.name}}" bindtap="openResult" hover-class="tap-scale">
+        <t-icon name="flag" size="36rpx" color="#C8A951" />
+        <text class="result-name">{{item.displayName || item.name}}</text>
+      </view>
+    </view>
+
+    <!-- 战队 -->
+    <view wx:if="{{teams.length}}" class="result-group">
+      <view class="group-head"><text class="group-title">战队</text><text class="group-count">{{teams.length}}</text></view>
+      <view class="result-item" wx:for="{{teams}}" wx:key="id" data-type="team" data-id="{{item.id}}" data-name="{{item.name}}" data-navigable="{{item.navigable}}" bindtap="openResult" hover-class="tap-scale">
+        <t-icon name="usergroup" size="36rpx" color="#58a6ff" />
+        <text class="result-name">{{item.name}}</text>
+      </view>
+    </view>
+
+    <!-- 物品 -->
+    <view wx:if="{{items.length}}" class="result-group">
+      <view class="group-head"><text class="group-title">物品</text><text class="group-count">{{items.length}}</text></view>
+      <view class="result-item" wx:for="{{items}}" wx:key="id" data-type="item" data-id="{{item.id}}" bindtap="openResult" hover-class="tap-scale">
+        <image wx:if="{{item.img}}" class="item-thumb" src="{{item.img}}" mode="aspectFit" lazy-load />
+        <view wx:else class="item-thumb item-thumb--fallback">物</view>
+        <text class="result-name">{{item.name}}</text>
+      </view>
+    </view>
+  </block>
+</view>

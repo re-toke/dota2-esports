@@ -29,6 +29,27 @@ page {
   --td-text-color-brand: #C8A951;
   --td-text-color-link: #C8A951;
 
+  /* ===== 全局 Tier 用色 Token（暗色设计系统，S金/A紫/B蓝 规范） =====
+     单一来源：所有等级色彩统一由此定义，各页面/组件仅引用 Token，禁止散落字面量。
+     规范映射：SSS=TI官方(亮金) / S=S-Tier(暗金·品牌金) / A=A-Tier(紫) / B=B-Tier(蓝) / C=社区赛(灰)
+     用途：等级彩条(::before)、t-tag 文本色(.tier-text-*)、筛选 chip 描边(.gc--*) 等。 */
+  --tier-sss: #FFD15C;          /* TI 官方顶级 · 亮金 */
+  --tier-s:   #C8A951;          /* S-Tier · 暗金（品牌色） */
+  --tier-a:   #A777E3;          /* A-Tier · 紫 */
+  --tier-b:   #5B9BD5;          /* B-Tier · 蓝 */
+  --tier-c:   #7A8696;          /* 社区赛 · 灰 */
+  --tier-sss-soft: rgba(255, 209, 92, 0.14);
+  --tier-s-soft:   rgba(200, 169, 81, 0.14);
+  --tier-a-soft:   rgba(167, 119, 227, 0.14);
+  --tier-b-soft:   rgba(91, 155, 213, 0.14);
+  --tier-c-soft:   rgba(122, 134, 150, 0.14);
+  /* 等级描边色（0.4 alpha，用于筛选 chip / 卡片边框等需要半透明的场景） */
+  --tier-sss-line: rgba(255, 209, 92, 0.40);
+  --tier-s-line:   rgba(200, 169, 81, 0.40);
+  --tier-a-line:   rgba(167, 119, 227, 0.40);
+  --tier-b-line:   rgba(91, 155, 213, 0.40);
+  --tier-c-line:   rgba(122, 134, 150, 0.40);
+
   /* 夜魇红：危险/错误/取消关注 */
   --td-error-color: #e8443b;
   --td-error-color-active: #c9352d;
@@ -71,10 +92,33 @@ page {
   font-size: 28rpx;
 }
 
+/* ===== 全局 Tier 用色 Token 工具类（暗色设计系统，S金/A紫/B蓝 规范） =====
+   仅定义颜色，几何尺寸（彩条宽度/定位）由各卡片 .tier-* 容器自身的 ::before 提供。
+   各页面/组件统一引用此处 Token，禁止散落字面量（见 #14）。 */
+.tier-sss::before { background: var(--tier-sss); }
+.tier-s::before   { background: var(--tier-s); }
+.tier-a::before   { background: var(--tier-a); }
+.tier-b::before   { background: var(--tier-b); }
+.tier-c::before   { background: var(--tier-c); }
+/* 等级文本色工具类（供 t-tag / 文字直接引用） */
+.tier-text-sss { color: var(--tier-sss); }
+.tier-text-s   { color: var(--tier-s); }
+.tier-text-a   { color: var(--tier-a); }
+.tier-text-b   { color: var(--tier-b); }
+.tier-text-c   { color: var(--tier-c); }
+
+/* 胜率颜色分级工具类（全局：teams / league-detail 共用，统一收敛到 kpi Token，禁止本地散落定义） */
+.wr-high { color: var(--kpi-primary, #5fd35f); }
+.wr-mid  { color: var(--kpi-warning, #f0aa28); }
+.wr-low  { color: #8a8f99; }
+
 view, text { box-sizing: border-box; }
 
 /* 通用容器 */
 .container { padding: 24rpx; }
+
+/* 带自定义 tabBar 的页面容器，预留底部导航栏高度 + 安全区 */
+.with-tab-bar { padding-bottom: calc(132rpx + env(safe-area-inset-bottom)); }
 
 /* 搜索栏上下间距 */
 .search-wrap { margin: 8rpx 0 20rpx; }
@@ -233,6 +277,12 @@ page {
   --status-ended: #6b7280;         /* 已结束：灰 */
   --status-verified: #5fd3a8;      /* 多源验证：青绿 */
 
+  /* ===== H2H 双方对战条形配色（spec B.3：主队青绿 / 客队红） ===== */
+  --h2h-a: #2DD4A7;                /* 主队（左）强调色：青绿/Radiant 风 */
+  --h2h-a-soft: rgba(45, 212, 167, 0.14);
+  --h2h-b: #F25C54;                /* 客队（右）强调色：红/Dire 风 */
+  --h2h-b-soft: rgba(242, 92, 84, 0.14);
+
   /* ===== 来源溯源 token（数据可信度徽标） ===== */
   --source-opendota: #5fd35f;
   --source-stratz: #6054f1;
@@ -260,8 +310,8 @@ page {
    =================================================================== */
 .kpi-strip {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160rpx, 1fr));
-  gap: var(--space-2);
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3);
   background: var(--card-bg-elevated);
   border-radius: var(--radius-lg);
   padding: var(--space-3);
@@ -272,6 +322,7 @@ page {
   flex-direction: column;
   gap: var(--space-1);
   min-width: 0;
+  overflow: hidden;
 }
 .kpi-label {
   font-size: 22rpx;
@@ -281,14 +332,17 @@ page {
   line-height: 1.4;
 }
 .kpi-value {
-  font-size: 32rpx;
+  font-size: 30rpx;
   font-weight: 600;
   color: #f0f3f6;
   font-family: var(--font-numeric);
-  line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.35;
+  word-break: break-word;
+  white-space: normal;
+}
+.kpi-value.is-empty {
+  color: #5b626d;
+  font-weight: 400;
 }
 .kpi-value.accent { color: var(--kpi-primary); }
 .kpi-value.warning { color: var(--kpi-warning); }
@@ -638,6 +692,17 @@ page {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.brand-search {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 16rpx;
+  background: #161b22;
+  border: 1rpx solid rgba(255,255,255,0.08);
 }
 
 /* ===================================================================

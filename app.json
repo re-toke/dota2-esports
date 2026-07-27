@@ -1,9 +1,11 @@
 {
   "pages": [
+    "pages/index/index",
     "pages/leagues/leagues",
     "pages/teams/teams",
     "pages/follow/follow",
     "pages/data/data",
+    "pages/search/search",
     "pages/stratz-test/stratz-test"
   ],
   "subpackages": [
@@ -14,7 +16,7 @@
         "league-detail/league-detail",
         "match-detail/match-detail",
         "team-detail/team-detail",
-        "player-detail/player-detail",
+        "h2h/h2h",
         "privacy/privacy"
       ]
     },
@@ -30,6 +32,10 @@
     }
   ],
   "preloadRule": {
+    "pages/index/index": {
+      "network": "all",
+      "packages": ["detail"]
+    },
     "pages/leagues/leagues": {
       "network": "all",
       "packages": ["detail"]
@@ -48,11 +54,13 @@
     "backgroundColor": "#0e1116"
   },
   "tabBar": {
+    "custom": true,
     "color": "#8a8f99",
     "selectedColor": "#C8A951",
     "backgroundColor": "#161b22",
     "borderStyle": "black",
     "list": [
+      { "pagePath": "pages/index/index", "text": "首页" },
       { "pagePath": "pages/leagues/leagues", "text": "赛事" },
       { "pagePath": "pages/teams/teams", "text": "战队" },
       { "pagePath": "pages/follow/follow", "text": "关注" },

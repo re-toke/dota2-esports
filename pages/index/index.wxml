@@ -1,0 +1,107 @@
+<view class="container with-tab-bar">
+  <!-- 品牌标识栏 + 常驻搜索入口（5.2） -->
+  <view class="brand-header">
+    <view class="brand-logo brand-logo--sm" />
+    <view class="brand-text">
+      <text class="brand-title">DOTA2赛事</text>
+      <text class="brand-sub">赛事 · 战队 · 对战</text>
+    </view>
+    <view class="brand-search" bindtap="openSearch" hover-class="tap-scale">
+      <t-icon name="search" size="40rpx" color="#c9d1d9" />
+    </view>
+  </view>
+
+  <!-- 持久搜索框（5.2 常驻入口） -->
+  <view class="search-bar" bindtap="openSearch">
+    <t-icon name="search" size="32rpx" color="#6b7280" />
+    <text class="search-placeholder">搜索赛事 / 战队 / 选手 / 物品</text>
+  </view>
+
+  <!-- 首页「我的关注」横向卡片流（spec C.2.1，从 leagues 迁入）：已关注战队的下一场赛事 + 实时倒计时 -->
+  <view wx:if="{{hasFollow}}" class="follow-flow">
+    <view class="ff-head" bindtap="openFollowCenter">
+      <text class="ff-title">我的关注</text>
+      <text class="ff-more">›</text>
+    </view>
+
+    <view wx:if="{{followLoading}}" class="ff-skeleton-row">
+      <view class="ff-skeleton-card" wx:for="{{[1,2,3]}}" wx:key="*this" />
+    </view>
+
+    <scroll-view wx:elif="{{hasFollowMatches}}" scroll-x class="ff-scroll" enhanced show-scrollbar="{{false}}">
+      <view class="ff-track">
+        <view class="ff-card {{item.tierClass}}" wx:for="{{followCards}}" wx:key="teamId"
+              data-leagueid="{{item.leagueid}}" data-leaguename="{{item.displayName || item.leagueName}}" data-oppid="{{item.oppId}}"
+              bindtap="openFollowCard" hover-class="tap-scale">
+          <view class="ff-card-top">
+            <text wx:if="{{item.tierLabel}}" class="ff-tier">{{item.tierLabel}}</text>
+            <text class="ff-league">{{item.displayName || item.leagueName || '其他赛事'}}</text>
+          </view>
+          <view class="ff-vs">
+            <text class="ff-team {{item.status==='ended' && item.won ? 'win' : ''}}">{{item.teamTag}}</text>
+            <text class="ff-vs-sym">VS</text>
+            <text class="ff-team">{{item.oppTag}}</text>
+          </view>
+          <view class="ff-meta">
+            <text wx:if="{{item.status==='upcoming'}}" class="ff-cd">{{item.countdownText}}</text>
+            <text wx:else class="ff-ended {{item.won ? 'win' : 'lose'}}">{{item.score}} {{item.won ? '胜' : '负'}}</text>
+            <text class="ff-date">{{item.dateText}}</text>
+          </view>
+        </view>
+      </view>
+    </scroll-view>
+
+    <view wx:else class="ff-empty">
+      <text class="ff-empty-text">暂无近期赛事</text>
+      <text class="ff-empty-sub">关注的战队近期没有赛程，继续关注更多战队吧</text>
+    </view>
+  </view>
+
+  <!-- 未关注态引导卡（spec C.AC-C1） -->
+  <view wx:elif="{{!hasFollow}}" class="follow-guide" bindtap="goFollowTeams">
+    <view class="fg-icon">🤍</view>
+    <view class="fg-text">
+      <text class="fg-title">关注战队得赛前提醒</text>
+      <text class="fg-sub">关注你支持的战队，赛前不错过</text>
+    </view>
+    <view class="fg-btn">去关注</view>
+  </view>
+
+  <!-- 1.3 个性化推荐位：热门 S 级赛事（排除已关注，个性化发现流） -->
+  <view wx:if="{{recLeagues.length}}" class="rec-section">
+    <view class="section-header">
+      <text class="section-title">为你推荐</text>
+      <text class="section-action">热门赛事</text>
+    </view>
+    <scroll-view scroll-x class="rec-scroll" enhanced show-scrollbar="{{false}}">
+      <view class="rec-track">
+        <view class="rec-card tier-{{item.grade}}" wx:for="{{recLeagues}}" wx:key="leagueid"
+              data-id="{{item.leagueid}}" data-name="{{item.name}}"
+              bindtap="openLeague" hover-class="tap-scale">
+          <view class="rec-card-top">
+            <text class="rec-tag rec-tag--{{item.tagTheme}}">{{item.displayLabel}}</text>
+            <text wx:if="{{item.daysToStart>0}}" class="rec-days">{{item.daysToStart}}天后</text>
+          </view>
+          <text class="rec-name">{{item.name}}</text>
+          <text class="rec-meta">{{item.dateRange}}</text>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+
+  <!-- 快捷入口 -->
+  <view class="quick-nav">
+    <view class="quick-cell" data-path="/pages/leagues/leagues" bindtap="goTab" hover-class="tap-scale">
+      <view class="qc-icon"><t-icon name="flag" size="40rpx" color="#C8A951" /></view>
+      <text class="qc-name">赛事</text>
+    </view>
+    <view class="quick-cell" data-path="/pages/teams/teams" bindtap="goTab" hover-class="tap-scale">
+      <view class="qc-icon"><t-icon name="usergroup" size="40rpx" color="#58a6ff" /></view>
+      <text class="qc-name">战队</text>
+    </view>
+    <view class="quick-cell" data-path="/pages/data/data" bindtap="goTab" hover-class="tap-scale">
+      <view class="qc-icon"><t-icon name="app" size="40rpx" color="#3FB950" /></view>
+      <text class="qc-name">资料库</text>
+    </view>
+  </view>
+</view>
