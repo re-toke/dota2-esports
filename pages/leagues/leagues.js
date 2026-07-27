@@ -329,7 +329,10 @@ Page({
     if (!l || !l.leagueid) return null;
     const ut = util.unifiedTier(l);
     // 从 curation（含 remoteCuration 热更新覆盖）取权威补充字段
-    const cur = remoteCuration.curatedEventFor(l.name);
+    // 2026-07-27：传入 leagueId + game 上下文，启用 curation 引擎的
+    //   ① leagueId 精确 pin（绕过别名漂移，避免把 CS2/低级别联赛误关联）
+    //   ② game 跨游戏隔离（DOTA2 条目只能命中 DOTA2 联赛）
+    const cur = remoteCuration.curatedEventFor(l.name, { leagueId: l.leagueid, game: 'dota2' });
     // 分级优先取 curation.tier（与详情页 sources.getLeagueTier 的 curation 输入一致），
     // 未配置时回退 util.unifiedTier（OpenDota tier 映射），保证列表与详情"赛段"一致。
     const curTier = (cur && cur.tier) ? cur.tier : null;
@@ -954,7 +957,8 @@ Page({
   // 复用 curation 规范名解析，与赛事详情页 curation 兜底一致；fakeId 与
   // mergeCurationUpcoming 命名归一逻辑相同，保证关注态与「即将到来」列表互通。
   buildFocusNode() {
-    const cur = remoteCuration.curatedEventFor(FOCUS_EVENT_CANONICAL);
+    // 焦点赛事：按 canonical 字面名查找，无 leagueId 上下文；显式声明 game 防跨游戏污染。
+    const cur = remoteCuration.curatedEventFor(FOCUS_EVENT_CANONICAL, { game: 'dota2' });
     if (!cur || !cur.start) {
       if (this._lastFocusSig !== 'null') { this._lastFocusSig = 'null'; this.setData({ focusNode: null }); }
       return;

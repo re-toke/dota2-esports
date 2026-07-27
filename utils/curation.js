@@ -103,19 +103,20 @@ const CURATED_EVENTS = [
     participants: 16, status: '已结束', liquipediaSlug: 'Esports_World_Cup/2026/Dota_2',
     valve: false, topThirdParty: true },
   // EPL Masters I（ESL / European Pro League Masters 第一季）：DOTA2 线上赛事
-  // ⚠️ 别名收敛（2026-07-27 修复，对应「EPL Masters I 列表重复 + 参赛队伍错误」Bug）：
-  //   原别名 'epl2026' / 'eplmasters2026' 过宽，会把 OpenDota 中两个低级别联赛也误映射为
-  //   "EPL Masters I"：
-  //     • leagueid 19080 "EPL 2026"（tier=excluded、0 场）→ 列表出现第二张重复卡；
-  //     • leagueid 19944 "EPL Masters 2026 "（专业级、86 场，但参赛队为 Nemiga/PuckChamp/
-  //       Team Lynx/Team Spirit Academy 等低级别队）→ 被强行冠以权威名，导致详情页队伍错位。
-  //   两联赛真实队伍均与本条目标注的 $100K A-Tier ESL EPL Masters I 不符；且本条目引用的
-  //   Liquipedia slug 'EPL/Masters/I' 实测不存在（页面无内容），交叉验证失效。
-  //   故收敛为仅命中字面 "EPL Masters I" 的窄别名，使上述联赛回退到 OpenDota 原始名，
-  //   不再被错误冠名（重复卡与队伍错位一并消除）。
-  //   —— 若确有正确的 ESL EPL Masters I leagueid，应改为「显式 pin（leagueId 字段）」而非模糊别名，
-  //      避免再次因 OpenDota 联赛名漂移而误关联。
+  // ⚠️ 关联模型（2026-07-27 第二次修复，对应「修复 A 比赛影响 B 比赛」Bug）：
+  //   原别名 'epl2026' / 'eplmasters2026' 过宽，会把 OpenDota 中两个非 DOTA2 / 低级别联赛
+  //   也误映射为 "EPL Masters I"，造成列表重复卡 + 详情页队伍错位（被错误应用 CS2 元数据）。
+  //   修复方案（精确匹配 + 跨游戏隔离，取代模糊别名）：
+  //     ① leagueId 显式 pin：leagueId=19944 是 OpenDota 中该赛事的权威 id，绕过别名漂移；
+  //        其它 leagueId（含 19080）即使名称相近也绝不匹配。
+  //     ② game='dota2' 跨游戏隔离：CS2 同名「ESL Pro League S24 / EPT Masters」（$1M、10/3–10/11）
+  //        一旦误关联，将用 DOTA2 元数据覆盖原赛事；game 校验确保 DOTA2 条目只能匹配 DOTA2 联赛。
+  //     ③ 仅保留字面 alias 'epl masters i'，供 canonical 字面名（如 focus / 详情 fallback）查找使用。
+  //   —— 今后新增 curation 条目：若 OpenDota 有明确 leagueid，应「显式 pin（leagueId + game）」
+  //      而非靠模糊别名；模糊别名只作为 canonical 字面名 fallback。
   { canonical: 'EPL Masters I', tier: { grade: 'A', rank: 8, label: 'A-Tier' },
+    leagueId: 19944,
+    game: 'dota2',
     aliases: ['epl masters i'], year: 2026,
     start: Math.floor(Date.UTC(2026, 6, 20) / 1000), end: Math.floor(Date.UTC(2026, 7, 12) / 1000),
     prizePool: '$100,000', organizer: 'ESL / EPL', region: '欧洲/CIS · 线上',
@@ -418,14 +419,21 @@ function isTIContestantTeam(teamId) {
 }
 
 // 构建「赛事/战队」查找器（可作用于任意数据集合，便于远程覆盖复用）。
-// 返回 { eventFor(name), teamFor(nameOrId) }，逻辑与原 curatedEventFor/curatedTeamFor 完全一致。
+// 返回 { eventFor(name, ctx), teamFor(nameOrId) }，逻辑与原 curatedEventFor/curatedTeamFor
+// 完全一致，但 eventFor 接受可选 ctx = { leagueId, game }：
+//   - leagueId 显式 pin 匹配（最高优先级，绕过别名漂移）
+//   - game 校验：若 entry.game 与 ctx.game 同时声明，必须一致；否则拒绝（防 CS2/DOTA2 跨游戏污染）
+//   - 两者都缺时保持原行为（向后兼容）
 function buildLookups(events, teams) {
   // 赛事名 -> 事件对象（按规范名/别名归一匹配）
   const EVENT_INDEX = {};
+  // leagueId -> 事件对象（显式 pin，绕过别名漂移；2026-07-27 加）
+  const LEAGUE_ID_INDEX = {};
   (events || []).forEach((ev) => {
     if (!ev || !ev.canonical) return;
     EVENT_INDEX[consensus.normName(ev.canonical)] = ev;
     (ev.aliases || []).forEach((a) => { EVENT_INDEX[consensus.normName(a)] = ev; });
+    if (ev.leagueId != null) LEAGUE_ID_INDEX[ev.leagueId] = ev;
   });
   // 战队名 -> id 反向索引（用于按名查询）
   const NAME_INDEX = {};
@@ -435,11 +443,23 @@ function buildLookups(events, teams) {
     NAME_INDEX[consensus.normName(t.name)] = Number(id);
     (t.aliases || []).forEach((a) => { NAME_INDEX[consensus.normName(a)] = Number(id); });
   });
-  function eventFor(name) {
+  function eventFor(name, ctx) {
     if (!name) return null;
+    // game 校验助手：entry.game 与 ctx.game 同时声明才校验；任一缺失则放行
+    const validGame = (entry) => {
+      if (!entry) return null;
+      if (ctx && ctx.game && entry.game && entry.game !== ctx.game) return null;
+      return entry;
+    };
+    // 1. 显式 leagueId 匹配（最高优先级，绕过别名漂移）
+    //    仅当调用方提供了 leagueId 且确实有对应 pin 时返回；其余情况走名称匹配。
+    if (ctx && ctx.leagueId != null && LEAGUE_ID_INDEX[ctx.leagueId]) {
+      return validGame(LEAGUE_ID_INDEX[ctx.leagueId]);
+    }
+    // 2. 名称匹配（精确 + 模糊）
     const k = consensus.normName(name);
     if (!k) return null;
-    if (EVENT_INDEX[k]) return EVENT_INDEX[k];
+    if (EVENT_INDEX[k]) return validGame(EVENT_INDEX[k]);
     // 宽松匹配：归一名包含事件键或反之，但必须满足边界检查（非字母数字）
     // 避免子串误匹配：如 "TI2026 NA Qualifier" 误匹配到 "TI2026" 主赛事
     const ks = Object.keys(EVENT_INDEX);
@@ -453,7 +473,10 @@ function buildLookups(events, teams) {
         const after = k.charAt(idx + ek.length);
         const okBefore = !before || !/[a-z0-9]/.test(before);
         const okAfter = !after || !/[a-z0-9]/.test(after);
-        if (okBefore && okAfter) return EVENT_INDEX[ek];
+        if (okBefore && okAfter) {
+          const v = validGame(EVENT_INDEX[ek]);
+          if (v) return v;
+        }
       }
       // 反向：事件键包含归一名（处理 OpenDota 名称少后缀，如 "ESL" 匹配 "ESL One"）
       const idx2 = ek.indexOf(k);
@@ -462,7 +485,10 @@ function buildLookups(events, teams) {
         const after = ek.charAt(idx2 + k.length);
         const okBefore = !before || !/[a-z0-9]/.test(before);
         const okAfter = !after || !/[a-z0-9]/.test(after);
-        if (okBefore && okAfter) return EVENT_INDEX[ek];
+        if (okBefore && okAfter) {
+          const v = validGame(EVENT_INDEX[ek]);
+          if (v) return v;
+        }
       }
     }
     return null;
@@ -484,7 +510,7 @@ function buildLookups(events, teams) {
 // 本地兜底查找器（始终基于内置 CURATED_*，离线/首启可用）
 const LOCAL = buildLookups(CURATED_EVENTS, CURATED_TEAMS);
 
-function curatedEventFor(name) { return LOCAL.eventFor(name); }
+function curatedEventFor(name, ctx) { return LOCAL.eventFor(name, ctx); }
 function curatedTeamFor(nameOrId) { return LOCAL.teamFor(nameOrId); }
 
 // 判断 team_id/队名 是否为高优先级战队（S-Tier 或 TI 参赛队）。

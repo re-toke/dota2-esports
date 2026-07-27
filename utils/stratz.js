@@ -232,8 +232,9 @@ function findLeagueByName(name) {
       }
     }
     // 2) curation 别名回退：用精选库的 canonical/aliases 归一后反查 STRATZ 联赛
+    // 2026-07-27：传入 game='dota2'，跨游戏隔离（拒绝 CS2 条目命中）
     var curated = null;
-    try { curated = curation.curatedEventFor(name); } catch (e) { curated = null; }
+    try { curated = curation.curatedEventFor(name, { game: 'dota2' }); } catch (e) { curated = null; }
     if (curated) {
       var aliases = [];
       if (curated.canonical) aliases.push(curated.canonical);

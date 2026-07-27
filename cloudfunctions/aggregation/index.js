@@ -39,6 +39,17 @@ function canonicalLeagueName(raw) {
   const r = leagueCanon.resolveCanonical(raw);
   return r || 'DOTA2 赛事';
 }
+// 2026-07-27：新增带上下文的规范名解析，支持 leagueId 精确 pin（云函数推送文案场景）。
+// 注：云函数侧仅做 leagueId pin（game 跨游戏隔离的真正威力在小程序侧 curation 引擎中，
+//   见 utils/curation.js）。leagueId pin 数据来自同步脚本生成的 leagueIdMap（见 curation-shared）。
+function canonicalLeagueNameWithCtx(raw, ctx) {
+  const base = canonicalLeagueName(raw);
+  if (!ctx || ctx.leagueId == null) return base;
+  const shared = require('./curation-shared');
+  const lm = shared && shared.leagueIdMap;
+  if (lm && lm[ctx.leagueId] && lm[ctx.leagueId] !== raw) return lm[ctx.leagueId];
+  return base;
+}
 const TTL = {
   leagues: 6 * 3600 * 1000,
   leagueMatches: 30 * 60 * 1000,
@@ -708,7 +719,7 @@ exports.main = async (event, context) => {
         const pad = (n) => (n < 10 ? '0' + n : '' + n);
         const timeStr = (d.getMonth() + 1) + '-' + d.getDate() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
         const data = {
-          thing1: { value: canonicalLeagueName(m.league_name).slice(0, 20) },
+          thing1: { value: canonicalLeagueNameWithCtx(m.league_name, { leagueId: m.leagueid }).slice(0, 20) },
           thing2: { value: timeStr },
           thing6: { value: ((m.radiant_name || '天辉') + ' VS ' + (m.dire_name || '夜魇')).slice(0, 20) },
           thing5: { value: '即将开始，别错过' }

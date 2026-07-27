@@ -94,8 +94,10 @@ function buildCurationFallback(cur) {
 }
 
 // 合并已有网络元数据与 curation 兜底，确保返回完整骨架。
-function mergeMetadataWithFallback(meta, name) {
-  const cur = remoteCuration.curatedEventFor(name);
+// 2026-07-27：传入 leagueId + game 上下文，让 curation 引擎走精确 pin + 跨游戏隔离，
+// 防止 CS2 同名联赛（如「ESL Pro League S24」）的元数据污染 DOTA2 详情页。
+function mergeMetadataWithFallback(meta, name, leagueId) {
+  const cur = remoteCuration.curatedEventFor(name, { leagueId: leagueId, game: 'dota2' });
   const fb = cur ? buildCurationFallback(cur) : buildMetadataSkeleton();
   return Object.assign({}, fb, meta || {});
 }
@@ -172,7 +174,8 @@ Page({
       // G5：p.name 来自 voteLeagueNameForMatch（共识投票名），仅在本分支②作为兜底，
       //     展示首选恒为 curation canonical（分支①），绝不直接以共识名作主展示。
       const raw = this.data.name;
-      const cur2 = remoteCuration.curatedEventFor(raw);
+      // 2026-07-27：传入 leagueId + game，启用精确 pin + 跨游戏隔离
+      const cur2 = remoteCuration.curatedEventFor(raw, { leagueId: this.data.leagueId, game: 'dota2' });
       let display = raw;
       if (cur2 && cur2.canonical && cur2.canonical !== raw) {
         display = cur2.canonical;                           // ① curation 显式校正
@@ -185,7 +188,7 @@ Page({
         setTimeout(() => wx.setNavigationBarTitle({ title: display }), 0);
       }
       // 元数据：Liquipedia/Steam 结果 与 curation 兜底合并，确保所有赛事都有完整 KPI 结构
-      const mergedMeta = mergeMetadataWithFallback(p.meta, this.data.name);
+      const mergedMeta = mergeMetadataWithFallback(p.meta, this.data.name, this.data.leagueId);
       patch.metadata = mergedMeta;
       patch.sourcesText = (mergedMeta.sources || []).map((s) => sources.SOURCE_LABEL[s] || s).join(' / ');
       // 合并 quality + sourceBadges 计算
@@ -245,13 +248,15 @@ Page({
           this._pending.meta = meta;
         } else {
           // Liquipedia 禁用/失败：用 curation 本地策展字段兜底，保证 KPI 仍有数据
-          const fb = buildCurationFallback(remoteCuration.curatedEventFor(name));
+          // 2026-07-27：传入 leagueId + game 上下文，启用精确 pin + 跨游戏隔离
+          const fb = buildCurationFallback(remoteCuration.curatedEventFor(name, { leagueId: this.data.leagueId, game: 'dota2' }));
           if (fb) this._pending.meta = fb;
         }
         finalize();
       })
       .catch(() => {
-        const fb = buildCurationFallback(remoteCuration.curatedEventFor(name));
+        // 2026-07-27：传入 leagueId + game 上下文，启用精确 pin + 跨游戏隔离
+        const fb = buildCurationFallback(remoteCuration.curatedEventFor(name, { leagueId: this.data.leagueId, game: 'dota2' }));
         if (fb) this._pending.meta = fb;
         finalize();
       });

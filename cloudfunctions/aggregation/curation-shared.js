@@ -4,8 +4,8 @@
 // cloudfunctions/aggregation (CommonJS module, NOT .json — WeChat require
 // cannot load .json directly).
 module.exports = {
-  "version": 1,
-  "generatedAt": "2026-07-27T14:35:46.387Z",
+  "version": 2,
+  "generatedAt": "2026-07-27T15:05:39.583Z",
   "source": "utils/curation.js#CURATED_EVENTS",
   "eventCount": 224,
   "map": {
@@ -175,5 +175,8 @@ module.exports = {
     "parismajor2019": "MDL Disneyland Paris Major",
     "epicentermajor": "EPICENTER Major",
     "epicenter2019": "EPICENTER Major"
+  },
+  "leagueIdMap": {
+    "19944": "EPL Masters I"
   }
 };

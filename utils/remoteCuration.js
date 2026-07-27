@@ -51,7 +51,7 @@ function buildEffective(remote) {
   return { events: events, teams: tmMap };
 }
 
-function curatedEventFor(name) { return ensure().eventFor(name); }
+function curatedEventFor(name, ctx) { return ensure().eventFor(name, ctx); }
 function curatedTeamFor(nameOrId) { return ensure().teamFor(nameOrId); }
 
 // 判断 team_id 是否为历届 TI 参赛队（直接透传本地名单，不依赖远程覆盖）

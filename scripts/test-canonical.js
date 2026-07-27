@@ -58,10 +58,9 @@ const monitor = require(path.join(SRC, 'monitor.js'));
 
 // ===== 4. 断言 =====
 section('\n--- 赛事展示名映射（P3 展示名）---');
-check('canonicalLeagueName("EPL Masters 2026") 不再误冠 "EPL Masters I"（2026-07-27 修复）', () => {
+check('canonicalLeagueName("EPL Masters 2026") 无 leagueId 上下文时原样返回（2026-07-27 修复）', () => {
   const r = sources.canonicalLeagueName('EPL Masters 2026');
-  assert(r === 'EPL Masters 2026', '过宽别名已移除，应原样返回，实际: ' + r);
-  assert(r !== 'EPL Masters I', '回归：EPL 别名不应再把低级别联赛误映射为 EPL Masters I');
+  assert(r === 'EPL Masters 2026', '无 leagueId 不应猜，应原样返回，实际: ' + r);
 });
 check('canonicalLeagueName("EPL 2026") 不再误冠 "EPL Masters I"', () => {
   const r = sources.canonicalLeagueName('EPL 2026');
@@ -73,10 +72,10 @@ check('canonicalLeagueName(未知名) 原样返回', () => {
 });
 
 section('\n--- leagueDisplayName 形状无关单一出口（G1 结构防护）---');
-check('leagueDisplayName({name})', () => assert(sources.leagueDisplayName({ name: 'EPL Masters 2026' }) === 'EPL Masters 2026'));
-check('leagueDisplayName({league_name})', () => assert(sources.leagueDisplayName({ league_name: 'EPL Masters 2026' }) === 'EPL Masters 2026'));
-check('leagueDisplayName({league:{name}})', () => assert(sources.leagueDisplayName({ league: { name: 'EPL Masters 2026' } }) === 'EPL Masters 2026'));
-check('leagueDisplayName(字符串)', () => assert(sources.leagueDisplayName('EPL Masters 2026') === 'EPL Masters 2026'));
+check('leagueDisplayName({name})', () => assert(sources.leagueDisplayName({ name: 'EPL Masters I' }) === 'EPL Masters I'));
+check('leagueDisplayName({league_name})', () => assert(sources.leagueDisplayName({ league_name: 'EPL Masters I' }) === 'EPL Masters I'));
+check('leagueDisplayName({league:{name}})', () => assert(sources.leagueDisplayName({ league: { name: 'EPL Masters I' } }) === 'EPL Masters I'));
+check('leagueDisplayName(字符串)', () => assert(sources.leagueDisplayName('EPL Masters I') === 'EPL Masters I'));
 check('leagueDisplayName("") 不为 undefined', () => assert(sources.leagueDisplayName('') === '', '空串应返回空串，实际: ' + sources.leagueDisplayName('')));
 check('leagueDisplayName(未知名 对象) 原样返回', () => {
   const raw = { name: 'Whatever League X' };
@@ -112,6 +111,59 @@ check('EPL 不再含过宽别名 epl2026 / eplmasters2026（2026-07-27 修复回
   const al = cur.aliases || [];
   assert(al.indexOf('epl2026') < 0, '不应再含过宽别名 epl2026（曾导致 19080 误冠）');
   assert(al.indexOf('eplmasters2026') < 0, '不应再含过宽别名 eplmasters2026（曾导致 19944 误冠）');
+});
+
+// ===== G10：leagueId 精确 pin + 跨游戏隔离（2026-07-27 第二次修复）=====
+// 根因：过宽别名让低级别/其它游戏联赛被误映射到 "EPL Masters I"（或其他权威名），
+//       导致「修复 A 比赛影响 B 比赛」。修复用 leagueId pin（精确 ID）+ game 校验（跨游戏隔离），
+//       取代模糊别名。下面是「修复 A 比赛却影响 B 比赛」的回归场景：
+section('\n--- G10 leagueId 精确 pin + 跨游戏隔离（防"修A影响B"回归）---');
+
+check('G10: 19944（EPL Masters I 真身）经 leagueId pin + dota2 ctx 正确解析为 "EPL Masters I"', () => {
+  const r = sources.canonicalLeagueName('EPL Masters 2026 ', { leagueId: 19944, game: 'dota2' });
+  assert(r === 'EPL Masters I', 'leagueId=19944 pin 应命中 EPL Masters I，实际: ' + r);
+});
+check('G10: 19080（同名低级别联赛）经 leagueId 上下文不应被 EPL pin 命中', () => {
+  const r = sources.canonicalLeagueName('EPL 2026', { leagueId: 19080, game: 'dota2' });
+  assert(r === 'EPL 2026', 'leagueId=19080 不在 EPL pin 内，应原样返回，实际: ' + r);
+});
+check('G10: leagueDisplayName 自动从 league 对象抽取 leagueId → pin 命中', () => {
+  const r = sources.leagueDisplayName({ name: 'EPL Masters 2026 ', leagueid: 19944 });
+  assert(r === 'EPL Masters I', '自动抽取 leagueid=19944 应命中 EPL Masters I，实际: ' + r);
+});
+check('G10: 跨游戏隔离 — cs2 ctx 下，DOTA2 EPL 条目不得命中（pin 失败）', () => {
+  const r = sources.canonicalLeagueName('EPL Masters 2026 ', { leagueId: 19944, game: 'cs2' });
+  assert(r === 'EPL Masters 2026', 'game=cs2 应拒绝 DOTA2 EPL pin，原样返回（已 trim），实际: ' + r);
+});
+check('G10: 跨游戏隔离 — curatedEventFor 在 game=cs2 下返回 null', () => {
+  const cur2 = remoteCuration.curatedEventFor('EPL Masters I', { game: 'cs2' });
+  assert(cur2 === null, 'game=cs2 应拒绝 EPL DOTA2 条目，实际: ' + (cur2 && cur2.canonical));
+});
+check('G10: 「修 A 影响 B」综合回归 — 拿 EPL 名称调用不带 ctx 时不该误命中', () => {
+  // 模拟一个不带 leagueId 的上游数据源（如第三方只传名字符串的场景）：
+  // 必须原样返回（trim 后），绝不「自动猜」或 fallback 到 EPL Masters I。
+  const a = sources.canonicalLeagueName('EPL Masters 2026 ');
+  const b = sources.canonicalLeagueName('EPL 2026');
+  const c = sources.canonicalLeagueName('ESL Pro League S24');
+  assert(a === 'EPL Masters 2026', '无 ctx 不应猜（trim 后），实际: ' + a);
+  assert(b === 'EPL 2026', '无 ctx 不应猜，实际: ' + b);
+  assert(c === 'ESL Pro League S24', 'CS2 同名赛事无 ctx 不应误用 DOTA2 canonical，实际: ' + c);
+});
+check('G10: 修复 A 比赛时不影响 B 比赛 — 其它 leagueId 不会被错抓', () => {
+  // 模拟其它 leagueId（即使名称恰好被 EPL 别名覆盖），也不能命中 EPL pin。
+  [15688, 15659, 19080, 12345, 0, -1].forEach((lid) => {
+    const r = sources.canonicalLeagueName('EPL Masters 2026 ', { leagueId: lid, game: 'dota2' });
+    assert(r === 'EPL Masters 2026', 'leagueId=' + lid + ' 不应被 EPL pin 命中，实际: ' + r);
+  });
+});
+check('G10: leagueId pin 命中后会返回完整元数据（prizePool / status / tier）', () => {
+  const c = remoteCuration.curatedEventFor('EPL Masters 2026 ', { leagueId: 19944, game: 'dota2' });
+  assert(c, '应返回 curation entry');
+  assert(c.canonical === 'EPL Masters I', 'canonical 不对: ' + c.canonical);
+  assert(c.prizePool === '$100,000', 'prizePool 应为 DOTA2 实际值 $100,000（非 CS2 $1M），实际: ' + c.prizePool);
+  assert(c.status === '进行中', 'status 应为 进行中，实际: ' + c.status);
+  const t = c.tier || {};
+  assert(t.grade === 'A', 'tier.grade 应为 A（非 CS2 S-Tier），实际: ' + t.grade);
 });
 
 // ===== G4：云函数与小程序共用同一份规范映射（消除双源漂移）=====

@@ -471,15 +471,22 @@ function getMatchTier(leagueName) {
 // 与原始名不同则返回规范名（如 OpenDota 的 "EPL Masters 2026" → 权威库 "EPL Masters I"），
 // 否则原样返回原始名。避免各页面重复内联 curation 查找、降低回归风险，
 // 也保证「列表/详情/搜索/关注/对局/推送」所有展示位口径一致。
-function canonicalLeagueName(rawName) {
+function canonicalLeagueName(rawName, ctx) {
   const name = (rawName || '').trim();
   if (!name) return name;
-  // 1) 优先走与云函数共用的精确归一映射（G4 单一数据源，保证两侧口径一致）
+  // 2026-07-27：当 ctx 提供 game（跨游戏隔离意图），仅信任动态 curation 引擎
+  // （含 leagueId pin + game 校验）；静态映射不带 game 信息，保守跳过，避免
+  // 把 CS2 联赛误用 DOTA2 canonical 覆盖。leagueDisplayName 默认传 game='dota2'，
+  // 走这条路径。
+  if (ctx && ctx.game) {
+    const cu = curation.curatedEventFor(name, ctx);
+    if (cu && cu.canonical && cu.canonical !== name) return cu.canonical;
+    return name;
+  }
+  // 兼容旧调用（无 ctx 或无 game）：优先静态精确映射（G4），再动态模糊匹配
   const exact = leagueCanon.resolveCanonical(name);
   if (exact && exact !== name) return exact;
-  // 2) 模糊匹配兜底（仅小程序展示用，保留 curation 的 rich 修正能力，
-  //    例如 OpenDota 名称多/少后缀的子串归一；云函数仅需精确映射即可）
-  const cu = curation.curatedEventFor(name);
+  const cu = curation.curatedEventFor(name, ctx);
   if (cu && cu.canonical && cu.canonical !== name) return cu.canonical;
   return name;
 }
@@ -494,7 +501,7 @@ function canonicalLeagueName(rawName) {
 //     新增展示位只需传入 league 对象，无需记忆字段名，从结构上消除 P3 复发。
 // 与 canonicalLeagueName 的分工：canonicalLeagueName 负责「原始名→规范名」单点映射；
 // leagueDisplayName 负责「从 league 对象取出原始名，再交给 canonicalLeagueName」。
-function leagueDisplayName(league) {
+function leagueDisplayName(league, ctx) {
   let raw = '';
   if (!league) raw = '';
   else if (typeof league === 'string') raw = league;
@@ -502,7 +509,16 @@ function leagueDisplayName(league) {
   else if (league.league_name) raw = league.league_name;
   else if (league.leagueName) raw = league.leagueName;
   else if (league.league && league.league.name) raw = league.league.name;
-  const display = canonicalLeagueName(raw);
+  // 2026-07-27：从 league 对象自动抽取 leagueId（OpenDota 联赛/比赛对象上常见字段名），
+  // 与调用方传入的 ctx 合并。缺省 game='dota2'（本项目只服务 DOTA2，跨游戏隔离默认开启）。
+  const mergedCtx = Object.assign({ game: 'dota2' }, ctx || {});
+  if (mergedCtx.leagueId == null && league && typeof league === 'object') {
+    const lid = league.leagueid != null ? league.leagueid
+      : (league.league_id != null ? league.league_id
+      : (league.league && (league.league.id != null ? league.league.id : league.league.leagueid)));
+    if (lid != null && !isNaN(Number(lid))) mergedCtx.leagueId = Number(lid);
+  }
+  const display = canonicalLeagueName(raw, mergedCtx);
   // G8：若仍未命中 curation（展示名==原始名），上报以便发现「应补进 curation 的赛事」
   if (raw && display === raw) monitor.leagueNameUncovered(raw);
   return display;
