@@ -266,8 +266,8 @@ dota2-esports/
 **规范映射单一数据源（G4 防护）**：
 
 - 赛事名规范映射只允许手工维护 `utils/curation.js` 的 `CURATED_EVENTS`（canonical + aliases）。任何新增/修改赛事别名都只改这里。
-- 映射产物 `utils/curation-shared.json` 由 `scripts/sync-canon-map.js`（`npm run sync:canon`）从 `CURATED_EVENTS` 生成，并**镜像**到 `cloudfunctions/aggregation/curation-shared.json`；两侧字节必须一致（测试断言）。
-- 小程序 `utils/league-canon-map.js` 与云函数 `cloudfunctions/aggregation/league-canon-map.js` 是同一份生成产物的副本，各自 `require('./curation-shared.json')`。`sources.canonicalLeagueName` 先走精确归一映射（`leagueCanon.resolveCanonical`），未命中再回退 `curatedEventFor` 模糊匹配（仅小程序展示用）。
+- 映射产物 `utils/curation-shared.js` 由 `scripts/sync-canon-map.js`（`npm run sync:canon`）从 `CURATED_EVENTS` 生成，并**镜像**到 `cloudfunctions/aggregation/curation-shared.js`；两侧字节必须一致（测试断言）。
+- 小程序 `utils/league-canon-map.js` 与云函数 `cloudfunctions/aggregation/league-canon-map.js` 是同一份生成产物的副本，各自 `require('./curation-shared.js')`。`sources.canonicalLeagueName` 先走精确归一映射（`leagueCanon.resolveCanonical`），未命中再回退 `curatedEventFor` 模糊匹配（仅小程序展示用）。
 - **禁止**在云函数内联手写 `canonicalLeagueName` MAP（G4 消除的正是该双源漂移）。云函数改动后必须 `npm run sync:canon` 并**重新上传部署 `aggregation`**，推送文案才生效。
 
 **共识投票名仅用于匹配/索引（G5 防护）**：
@@ -281,7 +281,7 @@ dota2-esports/
 新增/修改 `CURATED_EVENTS` 条目时，逐项核对：
 1. **canonical 正确性**：规范名以 Liquipedia / Valve 官方为准（如 DOTA2 的 "EPL Masters 2026" 实为 "EPL Masters I"）。`npm test` 的 G6 快照会断言 `canonical==='EPL Masters I'`。
 2. **跨游戏隔离**：同一赛事名在其它游戏（如 CS2 的 "EPL Masters 2026"）可能不同义——DOTA2 的 `CURATED_EVENTS` **绝不可**写入其它游戏的 canonical/别名。G6 快照断言「DOTA2 curation 不含 canonical "EPL Masters 2026"」，且展示层 `EPL Masters 2026 → EPL Masters I`。
-3. **别名完整**：`aliases` 必须覆盖 OpenDota / 各源可能出现的写法（含小写无分隔形式，如 `eplmasters2026`/`epl2026`/`eplmastersi`）。改完跑 `npm run sync:canon` 重新生成 `curation-shared.json` 并镜像云函数。
+3. **别名完整**：`aliases` 必须覆盖 OpenDota / 各源可能出现的写法（含小写无分隔形式，如 `eplmasters2026`/`epl2026`/`eplmastersi`）。改完跑 `npm run sync:canon` 重新生成 `curation-shared.js` 并镜像云函数。
 4. **赛期完整**：`start`/`end` 用 `Math.floor(Date.UTC(...)/1000)`（Unix **秒**，非毫秒）；`end >= start`；未开赛赛事的赛期用于「即将到来」判定，须与 Liquipedia 公布一致。
 5. **status 合法**：取值仅限 `即将到来` / `进行中` / `已结束` / `已取消`，且与 OpenDota 真实比赛窗口相符（列表/详情状态硬覆盖以此为准）。
 6. **改完校验**：`npm test` 全绿（含 G2/G4/G6 快照），`npm run lint` 无 error，`npm run sync:canon` 两侧 JSON 一致后再提交/部署。
