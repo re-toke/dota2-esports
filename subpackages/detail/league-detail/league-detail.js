@@ -494,10 +494,36 @@ Page({
     Object.keys(teamMap).forEach((k) => { if (!teamMap[k]) teamMap[k] = 'Team ' + k; });
     let participantsList = Object.keys(teamMap).map((id) => ({ id: Number(id), name: teamMap[id] }));
 
-    // 1.5) 无比赛数据时，用 curation/Liquipedia 提供的参赛队数生成占位列表，避免页面内容过短且显示"暂无数据"
-    if (!participantsList.length && meta.participants && Number(meta.participants) > 0) {
-      const n = Number(meta.participants);
-      participantsList = Array.from({ length: n }, (_, i) => ({ id: -1 - i, name: '待定队伍 ' + (i + 1) }));
+    // 1.5) Roster 完成（2026-07-27）：赛事进行中常出现「metadata 标 16 队但仅 13 队登场」的场景
+    // （如 EPL Masters I 86 场只覆盖 13 支队伍）。原先只在 participantsList 为空时才补占位，
+    // 导致 metadata 「参赛队 16」与实际显示「13 支」长期不一致 —— 给人"数据错误"的错觉。
+    // 修复：只要 metadata.participants > 实际参赛队数，补足到与 metadata 一致（占位「待定队伍 N」，
+    // id 用负数，避免与真实 team_id 冲突，且不会被 teamMap 反向覆盖）。
+    const metaParticipants = Number(meta.participants);
+    if (metaParticipants > 0 && metaParticipants > participantsList.length) {
+      const need = metaParticipants - participantsList.length;
+      const existingIds = new Set(participantsList.map((t) => t && t.id));
+      const fillers = [];
+      for (let i = 0; i < need; i++) {
+        const fakeId = -1 - i;
+        if (!existingIds.has(fakeId)) {
+          fillers.push({ id: fakeId, name: '待定队伍 ' + (i + 1) });
+        }
+      }
+      if (fillers.length) {
+        participantsList = participantsList.concat(fillers);
+        // 数据完整性告警：与 metadata 不一致便于排查（云函数缓存/Curation 漂移）
+        if (typeof console !== 'undefined' && console.warn) {
+          console.warn('[league-detail] 参赛队数与 metadata 不一致：',
+            'actual=' + (participantsList.length - fillers.length),
+            'meta=' + metaParticipants,
+            '— 已补 ' + fillers.length + ' 个待定队伍占位');
+        }
+      }
+    }
+    // 1.6) 无比赛数据时，用 curation/Liquipedia 提供的参赛队数生成纯占位列表（保留旧行为）
+    if (!participantsList.length && metaParticipants > 0) {
+      participantsList = Array.from({ length: metaParticipants }, (_, i) => ({ id: -1 - i, name: '待定队伍 ' + (i + 1) }));
     }
 
     // 2) 用真实比赛窗口补齐 metadata

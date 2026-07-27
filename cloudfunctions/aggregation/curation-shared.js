@@ -4,8 +4,8 @@
 // cloudfunctions/aggregation (CommonJS module, NOT .json — WeChat require
 // cannot load .json directly).
 module.exports = {
-  "version": 2,
-  "generatedAt": "2026-07-27T15:05:39.583Z",
+  "version": 3,
+  "generatedAt": "2026-07-27T15:49:19.746Z",
   "source": "utils/curation.js#CURATED_EVENTS",
   "eventCount": 224,
   "map": {
@@ -178,5 +178,6 @@ module.exports = {
   },
   "leagueIdMap": {
     "19944": "EPL Masters I"
-  }
+  },
+  "dataVersion": "1785167359746"
 };

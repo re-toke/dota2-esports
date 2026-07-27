@@ -12,6 +12,12 @@ const config = require('./config.js');
 const inc = require('./incremental.js');
 const sqlFragments = require('./sqlFragments.js');
 const breaker = require('./cloudBreaker.js');
+// 2026-07-27：curation 数据版本戳。缓存 key 前缀，确保代码/curation 变更后旧缓存自动失效。
+// 由 scripts/sync-canon-map.js 生成 curation-shared.js 时填入（同云函数侧），仅作 fallback。
+let _dataVersion = '0';
+try { _dataVersion = (require('./curation-shared').dataVersion || '0'); } catch (e) { /* 离线兜底 */ }
+// 兼容测试环境无 curation-shared 的情况
+function _v() { return _dataVersion + ':'; }
 
 const BASE = 'https://api.opendota.com/api';
 
@@ -140,8 +146,9 @@ function validateResponse(path, data) {
 const inflight = {};
 
 // 带缓存的请求：命中缓存直接返回（不计入限流）；未命中时 inflight 去重
+// 2026-07-27：缓存 key 加 _v() 前缀（dataVersion），保证 curation/代码变更后旧 key 自动失效。
 function cached(path, data, ttlSec) {
-  const key = path + '|' + JSON.stringify(data || {});
+  const key = _v() + path + '|' + JSON.stringify(data || {});
   const hit = cache.get(key, ttlSec);
   if (hit !== null && hit !== undefined) return Promise.resolve(hit);
   // inflight 去重：已有相同请求在进行中，复用其 Promise
@@ -175,7 +182,7 @@ const refreshInFlight = {};
 //   - 已过期/无缓存：正常拉取
 // 与 cached() 返回形态一致（仅 resolve 业务数据），调用方无需改动取值逻辑。
 function cachedFresh(path, data, freshSec, ttlSec) {
-  const key = path + '|' + JSON.stringify(data || {});
+  const key = _v() + path + '|' + JSON.stringify(data || {});
   const meta = cache.getStale(key, freshSec, ttlSec);
   if (meta.expired || !meta.value) {
     return request(path, data).then((data) => {
@@ -233,7 +240,7 @@ function fetchMatchDelta(resource, id, cursor) {
 
 // 增量版 cachedFresh：resPath 为直连全量端点（首次/硬过期用）；resource/id 用于游标增量。
 function cachedFreshIncremental(resPath, resource, id, freshSec, ttlSec) {
-  const key = resPath + '|{}';
+  const key = _v() + resPath + '|{}';
   const meta = cache.getStale(key, freshSec, ttlSec);
   if (meta.expired || !meta.value) {
     return request(resPath).then((data) => {

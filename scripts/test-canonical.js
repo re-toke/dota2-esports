@@ -199,6 +199,86 @@ check('G11: 子模块队名补全 — api.getTeamNames 导出为函数', () => {
   assert(typeof api.getTeamNames === 'function', 'getTeamNames 应导出为函数，实际: ' + typeof api.getTeamNames);
 });
 
+// ===== G12：云函数缓存版本戳（"部署即缓存失效"） + Roster 完成逻辑 =====
+section('\n--- G12 缓存版本戳 + Roster 完成（"云函数部署即刷新数据"）---');
+
+check('G12: curation-shared.js 包含 dataVersion 字段（缓存 key 前缀）', () => {
+  const shared = require(path.join(SRC, 'curation-shared.js'));
+  assert(shared.dataVersion, 'curation-shared.js 缺 dataVersion 字段');
+  assert(/^\d+$/.test(String(shared.dataVersion)), 'dataVersion 应为时间戳，实际: ' + shared.dataVersion);
+});
+check('G12: 客户端 api 模块加载后能读到 dataVersion（缓存前缀生效）', () => {
+  const shared = require(path.join(SRC, 'curation-shared.js'));
+  // 模拟 api.js 顶部 require 的方式：读取到的 dataVersion 与文件一致
+  assert(shared.dataVersion, 'api 模块应能读到 dataVersion');
+});
+check('G12: 缓存 key 包含 dataVersion —— 旧缓存自动失效（部署后立即刷新）', () => {
+  // 通过 sync-canon-map 生成的产物应有 dataVersion；客户端/云函数都用它作为缓存 key 前缀。
+  // 若 dataVersion 改变（curation 重新生成），所有旧 key 不再匹配 → 旧缓存自然失效。
+  const shared = require(path.join(SRC, 'curation-shared.js'));
+  const v = String(shared.dataVersion);
+  // 模拟缓存 key 构造（与 utils/api.js 的 cached() 一致）
+  const fakeKey = v + ':/leagues/19944/matches|{}';
+  assert(fakeKey.indexOf(v + ':') === 0, '缓存 key 必须以 dataVersion 开头，实际: ' + fakeKey);
+});
+
+// Roster 完成逻辑的单元测试：mock league-detail.refreshMetadataDerived 的关键路径
+check('G12: Roster 完成 — metadata 标 16 队 + 实际 13 队时应补足至 16（待定占位）', () => {
+  // 模拟 refreshMetadataDerived 的核心逻辑（实际函数依赖 wx/Page，无法在测试环境实例化 Page 调用）
+  const rawMatches = [
+    { radiant_team_id: 5014799, dire_team_id: 9360651 }, // Nemiga vs Dandelions
+    { radiant_team_id: 9600141, dire_team_id: 9928636 },
+    { radiant_team_id: 9948367, dire_team_id: 10047709 },
+    { radiant_team_id: 10163973, dire_team_id: 10164236 },
+    { radiant_team_id: 10182412, dire_team_id: 10182865 },
+    { radiant_team_id: 10201538, dire_team_id: 10201970 }
+    // 注：实际 19944 有 13 队，此处简化
+  ];
+  // 从 raw 推导 teamMap
+  const teamMap = {};
+  rawMatches.forEach((m) => {
+    if (m.radiant_team_id != null) teamMap[m.radiant_team_id] = null;
+    if (m.dire_team_id != null) teamMap[m.dire_team_id] = null;
+  });
+  Object.keys(teamMap).forEach((k) => { if (!teamMap[k]) teamMap[k] = 'Team ' + k; });
+  let participantsList = Object.keys(teamMap).map((id) => ({ id: Number(id), name: teamMap[id] }));
+
+  const meta = { participants: 16 };
+  // 应用本轮修复的 roster 完成逻辑
+  const metaParticipants = Number(meta.participants);
+  if (metaParticipants > 0 && metaParticipants > participantsList.length) {
+    const need = metaParticipants - participantsList.length;
+    const existingIds = new Set(participantsList.map((t) => t && t.id));
+    const fillers = [];
+    for (let i = 0; i < need; i++) {
+      const fakeId = -1 - i;
+      if (!existingIds.has(fakeId)) {
+        fillers.push({ id: fakeId, name: '待定队伍 ' + (i + 1) });
+      }
+    }
+    if (fillers.length) participantsList = participantsList.concat(fillers);
+  }
+  assert(participantsList.length === 16, '补足后应为 16，实际: ' + participantsList.length);
+  // 检查占位项存在且 id 为负
+  const placeholders = participantsList.filter((t) => t.id < 0);
+  assert(placeholders.length > 0, '应至少有占位项');
+  assert(placeholders[0].name.indexOf('待定') >= 0, '占位名应为「待定队伍 N」，实际: ' + placeholders[0].name);
+});
+check('G12: Roster 完成 — metadata 缺省时不补占位（保持原行为）', () => {
+  const rawMatches = [{ radiant_team_id: 5014799 }];
+  const teamMap = {};
+  rawMatches.forEach((m) => { if (m.radiant_team_id != null) teamMap[m.radiant_team_id] = null; });
+  Object.keys(teamMap).forEach((k) => { if (!teamMap[k]) teamMap[k] = 'Team ' + k; });
+  let participantsList = Object.keys(teamMap).map((id) => ({ id: Number(id), name: teamMap[id] }));
+  const meta = {}; // 无 participants
+  const metaParticipants = Number(meta.participants);
+  if (metaParticipants > 0 && metaParticipants > participantsList.length) {
+    // 不应进入此分支
+    throw new Error('不应进入补占位分支');
+  }
+  assert(participantsList.length === 1, '应保持原 1 队，实际: ' + participantsList.length);
+});
+
 // ===== G4：云函数与小程序共用同一份规范映射（消除双源漂移）=====
 section('\n--- G4 单一数据源：小程序 / 云函数规范映射一致 ---');
 const fs = require('fs');

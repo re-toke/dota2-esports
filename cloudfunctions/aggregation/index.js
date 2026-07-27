@@ -61,13 +61,20 @@ const TTL = {
 };
 
 // ===== 缓存操作（可选，依赖 cloud DB collection） =====
+// 2026-07-27：缓存 key 加 dataVersion 前缀。dataVersion 由 utils/curation-shared.js 输出，
+// 每次 scripts/sync-canon-map.js 运行即更新。语义：curation/代码变更后云函数重新部署，
+// 新 dataVersion 使所有旧缓存 key 自动失效，相当于"代码部署即缓存失效"，
+// 根治"云函数部署后数据未正确更新"的根因（旧 cloud DB 缓存跨部署持久化）。
+function _v() {
+  try { return (require('./curation-shared').dataVersion || '0') + ':'; } catch (e) { return '0:'; }
+}
 async function getCache(key) {
   try {
     const db = cloud.database();
-    const res = await db.collection(CACHE_COLL).doc(key).get();
+    const res = await db.collection(CACHE_COLL).doc(_v() + key).get();
     const item = res && res.data;
     if (item && item.expire > Date.now()) return item.data;
-    if (item) db.collection(CACHE_COLL).doc(key).remove().catch(() => {});
+    if (item) db.collection(CACHE_COLL).doc(_v() + key).remove().catch(() => {});
   } catch (e) {}
   return null;
 }
@@ -76,7 +83,7 @@ async function setCache(key, data, ttlMs) {
   try {
     const db = cloud.database();
     const expire = Date.now() + (ttlMs || 30 * 60 * 1000);
-    await db.collection(CACHE_COLL).doc(key).set({
+    await db.collection(CACHE_COLL).doc(_v() + key).set({
       data: data,
       expire: expire,
       fetchedAt: Date.now()
