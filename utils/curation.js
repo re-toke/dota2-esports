@@ -29,9 +29,12 @@ const CURATED_EVENTS = [
     aliases: ['theinternational2022', 'ti2022', 'international2022'], year: 2022 },
   // TI15 (The International 2026)：2026-08-13 ~ 2026-08-23（含小组赛+主赛事），上海
   // 来源：Liquipedia The_International/2026 + Valve 官方公告
+  // 补充字段（2026-07-25）：奖金池/地点/Valve 标记，供「赛事」tab 焦点卡与详情页 curation 兜底使用。
   { canonical: 'The International 2026', tier: { grade: 'SSS', rank: 4, label: 'TI 顶级' },
     aliases: ['theinternational2026', 'ti2026', 'international2026', 'ti15'], year: 2026,
-    start: Math.floor(Date.UTC(2026, 7, 13) / 1000), end: Math.floor(Date.UTC(2026, 7, 23) / 1000) },
+    start: Math.floor(Date.UTC(2026, 7, 13) / 1000), end: Math.floor(Date.UTC(2026, 7, 23) / 1000),
+    prizePool: '$1,600,000', organizer: 'Valve', region: '中国上海', format: '小组赛+双败淘汰',
+    participants: 16, status: '即将到来', liquipediaSlug: 'The_International/2026', valve: true, topThirdParty: false },
 
   // ── 知名 S 级（顶级第三方 S-Tier 巡回赛）2024 ──
   // 2024 起统一 $1M 级奖金，是 Dota2 职业生态骨架
@@ -88,11 +91,29 @@ const CURATED_EVENTS = [
   // ── 2026 ──
   // DreamLeague Season 26：2026 上半年 ESL Pro Tour 赛事（已举办）
   { canonical: 'DreamLeague Season 26', tier: { grade: 'S', rank: 3, label: 'S级' },
-    aliases: ['dreamleagueseason26', 'dreamleague26', 'dl2026s26'], year: 2026 },
+    aliases: ['dreamleagueseason26', 'dreamleague26', 'dl2026s26'], year: 2026,
+    prizePool: '$1,000,000', organizer: 'ESL', region: '欧洲', format: '双败淘汰',
+    participants: 16, status: '已结束', liquipediaSlug: 'DreamLeague/Season_26',
+    valve: false, topThirdParty: false },
   // 2026 电竞世界杯 DOTA2 项目：7月6日-8月23日，利雅得（顶级第三方，S 级）
   { canonical: 'Esports World Cup 2026', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['esportsworldcup2026', 'ewc2026', 'ewcdota2026'], year: 2026,
-    start: Math.floor(Date.UTC(2026, 6, 6) / 1000), end: Math.floor(Date.UTC(2026, 7, 23) / 1000) },
+    start: Math.floor(Date.UTC(2026, 6, 6) / 1000), end: Math.floor(Date.UTC(2026, 7, 23) / 1000),
+    prizePool: '$1,000,000', organizer: 'ESL / Savvy Games', region: '沙特阿拉伯·利雅得', format: '循环小组赛 + 单败淘汰附加赛',
+    participants: 16, status: '已结束', liquipediaSlug: 'Esports_World_Cup/2026/Dota_2',
+    valve: false, topThirdParty: true },
+  // EPL Masters I（ESL / European Pro League Masters 第一季）：DOTA2 线上赛事
+  // ⚠️ 注意：CS2 也有同名「EPL Masters 2026」（=ESL Pro League Season 24/EPT Masters），
+  //   10月波兰线下、$1M 奖金。两者名称极易混淆，本条目仅限 DOTA2。
+  //   OpenDota 中该联赛名显示为「EPL Masters 2026」，Liquipedia 标准名为「EPL Masters I」。
+  //   数据源交叉验证：Liquipedia + GosuGamers + e-rankings + Offstage（2026-07-27 确认）。
+  { canonical: 'EPL Masters I', tier: { grade: 'A', rank: 8, label: 'A-Tier' },
+    aliases: ['eplmasters2026', 'eplmasters', 'eplmasters1', 'epl2026', 'epl masters i'], year: 2026,
+    start: Math.floor(Date.UTC(2026, 6, 20) / 1000), end: Math.floor(Date.UTC(2026, 7, 12) / 1000),
+    prizePool: '$100,000', organizer: 'ESL / EPL', region: '欧洲/CIS · 线上',
+    format: '小组赛(Bo3) + 双败淘汰(Bo3/Bo5决赛)',
+    participants: 16, status: '进行中', liquipediaSlug: 'EPL/Masters/I',
+    valve: false, topThirdParty: true },
 
   // ── 2026 下半年即将到来（Tier 1，来源：Liquipedia Tournaments，已核实日期）──
   // 这些赛事在 OpenDota /leagues 中尚无比赛记录（未开赛），只能靠 curation 进入"即将到来" tab。
@@ -100,19 +121,31 @@ const CURATED_EVENTS = [
   // PGL Wallachia Season 9：9月17-27日，布加勒斯特，$1,000,000
   { canonical: 'PGL Wallachia Season 9', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['pglwallachiaseason9', 'pglwallachia9', 'wallachia2026', 'pglwallachia2026'], year: 2026,
-    start: 1789603200, end: 1790467200 },
+    start: 1789603200, end: 1790467200,
+    prizePool: '$1,000,000', organizer: 'PGL', region: '罗马尼亚·布加勒斯特', format: '双败淘汰',
+    participants: 16, status: '即将到来', liquipediaSlug: 'PGL/Wallachia/9',
+    valve: false, topThirdParty: false },
   // BLAST SLAM VIII：9月29日-10月11日，欧洲/马耳他，$750,000
   { canonical: 'BLAST SLAM VIII', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['blastslamviii', 'blastslam8', 'blastslam2026viii', 'blast2026s8'], year: 2026,
-    start: 1790640000, end: 1791676800 },
+    start: 1790640000, end: 1791676800,
+    prizePool: '$750,000', organizer: 'BLAST', region: '马耳他', format: '双败淘汰',
+    participants: 12, status: '即将到来', liquipediaSlug: 'BLAST/Slam/8',
+    valve: false, topThirdParty: false },
   // Esports Nations Cup 2026：11月2-8日，利雅得，$1,500,000（国家级 Tier 1）
   { canonical: 'Esports Nations Cup 2026', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['esportsnationscup2026', 'enc2026', 'nationscup2026'], year: 2026,
-    start: 1793577600, end: 1794096000 },
+    start: 1793577600, end: 1794096000,
+    prizePool: '$1,500,000', organizer: 'ESL / Savvy Games', region: '沙特阿拉伯·利雅得', format: '双败淘汰',
+    participants: 8, status: '即将到来', liquipediaSlug: 'Esports_Nations_Cup/2026',
+    valve: false, topThirdParty: true },
   // BLAST SLAM IX：11月17-29日，欧洲，$750,000
   { canonical: 'BLAST SLAM IX', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['blastslamix', 'blastslam9', 'blastslam2026ix', 'blast2026s9'], year: 2026,
-    start: 1794873600, end: 1795910400 },
+    start: 1794873600, end: 1795910400,
+    prizePool: '$750,000', organizer: 'BLAST', region: '欧洲', format: '双败淘汰',
+    participants: 12, status: '即将到来', liquipediaSlug: 'BLAST/Slam/9',
+    valve: false, topThirdParty: false },
 
   // ── B 级（B-Tier 区域联赛 + 次级国际赛）──
   { canonical: 'Games of the Future 2024', tier: { grade: 'B', rank: 1, label: 'B级' },
@@ -288,53 +321,60 @@ const CURATED_EVENTS = [
 //   - { grade: 'SSS', label: 'TI 参赛' }：历届 TI 主赛事参赛队
 //   - { grade: 'S',   label: 'S-Tier' }：长期活跃于 S 级赛事的顶级战队
 //   - 缺省：未标注，按普通战队处理
+// ⚠️ 重要：team_id 为 OpenDota 当前真实 id（2026-07 经 /teams/{id} + proMatches 对手反查逐项核验）。
+// OpenDota 会**复用** team_id，旧 id 已指向完全不同的队（例如 1333179 现为 2017 死数据、
+// 2163 现为 Team Liquid、111474 实为 Alliance）。故每隔版本需重新核验，详见项目记忆。
+// 标注「⚠️待复核」的 2 支（BetBoom/PARIVISION）因 OpenDota /search 与 /teams 分页受限
+// 无法自动解析正确 id，其详情可能仍不准确，需手动补正。（Fnatic 1375614 已校正为 Newbee，HOT_TEAMS 替换为 TL 2163）
 const CURATED_TEAMS = {
-  15:       { name: 'LGD Gaming', tag: 'LGD', country: 'CN', tier: { grade: 'S', label: 'S-Tier' },
+  10150538: { name: 'LGD Gaming', tag: 'LGD', country: 'CN', tier: { grade: 'S', label: 'S-Tier' },
               aliases: ['lgd', 'lgdgaming', 'psglgd'] },
   7119388:  { name: 'Team Spirit', tag: 'TS', country: 'RU', tier: { grade: 'SSS', label: 'TI 参赛' },
               aliases: ['teamspirit', 'spirit'] },
   36:       { name: 'Natus Vincere', tag: 'NAVI', country: 'UA', tier: { grade: 'SSS', label: 'TI 参赛' },
               aliases: ['natusvincere', 'navi'] },
-  1838312:  { name: 'OG', tag: 'OG', country: 'EU', tier: { grade: 'SSS', label: 'TI 参赛' },
+  2586976:  { name: 'OG', tag: 'OG', country: 'EU', tier: { grade: 'SSS', label: 'TI 参赛' },
               aliases: ['og'] },
-  2163:     { name: 'Team Secret', tag: 'SEC', country: 'EU', tier: { grade: 'S', label: 'S-Tier' },
-              aliases: ['teamsecret', 'secret'] },
-  8336801:  { name: 'Tundra Esports', tag: 'TUN', country: 'EU', tier: { grade: 'SSS', label: 'TI 参赛' },
-              aliases: ['tundra', 'tundraesports'] },
-  7090336:  { name: 'Gaimin Gladiators', tag: 'GG', country: 'EU', tier: { grade: 'SSS', label: 'TI 参赛' },
-              aliases: ['gaimingladiators', 'gg'] },
-  1375614:  { name: 'Fnatic', tag: 'FNC', country: 'MY', tier: { grade: 'SSS', label: 'TI 参赛' },
-              aliases: ['fnatic'] },
-  1369577:  { name: 'Evil Geniuses', tag: 'EG', country: 'US', tier: { grade: 'SSS', label: 'TI 参赛' },
-              aliases: ['evilgeniuses', 'eg'] },
-  2506989:  { name: 'PSG.LGD', tag: 'PSG', country: 'CN', tier: { grade: 'SSS', label: 'TI 参赛' },
-              aliases: ['psglgd', 'psgldg'] },
-  2586976:  { name: 'Team Liquid', tag: 'TL', country: 'NL', tier: { grade: 'SSS', label: 'TI 参赛' },
+  2163:     { name: 'Team Liquid', tag: 'TL', country: 'NL', tier: { grade: 'SSS', label: 'TI 参赛' },
               aliases: ['teamliquid', 'liquid'] },
-  111474:   { name: 'Virtus.pro', tag: 'VP', country: 'RU', tier: { grade: 'SSS', label: 'TI 参赛' },
+  1838315:  { name: 'Team Secret', tag: 'SEC', country: 'EU', tier: { grade: 'S', label: 'S-Tier' },
+              aliases: ['teamsecret', 'secret'] },
+  8291895:  { name: 'Tundra Esports', tag: 'TUN', country: 'EU', tier: { grade: 'SSS', label: 'TI 参赛' },
+              aliases: ['tundra', 'tundraesports'] },
+  8599101:  { name: 'Gaimin Gladiators', tag: 'GG', country: 'EU', tier: { grade: 'SSS', label: 'TI 参赛' },
+              aliases: ['gaimingladiators', 'gg'] },
+  // 注：1375614 = Newbee（已解散，2020 年后无比赛）；原误标为 Fnatic 已校正。
+  // Fnatic DOTA2 分部已于 2023-02 解散，HOT_TEAMS 中已替换为 Team Liquid(2163)。
+  1375614:  { name: 'Newbee', tag: 'NB', country: 'CN', tier: { grade: 'A', label: '历史战队' },
+              aliases: ['newbee'] },
+  8255756:  { name: 'Evil Geniuses', tag: 'EG', country: 'US', tier: { grade: 'SSS', label: 'TI 参赛' },
+              aliases: ['evilgeniuses', 'eg'] },
+  9580444:  { name: 'PSG.LGD', tag: 'PSG', country: 'CN', tier: { grade: 'SSS', label: 'TI 参赛' },
+              aliases: ['psglgd', 'psgldg'] },
+  9895392:  { name: 'Virtus.pro', tag: 'VP', country: 'RU', tier: { grade: 'SSS', label: 'TI 参赛' },
               aliases: ['virtuspro', 'vp'] },
-  543897:   { name: 'Alliance', tag: 'ALL', country: 'SE', tier: { grade: 'SSS', label: 'TI 参赛' },
+  111474:   { name: 'Alliance', tag: 'ALL', country: 'SE', tier: { grade: 'SSS', label: 'TI 参赛' },
               aliases: ['alliance'] },
-  350190:   { name: 'Nigma Galaxy', tag: 'NGX', country: 'EU', tier: { grade: 'SSS', label: 'TI 参赛' },
-              aliases: ['nigma', 'nigmagalaxy'] },
+  10136357: { name: 'Nigma Galaxy', tag: 'NGX', country: 'EU', tier: { grade: 'SSS', label: 'TI 参赛' },
+              aliases: ['nigma', 'nigmagalaxy', 'nigmagx'] },  // 合并原 350190 + 8124688
   7262280:  { name: 'BetBoom Team', tag: 'BB', country: 'RU', tier: { grade: 'S', label: 'S-Tier' },
-              aliases: ['betboom', 'betboomteam'] },
-  1333179:  { name: 'Xtreme Gaming', tag: 'XG', country: 'CN', tier: { grade: 'SSS', label: 'TI 参赛' },
+              aliases: ['betboom', 'betboomteam'] },   // ⚠️待复核：id 待替换正确值
+  8261500:  { name: 'Xtreme Gaming', tag: 'XG', country: 'CN', tier: { grade: 'SSS', label: 'TI 参赛' },
               aliases: ['xtremegaming', 'xg', 'extremegaming'] },
-  5026801:  { name: 'Azure Ray', tag: 'AR', country: 'CN', tier: { grade: 'S', label: 'S-Tier' },
+  8574561:  { name: 'Azure Ray', tag: 'AR', country: 'CN', tier: { grade: 'S', label: 'S-Tier' },
               aliases: ['azureray', 'ar'] },
-  7390454:  { name: 'Aurora Gaming', tag: 'AUR', country: 'TH', tier: { grade: 'S', label: 'S-Tier' },
+  9467224:  { name: 'Aurora Gaming', tag: 'AUR', country: 'TH', tier: { grade: 'S', label: 'S-Tier' },
               aliases: ['aurora', 'auroragaming'] },
-  8291895:  { name: 'Team Falcons', tag: 'FAL', country: 'SA', tier: { grade: 'SSS', label: 'TI 参赛' },
+  9247354:  { name: 'Team Falcons', tag: 'FAL', country: 'SA', tier: { grade: 'SSS', label: 'TI 参赛' },
               aliases: ['falcons', 'teamfalcons'] },
-  8124688:  { name: 'Nigma Galaxy', tag: 'NGX', country: 'AE', tier: { grade: 'S', label: 'S-Tier' },
-              aliases: ['nigmagx', 'nigma'] },
   8260824:  { name: 'PARIVISION', tag: 'PARI', country: 'RU', tier: { grade: 'S', label: 'S-Tier' },
-              aliases: ['parivision'] },
-  6209804:  { name: 'MOUZ', tag: 'MOUZ', country: 'DE', tier: { grade: 'S', label: 'S-Tier' },
+              aliases: ['parivision'] },   // ⚠️待复核：id 待替换正确值
+  9338413:  { name: 'MOUZ', tag: 'MOUZ', country: 'DE', tier: { grade: 'S', label: 'S-Tier' },
               aliases: ['mouz'] },
-  8137231:  { name: 'Talon Esports', tag: 'TLN', country: 'TH', tier: { grade: 'S', label: 'S-Tier' },
-              aliases: ['talon', 'talonesports'] }
+  9766941:  { name: 'Talon Esports', tag: 'TLN', country: 'TH', tier: { grade: 'S', label: 'S-Tier' },
+              aliases: ['talon', 'talonesports', 'flipstertalon'] },  // OpenDota 现名 FLIPSTER TALON
+  726228:   { name: 'Vici Gaming', tag: 'VG', country: 'CN', tier: { grade: 'S', label: 'S-Tier' },
+              aliases: ['vici', 'vici gaming', 'vg'] }               // 中国老牌战队，多届 TI 参赛 + EWC 2026 参赛
 };
 
 // ===== 历届 TI 参赛队 ID 集合（2022-2026 主赛事）=====
@@ -343,16 +383,16 @@ const CURATED_TEAMS = {
 // 注：同一战队 ID 跨届复用，这里合并去重。
 const TI_CONTESTANT_TEAM_IDS = [
   // TI 2022 (Singapore)
-  15, 7119388, 1838312, 2163, 7090336, 1375614, 2586976, 111474, 543897, 350190,
+  10150538, 7119388, 2586976, 1838315, 8599101, 2163, 111474, 10136357,
   8240186, 8252383, 8260824, 8572539, 8444661, 8654067, 8669264, 21,
   // TI 2023 (Seattle)
-  15, 7119388, 1838312, 2163, 8336801, 7090336, 2586976, 350190, 8252383, 3925770,
-  8444661, 8252383, 8291895, 8572539, 8609307, 8655479, 8210156, 39,
+  10150538, 7119388, 2586976, 1838315, 8291895, 8599101, 2163, 10136357, 8252383, 3925770,
+  8444661, 8252383, 9247354, 8572539, 8609307, 8655479, 8210156, 39,
   // TI 2024 (Copenhagen)
-  15, 7119388, 1838312, 8336801, 7090336, 1375614, 2586976, 111474, 350190, 7262280,
-  1333179, 8291895, 8260824, 8377730, 8210156, 8609307,
+  10150538, 7119388, 2586976, 8291895, 8599101, 2163, 111474, 10136357, 7262280,
+  8261500, 9247354, 8260824, 8377730, 8210156, 8609307,
   // TI 2026 (Shanghai, 已确认参赛队)
-  15, 7119388, 8336801, 7090336, 2586976, 1333179, 8291895, 7262280, 8260824
+  10150538, 7119388, 8291895, 8599101, 2163, 8261500, 9247354, 7260824
 ];
 // 构建 Set 用于 O(1) 查询
 const TI_CONTESTANT_TEAM_SET = (function () {
