@@ -1,4 +1,4 @@
-<view class="container">
+<view class="container with-tab-bar">
   <!-- 品牌标识栏 -->
   <view class="brand-header">
     <view class="brand-logo brand-logo--sm" />
@@ -8,39 +8,100 @@
     </view>
   </view>
 
-  <view class="search-wrap">
-    <t-search
-      value="{{keyword}}"
-      placeholder="搜索赛事名称"
-      bind:change="onSearch"
-      bind:clear="onSearch"
-    />
+  <!-- 焦点卡：重点运营节点（TI15 2026 上海 · Valve 官方年度旗舰） -->
+  <view wx:if="{{focusNode}}" class="focus-card {{focusNode.isLive ? 'focus-card--live' : ''}}" bindtap="openFocus" data-id="{{focusNode.leagueid}}" data-name="{{focusNode.name}}" hover-class="tap-scale">
+    <view class="focus-glow" />
+    <view class="focus-top">
+      <view class="focus-badges">
+        <text class="focus-valve">Valve 官方</text>
+        <text class="focus-flag">年度旗舰</text>
+        <text wx:if="{{focusNode.isLive}}" class="focus-live">● 进行中</text>
+      </view>
+      <view class="star-btn focus-star" catchtap="toggleFollow" data-id="{{focusNode.leagueid}}" data-name="{{focusNode.name}}">
+        <t-icon name="star" size="44rpx" color="{{focusNode.followed ? '#ffcf5c' : '#5b626d'}}" />
+      </view>
+    </view>
+    <view class="focus-title">The International 2026</view>
+    <view class="focus-sub">国际邀请赛 · {{focusNode.location}} · 第15届</view>
+    <view class="focus-meta">
+      <text class="focus-date">{{focusNode.dateRange}}</text>
+      <text class="focus-prize" wx:if="{{focusNode.prizePool}}">{{focusNode.prizePool}}</text>
+    </view>
+    <view class="focus-countdown" wx:if="{{!focusNode.isLive}}">
+      <text class="cd-num">{{focusNode.daysToStart}}</text>
+      <text class="cd-unit">天后开赛</text>
+    </view>
+    <view class="focus-countdown focus-countdown--live" wx:else>
+      <text class="cd-live">TI15 正赛进行中</text>
+    </view>
+    <view class="focus-cta">查看赛事详情 →</view>
   </view>
 
-  <!-- 筛选条 + 新鲜度（B 风格 · 移动友好 chips） -->
+  <!-- B 版 · 顶部工具条：状态常驻 + 筛选抽屉入口（原 4 行筛选 → 1 行常驻） -->
   <view class="filter-bar">
-    <view class="chip {{filter==='all'?'active':''}}" data-f="all" bindtap="onFilter">全部</view>
-    <view class="chip {{filter==='ongoing'?'active':''}}" data-f="ongoing" bindtap="onFilter">正在进行</view>
-    <view class="chip {{filter==='upcoming'?'active':''}}" data-f="upcoming" bindtap="onFilter">即将到来</view>
-    <view class="chip {{filter==='ended'?'active':''}}" data-f="ended" bindtap="onFilter">已结束</view>
+    <scroll-view scroll-x class="chip-scroll" enhanced show-scrollbar="{{false}}">
+      <view class="chip-group">
+        <view class="chip {{filter==='all'?'active':''}}" data-f="all" bindtap="onFilter">全部</view>
+        <view class="chip {{filter==='ongoing'?'active':''}}" data-f="ongoing" bindtap="onFilter">进行中</view>
+        <view class="chip {{filter==='upcoming'?'active':''}}" data-f="upcoming" bindtap="onFilter">即将</view>
+        <view class="chip {{filter==='ended'?'active':''}}" data-f="ended" bindtap="onFilter">已结束</view>
+      </view>
+    </scroll-view>
+    <view class="filter-toggle {{activeFilterCount ? 'filter-toggle--active' : ''}}" bindtap="openFilterPanel">
+      <t-icon name="filter" size="28rpx" />
+      <text class="ft-text">筛选</text>
+      <view wx:if="{{activeFilterCount}}" class="filter-badge">{{activeFilterCount}}</view>
+    </view>
   </view>
 
-  <!-- 等级筛选条（第二行）：纯字母标签 + 品牌色渐变 + 精致选中态 -->
-  <view class="grade-bar">
-    <view class="gc {{gradeFilter==='all'?'gc--active':''}} gc--all" data-g="all" bindtap="onGradeFilter">
-      <text class="gc__label">ALL</text>
-    </view>
-    <view class="gc {{gradeFilter==='sss'?'gc--active':''}} gc--sss" data-g="sss" bindtap="onGradeFilter">
-      <text class="gc__label">SSS</text>
-    </view>
-    <view class="gc {{gradeFilter==='s'?'gc--active':''}} gc--s" data-g="s" bindtap="onGradeFilter">
-      <text class="gc__label">S</text>
-    </view>
-    <view class="gc {{gradeFilter==='a'?'gc--active':''}} gc--a" data-g="a" bindtap="onGradeFilter">
-      <text class="gc__label">A</text>
-    </view>
-    <view class="gc {{gradeFilter==='b'?'gc--active':''}} gc--b" data-g="b" bindtap="onGradeFilter">
-      <text class="gc__label">B</text>
+  <!-- B-1 筛选抽屉：等级 / 排序 / 视图 / 战队 收拢于此 -->
+  <view wx:if="{{filterPanel}}" class="fp-mask" bindtap="closeFilterPanel">
+    <view class="fp-sheet" catchtap="noop">
+      <view class="fp-head">
+        <text class="fp-title">筛选</text>
+        <text class="fp-reset" bindtap="resetFilters">重置</text>
+      </view>
+
+      <view class="fp-section">
+        <text class="fp-label">等级</text>
+        <view class="gc-row">
+          <view class="gc {{gradeFilter==='all'?'gc--active':''}} gc--all" data-g="all" bindtap="onGradeFilter"><text class="gc__label">ALL</text></view>
+          <view class="gc {{gradeFilter==='sss'?'gc--active':''}} gc--sss" data-g="sss" bindtap="onGradeFilter"><text class="gc__label">SSS</text></view>
+          <view class="gc {{gradeFilter==='s'?'gc--active':''}} gc--s" data-g="s" bindtap="onGradeFilter"><text class="gc__label">S</text></view>
+          <view class="gc {{gradeFilter==='a'?'gc--active':''}} gc--a" data-g="a" bindtap="onGradeFilter"><text class="gc__label">A</text></view>
+          <view class="gc {{gradeFilter==='b'?'gc--active':''}} gc--b" data-g="b" bindtap="onGradeFilter"><text class="gc__label">B</text></view>
+        </view>
+      </view>
+
+      <view class="fp-section">
+        <text class="fp-label">排序</text>
+        <view class="seg-row">
+          <view class="seg {{sortMode==='smart'?'seg--active':''}}" data-m="smart" bindtap="onToggleSort"><t-icon name="filter" size="26rpx" />智能</view>
+          <view class="seg {{sortMode==='time'?'seg--active':''}}" data-m="time" bindtap="onToggleSort"><t-icon name="sort" size="26rpx" />时间</view>
+        </view>
+      </view>
+
+      <view class="fp-section">
+        <text class="fp-label">视图</text>
+        <view class="seg-row">
+          <view class="seg {{viewMode==='list'?'seg--active':''}}" data-m="list" bindtap="onToggleView"><t-icon name="list" size="26rpx" />列表</view>
+          <view class="seg {{viewMode==='week'?'seg--active':''}}" data-m="week" bindtap="onToggleView"><t-icon name="calendar" size="26rpx" />周轴</view>
+        </view>
+      </view>
+
+      <view class="fp-section">
+        <text class="fp-label">战队</text>
+        <view class="team-filter-btn {{teamActive ? 'team-filter-btn--active' : ''}}" bindtap="openTeamFilter">
+          <text class="tf-label">战队筛选</text>
+          <view wx:if="{{teamFilter.length}}" class="tf-badge">{{teamFilter.length}}</view>
+          <t-icon name="chevron-right" size="28rpx" color="#9aa4b2" />
+        </view>
+        <text class="tf-hint" wx:if="{{!teamOptions.length}}">关注战队后即可按战队筛赛</text>
+      </view>
+
+      <view class="fp-foot">
+        <view class="fp-btn fp-btn--confirm" bindtap="closeFilterPanel">完成</view>
+      </view>
     </view>
   </view>
 
@@ -64,9 +125,9 @@
 
   <!-- 即将到来为空：赛程来自 STRATZ / Liquipedia（云端代理），本地精选兜底 -->
   <view wx:elif="{{filter==='upcoming' && list.length === 0}}" class="empty-hint">
-    <t-empty icon="info-circle" description="无法获取即将到来的赛程数据" />
+    <t-empty icon="info-circle" description="即将到来的赛程暂时为空" />
     <view class="hint-card-enhanced">
-      <view class="hint-title">赛程数据来自 STRATZ / Liquipedia（云端代理）</view>
+      <view class="hint-title">启用 STRATZ 即可获取更多即将到来的赛程</view>
       <view class="hint-desc">即将到来的赛事主要来自 STRATZ 或 Liquipedia 实时数据（经云函数聚合，无需客户端持有 key）。若云端未部署或网络不可用，已知重大赛事（如 TI 2026）仍会通过本地精选兜底展示。</view>
       <view class="hint-step">在云函数 aggregation 配置 STRATZ_API_KEY 与 Liquipedia 代理即可启用实时赛程。</view>
       <view class="hint-step">免费申请 STRATZ key：stratz.com/api</view>
@@ -74,13 +135,17 @@
   </view>
 
   <empty-state
-    wx:elif="{{list.length === 0}}"
+    wx:elif="{{viewMode === 'list' && list.length === 0}}"
     type="empty"
     title="{{filter==='upcoming' ? '暂无未来两个月内开赛的赛事' : '暂无符合条件的赛事'}}"
-    desc="试试切换筛选条件或下拉刷新"
+    desc="{{teamActive ? '所选战队近期暂无匹配的赛事' : '试试切换筛选条件或下拉刷新'}}"
+    actionText="{{teamActive ? '清除筛选' : ''}}"
+    bind:action="onEmptyAction"
   />
 
   <block wx:else>
+    <!-- 列表视图（默认） -->
+    <block wx:if="{{viewMode === 'list'}}">
     <view
       class="league-item {{item.tierClass}} anim-fade-up"
       wx:for="{{list}}"
@@ -93,7 +158,7 @@
     >
       <view class="league-main">
         <view class="league-name-row">
-          <text class="league-name">{{item.name}}</text>
+          <text class="league-name">{{item.displayName || item.name}}</text>
           <view class="league-badges">
             <t-tag theme="{{item.tagTheme}}" variant="{{item.tagVariant}}" size="small">{{item.displayLabel}}</t-tag>
             <text wx:if="{{item.valve}}" class="hl-badge hl-valve">Valve官方</text>
@@ -102,17 +167,17 @@
             <text wx:if="{{!item.defunct}}" class="status-tag" style="color:{{item.statusColor}};border-color:{{item.statusColor}}">{{item.statusText}}</text>
           </view>
         </view>
-        <view class="league-sub muted" wx:if="{{item.dateRange || item.matchCount}}">
+        <!-- B-2 表格化：日期/场次/来源合并一行，去掉独立来源块 -->
+        <view class="league-sub muted">
           <text class="date-range" wx:if="{{item.dateRange}}">{{item.dateRange}}</text>
           <text wx:if="{{item.matchCount}}"> · {{item.matchCount}} 场</text>
+          <text class="src-inline src-{{item.source === 'community' ? 'curation' : (item.source === 'liquipedia' ? 'liquipedia' : (item.source === 'stratz' ? 'stratz' : 'opendota'))}}">{{item.source === 'community' ? '社区分级' : (item.source === 'liquipedia' ? 'Liquipedia' : (item.source === 'stratz' ? 'STRATZ' : 'OpenDota'))}}</text>
         </view>
         <!-- 即将到来：突出显示倒计时 -->
         <view class="league-countdown" wx:if="{{filter === 'upcoming' && item.countdownText}}">
           <text class="countdown-text">{{item.countdownText}}</text>
         </view>
-        <view class="league-source-row">
-          <text class="src-badge src-{{item.source === 'community' ? 'curation' : (item.source === 'liquipedia' ? 'liquipedia' : (item.source === 'stratz' ? 'stratz' : 'opendota'))}}">{{item.source === 'community' ? '社区分级' : (item.source === 'liquipedia' ? 'Liquipedia' : (item.source === 'stratz' ? 'STRATZ' : 'OpenDota'))}}</text>
-        </view>
+        <!-- B-2 表格化：来源已并入上方 league-sub -->
       </view>
       <view class="star-btn" catchtap="toggleFollow" data-id="{{item.leagueid}}" data-name="{{item.name}}">
         <t-icon name="star" size="44rpx" color="{{item.followed ? '#ffcf5c' : '#5b626d'}}" />
@@ -120,7 +185,7 @@
     </view>
 
     <view class="loadmore" wx:if="{{hasMore}}">
-      <t-button theme="light" size="medium" bindtap="appendPage" t-class="more-btn">加载更多</t-button>
+      <t-button theme="light" size="medium" bindtap="onLoadMore" t-class="more-btn">加载更多</t-button>
     </view>
 
     <!-- 已停办赛事归档区（defunct）：与主列表分离，置底展示 -->
@@ -141,7 +206,7 @@
       >
         <view class="league-main">
           <view class="league-name-row">
-            <text class="league-name">{{item.name}}</text>
+            <text class="league-name">{{item.displayName || item.name}}</text>
             <view class="league-badges">
               <t-tag theme="{{item.tagTheme}}" variant="{{item.tagVariant}}" size="small">{{item.displayLabel}}</t-tag>
               <text wx:if="{{item.valve}}" class="hl-badge hl-valve">Valve官方</text>
@@ -159,12 +224,92 @@
         </view>
       </view>
     </view>
+    </block><!-- /viewMode=list -->
+
+    <!-- 1.2 周轴视图：横向日期轴（按周分列）+ 同周赛事聚合 -->
+    <block wx:else>
+      <empty-state
+        wx:if="{{weekGroups.length === 0}}"
+        type="empty"
+        title="周轴视图下暂无可展示赛事"
+        desc="试试切换筛选条件或切回列表视图"
+      />
+      <scroll-view wx:else scroll-x class="wk-scroll" enhanced enable-flex show-scrollbar="{{false}}">
+        <view class="wk-row">
+          <view class="wk-col" wx:for="{{weekGroups}}" wx:key="key">
+            <view class="wk-head">
+              <text class="wk-label">{{item.label}}</text>
+              <text class="wk-count">{{item.leagues.length}}</text>
+            </view>
+            <view
+              class="wk-item {{l.tierClass}}"
+              wx:for="{{item.leagues}}"
+              wx:for-item="l"
+              wx:key="leagueid"
+              data-id="{{l.leagueid}}"
+              data-name="{{l.name}}"
+              bindtap="openLeague"
+              hover-class="tap-scale"
+            >
+              <text class="wk-item-name">{{l.name}}</text>
+              <view class="wk-item-meta">
+                <text class="wk-tag {{l.tierClass}}">{{l.label}}</text>
+                <text class="wk-date">{{l.wkDate}}</text>
+              </view>
+            </view>
+          </view>
+        </view>
+      </scroll-view>
+    </block>
 
       <view class="fresh-bottom" wx:if="{{updatedLabel && !loading}}">
         <text class="fresh-label">{{updatedLabel}}</text>
       </view>
+
+      <!-- 底部 spacer：确保自定义 tabBar 不会遮挡列表最后一项 -->
+      <view class="bottom-spacer"></view>
   </block>
 
   <!-- 首次启动引导（仅首次自动展示，完成后写入 Storage） -->
   <onboarding />
+
+  <!-- 战队筛选弹层（spec A：Popup + Cell + 多选；来源=已关注战队） -->
+  <view wx:if="{{teamPopup}}" class="tf-mask" bindtap="closeTeamFilter">
+    <view class="tf-sheet" catchtap="noop">
+      <view class="tf-sheet-head">
+        <text class="tf-sheet-title">选择战队（多选）</text>
+        <view class="tf-sheet-tools">
+          <text class="tf-tool" bindtap="selectAllTeams">全选</text>
+          <text class="tf-tool" bindtap="clearTeamDraft">清空</text>
+        </view>
+      </view>
+
+      <view wx:if="{{teamOptions.length}}" class="tf-list">
+        <view
+          class="tf-cell {{teamDraft.indexOf(item.id) >= 0 ? 'tf-cell--checked' : ''}}"
+          wx:for="{{teamOptions}}"
+          wx:key="id"
+          data-id="{{item.id}}"
+          bindtap="onTeamCheck"
+          hover-class="tap-scale"
+        >
+          <view class="tf-check {{teamDraft.indexOf(item.id) >= 0 ? 'tf-check--on' : ''}}">
+            <t-icon wx:if="{{teamDraft.indexOf(item.id) >= 0}}" name="check" size="28rpx" color="#0e1116" />
+          </view>
+          <view class="tf-cell-tag">{{item.tag}}</view>
+          <text class="tf-cell-name">{{item.name}}</text>
+        </view>
+      </view>
+
+      <view wx:else class="tf-empty">
+        <text class="tf-empty-text">还没有关注任何战队</text>
+        <text class="tf-empty-sub">去战队页关注你支持的队伍，即可按战队筛选赛事</text>
+      </view>
+
+      <view class="tf-sheet-foot">
+        <view class="tf-btn tf-btn--cancel" bindtap="closeTeamFilter">取消</view>
+        <view class="tf-btn tf-btn--confirm" bindtap="confirmTeamFilter">确定{{teamDraft.length ? '(' + teamDraft.length + ')' : ''}}</view>
+      </view>
+    </view>
+  </view>
 </view>

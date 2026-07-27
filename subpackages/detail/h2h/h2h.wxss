@@ -1,0 +1,264 @@
+.container { padding: 24rpx; }
+
+/* ===== VS 头部 ===== */
+.vs-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-bottom: 32rpx;
+}
+.vs-team {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12rpx;
+}
+.vs-team--away { /* 客队与主队对称 */ }
+.vs-logo {
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: 20rpx;
+  background: var(--card-bg-inset);
+  border: 1rpx solid var(--td-border-level-1-color, #232a33);
+}
+.vs-logo--fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32rpx;
+  font-weight: 800;
+  color: var(--dota-gold, #C8A951);
+}
+.vs-name {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #f0f3f6;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.vs-mid {
+  flex-shrink: 0;
+  width: 72rpx;
+  text-align: center;
+}
+.vs-symbol {
+  font-size: 30rpx;
+  font-weight: 800;
+  letter-spacing: 1rpx;
+  color: #6b7280;
+}
+
+/* ===== 胜负条形区 ===== */
+.h2h-bar-block {
+  background: var(--card-bg, #161b22);
+  border-radius: var(--radius-lg, 16rpx);
+  padding: 28rpx 24rpx;
+  margin-bottom: 24rpx;
+}
+.h2h-bar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10rpx;
+}
+.h2h-bar-row:last-of-type { margin-bottom: 0; margin-top: 10rpx; }
+.h2h-side {
+  font-size: 24rpx;
+  color: #9aa4b2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 60%;
+}
+.h2h-num {
+  font-size: 24rpx;
+  font-weight: 700;
+  font-family: var(--font-numeric, sans-serif);
+}
+.h2h-num--a { color: var(--h2h-a, #2DD4A7); }
+.h2h-num--b { color: var(--h2h-b, #F25C54); }
+
+/* 单条双向双色条形（spec B.3：左主队 / 右客队，按 p 分割） */
+.h2h-bar {
+  display: flex;
+  width: 100%;
+  height: 28rpx;
+  border-radius: var(--radius-pill, 999rpx);
+  overflow: hidden;
+  background: var(--card-bg-inset, #0f141b);
+}
+.h2h-bar-fill {
+  height: 100%;
+  transition: width 0.4s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.h2h-bar-fill--a {
+  background: var(--h2h-a, #2DD4A7);
+  box-shadow: inset 0 0 12rpx rgba(45, 212, 167, 0.35);
+}
+.h2h-bar-fill--b {
+  background: var(--h2h-b, #F25C54);
+  box-shadow: inset 0 0 12rpx rgba(242, 92, 84, 0.35);
+}
+
+/* ===== 标签 ===== */
+.h2h-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-top: 20rpx;
+}
+.h2h-tag {
+  font-size: 22rpx;
+  font-weight: 600;
+  padding: 4rpx 16rpx;
+  border-radius: var(--radius-pill, 999rpx);
+  line-height: 1.6;
+}
+.h2h-tag--dominate {
+  color: var(--h2h-b, #F25C54);
+  background: var(--h2h-b-soft, rgba(242, 92, 84, 0.14));
+  border: 1rpx solid rgba(242, 92, 84, 0.4);
+}
+.h2h-tag--even {
+  color: #9bb0c9;
+  background: rgba(155, 176, 201, 0.12);
+  border: 1rpx solid rgba(155, 176, 201, 0.35);
+}
+.h2h-tag--streak {
+  color: var(--h2h-a, #2DD4A7);
+  background: var(--h2h-a-soft, rgba(45, 212, 167, 0.14));
+  border: 1rpx solid rgba(45, 212, 167, 0.4);
+}
+
+/* ===== 历次交锋列表 ===== */
+.h2h-match {
+  position: relative;
+  overflow: hidden;
+  background: var(--card-bg, #161b22);
+  border-radius: var(--radius-md, 12rpx);
+  padding: 20rpx 24rpx 20rpx 32rpx;
+  margin-bottom: 14rpx;
+}
+.h2h-match::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 6rpx;
+  background: var(--td-border-level-1-color, #232a33);
+}
+.h2h-match.tier-sss::before { background: var(--tier-sss); }
+.h2h-match.tier-s::before { background: var(--tier-s); }
+.h2h-match.tier-a::before { background: var(--tier-a); }
+.h2h-match.tier-b::before { background: var(--tier-b); }
+/* 3.2 关键场次高亮（S 级以上赛事） */
+.h2h-match--key {
+  border: 1rpx solid rgba(200, 169, 81, 0.55);
+  box-shadow: 0 0 0 1rpx rgba(200, 169, 81, 0.15), 0 4rpx 14rpx rgba(200, 169, 81, 0.12);
+}
+.h2h-key-flag {
+  font-size: 20rpx;
+  font-weight: 700;
+  color: #1a1a1a;
+  background: #C8A951;
+  padding: 2rpx 10rpx;
+  border-radius: 999rpx;
+  flex-shrink: 0;
+}
+.h2h-match-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+}
+.h2h-league {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #f0f3f6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+.h2h-league--plain { color: #c3ccd9; }
+.h2h-date {
+  font-size: 22rpx;
+  color: #6b7280;
+  font-family: var(--font-mono, monospace);
+  flex-shrink: 0;
+}
+.h2h-match-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10rpx;
+}
+.h2h-score {
+  font-size: 32rpx;
+  font-weight: 800;
+  font-family: var(--font-numeric, sans-serif);
+  letter-spacing: 1rpx;
+}
+.h2h-result {
+  font-size: 24rpx;
+  font-weight: 700;
+}
+.h2h-score.win, .h2h-result.win { color: var(--h2h-a, #2DD4A7); }
+.h2h-score.lose, .h2h-result.lose { color: var(--h2h-b, #F25C54); }
+
+/* ===== 空态 / 骨架 ===== */
+.h2h-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 100rpx 40rpx;
+}
+.h2h-skeleton {
+  padding: 40rpx 0;
+}
+.sk-logo {
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: 20rpx;
+  background: var(--card-bg-elevated, #1c232c);
+  margin: 0 auto 24rpx;
+}
+.sk-bar {
+  height: 28rpx;
+  border-radius: 999rpx;
+  background: var(--card-bg-elevated, #1c232c);
+  margin-bottom: 16rpx;
+}
+
+/* ===== 3.3 近期状态雷达卡 ===== */
+.radar-card {
+  background: var(--card-bg, #161b22);
+  border: 1rpx solid var(--border, rgba(255, 255, 255, 0.08));
+  border-radius: 18rpx;
+  padding: 16rpx 8rpx 12rpx;
+  margin-bottom: 16rpx;
+}
+.radar-legend {
+  display: flex;
+  justify-content: center;
+  gap: 40rpx;
+  margin-top: 4rpx;
+}
+.rl-item {
+  display: flex;
+  align-items: center;
+  font-size: 22rpx;
+  color: #c9d1d9;
+}
+.rl-dot {
+  width: 18rpx;
+  height: 18rpx;
+  border-radius: 50%;
+  margin-right: 10rpx;
+}

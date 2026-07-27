@@ -2,9 +2,11 @@
   <!-- 头部：赛事名 + 关注 + 比赛数 + 状态徽标 -->
   <view class="head">
     <view class="head-info">
-      <view class="title">{{name}}</view>
+      <view class="title">{{displayName}}</view>
       <view class="head-meta">
         <text class="sub">共 {{totalSeries}} 组对阵{{hasMore ? '（持续加载）' : ''}}</text>
+        <text wx:if="{{eventWindow}}" class="sub">{{eventWindow.range}}</text>
+        <text wx:if="{{eventWindow}}" class="status-tag" style="color:{{eventWindow.statusColor}};border-color:{{eventWindow.statusColor}}">{{eventWindow.statusText}}</text>
         <text wx:if="{{liqTier}}" class="status-tag" style="color:{{liqTier.confidence === 'high' ? '#5fd35f' : '#f0aa28'}};border-color:{{liqTier.confidence === 'high' ? '#5fd35f' : '#f0aa28'}}">{{liqTier.label}}</text>
       </view>
     </view>
@@ -14,7 +16,7 @@
   </view>
 
   <!-- 数据溯源合并区（C 风格 · 把 quality / name-fix / liq-banner / sources 收敛为一区） -->
-  <view class="source-section" wx:if="{{quality || nameInfo || liqTier || metadata}}">
+  <view class="source-section" wx:if="{{quality || (nameInfo && nameInfo.differs) || liqTier || sourceBadges.length}}">
     <view class="source-section-head">
       <text class="source-section-title">数据溯源</text>
       <text wx:if="{{updatedLabel}}" class="fresh-label">{{updatedLabel}}</text>
@@ -38,38 +40,70 @@
   <!-- F1 直播聚合入口（isLive 时高亮置顶） -->
   <live-card wx:if="{{liveSources.length}}" sources="{{liveSources}}" live="{{isLive}}" event-name="{{name}}" />
 
-  <!-- 赛事元数据 KPI Strip -->
-  <view class="kpi-strip" wx:if="{{metadata}}">
-    <view class="kpi-cell" wx:if="{{metadata.prizePool}}">
+  <!-- 赛事元数据 KPI Strip：所有字段常驻，缺失时显示 '--'，确保各赛事信息结构统一 -->
+  <view class="kpi-strip">
+    <view class="kpi-cell">
       <text class="kpi-label">奖金池</text>
       <view class="kpi-value-row">
-        <text class="kpi-value accent">{{metadata.prizePool}}</text>
-        <text class="kpi-unit">{{metadata.prizePoolCurrency || 'USD'}}</text>
+        <text class="kpi-value accent {{metadata.prizePool ? '' : 'is-empty'}}">{{metadata.prizePool || '--'}}</text>
+        <text wx:if="{{metadata.prizePool}}" class="kpi-unit">{{metadata.prizePoolCurrency || 'USD'}}</text>
       </view>
     </view>
-    <view class="kpi-cell" wx:if="{{metadata.location}}">
+    <view class="kpi-cell">
       <text class="kpi-label">地点</text>
-      <text class="kpi-value">{{metadata.location}}</text>
+      <text class="kpi-value {{metadata.location ? '' : 'is-empty'}}">{{metadata.location || '--'}}</text>
     </view>
-    <view class="kpi-cell" wx:if="{{metadata.format}}">
+    <view class="kpi-cell">
       <text class="kpi-label">赛制</text>
-      <text class="kpi-value">{{metadata.format}}</text>
+      <text class="kpi-value {{metadata.format ? '' : 'is-empty'}}">{{metadata.format || '--'}}</text>
     </view>
-    <view class="kpi-cell" wx:if="{{metadata.organizer}}">
+    <view class="kpi-cell">
       <text class="kpi-label">主办方</text>
-      <text class="kpi-value">{{metadata.organizer}}</text>
+      <text class="kpi-value {{metadata.organizer ? '' : 'is-empty'}}">{{metadata.organizer || '--'}}</text>
     </view>
-    <view class="kpi-cell" wx:if="{{metadata.participants}}">
+    <view class="kpi-cell">
       <text class="kpi-label">参赛队</text>
-      <text class="kpi-value">{{metadata.participants}}</text>
+      <text class="kpi-value {{metadata.participants ? '' : 'is-empty'}}">{{metadata.participants || '--'}}</text>
     </view>
-    <view class="kpi-cell" wx:if="{{metadata.status}}">
+    <view class="kpi-cell">
       <text class="kpi-label">状态</text>
-      <text class="kpi-value">{{metadata.status}}</text>
+      <text class="kpi-value {{metadata.status ? '' : 'is-empty'}}">{{metadata.status || '--'}}</text>
     </view>
-    <view class="kpi-cell" wx:if="{{metadata.startDate || metadata.endDate}}">
+    <view class="kpi-cell" style="grid-column: 1 / -1;">
       <text class="kpi-label">赛期</text>
-      <text class="kpi-value">{{metadata.startDate || '?'}} ~ {{metadata.endDate || '?'}}</text>
+      <text class="kpi-value">{{(metadata.startDate && metadata.endDate) ? (metadata.startDate + ' ~ ' + metadata.endDate) : (eventWindow ? eventWindow.fullRange : '? ~ ?')}}</text>
+    </view>
+  </view>
+
+  <!-- 赛事概述：自动摘要已有元数据，结构统一 -->
+  <view class="overview-card" wx:if="{{metadata}}">
+    <view class="overview-head">
+      <t-icon name="info-circle" size="28rpx" color="#8a8f99" />
+      <text class="overview-title">赛事概述</text>
+    </view>
+    <view class="overview-body">
+      <text class="overview-name">{{displayName}}</text> 是 {{metadata.organizer || '主办方待定'}} 举办的 {{metadata.location ? '位于 ' + metadata.location + ' 的' : ''}} Dota 2 职业赛事。
+      赛事采用 <text class="overview-highlight">{{metadata.format || '待定赛制'}}</text>，
+      {{metadata.participants ? '共 ' + metadata.participants + ' 支参赛队伍' : '参赛队伍待定'}}。
+      {{metadata.prizePool ? '奖金池为 ' + metadata.prizePool + ' ' + (metadata.prizePoolCurrency || 'USD') + '。' : '奖金池待定。'}}
+      当前状态：<text class="overview-highlight">{{metadata.status || '未知'}}</text>。
+    </view>
+  </view>
+
+  <!-- 参赛队伍：从比赛数据推导，无数据时显示提示 -->
+  <view class="teams-card" wx:if="{{metadata}}">
+    <view class="teams-head">
+      <text class="teams-title">参赛队伍</text>
+      <text class="teams-count" wx:if="{{participantsList.length}}">{{participantsList.length}} 支</text>
+    </view>
+    <view class="teams-grid" wx:if="{{participantsList.length}}">
+      <view class="team-chip" wx:for="{{participantsList}}" wx:key="id" catchtap="openTeam" data-id="{{item.id}}">
+        <view class="team-chip-logo">{{item.name ? item.name[0] : '?'}}</view>
+        <text class="team-chip-name">{{item.name}}</text>
+      </view>
+    </view>
+    <view wx:else class="teams-empty">
+      <text>暂无参赛队伍数据，可能赛事尚未开赛或未收录。</text>
     </view>
   </view>
 
@@ -176,7 +210,8 @@
                   <text class="hero-side-label">{{s.radiantName}}</text>
                   <view class="hero-icons">
                     <view class="hero-icon" wx:for="{{g.detail.radiantHeroes}}" wx:for-item="h" wx:key="*this">
-                      <view class="hero-icon-box">{{h.short}}</view>
+                      <image wx:if="{{h.img}}" class="hero-icon-img" src="{{h.img}}" mode="aspectFill" lazy-load />
+                      <view wx:else class="hero-icon-box">{{h.short}}</view>
                       <text class="hero-icon-kda">{{h.kda}}</text>
                     </view>
                   </view>
@@ -185,7 +220,8 @@
                   <text class="hero-side-label">{{s.direName}}</text>
                   <view class="hero-icons">
                     <view class="hero-icon" wx:for="{{g.detail.direHeroes}}" wx:for-item="h" wx:key="*this">
-                      <view class="hero-icon-box">{{h.short}}</view>
+                      <image wx:if="{{h.img}}" class="hero-icon-img" src="{{h.img}}" mode="aspectFill" lazy-load />
+                      <view wx:else class="hero-icon-box">{{h.short}}</view>
                       <text class="hero-icon-kda">{{h.kda}}</text>
                     </view>
                   </view>

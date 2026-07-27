@@ -23,20 +23,45 @@ const TIER_RANK = {
   excluded: 0      // 其他 / 不计入
 };
 
-// ===== 限流器 =====
+// ===== 限流器（滑动窗口并发模式）=====
+// 改造说明：原实现用模块级 `lastCall + minGapMs` 强制所有请求串行，
+// 让调用方的 Promise.all 在底层被串行化（10 个请求要 10s+）。
+// 现改为滑动窗口计数：每分钟最多 60 次（OpenDota 限制），允许并发，
+// 仅在窗口即将超限时 sleep 到最老请求滑出窗口。
 const RATE = config.rateLimit;
-let lastCall = 0;
+const WINDOW_MS = 60 * 1000;          // 滑动窗口 1 分钟
+const MAX_IN_WINDOW = Math.max(3, Math.floor(RATE.maxPerMin || 50)); // 窗口内最大请求数（留 10 余量）
+const REQUEST_TIMEOUT_MS = RATE.timeoutMs || 12000;  // 单请求超时
+const _timestamps = [];               // 窗口内请求时间戳队列
 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
+// 等待直到窗口内有空闲槽位，返回本次请求入队的时间戳
+function acquireSlot() {
+  const now = Date.now();
+  // 清理 1 分钟前的时间戳
+  while (_timestamps.length && _timestamps[0] <= now - WINDOW_MS) _timestamps.shift();
+  if (_timestamps.length < MAX_IN_WINDOW) {
+    _timestamps.push(now);
+    return Promise.resolve(now);
+  }
+  // 需要等待最老请求滑出窗口
+  const wait = _timestamps[0] + WINDOW_MS - now + 10;
+  return sleep(wait).then(() => acquireSlot());
+}
+
 function rawRequest(path, data) {
   return new Promise((resolve, reject) => {
-    wx.request({
+    let settled = false;
+    const task = wx.request({
       url: BASE + path,
       data: data || {},
       method: 'GET',
+      timeout: REQUEST_TIMEOUT_MS,
       header: { 'content-type': 'application/json' },
       success: (res) => {
+        if (settled) return;
+        settled = true;
         if (res.statusCode >= 200 && res.statusCode < 300) {
           resolve(res.data);
         } else if (res.statusCode === 429) {
@@ -45,24 +70,38 @@ function rawRequest(path, data) {
           err.statusCode = 429;
           reject(err);
         } else {
-          reject(new Error('HTTP ' + res.statusCode));
+          // 5xx/其他非 2xx：带 statusCode 抛出，供外层按状态码决定是否退避重试
+          const err = new Error('HTTP ' + res.statusCode);
+          err.statusCode = res.statusCode;
+          reject(err);
         }
       },
-      fail: (err) => reject(err)
+      fail: (err) => {
+        if (settled) return;
+        settled = true;
+        reject(err);
+      }
     });
+    // 额外超时兜底（部分基础库 timeout 不触发 fail）
+    setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      try { task && task.abort && task.abort(); } catch (e) {}
+      reject(new Error('request timeout'));
+    }, REQUEST_TIMEOUT_MS + 500);
   });
 }
 
-// 带限流的请求：串行保留请求槽位，避免并发瞬间打满 60/min
+// 带限流的请求：滑动窗口并发限流，仅在窗口满时排队等待
 function request(path, data, opts) {
   opts = opts || {};
-  const now = Date.now();
-  const wait = Math.max(0, lastCall + RATE.minGapMs - now);
-  lastCall = now + wait; // 立即预留槽位，杜绝并发竞争
-  return sleep(wait)
-    .then(() => rawRequest(path, data))
+  return acquireSlot().then(() => rawRequest(path, data))
     .catch((err) => {
-      if (err && err.statusCode === 429 && (opts.retries || 0) < RATE.maxRetries) {
+      const code = err && err.statusCode;
+      // 429 限流 / 5xx 源站抖动（OpenDota 经 Cloudflare 常返回的 521/502/503）
+      // 均做退避重试：429 是触发限流，5xx 多为瞬时源站不可用，重试通常可恢复，
+      // 避免把瞬时故障直接暴露到 Console / 触发页面加载失败态。
+      if ((code === 429 || (code >= 500 && code < 600)) && (opts.retries || 0) < RATE.maxRetries) {
         const delay = RATE.retryBaseMs * Math.pow(2, opts.retries || 0);
         return sleep(delay).then(() =>
           request(path, data, { retries: (opts.retries || 0) + 1 }));
@@ -96,12 +135,18 @@ function validateResponse(path, data) {
   return true;
 }
 
-// 带缓存的请求：命中缓存直接返回（不计入限流）
+// inflight 请求去重：同一缓存 key 并发调用复用同一个 Promise
+// 解决痛点：冷启动时多页面/多组件同时发起同一请求，导致重复打网络。
+const inflight = {};
+
+// 带缓存的请求：命中缓存直接返回（不计入限流）；未命中时 inflight 去重
 function cached(path, data, ttlSec) {
   const key = path + '|' + JSON.stringify(data || {});
   const hit = cache.get(key, ttlSec);
   if (hit !== null && hit !== undefined) return Promise.resolve(hit);
-  return request(path, data).then((data) => {
+  // inflight 去重：已有相同请求在进行中，复用其 Promise
+  if (inflight[key]) return inflight[key];
+  const p = request(path, data).then((data) => {
     if (!validateResponse(path, data)) {
       // 畸形响应：不写入缓存，尝试回退到陈旧缓存
       const stale = cache.peek(key);
@@ -110,7 +155,15 @@ function cached(path, data, ttlSec) {
     }
     cache.set(key, data, ttlSec);
     return data;
+  }, (err) => {
+    delete inflight[key];
+    throw err;
+  }).then((v) => {
+    delete inflight[key];
+    return v;
   });
+  inflight[key] = p;
+  return p;
 }
 
 // 后台刷新进行中的 key 集合（避免同一 key 重复触发刷新）
@@ -257,8 +310,6 @@ const ACTION_MAP = {
   getTeam: function (id) { return { action: 'getTeam', params: { teamId: id } }; },
   getTeamPlayers: function (id) { return { action: 'getTeamPlayers', params: { teamId: id } }; },
   getTeamMatches: function (id) { return { action: 'getTeamMatches', params: { teamId: id } }; },
-  getPlayer: function (id) { return { action: 'getPlayer', params: { accountId: id } }; },
-  getPlayerMatches: function (id) { return { action: 'getPlayerMatches', params: { accountId: id } }; },
   getHeroes: function () { return { action: 'getHeroes', params: {} }; }
 };
 
@@ -283,6 +334,7 @@ function transformLeagueWindows(data) {
       map[r.leagueid] = {
         earliest: Number(r.earliest) || 0,
         latest: Number(r.latest) || 0,
+        lastEnd: Number(r.last_end) || 0,   // 真实结束时间（start_time + duration 最大值）；0 = 未知
         count: Number(r.n) || 0
       };
     }
@@ -364,13 +416,6 @@ function transformSearchTeams(list) {
     .slice(0, 30);
 }
 
-function transformSearchPlayers(list) {
-  return (list || [])
-    .filter((item) => item && item.account_id)
-    .map((item) => ({ account_id: item.account_id, name: item.personaname || item.name || ('ID:' + item.account_id) }))
-    .slice(0, 30);
-}
-
 function searchTeams(name) {
   // 搜索结果短时缓存，避免连续相同搜索重复消耗配额
   const direct = function () { return cached('/search', { q: name }, 5 * 60).then(transformSearchTeams); };
@@ -381,16 +426,8 @@ function searchTeams(name) {
   return direct();
 }
 
-function searchPlayers(name) {
-  const direct = function () { return cached('/search', { q: name }, 5 * 60).then(transformSearchPlayers); };
-  if (cloudEnabled()) {
-    return cloudFetch('searchTeams', { q: name }).then(transformSearchPlayers).catch(function () { return direct(); });
-  }
-  return direct();
-}
-
 function getTeam(teamId) {
-  const direct = function () { return cachedFresh('/teams/' + teamId, null, 60 * 60, config.cacheTTL.team); };
+  const direct = function () { return cachedFresh('/teams/' + teamId, null, 15 * 60, config.cacheTTL.team); };
   if (cloudEnabled()) {
     const m = ACTION_MAP.getTeam(teamId);
     return cloudFetch(m.action, m.params).catch(function () { return direct(); });
@@ -399,7 +436,7 @@ function getTeam(teamId) {
 }
 
 function getTeamPlayers(teamId) {
-  const direct = function () { return cachedFresh('/teams/' + teamId + '/players', null, 60 * 60, config.cacheTTL.teamPlayers); };
+  const direct = function () { return cachedFresh('/teams/' + teamId + '/players', null, 20 * 60, config.cacheTTL.teamPlayers); };
   if (cloudEnabled()) {
     const m = ACTION_MAP.getTeamPlayers(teamId);
     return cloudFetch(m.action, m.params).catch(function () { return direct(); });
@@ -413,26 +450,6 @@ function getTeamMatches(teamId) {
   };
   if (cloudEnabled()) {
     const m = ACTION_MAP.getTeamMatches(teamId);
-    return cloudFetch(m.action, m.params).catch(function () { return direct(); });
-  }
-  return direct();
-}
-
-function getPlayer(accountId) {
-  const direct = function () { return cachedFresh('/players/' + accountId, null, 60 * 60, config.cacheTTL.player); };
-  if (cloudEnabled()) {
-    const m = ACTION_MAP.getPlayer(accountId);
-    return cloudFetch(m.action, m.params).catch(function () { return direct(); });
-  }
-  return direct();
-}
-
-function getPlayerMatches(accountId) {
-  const direct = function () {
-    return cachedFreshIncremental('/players/' + accountId + '/matches', 'player', accountId, 10 * 60, config.cacheTTL.playerMatches);
-  };
-  if (cloudEnabled()) {
-    const m = ACTION_MAP.getPlayerMatches(accountId);
     return cloudFetch(m.action, m.params).catch(function () { return direct(); });
   }
   return direct();
@@ -481,6 +498,9 @@ function getTeamNames(teamIds) {
 
 // 物品表（id -> { name, img, dname }）：OpenDota /constants/items 返回 { name: { id, img, dname } }，
 // 反转为 id 索引便于比赛详情页按 item_0~5 数字 id 查物品名/图标。长缓存（物品几乎不变）。
+// 注意：OpenDota 的 img 是相对路径 /apps/dota2/images/dota_react/items/{name}.png?t=xxx，
+// 需拼接 Steam CDN 源站得到绝对地址（与英雄头像同源 cdn.cloudflare.steamstatic.com，已加入合法域名白名单）。
+const ITEM_CDN_ORIGIN = 'https://cdn.cloudflare.steamstatic.com';
 function getItems() {
   return cached('/constants/items', null, 24 * 3600).then((data) => {
     const map = {};
@@ -488,17 +508,46 @@ function getItems() {
     Object.keys(data).forEach((name) => {
       const it = data[name];
       if (it && it.id != null) {
-        map[it.id] = { name: name, img: it.img || ('items/' + name + '.png'), dname: it.dname || name };
+        // 规范为 Steam CDN 绝对地址；it.img 已含 ?t 时间戳，可正常加载
+        let img = it.img || ('/apps/dota2/images/dota_react/items/' + name + '.png');
+        if (img.indexOf('http') !== 0) {
+          img = ITEM_CDN_ORIGIN + (img.charAt(0) === '/' ? img : '/' + img);
+        }
+        map[it.id] = { name: name, img: img, dname: it.dname || name };
       }
     });
     return map;
   });
 }
 
-// 物品基础表（数组）：OpenDota /items 返回 [{ id, name, cost, secret_shop, side_shop, recipe, localized_name }]。
-// 含价格 / 是否配方 / 商店类型，用于物品浏览与详情；与 getItems() 的 img/dname 合并补全显示信息。
+// 物品基础表（数组）：OpenDota 旧端点 /items 已下线（返回 404），物品基础数据现统一来自
+// /constants/items（对象，按物品内部名索引）。本函数把该对象转换为列表所需的数组形态：
+// [{ id, name, cost, secret_shop, side_shop, recipe, localized_name }]，
+// 供物品浏览与详情使用；与 getItems() 的 img/dname 合并补全显示信息。
+// 注意：/constants/items 已不再提供 secret_shop / side_shop 字段，故这两项恒为 false（UI 相应标签不显示）；
+// recipe（是否合成组件）改由 components 依赖图推导：凡被其它物品引用为组件的即标为配方。
 function getItemsList() {
-  return cached('/items', null, config.cacheTTL.heroes);
+  return cached('/constants/items', null, 24 * 3600).then((obj) => {
+    if (!obj || typeof obj !== 'object') return [];
+    // 合成组件集合：出现在任意物品 components 中的物品名 → 即「配方 / 合成组件」
+    const componentSet = new Set();
+    Object.keys(obj).forEach((k) => {
+      const comps = obj[k] && obj[k].components;
+      if (Array.isArray(comps)) comps.forEach((c) => componentSet.add(c));
+    });
+    return Object.keys(obj).map((name) => {
+      const it = obj[name] || {};
+      return {
+        id: it.id != null ? it.id : 0,
+        name: name,
+        localized_name: it.dname || name,
+        cost: it.cost || 0,
+        secret_shop: false,   // /constants/items 已不再提供该字段
+        side_shop: false,     // /constants/items 已不再提供该字段
+        recipe: componentSet.has(name)  // 由 components 依赖图推导
+      };
+    });
+  });
 }
 
 module.exports = {
@@ -514,12 +563,9 @@ module.exports = {
   getMatch: getMatch,
   getMatchPlayers: getMatchPlayers,
   searchTeams: searchTeams,
-  searchPlayers: searchPlayers,
   getTeam: getTeam,
   getTeamPlayers: getTeamPlayers,
   getTeamMatches: getTeamMatches,
-  getPlayer: getPlayer,
-  getPlayerMatches: getPlayerMatches,
   getHeroes: getHeroes,
   getHeroStats: getHeroStats,
   getHeroMatchups: getHeroMatchups,

@@ -17,21 +17,27 @@
   </view>
 
   <block wx:else>
-    <!-- 顶部：胜方横幅 + 比分 -->
-    <view class="hero-banner report-hero {{radiantWin ? 'radiant-win' : 'dire-win'}}">
-      <view class="hero-overlay">
-        <view class="hero-content">
-          <view class="hero-title">{{radiantWin ? radiantName : direName}} WIN</view>
-          <view class="hero-meta">
-            <text class="hero-meta-item">{{radiantName}} {{radiantScore}} : {{direScore}} {{direName}}</text>
-          </view>
-          <view class="hero-meta">
-            <text wx:if="{{duration}}" class="hero-meta-item">{{duration}}</text>
-            <text wx:if="{{time}}" class="hero-meta-item">· {{time}}</text>
-            <text wx:if="{{league}}" class="hero-meta-item">· {{league}}</text>
-          </view>
-        </view>
+    <!-- 4.1 关键指标锚点卡：大字号比分 / 胜负 / Tier / 时间 -->
+    <anchor-card
+      title="{{league}}"
+      nameA="{{radiantName}}"
+      nameB="{{direName}}"
+      scoreA="{{radiantScore}}"
+      scoreB="{{direScore}}"
+      winSide="{{anchorWinSide}}"
+      live="{{isLive}}"
+      tierLabel="{{anchorTierLabel}}"
+      tierClass="{{anchorTierClass}}"
+      metaList="{{anchorMeta}}"
+    />
+
+    <!-- 5.1 内嵌对战：赛事详情快捷跳双方历史对比（仅战队赛显示） -->
+    <view wx:if="{{radiantTeamId && direTeamId}}" class="h2h-cta" bindtap="openH2h" hover-class="h2h-cta--hover">
+      <view class="h2h-cta-left">
+        <text class="h2h-cta-title">查看双方对战历史</text>
+        <text class="h2h-cta-sub">{{radiantName}} VS {{direName}} · 历史交锋</text>
       </view>
+      <text class="h2h-cta-arrow">›</text>
     </view>
 
     <!-- MVP 标记 -->
@@ -61,9 +67,10 @@
         <text class="c-net">GPM</text>
         <text class="c-net">XPM</text>
       </view>
-      <view class="kda-row" wx:for="{{radiant}}" wx:key="account_id" bindtap="openPlayer" data-id="{{item.account_id}}" hover-class="kda-row-hover">
+      <view class="kda-row" wx:for="{{radiant}}" wx:key="account_id" hover-class="kda-row-hover">
         <view class="c-hero">
-          <view class="hero-box {{radiantWin ? 'win-side' : ''}}">{{item.heroShort}}</view>
+          <image wx:if="{{item.heroImg}}" class="hero-img" src="{{item.heroImg}}" mode="aspectFill" lazy-load />
+          <view wx:else class="hero-box {{radiantWin ? 'win-side' : ''}}">{{item.heroShort}}</view>
         </view>
         <text class="c-player">{{item.name}}</text>
         <text class="c-kda">{{item.kda}}</text>
@@ -76,7 +83,10 @@
       <view class="items-row" wx:for="{{radiant}}" wx:key="account_id" wx:for-item="p">
         <view class="items-hero">{{p.heroShort}}</view>
         <view class="items-list">
-          <image wx:for="{{p.items}}" wx:key="name" wx:for-item="it" class="item-icon" src="{{it.img}}" mode="aspectFit" lazy-load="{{true}}" />
+          <view wx:for="{{p.items}}" wx:key="name" wx:for-item="it" class="item-slot">
+            <image wx:if="{{it.img}}" class="item-icon" src="{{it.img}}" mode="aspectFit" lazy-load="{{true}}" />
+            <text wx:else class="item-fallback">{{it.dname}}</text>
+          </view>
           <text wx:if="{{p.items.length === 0}}" class="muted items-empty">无出装数据</text>
         </view>
       </view>
@@ -95,9 +105,10 @@
         <text class="c-net">GPM</text>
         <text class="c-net">XPM</text>
       </view>
-      <view class="kda-row" wx:for="{{dire}}" wx:key="account_id" bindtap="openPlayer" data-id="{{item.account_id}}" hover-class="kda-row-hover">
+      <view class="kda-row" wx:for="{{dire}}" wx:key="account_id" hover-class="kda-row-hover">
         <view class="c-hero">
-          <view class="hero-box {{!radiantWin ? 'win-side' : ''}}">{{item.heroShort}}</view>
+          <image wx:if="{{item.heroImg}}" class="hero-img" src="{{item.heroImg}}" mode="aspectFill" lazy-load />
+          <view wx:else class="hero-box {{!radiantWin ? 'win-side' : ''}}">{{item.heroShort}}</view>
         </view>
         <text class="c-player">{{item.name}}</text>
         <text class="c-kda">{{item.kda}}</text>
@@ -110,7 +121,10 @@
       <view class="items-row" wx:for="{{dire}}" wx:key="account_id" wx:for-item="p">
         <view class="items-hero">{{p.heroShort}}</view>
         <view class="items-list">
-          <image wx:for="{{p.items}}" wx:key="name" wx:for-item="it" class="item-icon" src="{{it.img}}" mode="aspectFit" lazy-load="{{true}}" />
+          <view wx:for="{{p.items}}" wx:key="name" wx:for-item="it" class="item-slot">
+            <image wx:if="{{it.img}}" class="item-icon" src="{{it.img}}" mode="aspectFit" lazy-load="{{true}}" />
+            <text wx:else class="item-fallback">{{it.dname}}</text>
+          </view>
           <text wx:if="{{p.items.length === 0}}" class="muted items-empty">无出装数据</text>
         </view>
       </view>
@@ -131,6 +145,6 @@
       <view class="chart-axis muted">每 5 分钟采样 · 正=天辉领先 / 负=夜魇领先 · 点击曲线查看数值</view>
     </view>
 
-    <view class="footer-tip muted">数据由 OpenDota 提供，单击选手行可跳转详情页</view>
+    <view class="footer-tip muted">数据由 OpenDota 提供</view>
   </block>
 </view>

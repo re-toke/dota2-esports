@@ -6,6 +6,7 @@
     "t-empty": "../../../miniprogram_npm/tdesign-miniprogram/empty/empty",
     "t-skeleton": "../../../miniprogram_npm/tdesign-miniprogram/skeleton/skeleton",
     "live-card": "../../../components/live-card/live-card",
-    "chart": "../../../components/chart/chart"
+    "chart": "../../../components/chart/chart",
+    "anchor-card": "../../../components/anchor-card/anchor-card"
   }
 }

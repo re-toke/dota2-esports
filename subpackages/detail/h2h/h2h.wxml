@@ -1,0 +1,112 @@
+<view class="container">
+  <!-- 加载骨架 -->
+  <block wx:if="{{loading}}">
+    <view class="h2h-skeleton">
+      <view class="sk-logo" />
+      <view class="sk-bar" />
+      <view class="sk-bar" />
+    </view>
+  </block>
+
+  <!-- 错误态 -->
+  <empty-state wx:elif="{{error}}" type="error" title="加载失败" desc="{{error}}" actionText="重试" bind:action="retry" />
+
+  <!-- 无交锋数据态（spec B.5：X=0 且 Y=0 → Empty，不渲染误导性条形） -->
+  <view wx:elif="{{total === 0 && teamA}}" class="h2h-empty">
+    <t-empty icon="info-circle" description="两队暂无交锋记录" />
+  </view>
+
+  <block wx:else>
+    <!-- 双方 VS 头部 -->
+    <view class="vs-head">
+      <view class="vs-team" bindtap="openTeam" data-id="{{teamA.id}}">
+        <image wx:if="{{teamA.logo}}" class="vs-logo" src="{{teamA.logo}}" mode="aspectFit" lazy-load />
+        <view wx:else class="vs-logo vs-logo--fallback">{{teamA.tag || '?'}}</view>
+        <text class="vs-name">{{teamA.name}}</text>
+      </view>
+      <view class="vs-mid">
+        <text class="vs-symbol">VS</text>
+      </view>
+      <view class="vs-team vs-team--away" bindtap="openTeam" data-id="{{teamB.id}}">
+        <image wx:if="{{teamB.logo}}" class="vs-logo" src="{{teamB.logo}}" mode="aspectFit" lazy-load />
+        <view wx:else class="vs-logo vs-logo--fallback">{{teamB.tag || '?'}}</view>
+        <text class="vs-name">{{teamB.name}}</text>
+      </view>
+    </view>
+
+    <!-- 胜负条形区（spec B.2/B.3：单条双向 CSS 双色 View） -->
+    <view class="h2h-bar-block">
+      <view class="h2h-bar-row">
+        <text class="h2h-side h2h-side--a">{{teamA.name}}</text>
+        <text class="h2h-num h2h-num--a">{{x}} 胜</text>
+      </view>
+      <view class="h2h-bar">
+        <view class="h2h-bar-fill h2h-bar-fill--a" style="width:{{pctA}}%;"></view>
+        <view class="h2h-bar-fill h2h-bar-fill--b" style="width:{{100 - pctA}}%;"></view>
+      </view>
+      <view class="h2h-bar-row">
+        <text class="h2h-side h2h-side--b">{{teamB.name}}</text>
+        <text class="h2h-num h2h-num--b">{{y}} 负</text>
+      </view>
+
+      <!-- 标签（连胜 / 压制 / 平分） -->
+      <view class="h2h-tags" wx:if="{{tags.length}}">
+        <text
+          wx:for="{{tags}}"
+          wx:key="text"
+          class="h2h-tag h2h-tag--{{item.type}}"
+        >{{item.text}}</text>
+      </view>
+    </view>
+
+    <!-- 3.3 双方近期状态雷达（5 维对比：胜率/净胜分/对手强度/近期密度/大赛占比） -->
+    <view class="section-header">
+      <text class="section-title">近期状态对比</text>
+      <text class="section-action">近 30 场</text>
+    </view>
+    <view class="radar-card">
+      <chart type="radar" height="240" indicators="{{radarIndicators}}" series="{{radarSeries}}" />
+      <view class="radar-legend">
+        <view class="rl-item"><view class="rl-dot" style="background:#C8A951;"></view><text>{{teamA.name}}</text></view>
+        <view class="rl-item"><view class="rl-dot" style="background:#58a6ff;"></view><text>{{teamB.name}}</text></view>
+      </view>
+    </view>
+
+    <!-- 历次交锋列表（spec B.4 + 3.2：按年份折叠 + 关键场高亮 + 下钻赛事详情） -->
+    <view class="section-header">
+      <text class="section-title">历次交锋</text>
+      <text class="section-action">{{matchCount}} 场</text>
+    </view>
+
+    <view wx:if="{{groups.length === 0}}" class="center">暂无可展示的交锋记录</view>
+
+    <t-collapse value="{{activeGroups}}" bind:change="onCollapseChange">
+      <t-collapse-panel
+        wx:for="{{groups}}"
+        wx:key="year"
+        value="{{item.year}}"
+        header="{{item.year}} 年 · {{item.count}} 场"
+      >
+        <view
+          class="h2h-match {{m.tierClass}} {{m.isKey ? 'h2h-match--key' : ''}}"
+          wx:for="{{item.matches}}"
+          wx:for-item="m"
+          wx:key="match_id"
+          hover-class="tap-scale"
+          bindtap="openMatch"
+          data-id="{{m.match_id}}"
+        >
+          <view class="h2h-match-top">
+            <text class="h2h-league {{m.tierClass ? '' : 'h2h-league--plain'}}">{{m.displayName || m.league || '未知赛事'}}</text>
+            <text wx:if="{{m.isKey}}" class="h2h-key-flag">关键场</text>
+            <text class="h2h-date">{{m.date}}</text>
+          </view>
+          <view class="h2h-match-bottom">
+            <text class="h2h-score {{m.won ? 'win' : 'lose'}}">{{m.score}}</text>
+            <text class="h2h-result {{m.won ? 'win' : 'lose'}}">{{m.won ? '胜' : '负'}}</text>
+          </view>
+        </view>
+      </t-collapse-panel>
+    </t-collapse>
+  </block>
+</view>

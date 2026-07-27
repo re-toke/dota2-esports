@@ -29,6 +29,10 @@ const liquipedia = require('./liquipedia.js');
 const consensus = require('./consensus.js');
 const curation = require('./remoteCuration.js');
 const imageUtil = require('./image.js');
+// G4 单一数据源：与云函数共用的精确归一映射（来自 curation-shared.json）
+const leagueCanon = require('./league-canon-map.js');
+// G8 运行时监控（安全降级，无 wx 时不打点）
+const monitor = require('./monitor.js');
 
 // 源中文名（用于 UI 标注数据来源 / 可信度）
 const SOURCE_LABEL = {
@@ -95,7 +99,13 @@ async function getLeagueTier(league) {
 }
 
 // ===== 赛事名称：多源归一投票 =====
-async function getLeagueName(league) {
+// ⚠️ G5 收敛：本函数产出的是「跨源共识投票名」，仅用于【匹配 / 索引 / 检索】，
+//    **禁止**直接当作 UI 展示名。原因：consensus 的「取更长名」规则在缺乏 curation
+//    覆盖时可能选回旧名/错误名（P3 风险依据③）。展示一律走 `leagueDisplayName` /
+//    `displayName`（curation canonical 优先，零网络、确定性强）。
+//    在 league-detail 中它仅作为「无 curation canonical 时的兜底」参与 finalize 优先级②，
+//    绝不作为展示首选。如需检索用候选名，调用本函数；如需展示，调用 leagueDisplayName。
+async function voteLeagueNameForMatch(league) {
   const candidates = [];
   const name = (league && league.name) || '';
   if (name) candidates.push({ value: name, source: 'opendota' });
@@ -104,20 +114,24 @@ async function getLeagueName(league) {
   if (cu) candidates.push({ value: cu.canonical, source: 'curation' });
 
   const id = league && (league.leagueid || league.id);
+  // 优化：stratz 和 liquipedia 是独立来源，并行发起，各自隔离错误
+  const tasks = [];
   if (stratz.ENABLED && id) {
-    try {
-      const s = await stratz.getLeagueDisplayName(id);
-      if (s) candidates.push({ value: s, source: 'stratz' });
-    } catch (e) { /* 隔离 */ }
+    tasks.push(
+      stratz.getLeagueDisplayName(id)
+        .then((s) => { if (s) candidates.push({ value: s, source: 'stratz' }); })
+        .catch(() => { /* 隔离 */ })
+    );
   }
-
   // Liquipedia：独立人工策展源，提供规范名作为第四候选（与 Valve 数据链路无关）
   if (liquipedia.ENABLED && name) {
-    try {
-      const meta = await liquipedia.getLeagueMetadata(name);
-      if (meta && meta.canonical) candidates.push({ value: meta.canonical, source: 'liquipedia' });
-    } catch (e) { /* 隔离 */ }
+    tasks.push(
+      liquipedia.getLeagueMetadata(name)
+        .then((meta) => { if (meta && meta.canonical) candidates.push({ value: meta.canonical, source: 'liquipedia' }); })
+        .catch(() => { /* 隔离 */ })
+    );
   }
+  if (tasks.length) await Promise.all(tasks);
 
   const r = consensus.voteName(candidates);
   if (!r.value && name) {
@@ -144,21 +158,24 @@ async function getLeagueWindow(league) {
   }
   if (cu && cu.end) endC.push({ value: cu.end, source: 'curation' });
 
+  // 优化：stratz 和 liquipedia 独立来源，并行发起，各自隔离错误
+  const tasks = [];
+
   // STRATZ 当前 schema 不直接提供赛事起止时间，留接口；启用且可用时补充
   if (stratz.ENABLED && name) {
-    try {
-      const s = await stratz.getLeagueWindow(name);
-      if (s && s.start) {
-        startC.push({ value: s.start, source: 'stratz' });
-        diag.stratz = 'hit(' + s.start + ')';
-      } else {
-        diag.stratz = s ? 'no-start' : 'null/fail';
-      }
-      if (s && s.end) endC.push({ value: s.end, source: 'stratz' });
-    } catch (e) {
-      diag.stratz = 'error';
-      /* 隔离 */
-    }
+    tasks.push(
+      stratz.getLeagueWindow(name)
+        .then((s) => {
+          if (s && s.start) {
+            startC.push({ value: s.start, source: 'stratz' });
+            diag.stratz = 'hit(' + s.start + ')';
+          } else {
+            diag.stratz = s ? 'no-start' : 'null/fail';
+          }
+          if (s && s.end) endC.push({ value: s.end, source: 'stratz' });
+        })
+        .catch(() => { diag.stratz = 'error'; /* 隔离 */ })
+    );
   } else {
     diag.stratz = stratz.ENABLED ? 'skip(no-name)' : 'disabled';
   }
@@ -166,34 +183,36 @@ async function getLeagueWindow(league) {
   // Liquipedia：返回的日期为文本字符串，需经 liquipediaDateToUnix 转为 Unix 秒
   // 才能进入 voteTime（仅接受数值候选）；解析失败的字段被跳过，不影响其它源。
   if (liquipedia.ENABLED && name) {
-    try {
-      const meta = await liquipedia.getLeagueMetadata(name);
-      if (meta) {
-        if (meta.startDate) {
-          const t = liquipediaDateToUnix(meta.startDate);
-          if (t != null) {
-            startC.push({ value: t, source: 'liquipedia' });
-            diag.liquipedia = 'hit';
+    tasks.push(
+      liquipedia.getLeagueMetadata(name)
+        .then((meta) => {
+          if (meta) {
+            if (meta.startDate) {
+              const t = liquipediaDateToUnix(meta.startDate);
+              if (t != null) {
+                startC.push({ value: t, source: 'liquipedia' });
+                diag.liquipedia = 'hit';
+              } else {
+                diag.liquipedia = 'date-parse-fail';
+              }
+            } else {
+              diag.liquipedia = 'no-date';
+            }
+            if (meta.endDate) {
+              const t = liquipediaDateToUnix(meta.endDate);
+              if (t != null) endC.push({ value: t, source: 'liquipedia' });
+            }
           } else {
-            diag.liquipedia = 'date-parse-fail';
+            diag.liquipedia = 'null';
           }
-        } else {
-          diag.liquipedia = 'no-date';
-        }
-        if (meta.endDate) {
-          const t = liquipediaDateToUnix(meta.endDate);
-          if (t != null) endC.push({ value: t, source: 'liquipedia' });
-        }
-      } else {
-        diag.liquipedia = 'null';
-      }
-    } catch (e) {
-      diag.liquipedia = 'error';
-      /* 隔离 */
-    }
+        })
+        .catch(() => { diag.liquipedia = 'error'; /* 隔离 */ })
+    );
   } else {
     diag.liquipedia = 'disabled';
   }
+
+  if (tasks.length) await Promise.all(tasks);
 
   // 诊断日志：一次性输出全部源的查询结果
   console.log('[sources.getLeagueWindow]', diag.name, '→',
@@ -256,31 +275,44 @@ async function getLeagueMetadata(league) {
   const id = league && (league.leagueid || league.id);
   const result = { sources: [] };
 
+  // 优化：liquipedia 和 steam 独立来源，并行发起，各自隔离错误
+  // 并行安全：Liquipedia 用 Object.assign 设置 prizePool（若有），Steam 仅在 prizePool==null 时兜底；
+  // 无论两者完成顺序如何，最终都是 Liquipedia 优先、Steam 兜底
+  const tasks = [];
+
   // Liquipedia: full metadata (canonical name, dates, prize pool, location, format, organizer)
   if (liquipedia.ENABLED && name) {
-    try {
-      const meta = await liquipedia.getLeagueMetadata(name);
-      if (meta) {
-        Object.assign(result, meta);
-        result.sources.push('liquipedia');
-      }
-    } catch (e) { /* 隔离 */ }
+    tasks.push(
+      liquipedia.getLeagueMetadata(name)
+        .then((meta) => {
+          if (meta) {
+            Object.assign(result, meta);
+            result.sources.push('liquipedia');
+          }
+        })
+        .catch(() => { /* 隔离 */ })
+    );
   }
 
   // Steam: prize pool (unique to Steam, complements/validates Liquipedia)
   if (steam.ENABLED && id) {
-    try {
-      const pp = await steam.getTournamentPrizePool(id);
-      if (pp && pp.prizePool != null) {
-        // Liquipedia 优先（人工策展更可靠），Steam 兜底
-        if (result.prizePool == null) {
-          result.prizePool = pp.prizePool;
-          result.prizePoolCurrency = pp.prizePoolCurrency || 'USD';
-        }
-        result.sources.push('steam');
-      }
-    } catch (e) { /* 隔离 */ }
+    tasks.push(
+      steam.getTournamentPrizePool(id)
+        .then((pp) => {
+          if (pp && pp.prizePool != null) {
+            // Liquipedia 优先（人工策展更可靠），Steam 兜底
+            if (result.prizePool == null) {
+              result.prizePool = pp.prizePool;
+              result.prizePoolCurrency = pp.prizePoolCurrency || 'USD';
+            }
+            result.sources.push('steam');
+          }
+        })
+        .catch(() => { /* 隔离 */ })
+    );
   }
+
+  if (tasks.length) await Promise.all(tasks);
 
   return Object.keys(result).length > 1 ? result : null;
 }
@@ -351,21 +383,30 @@ async function enrichTeamInfo(team) {
 async function crossTeamMembers(teamId) {
   const lists = [];
 
-  try {
-    const ps = await api.getTeamPlayers(teamId);
-    if (ps && ps.length) {
-      lists.push({
-        source: 'opendota',
-        members: ps.map((p) => ({ account_id: p.account_id, name: p.name }))
-      });
-    }
-  } catch (e) { /* 隔离 */ }
+  // 优化：三个独立来源并行发起，各自隔离错误
+  const tasks = [];
 
+  // OpenDota
+  tasks.push(
+    api.getTeamPlayers(teamId)
+      .then((ps) => {
+        if (ps && ps.length) {
+          lists.push({
+            source: 'opendota',
+            members: ps.map((p) => ({ account_id: p.account_id, name: p.name }))
+          });
+        }
+      })
+      .catch(() => { /* 隔离 */ })
+  );
+
+  // STRATZ
   if (stratz.ENABLED && teamId) {
-    try {
-      const rs = await stratz.getTeamRoster(teamId);
-      if (rs && rs.length) lists.push({ source: 'stratz', members: rs });
-    } catch (e) { /* 隔离 */ }
+    tasks.push(
+      stratz.getTeamRoster(teamId)
+        .then((rs) => { if (rs && rs.length) lists.push({ source: 'stratz', members: rs }); })
+        .catch(() => { /* 隔离 */ })
+    );
   }
 
   // Liquipedia：按战队「名称」查询名册（非 id），故先用 curation 把 teamId 映射到规范队名。
@@ -377,11 +418,14 @@ async function crossTeamMembers(teamId) {
   const cu = curation.curatedTeamFor(teamId);
   const teamName = cu && cu.name;
   if (liquipedia.ENABLED && teamName) {
-    try {
-      const rs = await liquipedia.getTeamRoster(teamName);
-      if (rs && rs.length) lists.push({ source: 'liquipedia', members: rs });
-    } catch (e) { /* 隔离 */ }
+    tasks.push(
+      liquipedia.getTeamRoster(teamName)
+        .then((rs) => { if (rs && rs.length) lists.push({ source: 'liquipedia', members: rs }); })
+        .catch(() => { /* 隔离 */ })
+    );
   }
+
+  if (tasks.length) await Promise.all(tasks);
 
   if (lists.length === 0) return null;
   const r = consensus.crossMembers(lists);
@@ -422,8 +466,60 @@ function getMatchTier(leagueName) {
   return t || null;
 }
 
+// ===== 赛事展示名：curation 规范名覆盖（同步式，零网络）=====
+// 集中式覆盖入口：所有 UI 展示赛事名时统一调用本函数。命中 curation 且规范名
+// 与原始名不同则返回规范名（如 OpenDota 的 "EPL Masters 2026" → 权威库 "EPL Masters I"），
+// 否则原样返回原始名。避免各页面重复内联 curation 查找、降低回归风险，
+// 也保证「列表/详情/搜索/关注/对局/推送」所有展示位口径一致。
+function canonicalLeagueName(rawName) {
+  const name = (rawName || '').trim();
+  if (!name) return name;
+  // 1) 优先走与云函数共用的精确归一映射（G4 单一数据源，保证两侧口径一致）
+  const exact = leagueCanon.resolveCanonical(name);
+  if (exact && exact !== name) return exact;
+  // 2) 模糊匹配兜底（仅小程序展示用，保留 curation 的 rich 修正能力，
+  //    例如 OpenDota 名称多/少后缀的子串归一；云函数仅需精确映射即可）
+  const cu = curation.curatedEventFor(name);
+  if (cu && cu.canonical && cu.canonical !== name) return cu.canonical;
+  return name;
+}
+
+// ===== 赛事展示名：统一解析器（形状无关，单一出口）=====
+// 接受任意 league 对象或原始名字符串，返回 curation 规范名覆盖后的「展示名」。
+// 设计目的：把「从对象取字段 + 规范名映射」两步收敛为 1 个数据出口——
+//   - 此前各展示位手写 sources.canonicalLeagueName(obj.X)，字段名在
+//     .name / .league_name / .league.name / .leagueName 间漂移，正是
+//     P3「漏调/错字段」的根因；
+//   - 现在所有展示位统一调用 leagueDisplayName(obj)，由本函数负责字段提取，
+//     新增展示位只需传入 league 对象，无需记忆字段名，从结构上消除 P3 复发。
+// 与 canonicalLeagueName 的分工：canonicalLeagueName 负责「原始名→规范名」单点映射；
+// leagueDisplayName 负责「从 league 对象取出原始名，再交给 canonicalLeagueName」。
+function leagueDisplayName(league) {
+  let raw = '';
+  if (!league) raw = '';
+  else if (typeof league === 'string') raw = league;
+  else if (league.name) raw = league.name;
+  else if (league.league_name) raw = league.league_name;
+  else if (league.leagueName) raw = league.leagueName;
+  else if (league.league && league.league.name) raw = league.league.name;
+  const display = canonicalLeagueName(raw);
+  // G8：若仍未命中 curation（展示名==原始名），上报以便发现「应补进 curation 的赛事」
+  if (raw && display === raw) monitor.leagueNameUncovered(raw);
+  return display;
+}
+
+// 就地给 league 对象挂载 displayName 字段（= leagueDisplayName(league)），
+// 供列表/卡片构建后直接 obj.displayName 透传给 WXML。返回原对象，便于链式调用。
+// 注意：本函数只添加展示用字段，不修改其它字段。
+function attachDisplayName(league) {
+  if (league && typeof league === 'object') {
+    league.displayName = leagueDisplayName(league);
+  }
+  return league;
+}
+
 // ===== 选手资料多源增强：接入 Liquipedia getPlayerProfile =====
-// 解决痛点：player-detail.js 此前完全未调用 liquipedia.getPlayerProfile，
+// 历史背景：选手详情页此前完全未调用 liquipedia.getPlayerProfile，
 // 选手真实姓名/国籍/位置/队伍履历/成就均缺失（ASSESSMENT.md P1 待办）。
 // 数据接入以 OpenDota + Liquipedia 为主，本函数封装 Liquipedia 调用，
 // 失败静默回退，不阻塞主流程。
@@ -619,7 +715,8 @@ function groupSeries(matches) {
 module.exports = {
   SOURCE_LABEL: SOURCE_LABEL,
   getLeagueTier: getLeagueTier,
-  getLeagueName: getLeagueName,
+  getLeagueName: voteLeagueNameForMatch, // @deprecated 别名：仅供向后兼容；新代码请用 voteLeagueNameForMatch，且勿用于展示
+  voteLeagueNameForMatch: voteLeagueNameForMatch,
   getLeagueWindow: getLeagueWindow,
   getUpcomingFromCuration: getUpcomingFromCuration,
   getLeagueMetadata: getLeagueMetadata,
@@ -632,5 +729,8 @@ module.exports = {
   validatePlayerId: validatePlayerId,
   getTeamPriority: getTeamPriority,
   getMatchTier: getMatchTier,
+  canonicalLeagueName: canonicalLeagueName,
+  leagueDisplayName: leagueDisplayName,
+  attachDisplayName: attachDisplayName,
   enrichPlayerProfile: enrichPlayerProfile
 };

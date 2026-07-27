@@ -9,6 +9,9 @@ const cloudProxy = require('../../utils/cloudProxy.js');
 const tiers = require('../../utils/tiers.js');
 const remoteCuration = require('../../utils/remoteCuration.js');
 
+// 焦点卡锁定的重点运营节点（文档建议：TI15 2026 上海为本土流量爆发点）
+const FOCUS_EVENT_CANONICAL = 'The International 2026';
+
 // 跨页状态持久化键（I5）：离开页面时保存筛选/关键词/滚动位置，返回时还原
 const VIEW_KEY = 'leagues_view_state';
 
@@ -24,6 +27,79 @@ function statusBadgeOf(status) {
   if (status === 'ongoing') return { text: '进行中', color: '#1ec896' };
   if (status === 'upcoming') return { text: '即将到来', color: '#ffcf5c' };
   return { text: '已结束', color: '#6b7280' };
+}
+
+// ===== 1.2 周轴视图工具：按「周一为界」的周聚合赛事 =====
+// 取赛事代表开赛时间（startDate > earliest > latest），归到所在周的周一，
+// 同周赛事归入一列；无日期（start=0）归入「未定档期」。
+function weekMondayOf(ts) {
+  const d = new Date(ts * 1000);
+  const dow = d.getDay();                 // 0=周日 … 6=周六
+  const diff = (dow + 6) % 7;             // 距本周一的天数
+  const mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() - diff);
+  return Math.floor(mon.getTime() / 1000);
+}
+function fmtMD(ts) {
+  const d = new Date(ts * 1000);
+  return (d.getMonth() + 1) + '/' + d.getDate();
+}
+// ===== 1.3 智能排序：关注置顶 + S级优先 + 时间 =====
+// 用于「全部 / 进行中 / 已结束 / 即将到来」列表的默认排序。
+// 排序键：① followed（关注置顶）→ ② grade rank（SSS>S>A>B>C）→ ③ 时间（近的在前）。
+// 关注态优先取 item.followed，缺失时回退本地 follow 查询，保证排序准确。
+function sortSmart(arr) {
+  return (arr || []).slice().sort((a, b) => {
+    const fa = (a.followed != null ? a.followed : follow.isFollowed('leagues', a.leagueid)) ? 1 : 0;
+    const fb = (b.followed != null ? b.followed : follow.isFollowed('leagues', b.leagueid)) ? 1 : 0;
+    if (fa !== fb) return fb - fa;                                  // 关注置顶
+    const ra = a.rank || 0, rb = b.rank || 0;
+    if (ra !== rb) return rb - ra;                                  // S级优先
+    const ta = a.startDate || a.latest || 0;
+    const tb = b.startDate || b.latest || 0;
+    return tb - ta;                                                 // 时间近的在前
+  });
+}
+
+function groupByWeek(arr) {
+  const map = {};
+  const order = [];
+  const undated = [];
+  (arr || []).forEach((l) => {
+    const start = l.startDate || l.earliest || l.latest || 0;
+    if (!start) { undated.push(l); return; }
+    const mon = weekMondayOf(start);
+    if (!map[mon]) { map[mon] = []; order.push(mon); }
+    map[mon].push(Object.assign({}, l, { wkDate: fmtMD(start) }));
+  });
+  order.sort((a, b) => a - b);
+  const groups = order.map((mon) => {
+    const end = mon + 6 * 86400;
+    const leagues = map[mon].slice().sort((a, b) => (b.latest || 0) - (a.latest || 0));
+    return { key: String(mon), label: fmtMD(mon) + '–' + fmtMD(end), leagues: leagues, undated: false };
+  });
+  if (undated.length) {
+    groups.push({ key: 'undated', label: '未定档期', leagues: undated, undated: true });
+  }
+  return groups;
+}
+
+// 「全部」Tab 数据源合并（P0-1 / RC1）：
+// allLeagues 仅含 OpenDota 已开赛赛事（真实 latest/status），upcomingList 含未来赛事
+// （latest=0，如 TI / Major，OpenDota 暂无比赛记录）。两源按 leagueid 去重合并，
+// allLeagues 优先（保留真实时间数据），仅存在于 upcomingList 的未来赛事补充进来，
+// 确保「全部」能完整展示即将到来的赛事，而不只是「已结束+正在进行」。
+function mergeAllWithUpcoming(allLeagues, upcomingList) {
+  const seen = Object.create(null);
+  const out = [];
+  (allLeagues || []).forEach((x) => {
+    const k = String(x.leagueid);
+    if (!seen[k]) { seen[k] = true; out.push(x); }
+  });
+  (upcomingList || []).forEach((u) => {
+    const k = String(u.leagueid);
+    if (!seen[k]) { seen[k] = true; out.push(u); }
+  });
+  return out;
 }
 
 // 将「赛程原始条目」统一转换为渲染卡片对象。
@@ -81,8 +157,10 @@ Page({
     filter: 'all',
     // 等级筛选：all=全部 / sss=TI顶级 / s=S级 / a=A级 / b=B级
     gradeFilter: 'all',
+    // 1.3 排序模式：smart=智能排序（关注置顶+S级优先+时间）/ time=按时间倒序（默认）
+    sortMode: 'time',
     gradeCounts: { all: 0, sss: 0, s: 0, a: 0, b: 0 },
-    keyword: '',
+    focusNode: null,       // 焦点卡（重点运营节点）：TI15 2026 上海
     list: [],
     archived: [],
     loading: true,
@@ -95,14 +173,31 @@ Page({
     // STRATZ 是否启用（赛程数据主要来源）：未启用且即将到来为空时，据此提示用户
     stratzEnabled: !!stratz.ENABLED,
     updatedAt: 0,
-    updatedLabel: ''
+    updatedLabel: '',
+    // ===== 战队筛选（spec A：多选 + 计数徽标 + 与 Tab×级别取交集）=====
+    teamOptions: [],          // 弹层可选战队（来源：用户已关注战队）
+    teamFilter: [],           // 已确认选中的战队 id 列表
+    teamDraft: [],            // 弹层内草稿选中（取消不生效）
+    teamPopup: false,         // 战队筛选弹层显隐
+    teamFiltering: false,     // 确认后按战队聚合并联赛 id 的加载态
+    teamActive: false,        // 战队筛选是否生效（用于空态「清除筛选」）
+    teamLeagueIds: null,      // { [leagueid]: true } 选中战队参与过的联赛并集；null=不按战队过滤
+    // ===== B 版：筛选抽屉 =====
+    filterPanel: false,           // 筛选抽屉显隐
+    activeFilterCount: 0,         // 生效的非默认筛选数量（「筛选」按钮角标）
+    // ===== 1.2 视图切换：列表(list) / 周轴(week) =====
+    viewMode: 'list',
+    weekGroups: []            // 周轴分组：[{ key, label, leagues:[...], undated }]
   },
 
   onLoad() {
     this.allLeagues = [];     // 归一化后的全部 S 级及以上赛事（含时间窗口与状态）
     this.filtered = [];       // 当前 tab 筛选结果
     this.upcomingList = null;  // 即将到来列表（null=未加载，[]=已加载无结果）
+    this.teamLeagueIds = null;
     this.loadLeagues();
+    this.buildFocusNode();
+    this.refreshTeamOptions();
   },
 
   onPullDownRefresh() {
@@ -134,21 +229,29 @@ Page({
         scrollTop: this._scrollTop || 0,
         filter: this.data.filter,
         gradeFilter: this.data.gradeFilter,
-        keyword: this.data.keyword
+        teamFilter: this.data.teamFilter
       });
     } catch (e) { /* 忽略存储异常 */ }
   },
 
   // I5：返回页面时还原视图状态（首次 onShow 跳过，避免覆盖 onLoad 的初始数据）
   onShow() {
+    if (typeof this.getTabBar === 'function' && this.getTabBar()) {
+      this.getTabBar().setData({ selected: 1 });
+    }
+    this.buildFocusNode();
+    this.refreshTeamOptions();
     if (this._restored) {
       let saved = null;
       try { saved = wx.getStorageSync(VIEW_KEY) || null; } catch (e) { saved = null; }
       if (saved) {
+        const teamFilter = (saved.teamFilter && saved.teamFilter.length) ? saved.teamFilter : [];
         this.setData({
           filter: saved.filter || 'all',
           gradeFilter: saved.gradeFilter || 'all',
-          keyword: saved.keyword || ''
+          teamFilter: teamFilter,
+          teamActive: teamFilter.length > 0
+          // teamLeagueIds 在页面实例存活期间保留于内存，无需从存储恢复
         });
         // 即将到来未加载则补拉，否则直接套用筛选
         if (saved.filter === 'upcoming' && this.upcomingList === null) {
@@ -207,29 +310,50 @@ Page({
   normalize(l, win) {
     if (!l || !l.leagueid) return null;
     const ut = util.unifiedTier(l);
-    const t = tagThemeOf(ut.grade);
     // 从 curation（含 remoteCuration 热更新覆盖）取权威补充字段
     const cur = remoteCuration.curatedEventFor(l.name);
+    // 分级优先取 curation.tier（与详情页 sources.getLeagueTier 的 curation 输入一致），
+    // 未配置时回退 util.unifiedTier（OpenDota tier 映射），保证列表与详情"赛段"一致。
+    const curTier = (cur && cur.tier) ? cur.tier : null;
+    let grade = curTier ? curTier.grade : ut.grade;
+    // RC7 兜底：确保 grade 恒为大写（SSS/S/A/B），与 gradeMatch 的 toLowerCase 比对一致，
+    // 避免 curation/外部源分级大小写异常导致静默漏筛。
+    grade = (grade || 'S').toUpperCase();
+    const rank = curTier ? curTier.rank : ut.rank;
+    const label = curTier ? curTier.label : ut.label;
+    const t = tagThemeOf(grade);
     const valve = (cur && cur.valve != null) ? cur.valve : tiers.flagValve(l.name);
     const topThirdParty = (cur && cur.topThirdParty != null) ? cur.topThirdParty : tiers.flagTopThirdParty(l.name);
     const defunct = !!(cur && cur.defunct);
     const w = win || {};
+    // 传入 curation 日期范围（cur.start/cur.end），使 isOngoing() 的第二条判定路径生效：
+    // 当 SQL 聚合的 lastEnd 因缓存陈旧（2h TTL）或进行中比赛 duration=0 未计入时，
+    // 仍可依据 curation 的官方赛期正确判定"进行中"。
     const mixed = {
       earliest: w.earliest || 0,
       latest: w.latest || 0,
-      startDate: null,
-      endDate: null
+      lastEnd: w.lastEnd || 0,
+      startDate: (cur && cur.start) || null,
+      endDate: (cur && cur.end) || null
     };
-    const status = util.statusOf(mixed);
+    // curation 显式状态硬覆盖：如果策展库明确标记「已结束」/「进行中」，
+    // 信任人工维护的状态，不再依赖自动时间窗口判定（避免数据回填/修正导致误判）。
+    let status = util.statusOf(mixed);
+    if (cur && cur.status === '已结束') status = 'ended';
+    else if (cur && cur.status === '进行中') status = 'ongoing';
     const badge = statusBadgeOf(status);
+    // 展示名经 leagueDisplayName 单一出口解析（形状无关），与详情页口径一致，避免列表/详情不一致。
+    const displayName = sources.leagueDisplayName(l);
     return {
       leagueid: l.leagueid,
-      name: l.name || ('赛事 ' + l.leagueid),
-      grade: ut.grade,
-      rank: ut.rank,
-      tierClass: 'tier-' + ut.grade.toLowerCase(),
-      label: ut.label,
-      displayLabel: tiers.displayOf(ut.grade),   // 文档五档名：官方TI/S-Tier/A-Tier/区域赛/社区赛
+      // 展示名走 curation 规范名覆盖（如 "EPL Masters 2026" → "EPL Masters I"）
+      name: displayName || ('赛事 ' + l.leagueid),
+      displayName: displayName,
+      grade: grade,
+      rank: rank,
+      tierClass: 'tier-' + grade.toLowerCase(),
+      label: label,
+      displayLabel: tiers.displayOf(grade),   // 文档五档名：官方TI/S-Tier/A-Tier/区域赛/社区赛
       source: ut.source,
       tagTheme: t.theme,
       tagVariant: t.variant,
@@ -243,7 +367,13 @@ Page({
       status: status,
       statusText: badge.text,
       statusColor: badge.color,
-      dateRange: util.formatDateRange(mixed.earliest, mixed.latest),
+      // 赛期优先用 curation 完整周期（cur.start/cur.end），无则回退 OpenDota 真实比赛窗口。
+      // 修复：此前直接用比赛窗口，导致 EPL 显示 "7/20–7/27" 而非权威赛期 "7/20–8/12"。
+      dateRange: (mixed.startDate && mixed.endDate)
+        ? util.formatDateRange(mixed.startDate, mixed.endDate)
+        : util.formatDateRange(mixed.earliest, mixed.latest),
+      startDate: mixed.startDate,
+      endDate: mixed.endDate,
       _win: mixed
     };
   },
@@ -272,10 +402,142 @@ Page({
     this.applyAndSlice(true);
   },
 
-  onSearch(e) {
-    this.setData({ keyword: (e.detail.value || '').trim(), page: 0 });
+  // ===== B 版：筛选抽屉控制 =====
+  // 统计生效的非默认筛选数量，驱动「筛选」按钮角标
+  syncFilterBadge() {
+    const d = this.data;
+    let n = 0;
+    if (d.gradeFilter !== 'all') n++;
+    if (d.sortMode === 'smart') n++;   // 默认 time；smart 作为「高级模式」计入非默认
+    if (d.viewMode !== 'list') n++;
+    n += (d.teamFilter && d.teamFilter.length) || 0;
+    if (n !== d.activeFilterCount) this.setData({ activeFilterCount: n });
+  },
+
+  openFilterPanel() { this.setData({ filterPanel: true }); },
+  closeFilterPanel() { this.setData({ filterPanel: false }); },
+
+  // 重置等级/排序/视图/战队筛选为默认
+  resetFilters() {
+    this.teamLeagueIds = null;
+    this.setData({
+      filterPanel: false,
+      gradeFilter: 'all',
+      sortMode: 'time',
+      viewMode: 'list',
+      teamFilter: [],
+      teamActive: false
+    });
     this.applyAndSlice(true);
   },
+
+  // 1.2 视图切换：列表 / 周轴（复用同一套筛选结果，仅改渲染维度）
+  onToggleView(e) {
+    const m = e.currentTarget.dataset.m;
+    if (m === this.data.viewMode) return;
+    this.setData({ viewMode: m });
+    this.applyAndSlice(true);
+  },
+
+  // 1.3 切换排序模式（智能 / 时间）
+  onToggleSort(e) {
+    const m = e.currentTarget.dataset.m;
+    if (m === this.data.sortMode) return;
+    this.setData({ sortMode: m });
+    this.applyAndSlice(true);
+  },
+
+  // ===== 战队筛选（spec A）=====
+  // 来源：用户已关注战队（D-A2 取「用户已关注战队」，量级小、交互快）
+  // 优化：用签名判断关注列表是否变化，未变则跳过 setData（避免 onShow 重复开销）
+  refreshTeamOptions() {
+    const followed = follow.list('teams') || [];
+    // 用 id+name 拼接作为签名，快速判断是否有变化
+    const sig = followed.map((t) => t.id + ':' + (t.name || '')).join('|');
+    if (this._lastTeamSig === sig) return;  // 未变化，跳过 setData
+    this._lastTeamSig = sig;
+    const options = followed.map((t) => ({
+      id: String(t.id),
+      name: t.name || ('战队 ' + t.id),
+      tag: t.tag || (t.name || '?').slice(0, 3).toUpperCase()
+    }));
+    this.setData({ teamOptions: options });
+  },
+
+  openTeamFilter() {
+    this.setData({ teamPopup: true, teamDraft: this.data.teamFilter.slice() });
+  },
+
+  closeTeamFilter() {
+    this.setData({ teamPopup: false });
+  },
+
+  // 弹层内勾选切换（草稿态，取消不生效）
+  onTeamCheck(e) {
+    const id = String(e.currentTarget.dataset.id);
+    const draft = this.data.teamDraft.slice();
+    const i = draft.indexOf(id);
+    if (i >= 0) draft.splice(i, 1);
+    else draft.push(id);
+    this.setData({ teamDraft: draft });
+  },
+
+  selectAllTeams() {
+    this.setData({ teamDraft: this.data.teamOptions.map((t) => t.id) });
+  },
+
+  clearTeamDraft() {
+    this.setData({ teamDraft: [] });
+  },
+
+  // 确认：按选中战队（OR 逻辑）聚合它们参与过的联赛 id 并集，再与当前结果取交集。
+  // 数据来源 api.getTeamMatches(teamId) 含 leagueid，经本地缓存层（10min）避免重复请求。
+  confirmTeamFilter() {
+    const draft = this.data.teamDraft.slice();
+    this.setData({ teamPopup: false });
+    if (!draft.length) {
+      // 未选任何战队 = 清除筛选
+      this.teamLeagueIds = null;
+      this.setData({ teamFilter: [], teamActive: false });
+      this.applyAndSlice(true);
+      return;
+    }
+    if (draft.length === this.data.teamFilter.length && draft.every((id) => this.data.teamFilter.indexOf(id) >= 0)) {
+      // 与已生效筛选一致，无需重新聚合
+      return;
+    }
+    wx.showLoading({ title: '聚合战队赛事...', mask: true });
+    Promise.all(draft.map((id) => api.getTeamMatches(id).catch(() => [])))
+      .then((lists) => {
+        const map = {};
+        lists.forEach((ms) => (ms || []).forEach((m) => {
+          if (m.leagueid != null) map[m.leagueid] = true;
+        }));
+        this.teamLeagueIds = map;
+        this.setData({ teamFilter: draft, teamActive: true, teamFiltering: false });
+        this.applyAndSlice(true);
+        wx.hideLoading();
+      })
+      .catch(() => {
+        this.setData({ teamFiltering: false });
+        wx.hideLoading();
+        wx.showToast({ title: '战队筛选失败，请重试', icon: 'none' });
+      });
+  },
+
+  clearTeamFilter() {
+    this.teamLeagueIds = null;
+    this.setData({ teamFilter: [], teamActive: false });
+    this.applyAndSlice(true);
+  },
+
+  // 空态动作：战队筛选生效时提供「清除筛选」入口（spec A.AC-A4）
+  onEmptyAction() {
+    if (this.data.teamActive) this.clearTeamFilter();
+  },
+
+  // 弹层内容区点击：阻止冒泡到遮罩关闭
+  noop() {},
 
   // 即将到来：对知名 S 级赛事查赛程，筛未来两个月内开赛。
   // 赛程数据来源：curation 本地精选（部分赛事含日期）+ STRATZ（启用时）。
@@ -554,6 +816,7 @@ Page({
   },
 
   applyAndSlice(reset) {
+    this.syncFilterBadge();
     const f = this.data.filter;
     const gf = this.data.gradeFilter;
     // 等级过滤函数：gradeFilter=all 不过滤，否则只保留对应等级
@@ -567,27 +830,42 @@ Page({
       arr = (this.upcomingList || []).filter(gradeMatch).slice();
     } else if (f === 'ongoing') {
       arr = (this.allLeagues || []).filter((x) => x.status === 'ongoing' && gradeMatch(x));
-      // 进行中：按最近比赛时间倒序
-      arr.sort((a, b) => (b.latest || 0) - (a.latest || 0));
     } else if (f === 'ended') {
-      // 已结束：最近比赛在 7 天前的赛事，按最近比赛时间倒序
-      const cutoff = Date.now() / 1000 - 7 * 86400;
-      arr = (this.allLeagues || []).filter((x) => x.status === 'ended' && (x.latest || 0) < cutoff && gradeMatch(x));
-      arr.sort((a, b) => (b.latest || 0) - (a.latest || 0));
+      // 已结束：直接信任归一化时计算的 status（statusOf 已用真实结束时间 + 缓冲判定）。
+      // 移除冗余的「末场开赛须早于 7 天前」cutoff：短期赛事（1–2 天赛程）打完不久时，
+      // latest(末场开赛) 尚未超过 7 天，会被错误剔除，导致既不在「正在进行」也不在
+      // 「已结束」、只在「全部」能看到（RC2/RC3）。SQL 窗口已限定近 1 年，无需再 cutoff。
+      arr = (this.allLeagues || []).filter((x) => x.status === 'ended' && gradeMatch(x));
     } else {
-      // 全部：按最近比赛时间倒序（无 latest 的排最后）
-      arr = (this.allLeagues || []).filter(gradeMatch).slice();
-      arr.sort((a, b) => {
-        const la = a.latest || 0, lb = b.latest || 0;
-        return lb - la;
-      });
+      // 全部：allLeagues（已结束+正在进行）+ upcomingList（未来赛事）按 leagueid 去重合并，
+      // 未来赛事（OpenDota 暂无比赛记录）一并展示（RC1 / P0-1）。
+      arr = mergeAllWithUpcoming(this.allLeagues, this.upcomingList).filter(gradeMatch).slice();
+    }
+    // 排序：默认按时间倒序；智能排序（关注置顶 + S级优先 + 时间）为高级模式
+    if (this.data.sortMode === 'smart') {
+      arr = sortSmart(arr);
+    } else {
+      const tkey = (x) => (f === 'upcoming' ? (x.startDate || x.latest || 0) : (x.latest || 0));
+      if (f === 'upcoming') {
+        // 即将：按开赛时间从近到远（升序），越近的赛事越靠上
+        arr.sort((a, b) => tkey(a) - tkey(b));
+      } else {
+        // 其他：按最新时间从近到远（降序）
+        arr.sort((a, b) => tkey(b) - tkey(a));
+      }
     }
 
-    // 关键词过滤
-    const kw = this.data.keyword;
-    if (kw) {
-      const k = kw.toLowerCase();
-      arr = arr.filter((x) => x.name.toLowerCase().indexOf(k) >= 0);
+    // 战队筛选：取选中战队「参与过的联赛并集」（OR 逻辑，非 AND）与当前结果取交集
+    // （spec A.AC-A3：列表仅显示参赛方含选中战队中任一方的赛事）
+    const tl = this.teamLeagueIds;
+    if (tl) {
+      arr = arr.filter((x) => tl[x.leagueid]);
+    }
+
+    // 1.2 周轴视图：按周聚合（含 defunct → 未定档期），不分页
+    if (this.data.viewMode === 'week') {
+      this.setData({ weekGroups: groupByWeek(arr), hasMore: false });
+      return;
     }
 
     this.filtered = arr;
@@ -608,6 +886,14 @@ Page({
     this.setData({ list: slice, page: page, hasMore: this.filtered.length > slice.length });
   },
 
+  // P1/RC4：列表底部「加载更多」按钮兜底，不依赖 onReachBottom 触底
+  // （吸顶条/自定义滚动容器遮挡时，触底永不触发，第 31 条以后不加载）。
+  onLoadMore() {
+    if (this.data.hasMore && !this.data.loading && !this.data.upcomingLoading) {
+      this.appendPage();
+    }
+  },
+
   toggleFollow(e) {
     const id = e.currentTarget.dataset.id;
     const name = e.currentTarget.dataset.name;
@@ -623,6 +909,64 @@ Page({
   },
 
   openLeague(e) {
+    const id = e.currentTarget.dataset.id;
+    const name = e.currentTarget.dataset.name;
+    wx.navigateTo({
+      url: '/subpackages/detail/league-detail/league-detail?leagueId=' + id + '&name=' + encodeURIComponent(name)
+    });
+  },
+
+  // 「重点运营节点」焦点卡：当前锁定 TI15 2026 上海（Valve 官方年度旗舰）。
+  // 纯本地 curation 数据驱动，无需网络；TI 结束后自动隐藏（避免展示过期焦点）。
+  // 复用 curation 规范名解析，与赛事详情页 curation 兜底一致；fakeId 与
+  // mergeCurationUpcoming 命名归一逻辑相同，保证关注态与「即将到来」列表互通。
+  buildFocusNode() {
+    const cur = remoteCuration.curatedEventFor(FOCUS_EVENT_CANONICAL);
+    if (!cur || !cur.start) {
+      if (this._lastFocusSig !== 'null') { this._lastFocusSig = 'null'; this.setData({ focusNode: null }); }
+      return;
+    }
+    const nowSec = Math.floor(Date.now() / 1000);
+    const start = cur.start;
+    const end = cur.end || (cur.start + 10 * 86400);
+    // TI 结束后不再展示焦点卡
+    if (nowSec > end) {
+      if (this._lastFocusSig !== 'ended') { this._lastFocusSig = 'ended'; this.setData({ focusNode: null }); }
+      return;
+    }
+    const isLive = nowSec >= start && nowSec <= end;
+    const daysToStart = Math.ceil((start - nowSec) / 86400);
+    // 稳定的负数 id（与 mergeCurationUpcoming 命名归一逻辑一致）
+    let hash = 0;
+    const k = (cur.canonical || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    for (let j = 0; j < k.length; j++) { hash = ((hash << 5) - hash + k.charCodeAt(j)) | 0; }
+    const fakeId = -(Math.abs(hash) % 1000000 + 1000000);
+    const followed = follow.isFollowed('leagues', fakeId);
+    // 签名：只有「是否直播 + 距开赛天数 + 关注态」变化时才 setData
+    // 这三个是用户可感知的状态，其余字段（name/dateRange 等）恒定不变
+    const sig = isLive + '|' + daysToStart + '|' + followed;
+    if (this._lastFocusSig === sig) return;  // 状态未变，跳过 setData
+    this._lastFocusSig = sig;
+    this.setData({
+      focusNode: {
+        leagueid: fakeId,
+        name: cur.canonical,
+        canonical: cur.canonical,
+        start: start,
+        end: end,
+        dateRange: util.formatDateRange(start, end),
+        prizePool: cur.prizePool ? String(cur.prizePool) : '',
+        location: cur.region || '上海',
+        valve: true,
+        isLive: isLive,
+        daysToStart: daysToStart,
+        followed: followed
+      }
+    });
+  },
+
+  // 焦点卡点击：进入赛事详情（curation-only 赛事由详情页兜底渲染）
+  openFocus(e) {
     const id = e.currentTarget.dataset.id;
     const name = e.currentTarget.dataset.name;
     wx.navigateTo({

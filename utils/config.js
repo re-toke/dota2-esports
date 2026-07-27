@@ -4,7 +4,21 @@
 module.exports = {
   // 订阅消息模板 id：在微信公众平台「功能 → 订阅消息 → 我的模板」中申请后填入。
   // 留空时，关注功能仅做本地收藏，不会弹出微信订阅授权（避免无模板时崩溃）。
-  subscribeTemplateId: '',
+  subscribeTemplateId: 'eLHDZtOvcGghXBZnnwcvsO3SX3fBPdB9cz9PKi_NwRQ',
+
+  // 订阅消息相关配置
+  subscribe: {
+    // 授权弹窗冷却时间（秒）。用户关闭/拒绝后 N 秒内不再弹出，避免骚扰。
+    cooldownSec: 86400,       // 24 小时
+    // 赛前提醒窗口（秒）：开赛前 N 秒内触发推送
+    remindBeforeSec: 1800,    // 30 分钟
+    // 每用户每日推送上限
+    dailyLimit: 5,
+    // 发送记录本地存储 key 前缀
+    sendLogKey: 'dota2_sub_send_log',
+    // 订阅状态存储 key
+    statusKey: 'dota2_sub_status'
+  },
 
   // 缓存 TTL（秒）。调大可减少 OpenDota 请求，调小可获取更实时数据。
   // 注意：本项目的「新鲜窗口(freshSec)」由 api.cachedFresh 使用，硬 TTL 仅作为最终兜底。
@@ -23,24 +37,31 @@ module.exports = {
 
   // 赛事时间窗口判定（用于「正在进行 / 即将到来」筛选）
   leagueWindow: {
-    ongoingBufferSec: 7 * 86400,   // 「正在进行」：最近 N 秒内仍有比赛视为进行中
+    // 「正在进行」缓冲：真实结束时间(last_end)之后再保留 N 秒仍判为进行中，
+    // 用于平滑数据延迟/时钟漂移。注意：仅 2 小时——此前为 7 天，会导致已结束的比赛
+    // 在最后一场开赛后整整一周仍显示"进行中"。有了 last_end（真实结束时间）后无需长缓冲。
+    ongoingBufferSec: 2 * 3600,   // 「正在进行」：真实结束时间后再保留 2 小时
     // 「即将到来」：未来 N 秒内开赛视为即将到来。
     // 原值 60 天过窄——未开赛的 S 级赛事在 OpenDota /leagues 中无记录，
     // 只能靠 curation 补充；而 Liquipedia 等来源的"即将到来"常覆盖下半年赛程。
     // 放宽到 180 天（约半年），让下半年已公布日期的 Tier 1 赛事都能进入即将到来 tab。
     upcomingRangeSec: 180 * 86400,
-    // 即将到来 tab 懒加载时，最多查询的赛事数量
-    upcomingQueryLimit: 60
+    // 即将到来 tab 懒加载时，最多查询的赛事数量（串行补充层上限）。
+    // 原 60 偏低：已知 S 级赛事 >60 时，第 61+ 个不进「即将到来」（RC6）。
+    // 提到 120，仍受 cloudProxy 的 OpenDota 60/min 限流保护，首查稍慢但覆盖更全。
+    upcomingQueryLimit: 120
   },
 
   // 列表分页每页条数
   pageSize: 30,
 
-  // OpenDota 限流（约 60 次/分钟）。采用最小间隔策略串行保留槽位。
+  // OpenDota 限流（约 60 次/分钟）。采用滑动窗口并发模式：窗口内最多 maxPerMin 次请求，
+  // 允许并发，仅在窗口满时排队等待（替代原串行 minGapMs 策略，让 Promise.all 真正并行）。
   rateLimit: {
-    minGapMs: 1050,   // 两次请求最小间隔，略大于 1000ms 以保证不破 60/min
-    maxRetries: 2,    // 遇到 429 时的最大重试次数
-    retryBaseMs: 1500 // 重试退避基数（指数增长）
+    maxPerMin: 50,       // 窗口内最大请求数（OpenDota 限制 60，留 10 余量）
+    timeoutMs: 12000,    // 单请求超时（ms），避免 hang 住请求阻塞队列
+    maxRetries: 2,       // 遇到 429 时的最大重试次数
+    retryBaseMs: 1500    // 重试退避基数（指数增长）
   },
 
   // 第二网络数据源：STRATZ（GraphQL，免费 API key，申请见 https://stratz.com/api）。

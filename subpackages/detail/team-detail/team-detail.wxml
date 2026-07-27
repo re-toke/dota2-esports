@@ -11,7 +11,7 @@
           <text wx:if="{{teamPriority && teamPriority.isHighPriority}}" class="priority-badge priority-{{teamPriority.isTI ? 'ti' : 's'}}">{{teamPriority.label}}</text>
           <text wx:if="{{team.tag}}" class="tag-tag">#{{team.tag}}</text>
           <text wx:if="{{team.country}}" class="country-badge">{{team.country}}</text>
-          <text wx:if="{{team.created}}" class="sub">· 成立 {{team.created}}</text>
+          <text wx:if="{{team.lastMatch}}" class="sub">· 最近比赛 {{team.lastMatch}}</text>
         </view>
       </view>
       <view class="star-btn" catchtap="toggleFollow">
@@ -30,6 +30,14 @@
   </view>
 
   <block wx:else>
+    <!-- 4.1 关键指标锚点卡（单体档案模式）：大字号胜率 + 战绩/评级/最近 -->
+    <anchor-card
+      title="{{anchorTitle}}"
+      bigValue="{{anchorBigValue}}"
+      bigLabel="{{anchorBigLabel}}"
+      metaList="{{anchorMeta}}"
+    />
+
     <!-- KPI Strip：战绩核心指标（C 风格 · 多列对齐） -->
     <view class="kpi-strip" wx:if="{{team}}">
       <view class="kpi-cell" wx:if="{{team.rating}}">
@@ -87,8 +95,6 @@
         class="member"
         wx:for="{{current}}"
         wx:key="account_id"
-        bindtap="openPlayer"
-        data-id="{{item.account_id}}"
         hover-class="member-hover"
       >
         <view class="member-avatar">
@@ -120,8 +126,6 @@
         class="member"
         wx:for="{{history}}"
         wx:key="account_id"
-        bindtap="openPlayer"
-        data-id="{{item.account_id}}"
         hover-class="member-hover"
       >
         <view class="member-avatar">
@@ -173,7 +177,7 @@
         <text class="vs-vs">{{item.won ? 'WIN' : 'LOSS'}}</text>
         <text class="vs-meta">{{item.time}}</text>
         <text class="vs-meta" wx:if="{{item.duration}}">{{item.duration}}</text>
-        <text class="vs-meta" wx:if="{{item.league}}">{{item.league}}</text>
+        <text class="vs-meta" wx:if="{{item.league}}">{{item.displayName || item.league}}</text>
       </view>
       <view class="vs-side away">
         <view class="vs-team">
@@ -188,13 +192,13 @@
       <t-button theme="light" size="medium" bindtap="appendMatches" t-class="more-btn">加载更多</t-button>
     </view>
 
-    <!-- 对战记录（H2H）：按对手聚合胜负，点击跳转对手战队详情 -->
+    <!-- 对战记录（H2H）：按对手聚合胜负，点击进入双方对战详情页（spec B 入口） -->
     <view class="section-header" wx:if="{{h2hList.length > 0}}" style="margin-top: 32rpx;">
       <text class="section-title">对战记录</text>
       <text class="section-action muted">优先展示 S-Tier / TI 赛事</text>
     </view>
     <view class="h2h-list" wx:if="{{h2hList.length > 0}}">
-      <view class="h2h-row {{item.topTierLabel ? 'h2h-row-priority' : ''}}" wx:for="{{h2hList}}" wx:key="oppId" bindtap="openTeam" data-id="{{item.oppId}}" hover-class="h2h-row-hover">
+      <view class="h2h-row {{item.topTierLabel ? 'h2h-row-priority' : ''}}" wx:for="{{h2hList}}" wx:key="oppId" bindtap="openH2h" data-a="{{teamId}}" data-b="{{item.oppId}}" hover-class="h2h-row-hover">
         <view class="h2h-opp">
           <view class="h2h-opp-tag">{{item.oppTag}}</view>
           <text class="h2h-opp-name">{{item.oppName}}</text>

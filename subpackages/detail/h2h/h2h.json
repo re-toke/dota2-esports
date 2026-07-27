@@ -1,0 +1,13 @@
+{
+  "navigationBarTitleText": "双方对战",
+  "backgroundColor": "#0e1116",
+  "navigationBarBackgroundColor": "#0e1116",
+  "navigationBarTextStyle": "white",
+  "usingComponents": {
+    "empty-state": "../../../components/empty-state/empty-state",
+    "t-empty": "../../../miniprogram_npm/tdesign-miniprogram/empty/empty",
+    "t-collapse": "../../../miniprogram_npm/tdesign-miniprogram/collapse/collapse",
+    "t-collapse-panel": "../../../miniprogram_npm/tdesign-miniprogram/collapse-panel/collapse-panel",
+    "chart": "../../../components/chart/chart"
+  }
+}

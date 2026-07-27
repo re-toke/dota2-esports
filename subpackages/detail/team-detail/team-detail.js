@@ -51,7 +51,12 @@ Page({
     sourceBadges: [],      // 数据来源徽标列表（统一展示）
     updatedAt: 0,
     updatedLabel: '',
-    teamPriority: null     // 战队优先级：{ isHighPriority, isTI, label }（S-Tier/TI 参赛队标识）
+    teamPriority: null,    // 战队优先级：{ isHighPriority, isTI, label }（S-Tier/TI 参赛队标识）
+    // 4.1 锚点卡（单体档案模式）
+    anchorTitle: '',
+    anchorBigValue: '',
+    anchorBigLabel: '',
+    anchorMeta: []
   },
 
   onLoad(options) {
@@ -66,6 +71,14 @@ Page({
 
   onPullDownRefresh() {
     this.retry(() => wx.stopPullDownRefresh());
+  },
+
+  onUnload() {
+    // 清理增强超时 timer，避免离开页面后 setData 触发错误
+    if (this._enhanceTimer) {
+      clearTimeout(this._enhanceTimer);
+      this._enhanceTimer = null;
+    }
   },
 
   retry(cb) {
@@ -108,7 +121,7 @@ Page({
           losses: t.losses || 0,
           winRate: util.winRate(t.wins, (t.wins || 0) + (t.losses || 0)),
           country: t.country_code || '',
-          created: t.last_match_time ? util.formatTime(t.last_match_time) : ''
+          lastMatch: t.last_match_time ? util.formatTime(t.last_match_time) : ''
         };
 
         const list = players || [];
@@ -136,7 +149,16 @@ Page({
           loading: false,
           teamPriority: priority,
           updatedAt: at,
-          updatedLabel: util.formatAgo(at)
+          updatedLabel: util.formatAgo(at),
+          // 4.1 锚点卡（单体档案）：大字号胜率 + 战绩/评级/最近 元数据
+          anchorTitle: teamInfo.name,
+          anchorBigValue: teamInfo.winRate || '0%',
+          anchorBigLabel: '胜率',
+          anchorMeta: [
+            { label: '战绩', value: (teamInfo.wins || 0) + '-' + (teamInfo.losses || 0) },
+            { label: '评级', value: teamInfo.rating || '—' },
+            { label: '最近', value: teamInfo.lastMatch || '—' }
+          ]
         });
 
         // 异步增强：4 个源用计数器统一收口，避免各自独立 setData。
@@ -150,7 +172,11 @@ Page({
         const finalizeEnhance = () => {
           this._enhanceCount++;
           if (this._enhanceCount < this._enhanceTotal) return;
-          // 所有增强完成，统一刷新 sourceBadges + updatedAt
+          // 所有增强完成，清理超时 timer 并统一刷新 sourceBadges
+          if (this._enhanceTimer) {
+            clearTimeout(this._enhanceTimer);
+            this._enhanceTimer = null;
+          }
           const p = this._enhancePending || {};
           const arr = [];
           if (p.logo && p.logo.source) arr.push(p.logo.source);
@@ -348,9 +374,11 @@ Page({
     const ownScore = m.radiant ? m.radiant_score : m.dire_score;
     const oppScore = m.radiant ? m.dire_score : m.radiant_score;
     const oppName = m.opposing_team_name || '未知对手';
-    // 赛事等级判定（不发网络，零开销）：用于 buildH2h 按 S-Tier 优先聚合
-    const leagueName = m.league_name || '';
-    const tier = sources.getMatchTier(leagueName);
+    // 赛事等级判定（不发网络，零开销）：用于 buildH2h 按 S-Tier 优先聚合。
+    // 分级用原始名保持稳定；展示名走 curation 规范名。
+    const rawLeagueName = m.league_name || '';
+    const leagueName = sources.leagueDisplayName(m);
+    const tier = sources.getMatchTier(rawLeagueName);
     return {
       match_id: m.match_id,
       oppId: m.opposing_team_id,
@@ -390,13 +418,7 @@ Page({
     const followed = follow.toggle('teams', { id: this.data.teamId, name: this.data.team.name });
     this.setData({ followed: followed });
     wx.showToast({ title: followed ? '已关注' : '已取消关注', icon: 'none' });
-    if (followed) subscribe.requestSubscribe();
-  },
-
-  openPlayer(e) {
-    const id = e.currentTarget.dataset.id;
-    if (!id) return;
-    wx.navigateTo({ url: '/subpackages/detail/player-detail/player-detail?accountId=' + id });
+    if (followed) subscribe.requestSubscribe({ force: true });
   },
 
   openTeam(e) {
@@ -410,5 +432,14 @@ Page({
     const id = e.currentTarget.dataset.id;
     if (!id) return;
     wx.navigateTo({ url: '/subpackages/detail/team-detail/team-detail?teamId=' + id });
+  },
+
+  // 对战记录行 → 双方对战 H2H 页（spec B 入口）
+  // data-a = 当前战队(teamId)，data-b = 对手(oppId)
+  openH2h(e) {
+    const a = e.currentTarget.dataset.a;
+    const b = e.currentTarget.dataset.b;
+    if (!a || !b) return;
+    wx.navigateTo({ url: '/subpackages/detail/h2h/h2h?teamA=' + a + '&teamB=' + b });
   }
 });

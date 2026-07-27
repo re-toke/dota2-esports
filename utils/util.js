@@ -85,14 +85,36 @@ function parseISODate(s) {
 // now（Unix 秒），不传则取当前
 function nowSec() { return Math.floor(Date.now() / 1000); }
 
-// 赛事是否正在进行：已开赛且最近 N 秒内仍有比赛，或 startDate<=now<=endDate
-// win 可包含 OpenDota 的 earliest/latest，以及外部源的 startDate/endDate
+// 赛事是否正在进行：已开赛且真实结束时间仍在缓冲内，或 startDate<=now<=endDate
+// win 可包含 OpenDota 的 earliest/latest/lastEnd，以及外部源的 startDate/endDate
+// 注意：lastEnd = max(start_time + duration) 才是真实结束时间；latest 只是最后一场开赛时间，
+// 不能直接当结束边界（否则最后一场开赛后很久仍被误判为进行中）。lastEnd 缺失时回退 latest。
+//
+// 三条判定路径（优先级从高到低）：
+//   ① OpenDota 真实结束时间（lastEnd）在缓冲期内 → 精确匹配
+//   ② Curation/外部源日期范围（startDate ~ endDate + 1天宽限）→ 覆盖 SQL 缓存陈旧场景
+//   ③ 未结算比赛证据兜底：latest 在缓冲期内 且 存在 duration=0/缺失 的比赛
+//      （lastEnd < latest 或 lastEnd=0 说明有正在进行的比赛未被计入真实结束时间）
+//      此路径防止"当天最后几场 BO3/BO5 进行中但因 duration=0 导致 lastEnd 偏小"的场景，
+//      同时避免因数据回填/修正导致 latest 变新而误判已结束赛事为进行中。
 function isOngoing(win, now) {
   if (!win) return false;
   now = now || nowSec();
   const buf = require('./config.js').leagueWindow.ongoingBufferSec;
-  if (win.earliest && win.earliest <= now && win.latest && win.latest >= now - buf) return true;
+  // ① OpenDota 真实结束时间路径
+  if (win.earliest && win.earliest <= now) {
+    const end = win.lastEnd || win.latest;
+    if (end && end >= now - buf) return true;
+  }
+  // ② Curation / 外部源日期范围路径
   if (win.startDate && win.endDate && win.startDate <= now && now <= win.endDate + 86400) return true;
+  // ③ 未结算比赛证据兜底：最新开赛时间在缓冲期内 + 存在未结算比赛（duration=0 或缺失）
+  //    条件收紧：必须同时满足 (a) latest 处于活跃窗口内 (b) lastEnd 无效或早于 latest
+  //    这排除了"已结束赛事因数据回填导致 latest 变新"的误判场景
+  if (win.latest && win.latest <= now && win.latest >= now - buf) {
+    const end = win.lastEnd || 0;
+    if (!end || end < win.latest) return true;
+  }
   return false;
 }
 
@@ -161,5 +183,6 @@ module.exports = {
   isUpcoming,
   statusOf,
   formatDateRange,
-  formatAgo
+  formatAgo,
+  nowSec
 };
