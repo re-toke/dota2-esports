@@ -1,4 +1,4 @@
-<view class="container">
+<view class="container with-tab-bar">
   <!-- 头部 + 计数 KPI -->
   <view class="head">
     <view class="head-info">
@@ -9,10 +9,6 @@
     <view class="kpi-cell" bindtap="switchTab" data-key="teams">
       <text class="kpi-label">战队</text>
       <text class="kpi-value {{activeTab === 'teams' ? 'accent' : ''}}">{{counts.teams}}</text>
-    </view>
-    <view class="kpi-cell" bindtap="switchTab" data-key="players">
-      <text class="kpi-label">选手</text>
-      <text class="kpi-value {{activeTab === 'players' ? 'accent' : ''}}">{{counts.players}}</text>
     </view>
     <view class="kpi-cell" bindtap="switchTab" data-key="leagues">
       <text class="kpi-label">赛事</text>
@@ -32,7 +28,7 @@
   </view>
 
   <!-- 空态 -->
-  <empty-state wx:if="{{items.length === 0}}" type="follow" title="还没有关注任何{{activeLabel}}" desc="在战队 / 选手 / 赛事列表页点击星标即可加入关注" actionText="{{ctaVariant === 'B' ? '浏览热门战队' : '去发现战队'}}" bind:action="goExplore" />
+  <empty-state wx:if="{{items.length === 0}}" type="follow" title="还没有关注任何{{activeLabel}}" desc="在战队 / 赛事列表页点击星标即可加入关注" actionText="{{exploreText}}" bind:action="goExplore" />
 
   <view wx:else class="list">
     <view class="follow-card anim-fade-up" wx:for="{{items}}" wx:key="id" hover-class="follow-card-hover" style="animation-delay: {{ (index % 12) * 50 }}ms">
@@ -43,7 +39,7 @@
         </view>
         <view class="follow-info">
           <view class="follow-name-row">
-            <text class="follow-name">{{item.name}}</text>
+            <text class="follow-name">{{item.displayName || item.name}}</text>
             <text class="type-badge type-{{item.type}}">{{item.typeLabel}}</text>
           </view>
           <text class="follow-sub">{{item.sub}}</text>
@@ -61,7 +57,74 @@
   </view>
 
   <view class="footer">
-    <view class="tip muted">关注数据仅保存在本机。在公众平台配置订阅模板后，可开启赛事临近提醒。</view>
-    <t-button theme="primary" size="medium" block bindtap="onSubscribe" t-class="sub-btn">开启赛事提醒</t-button>
+    <!-- 2.2 订阅状态卡片 -->
+    <view class="sub-card" wx:if="{{subReady}}">
+      <view class="sub-card-head">
+        <text class="sub-card-title">{{tmplTitle}}</text>
+        <view class="sub-badge {{subStatus.subscribed ? 'sub-badge--on' : 'sub-badge--off'}}">
+          {{subStatus.subscribed ? '已开启' : '未开启'}}
+        </view>
+      </view>
+      <view class="sub-card-body" wx:if="{{subStatus.subscribed}}">
+        <text class="sub-info">授权时间：{{subStatus.time ? '已授权' : '未知'}}</text>
+        <text class="sub-info">今日推送：{{todayCount}} / 5 条</text>
+      </view>
+      <view class="sub-card-body" wx:else>
+        <text class="sub-info sub-muted">开启后，关注的战队赛前将收到微信提醒</text>
+      </view>
+      <t-button theme="{{subStatus.subscribed ? 'light' : 'primary'}}" size="medium" block bindtap="onSubscribe">
+        {{subStatus.subscribed ? '重新授权' : '开启赛事提醒'}}
+      </t-button>
+    </view>
+
+    <!-- #20 智能提醒设置：提前量 + 分级过滤 -->
+    <view class="reminder-card" wx:if="{{subReady}}">
+      <view class="sub-card-head">
+        <text class="sub-card-title">智能提醒设置</text>
+        <t-icon name="info-circle" size="32rpx" color="#9aa4b2" />
+      </view>
+      <view class="reminder-block">
+        <text class="reminder-label">提前量</text>
+        <view class="reminder-chips">
+          <view
+            wx:for="{{leadOptions}}"
+            wx:key="sec"
+            class="rc-chip {{reminder.leadSec === item.sec ? 'rc-chip--on' : ''}}"
+            data-sec="{{item.sec}}"
+            bindtap="onLeadChange"
+          >{{item.label}}</view>
+        </view>
+      </view>
+      <view class="reminder-block">
+        <text class="reminder-label">提醒级别</text>
+        <view class="reminder-chips">
+          <view
+            wx:for="{{tierOptions}}"
+            wx:key="grade"
+            class="rc-chip {{item.selected ? 'rc-chip--on' : ''}}"
+            data-grade="{{item.grade}}"
+            bindtap="onTierToggle"
+          >{{item.label}}</view>
+        </view>
+      </view>
+      <text class="reminder-hint">仅对选中级别、赛前 {{reminder.leadSec / 60}} 分钟推送，降低打扰</text>
+    </view>
+
+    <!-- 发送记录（最近 5 条） -->
+    <view class="send-log" wx:if="{{sendHistory.length > 0}}">
+      <view class="send-log-title">推送记录</view>
+      <view class="send-log-item" wx:for="{{sendHistory}}" wx:key="time" wx:if="{{index < 5}}">
+        <view class="sl-status {{item.status === 'ok' ? 'sl-ok' : 'sl-fail'}}">
+          {{item.status === 'ok' ? '成功' : '失败'}}
+        </view>
+        <view class="sl-detail">
+          <text class="sl-league">{{item.displayName || item.leagueName || '赛事提醒'}}</text>
+          <text class="sl-time">{{item.time}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="tip muted" wx:if="{{!subReady}}">关注数据仅保存在本机。需在公众平台配置订阅模板后可开启赛事临近提醒。</view>
+    <view class="tip muted" wx:else>关注数据仅保存在本机。订阅消息由微信云开发推送，每日上限 {{subscribe.dailyLimit || 5}} 条。</view>
   </view>
 </view>

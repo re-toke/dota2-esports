@@ -1,11 +1,11 @@
 // utils/follow.js
-// 关注订阅的本地存储实现。数据结构：{ teams:{id:item}, players:{id:item}, leagues:{id:item} }
+// 关注订阅的本地存储实现。数据结构：{ teams:{id:item}, leagues:{id:item} }
 // 全部存于本地 Storage，无需登录、无需后端。订阅消息推送需配合微信订阅消息（见 config.subscribeTemplateId）。
 
 const KEY = 'dota2_follow';
 
 function blank() {
-  return { teams: {}, players: {}, leagues: {} };
+  return { teams: {}, leagues: {} };
 }
 
 function read() {
@@ -13,7 +13,6 @@ function read() {
     const d = wx.getStorageSync(KEY);
     if (!d || typeof d !== 'object') return blank();
     if (!d.teams) d.teams = {};
-    if (!d.players) d.players = {};
     if (!d.leagues) d.leagues = {};
     return d;
   } catch (e) {
@@ -65,7 +64,6 @@ function counts() {
   const d = read();
   return {
     teams: Object.keys(d.teams || {}).length,
-    players: Object.keys(d.players || {}).length,
     leagues: Object.keys(d.leagues || {}).length
   };
 }
