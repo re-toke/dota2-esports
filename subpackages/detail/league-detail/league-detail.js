@@ -139,12 +139,26 @@ Page({
 
   onLoad(options) {
     const name = decodeURIComponent(options.name || '');
-    const leagueId = options.leagueId;
+    const leagueId = Number(options.leagueId);
+    // 2026-07-27 防复发：若传入的 leagueId 不是该赛事在 curation 中 pin 的权威 leagueId，
+    // 而 curation 中确有对应精确 pin，尝试重定向到 pin 的 leagueId，避免深层链接/缓存落入次级/低级别 id。
+    // （例如：openLeague/data-name 传入的 name 可能与 pin 的 canonical 匹配，但 id 是旧缓存的 19080，
+    //   需纠正回 19944）
+    const cur = remoteCuration.curatedEventFor(name, { leagueId: leagueId, game: 'dota2' });
+    const effectiveId = (cur && cur.leagueId != null && cur.leagueId !== leagueId) ? cur.leagueId : leagueId;
+    if (effectiveId !== leagueId) {
+      console.log('[league-detail] 联赛 Id 重定向: ' + leagueId + ' -> ' + effectiveId + ' (curation pin)');
+      wx.redirectTo({
+        url: '/subpackages/detail/league-detail/league-detail?leagueId=' + effectiveId + '&name=' + encodeURIComponent(name)
+      });
+      return;
+    }
+    const lid = String(effectiveId);
     this.setData({
-      leagueId: leagueId,
+      leagueId: lid,
       name: name,
       displayName: name,
-      followed: follow.isFollowed('leagues', leagueId)
+      followed: follow.isFollowed('leagues', lid)
     });
     wx.setNavigationBarTitle({ title: name || '赛事详情' });
     // F1 直播聚合入口：按赛事名构建各平台搜索链接
@@ -434,7 +448,10 @@ Page({
         }
         if (Object.keys(patch).length) this.setData(patch);
       })
-      .catch(() => {});
+      .catch((err) => {
+        // 2026-07-27：队名补全失败日志（非静默吞错），方便排查「队伍名显示为占位」的根因。
+        console.warn('[league-detail] enrichTeamNames 失败，队伍将保留为 "Team {id}" 占位:', err);
+      });
   },
 
   fmt(m) {
