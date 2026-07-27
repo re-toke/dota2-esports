@@ -34,13 +34,13 @@ jobs:
       - name: Test
         run: npm test
 
-      # G4 — 确保 curation-shared.json 与 curation.js 同步（防止改了 curation 忘了 sync）
+      # G4 — 确保 curation-shared.js 与 curation.js 同步（防止改了 curation 忘了 sync）
       - name: Verify curation map is up to date
         run: |
           npm run sync:canon
-          if ! git diff --quiet -- utils/curation-shared.json cloudfunctions/aggregation/curation-shared.json; then
-            echo "::error::curation-shared.json 已过期，请运行 npm run sync:canon 后重新提交"
-            git --no-pager diff --stat -- utils/curation-shared.json cloudfunctions/aggregation/curation-shared.json
+          if ! git diff --quiet -- utils/curation-shared.js cloudfunctions/aggregation/curation-shared.js; then
+            echo "::error::curation-shared.js 已过期，请运行 npm run sync:canon 后重新提交"
+            git --no-pager diff --stat -- utils/curation-shared.js cloudfunctions/aggregation/curation-shared.js
             exit 1
           fi
         shell: bash

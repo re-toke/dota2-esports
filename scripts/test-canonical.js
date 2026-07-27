@@ -129,10 +129,10 @@ if (cloudCanon) {
       assert(m === 'EPL Masters I' && c === 'EPL Masters I', 'EPL 别名 ' + a + ' 不一致: mini=' + m + ' cloud=' + c);
     });
   });
-  check('G4: 两侧 curation-shared.json 字节一致（无双源漂移）', () => {
-    const a = fs.readFileSync(path.join(SRC, 'curation-shared.json'), 'utf8');
-    const b = fs.readFileSync(path.resolve(__dirname, '..', 'cloudfunctions', 'aggregation', 'curation-shared.json'), 'utf8');
-    assert(a === b, '两侧 JSON 不一致，请运行 npm run sync:canon');
+  check('G4: 两侧 curation-shared.js 模块等价（无双源漂移）', () => {
+    const a = require(path.join(SRC, 'curation-shared.js'));
+    const b = require(path.resolve(__dirname, '..', 'cloudfunctions', 'aggregation', 'curation-shared.js'));
+    assert(JSON.stringify(a) === JSON.stringify(b), '两侧 curation-shared.js 模块不相等，请运行 npm run sync:canon');
   });
 }
 

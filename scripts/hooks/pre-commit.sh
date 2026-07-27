@@ -12,7 +12,7 @@ cd "$(git rev-parse --show-toplevel)"
 # 仅对已暂存（Added/Copied/Modified）的 .js 跑 lint，排除依赖与构建产物
 STAGED_JS=$(git diff --cached --name-only --diff-filter=ACM \
   | grep -E '\.js$' \
-  | grep -vE 'node_modules/|miniprogram_npm/|cloudfunctions/aggregation/curation-shared\.json' \
+  | grep -vE 'node_modules/|miniprogram_npm/|cloudfunctions/aggregation/curation-shared\.js' \
   || true)
 
 if [ -n "$STAGED_JS" ]; then

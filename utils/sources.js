@@ -29,7 +29,7 @@ const liquipedia = require('./liquipedia.js');
 const consensus = require('./consensus.js');
 const curation = require('./remoteCuration.js');
 const imageUtil = require('./image.js');
-// G4 单一数据源：与云函数共用的精确归一映射（来自 curation-shared.json）
+// G4 单一数据源：与云函数共用的精确归一映射（来自 curation-shared.js 模块，非 .json）
 const leagueCanon = require('./league-canon-map.js');
 // G8 运行时监控（安全降级，无 wx 时不打点）
 const monitor = require('./monitor.js');
