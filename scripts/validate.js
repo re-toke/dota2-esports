@@ -6,12 +6,11 @@ const ROOT = path.resolve(__dirname, '..');
 const NPM = path.join(ROOT, 'miniprogram_npm', 'tdesign-miniprogram');
 
 const JS_FILES = [
-  'pages/player-detail/player-detail.js',
   'pages/teams/teams.js',
   'pages/follow/follow.js',
   'pages/leagues/leagues.js',
-  'pages/league-detail/league-detail.js',
-  'pages/team-detail/team-detail.js',
+  'subpackages/detail/league-detail/league-detail.js',
+  'subpackages/detail/team-detail/team-detail.js',
   'utils/sources.js',
   'utils/stratz.js',
   'utils/steam.js',
@@ -21,11 +20,10 @@ const JS_FILES = [
 ];
 
 const JSON_FILES = [
-  'pages/player-detail/player-detail.json',
   'pages/teams/teams.json',
   'pages/follow/follow.json',
-  'pages/league-detail/league-detail.json',
-  'pages/team-detail/team-detail.json'
+  'subpackages/detail/league-detail/league-detail.json',
+  'subpackages/detail/team-detail/team-detail.json'
 ];
 
 let errors = 0;
@@ -83,10 +81,9 @@ for (const f of JSON_FILES) {
 // 4) WXML 中引用的关键 data 字段是否在 JS data 中声明（轻量正则校验）
 console.log('\n=== WXML 关键字段引用检查 ===');
 const pairs = [
-  ['pages/player-detail/player-detail', ['loadingMore', 'hasMore', 'page', 'pageSize']],
   ['pages/teams/teams', ['loadingMore', 'hasMore', 'page', 'pageSize']],
   ['pages/follow/follow', ['loadingMore', 'hasMore', 'page', 'pageSize']],
-  ['pages/league-detail/league-detail', ['liqTier', 'sourceLabel']]
+  ['subpackages/detail/league-detail/league-detail', ['liqTier', 'sourceLabel']]
 ];
 for (const [page, fields] of pairs) {
   const js = fs.readFileSync(path.join(ROOT, page + '.js'), 'utf8');

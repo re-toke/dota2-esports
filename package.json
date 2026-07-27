@@ -3,13 +3,19 @@
   "version": "1.1.0",
   "description": "DOTA2赛事微信小程序（TDesign 版）",
   "scripts": {
-    "lint": "eslint utils/ pages/ cloudfunctions/ scripts/ --ext .js",
-    "lint:fix": "eslint utils/ pages/ cloudfunctions/ scripts/ --ext .js --fix"
+    "lint": "eslint --rulesdir scripts/eslint-rules utils/ pages/ subpackages/ cloudfunctions/ scripts/ --ext .js",
+    "lint:fix": "eslint --rulesdir scripts/eslint-rules utils/ pages/ subpackages/ cloudfunctions/ scripts/ --ext .js --fix",
+    "test": "node scripts/test-canonical.js",
+    "test:all": "node scripts/test-sources.js && node scripts/test-consensus.js && node scripts/test-canonical.js",
+    "sync:canon": "node scripts/sync-canon-map.js",
+    "check:syntax": "node scripts/check-syntax.js",
+    "prepare": "husky"
   },
   "dependencies": {
     "tdesign-miniprogram": "^1.15.3"
   },
   "devDependencies": {
-    "eslint": "^8.57.0"
+    "eslint": "^8.57.0",
+    "husky": "^9.1.0"
   }
 }

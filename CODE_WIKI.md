@@ -243,7 +243,8 @@ dota2-esports/
 | 函数 | 职责 | 数据来源 |
 |------|------|----------|
 | `getLeagueTier(league)` | 赛事分级多源计票 | community / curation / OpenDota / STRATZ |
-| `getLeagueName(league)` | 赛事名归一投票 | OpenDota / curation / STRATZ / Liquipedia |
+| `voteLeagueNameForMatch(league)` | 赛事名归一投票（**仅用于匹配/索引，禁止展示**；展示走 `leagueDisplayName`） | OpenDota / curation / STRATZ / Liquipedia |
+| `getLeagueName(league)` | ⚠️ 已废弃别名，等价于 `voteLeagueNameForMatch`，勿用于展示 | 同上 |
 | `getLeagueWindow(league)` | 赛事时间中位数比对 | curation / STRATZ / Liquipedia |
 | `getLeagueMetadata(league)` | 元数据聚合（奖金池/地点/赛制） | Liquipedia + Steam |
 | `crossTeamMembers(teamId)` | 成员按 account_id 交叉比对 | OpenDota / STRATZ / Liquipedia |
@@ -253,6 +254,50 @@ dota2-esports/
 | `getMatchTier(leagueName)` | 单场比赛赛事等级（零网络） | tiers |
 | `enrichPlayerProfile(player)` | 选手资料多源增强 | Liquipedia |
 | `getUpcomingFromCuration(now)` | curation 未来赛事补充 | curation |
+
+**展示联赛名规范（P3 / G1+G3 防护）**：
+
+- 所有展示位统一使用 `sources.leagueDisplayName(league对象)` 取得规范名（形状无关：接受 `{name}` / `{league_name}` / `{league:{name}}` / 字符串）。该函数内部调用 `canonicalLeagueName`，命中 curation 规范名则覆盖（如 `EPL Masters 2026` → `EPL Masters I`），否则原样返回。
+- 列表/卡片/详情构建出的展示对象应附带 `displayName` 字段（= leagueDisplayName 结果），WXML 用 `{{item.displayName || item.name}}` 读取，保证「安全路径=默认路径」。
+- **禁止**把原始联赛名字段（`<obj>.league_name` / `<obj>.league.name`）直接赋给展示字段（`name` / `leagueName` / `league` / `displayName` / `title`）。静态检查 `scripts/eslint-rules/no-raw-league-name.js`（已在 `.eslintrc.json` 启用为 error）会在 lint/CI 阶段拦截此类赋值；确需原始名用于分级/检索时，请赋给非展示字段（如 `rawLeagueName`）。
+- 赛期展示优先用 curation 完整周期（`cur.start`/`cur.end`），回退 OpenDota 真实比赛窗口；不要用「已进行比赛窗口」冒充完整赛期。
+- 相关测试：`scripts/test-canonical.js`（`npm test`）断言映射/别名/赛期/状态一致性，P3/P1 回归首次复现即红。
+
+**规范映射单一数据源（G4 防护）**：
+
+- 赛事名规范映射只允许手工维护 `utils/curation.js` 的 `CURATED_EVENTS`（canonical + aliases）。任何新增/修改赛事别名都只改这里。
+- 映射产物 `utils/curation-shared.json` 由 `scripts/sync-canon-map.js`（`npm run sync:canon`）从 `CURATED_EVENTS` 生成，并**镜像**到 `cloudfunctions/aggregation/curation-shared.json`；两侧字节必须一致（测试断言）。
+- 小程序 `utils/league-canon-map.js` 与云函数 `cloudfunctions/aggregation/league-canon-map.js` 是同一份生成产物的副本，各自 `require('./curation-shared.json')`。`sources.canonicalLeagueName` 先走精确归一映射（`leagueCanon.resolveCanonical`），未命中再回退 `curatedEventFor` 模糊匹配（仅小程序展示用）。
+- **禁止**在云函数内联手写 `canonicalLeagueName` MAP（G4 消除的正是该双源漂移）。云函数改动后必须 `npm run sync:canon` 并**重新上传部署 `aggregation`**，推送文案才生效。
+
+**共识投票名仅用于匹配/索引（G5 防护）**：
+
+- `sources.voteLeagueNameForMatch(league)`（旧名 `getLeagueName` 为已废弃别名）产出的是「跨源共识投票名」，**仅供匹配 / 索引 / 检索**，**禁止**直接当作 UI 展示名。原因：consensus「取更长名」规则在缺乏 curation 覆盖时可能选回旧名/错误名（P3 风险依据③）。
+- UI 展示名一律走 `sources.leagueDisplayName(对象)` / `displayName`（curation canonical 优先，零网络、确定性强）。
+- `league-detail` 中 `voteLeagueNameForMatch` 仅作为 `finalize()` 优先级②的兜底（无 curation canonical 时），展示首选恒为 curation canonical（优先级①），绝不直接以共识名作主展示。
+
+**curation 赛事条目变更 checklist（G6 防护，改 `utils/curation.js` 前必读）**：
+
+新增/修改 `CURATED_EVENTS` 条目时，逐项核对：
+1. **canonical 正确性**：规范名以 Liquipedia / Valve 官方为准（如 DOTA2 的 "EPL Masters 2026" 实为 "EPL Masters I"）。`npm test` 的 G6 快照会断言 `canonical==='EPL Masters I'`。
+2. **跨游戏隔离**：同一赛事名在其它游戏（如 CS2 的 "EPL Masters 2026"）可能不同义——DOTA2 的 `CURATED_EVENTS` **绝不可**写入其它游戏的 canonical/别名。G6 快照断言「DOTA2 curation 不含 canonical "EPL Masters 2026"」，且展示层 `EPL Masters 2026 → EPL Masters I`。
+3. **别名完整**：`aliases` 必须覆盖 OpenDota / 各源可能出现的写法（含小写无分隔形式，如 `eplmasters2026`/`epl2026`/`eplmastersi`）。改完跑 `npm run sync:canon` 重新生成 `curation-shared.json` 并镜像云函数。
+4. **赛期完整**：`start`/`end` 用 `Math.floor(Date.UTC(...)/1000)`（Unix **秒**，非毫秒）；`end >= start`；未开赛赛事的赛期用于「即将到来」判定，须与 Liquipedia 公布一致。
+5. **status 合法**：取值仅限 `即将到来` / `进行中` / `已结束` / `已取消`，且与 OpenDota 真实比赛窗口相符（列表/详情状态硬覆盖以此为准）。
+6. **改完校验**：`npm test` 全绿（含 G2/G4/G6 快照），`npm run lint` 无 error，`npm run sync:canon` 两侧 JSON 一致后再提交/部署。
+
+**运行时监控（G8 防护，兜底发现残余）**：
+
+- `utils/monitor.js` 封装 `wx.reportAnalytics` 安全上报：仅在真机生产环境打点（开发者工具 / 无 wx 时自动降级为 no-op，不阻塞业务、不破坏单测）。
+- `leagueNameUncovered(raw)`：当某联赛名经 `leagueDisplayName` 后仍未命中 curation（原样返回）时上报，按原始名去重（同会话一次）。用途：发现「应补进 curation 的赛事」，从源头缩小 P3 数据层缺口。
+- `statusConflict(leagueid, list, detail)`：列表 vs 详情状态不一致时上报（P1 兜底发现）。
+- 在 MP 后台「自定义分析」查看事件 `league_name_uncovered` / `league_status_conflict`。
+
+**提交前守卫（G9 防护，把 G2/G3 前移到个人提交阶段）**：
+
+- `scripts/hooks/pre-commit.sh`：提交前对「已暂存的 .js」跑 ESLint（含 `no-raw-league-name` 领域规则），并跑离线可靠测试 `npm test`（G2/G4/G6/G8 快照）；任一失败即阻断提交。
+- 本仓库已安装原生 `.git/hooks/pre-commit`（立即可用，零依赖）；`husky` 配置（`.husky/pre-commit` + `prepare: husky`）用于跨克隆便携化——克隆后执行一次 `npm install` 即自动接管。
+- 跳过守卫（紧急时）：`git commit --no-verify`。仅限已确认无误的纯文档/配置改动。
 
 **系列赛 BO 类型判定逻辑**（基于胜负场数，比 `series_type` 字段更可靠）：
 - 一方赢 3 局 → BO5
@@ -486,7 +531,7 @@ statusOf(win, now)     // 'ongoing' | 'upcoming' | 'ended'
 ### 8.1 多源交叉验证流
 
 ```
-页面调用 sources.getLeagueName(league)
+页面调用 sources.voteLeagueNameForMatch(league)   // G5：共识投票名，仅供匹配/索引，非展示用
         │
         ▼ 并行采集候选
   ┌─────────────┬─────────────┬─────────────┬─────────────┐
@@ -665,7 +710,7 @@ node scripts/test-series.js
 
 | 参数 | 值 | 含义 |
 |------|----|------|
-| ongoingBufferSec | 7 天 | 「正在进行」缓冲 |
+| ongoingBufferSec | 2 小时 | 「正在进行」缓冲（真实结束时间 last_end 之后再保留 2 小时；旧值为 7 天，会造成赛事结束很久仍显示进行中） |
 | upcomingRangeSec | 60 天 | 「即将到来」范围 |
 | upcomingQueryLimit | 60 | 懒加载最大查询数 |
 

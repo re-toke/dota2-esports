@@ -1,12 +1,9 @@
 {
   "triggers": [
     {
-      "name": "prewarm10min",
+      "name": "cacheRefresh",
       "type": "timer",
-      "config": "0 */10 * * * *"
+      "config": "0 0 */6 * * *"
     }
-  ],
-  "permissions": {
-    "openapi": []
-  }
+  ]
 }

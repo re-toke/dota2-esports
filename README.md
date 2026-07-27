@@ -178,7 +178,7 @@ Liquipedia 要求描述性 `User-Agent` 头（已在 `config.liquipedia.userAgen
 
 | 关键字段 | 验证方式 | 对应函数 |
 |----------|----------|----------|
-| 赛事名称 | OpenDota / 本地权威库 / STRATZ / Liquipedia 归一投票，取最完整原文 | `sources.getLeagueName()` |
+| 赛事名称 | OpenDota / 本地权威库 / STRATZ / Liquipedia 归一投票（**仅供匹配/索引**，展示走 `sources.leagueDisplayName`） | `sources.voteLeagueNameForMatch()` |
 | 赛事分级 | 本地精选 / 本地权威库 / OpenDota / STRATZ 按等级计票 | `sources.getLeagueTier()` |
 | 赛事时间 | 本地权威库 / STRATZ / Steam / Liquipedia 时间中位数比对（容差 3 天） | `sources.getLeagueWindow()` |
 | 赛事元数据 | Liquipedia（规范名/日期/奖金池/地点/赛制/主办方）+ Steam（奖金池兜底） | `sources.getLeagueMetadata()` |

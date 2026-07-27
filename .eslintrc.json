@@ -74,6 +74,7 @@
     "no-return-await": "warn",
     "no-throw-literal": "warn",
     "no-shadow": "off",
-    "no-use-before-define": ["warn", { "functions": false, "classes": true, "variables": false }]
+    "no-use-before-define": ["warn", { "functions": false, "classes": true, "variables": false }],
+    "no-raw-league-name": "error"
   }
 }

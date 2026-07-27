@@ -85,7 +85,7 @@
 ### F3 · 英雄/物品数据库深化（本轮）
 **目标**：补全游戏基础数据深度（计划 F3）。全部数据来自 OpenDota 公开 API（`api.opendota.com`，已在用，**不新增域名白名单**、**不依赖后端**，走既有缓存/限流/云代理回退）。英雄/物品头像用属性色+首字母占位（不拉远程图，避免新域名）。
 - `utils/api.js`
-  - 新增 `getHeroStats()`（`/heroStats`：职业登场/胜/禁）、`getHeroMatchups(id)`（`/heroes/{id}/matchups`：同场胜负样本）、`getItemsList()`（`/items`：价格/配方/商店类型）。
+  - 新增 `getHeroStats()`（`/heroStats`：职业登场/胜/禁）、`getHeroMatchups(id)`（`/heroes/{id}/matchups`：同场胜负样本）、`getItemsList()`（物品基础表；**原 `/items` 端点已被 OpenDota 下线(404)，现改读 `/constants/items` 并转数组：价格/配方由 components 推导，商店类型该端点已不提供**）。
   - `validateResponse` 补 `/heroStats` `/items` `/heroes/{id}/matchups` 数组白名单；`module.exports` 导出三者。
 - `utils/heroes.js`（新增）：合并 `/heroes` + `/heroStats`，计算职业胜率与相对登场率；`getMatchups(id)` 按同场胜率取最佳/最差对位（过滤样本 <20 场）。
 - `utils/items.js`（新增）：合并 `/items` + `/constants/items`（图标/展示名），返回统一物品结构。

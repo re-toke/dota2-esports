@@ -1,0 +1,3 @@
+#!/bin/sh
+# husky 便携化 pre-commit 钩子（G9）。逻辑统一在 scripts/hooks/pre-commit.sh。
+sh scripts/hooks/pre-commit.sh

@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: ['**']
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # G7 — 全量语法校验（utils/pages/subpackages/cloudfunctions/scripts）
+      - name: Syntax check (node --check)
+        run: npm run check:syntax
+
+      # G3 — 自定义 ESLint 守卫 + 通用规则
+      - name: Lint
+        run: npm run lint
+
+      # G2/G4/G6 — 离线可靠测试（canonical 映射 / 赛期 / 状态一致性 / 单一数据源 / 快照）
+      - name: Test
+        run: npm test
+
+      # G4 — 确保 curation-shared.json 与 curation.js 同步（防止改了 curation 忘了 sync）
+      - name: Verify curation map is up to date
+        run: |
+          npm run sync:canon
+          if ! git diff --quiet -- utils/curation-shared.json cloudfunctions/aggregation/curation-shared.json; then
+            echo "::error::curation-shared.json 已过期，请运行 npm run sync:canon 后重新提交"
+            git --no-pager diff --stat -- utils/curation-shared.json cloudfunctions/aggregation/curation-shared.json
+            exit 1
+          fi
+        shell: bash
