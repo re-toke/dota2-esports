@@ -316,7 +316,66 @@ async function liquipediaLeagueMeta(params, force) {
 }
 
 // 知名 S 级赛事关键词（与客户端 leagues.js 保持一致）
-const KNOWN_KEYWORDS = /(international|major|esl\s+one|esl\s+pro|dreamleague|blast|riyadh|pgl|betboom|clavision|fissure|the\s+summit|games\s+of\s+the\s+future|heroic|resurrection|weplay|moonstorm|dpc|tour|division\s+i)/i;
+const KNOWN_KEYWORDS = /(international|major|esl\s+one|esl\s+pro|dreamleague|blast|riyadh|pgl|betboom|clavision|fissure|the\s+summit|games\s+of\s+the\s+future|heroic|resurrection|weplay|moonstorm|dpc|\btour\b|division\s+i)/i;
+
+// 批量预热 Liquipedia 赛事元数据：把"懒加载"升级为"懒加载 + 预热"双轨。
+// - 显式 pageNames：按传入列表处理（适合定向回填已知赛事）。
+// - 未传 pageNames：自动从 OpenDota /leagues 枚举知名/职业联赛（与客户端 KNOWN_KEYWORDS 一致），
+//   覆盖近一年 + 未来已公布的 notable 联赛（Liquipedia 仅收录 notable 赛事，故该筛选即对齐数据源）。
+// 每个联赛固定 2s 间隔（Liquipedia MediaWiki API 软限流），单条失败不影响其余，最终返回汇总。
+// 设计说明：本 action 单条处理约 1-3s；若由脚本逐条调用（每条一个 pageName）可规避云函数超时，
+//   若在 DevTools 控制台一次性粘贴批量，建议 ≤30 条以免触发函数超时。
+async function liquipediaPrewarm(params, force) {
+  const p = params || {};
+  let pageNames = [];
+  if (Array.isArray(p.pageNames) && p.pageNames.length) {
+    pageNames = p.pageNames.slice();
+  } else {
+    try {
+      const leagues = await fetch('/leagues');
+      const seen = {};
+      (leagues || []).forEach(function (l) {
+        const nm = (l && l.name) || '';
+        if (!nm || seen[nm]) return;
+        // 仅筛 notable 赛事（与客户端 preheatUpcoming / KNOWN_KEYWORDS 一致），
+        // 不按 tier 放宽，避免把社区/业余赛事也拉进来浪费 Liquipedia 2s 限流配额。
+        if (KNOWN_KEYWORDS.test(nm)) {
+          seen[nm] = true;
+          pageNames.push(nm);
+        }
+      });
+    } catch (e) { /* 枚举失败则走空列表 */ }
+  }
+  const limit = (p.limit && Number(p.limit) > 0) ? Number(p.limit) : 80;
+  pageNames = pageNames.slice(0, limit);
+
+  const summary = {
+    total: pageNames.length,
+    ok: 0,        // 成功抓取并解析到 metadata
+    skipped: 0,   // 页面不存在 / 解析为空（不计入失败）
+    failed: [],   // 异常（网络/解析崩溃）
+    startedAt: Date.now()
+  };
+
+  for (let i = 0; i < pageNames.length; i++) {
+    const pageName = pageNames[i];
+    try {
+      const r = await liquipediaLeagueMeta({ pageName: pageName }, force);
+      if (r && r.data) summary.ok++;
+      else summary.skipped++;
+    } catch (e) {
+      summary.failed.push(pageName);
+    }
+    // 2s 软限流（最后一条后无需等待）
+    if (i < pageNames.length - 1) {
+      await new Promise(function (res) { setTimeout(res, 2000); });
+    }
+  }
+
+  summary.elapsedSec = Math.round((Date.now() - summary.startedAt) / 1000);
+  summary.source = 'liquipediaPrewarm';
+  return summary;
+}
 
 // 赛程预热：优先 STRATZ（需 key，数据最全，含真实联赛 id 便于跳转详情）；
 // 未配 STRATZ key 时自动改用 Liquipedia 实时赛事列表（零 key，覆盖下半年已公布 Tier 1/2 赛程）。
@@ -628,6 +687,12 @@ exports.main = async (event, context) => {
   // 规避 wx.request 禁设 User-Agent 的限制；返回与客户端 getLeagueMetadata 同形状的 metadata。
   if (action === 'liquipediaLeagueMeta') {
     return await liquipediaLeagueMeta(params, force);
+  }
+
+  // 批量预热 Liquipedia 赛事元数据（懒加载 + 预热双轨）。默认自动枚举近一年/未来 notable 联赛，
+  // 或由 params.pageNames 定向回填；每条 2s 限流，单条失败隔离，返回汇总。
+  if (action === 'liquipediaPrewarm') {
+    return await liquipediaPrewarm(params, force);
   }
 
   if (action === 'getUpcomingSchedule') {
