@@ -211,8 +211,19 @@
   white-space: nowrap;
   letter-spacing: 0.5rpx;
 }
-.series-team-name.win { color: #5fd35f; }
+/* 已结束胜负标识（金色强调，区别于 .win 绿阵营语义）：
+   胜方队名加粗 + 金色；败方常规字重 + 灰色 */
+.series-team.win .series-team-name,
+.series-team.is-win .series-team-name {
+  color: var(--dota-gold, #C8A951);
+  font-weight: 800;
+}
+.series-team.is-lose .series-team-name {
+  color: #6b7280;
+  font-weight: 400;
+}
 .series-team-name.draw { color: #d4dce6; }
+.series-team.is-draw .series-team-name { color: #d4dce6; }
 /* 胜方 logo 加金色边框 + 微妙光效 */
 .series-team-logo.team-win {
   border-color: rgba(255, 207, 92, 0.6);
@@ -220,6 +231,11 @@
   color: #ffcf5c;
   box-shadow: 0 0 8rpx rgba(255, 207, 92, 0.2);
 }
+/* 胜方行左侧/右侧金色竖线（3-4px），败方浅灰线 */
+.series-team.is-win { box-shadow: inset 4rpx 0 0 0 var(--dota-gold, #C8A951); }
+.series-team.is-lose { box-shadow: inset 4rpx 0 0 0 rgba(120, 128, 140, 0.25); }
+.series-team.right.is-win { box-shadow: inset -4rpx 0 0 0 var(--dota-gold, #C8A951); }
+.series-team.right.is-lose { box-shadow: inset -4rpx 0 0 0 rgba(120, 128, 140, 0.25); }
 .series-score {
   display: flex;
   align-items: baseline;
@@ -238,9 +254,18 @@
   line-height: 1;
   letter-spacing: -1rpx;
 }
-.series-score-num.win { color: #5fd35f; }
-.series-score-num.lose { color: #5b626d; }
-.series-score-num.draw { color: #d4dce6; }
+/* 胜方比分：金色加粗 + 底部色块衬底；败方灰色常规 */
+.series-score-num.win,
+.series-score-num.is-win {
+  color: var(--dota-gold, #C8A951);
+  font-weight: 800;
+  border-bottom: 4rpx solid var(--dota-gold, #C8A951);
+  padding-bottom: 2rpx;
+}
+.series-score-num.lose,
+.series-score-num.is-lose { color: #5b626d; }
+.series-score-num.draw,
+.series-score-num.is-draw { color: #d4dce6; }
 .series-score-sep {
   color: #3a4250;
   font-size: 28rpx;
@@ -259,6 +284,26 @@
   border-radius: var(--radius-pill, 999rpx);
   padding: 2rpx 10rpx;
   line-height: 1.4;
+  letter-spacing: 1rpx;
+}
+/* 胜方「胜」徽章（圆角填充） */
+.series-win-badge {
+  margin-left: 10rpx;
+  font-size: 18rpx;
+  font-weight: 700;
+  color: #1a1205;
+  background: linear-gradient(135deg, #ffcf5c, #C8A951);
+  border-radius: 999rpx;
+  padding: 2rpx 12rpx;
+  line-height: 1.4;
+  letter-spacing: 1rpx;
+  flex-shrink: 0;
+}
+/* 数据缺失：已结束但无比分，仅显示「已结束」 */
+.series-score-missing {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #8a8f99;
   letter-spacing: 1rpx;
 }
 /* B 点缀：live/recent 比分放大 */

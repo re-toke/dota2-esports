@@ -162,17 +162,22 @@
       >
         <!-- 系列头部：队A · 大比分/开赛时间 · 队B -->
         <view class="series-head">
-          <view class="series-team" catchtap="openTeam" data-id="{{s.radiantTeamId}}">
+          <view class="series-team {{s.teamACls}}" catchtap="openTeam" data-id="{{s.radiantTeamId}}">
             <view class="series-team-logo {{s.teamALogoCls}}">
               <image wx:if="{{s.radiantLogo}}" class="team-logo-img" src="{{s.radiantLogo}}" mode="aspectFill" lazy-load binderror="onLogoError" data-si="{{si}}" data-side="radiant" />
               <text wx:else>{{s.radiantName ? s.radiantName[0] : '?'}}</text>
             </view>
-            <text class="series-team-name {{s.teamACls}}">{{s.radiantName || '天辉'}}</text>
+            <text class="series-team-name">{{s.radiantName || '天辉'}}</text>
+            <text wx:if="{{s.seriesWinner === 'A'}}" class="series-win-badge">{{s.aForfeit ? '胜（判胜）' : '胜'}}</text>
           </view>
           <view class="series-score">
             <!-- 未开赛：显示开赛时间，不显示 0:0 比分 -->
             <block wx:if="{{s.phase === 'upcoming'}}">
               <text class="series-scheduled-time">{{s.scheduledTimeText}}</text>
+            </block>
+            <!-- 已结束但数据缺失：仅显示「已结束」，不强制标识胜负 -->
+            <block wx:elif="{{s.seriesMissing}}">
+              <text class="series-score-missing">已结束</text>
             </block>
             <block wx:else>
               <text class="series-score-num {{s.scoreACls}}">{{s.scoreA}}</text>
@@ -181,8 +186,9 @@
               <text wx:if="{{s.isDraw}}" class="series-draw-badge">平</text>
             </block>
           </view>
-          <view class="series-team right" catchtap="openTeam" data-id="{{s.direTeamId}}">
-            <text class="series-team-name {{s.teamBCls}}">{{s.direName || '夜魇'}}</text>
+          <view class="series-team right {{s.teamBCls}}" catchtap="openTeam" data-id="{{s.direTeamId}}">
+            <text class="series-team-name">{{s.direName || '夜魇'}}</text>
+            <text wx:if="{{s.seriesWinner === 'B'}}" class="series-win-badge">{{s.bForfeit ? '胜（判胜）' : '胜'}}</text>
             <view class="series-team-logo {{s.teamBLogoCls}}">
               <image wx:if="{{s.direLogo}}" class="team-logo-img" src="{{s.direLogo}}" mode="aspectFill" lazy-load binderror="onLogoError" data-si="{{si}}" data-side="dire" />
               <text wx:else>{{s.direName ? s.direName[0] : '?'}}</text>

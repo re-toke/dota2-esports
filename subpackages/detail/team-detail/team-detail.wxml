@@ -170,6 +170,7 @@
         <view class="vs-team">
           <view class="vs-team-logo vs-team-logo-placeholder">{{team.tag ? team.tag[0] : '?'}}</view>
           <text class="vs-team-name">{{team.name}}</text>
+          <text wx:if="{{item.won}}" class="vs-win-badge">胜</text>
         </view>
         <text class="vs-score {{item.won ? 'win' : 'lose'}}">{{item.ownScore}}</text>
       </view>
@@ -183,6 +184,7 @@
         <view class="vs-team">
           <view class="vs-team-logo vs-team-logo-placeholder">{{item.oppTag}}</view>
           <text class="vs-team-name">{{item.oppName}}</text>
+          <text wx:if="{{!item.won}}" class="vs-win-badge">胜</text>
         </view>
         <text class="vs-score {{item.won ? 'lose' : 'win'}}">{{item.oppScore}}</text>
       </view>

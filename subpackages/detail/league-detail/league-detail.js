@@ -490,6 +490,8 @@ Page({
         upcomingList.sort(function (a, b) { return a.lastTime - b.lastTime; });
         recentList.sort(function (a, b) { return b.lastTime - a.lastTime; });
         this.allSeries = liveList.concat(upcomingList, recentList);
+        // ★ 已结束对阵胜负标识：金色多层级强调（仅 recent），详见 decorateSeriesWinner
+        this.allSeries = this.allSeries.map((s) => this.decorateSeriesWinner(s));
         console.log('[league-detail] 分段统计: LIVE=%d UPCOMING=%d RECENT=%d',
           liveList.length, upcomingList.length, recentList.length);
 
@@ -819,6 +821,36 @@ Page({
     if (idx == null) return;
     this.setData({
       ['participantsList[' + idx + '].logo']: ''
+    });
+  },
+
+  // ★ 已结束对阵胜负标识（2026-07-29）：金色多层级强调，区别于全站 .win/.lose 阵营语义
+  // 仅对「已结束」（phase==='recent'）应用；进行中/未开赛保持 groupSeries 原判定。
+  // 产出 is-win / is-lose / is-draw 类（替代原有 win/lose，避免与天辉绿阵营色混淆），
+  // 并暴露 seriesWinner(A/B/draw/''), seriesMissing(数据缺失), 供 WXML 渲染徽章/缺失态。
+  decorateSeriesWinner(s) {
+    if (s.phase !== 'recent') return s; // 非已结束：保持原样（live 当前领先者 / upcoming 无比分）
+    const sa = Number(s.scoreA) || 0, sb = Number(s.scoreB) || 0;
+    let winner = '';
+    if (s.isDraw) winner = 'draw';
+    else if (sa > sb) winner = 'A';
+    else if (sb > sa) winner = 'B';
+    // 数据缺失：已结束但双方比分均为 0，不强制标识胜负，仅显示「已结束」
+    const missing = (sa === 0 && sb === 0);
+    const sideCls = function (side) {
+      if (missing) return '';
+      if (winner === 'draw') return 'is-draw';
+      return winner === side ? 'is-win' : 'is-lose';
+    };
+    return Object.assign({}, s, {
+      seriesWinner: missing ? '' : winner,
+      seriesMissing: missing,
+      teamACls: sideCls('A'),
+      teamBCls: sideCls('B'),
+      scoreACls: sideCls('A'),
+      scoreBCls: sideCls('B'),
+      teamALogoCls: (!missing && winner === 'A') ? 'team-win' : '',
+      teamBLogoCls: (!missing && winner === 'B') ? 'team-win' : ''
     });
   },
 

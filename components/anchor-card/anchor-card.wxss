@@ -49,6 +49,9 @@
   align-items: center;
   flex: 1;
   min-width: 0;
+  /* 预留左右 4rpx 边，避免胜方金色竖线引发布局抖动 */
+  border-left: 4rpx solid transparent;
+  border-right: 4rpx solid transparent;
 }
 
 .ac-name {
@@ -69,13 +72,40 @@
   line-height: 1.1;
 }
 
+/* 胜方比分：金色加粗 + 色块衬底 */
 .ac-team.is-win .ac-num {
   color: #C8A951;
+  background: rgba(200, 169, 81, 0.15);
+  border-radius: 12rpx;
+  padding: 0 16rpx;
 }
+/* 胜方队名：金色加粗（区别于败方灰白） */
 .ac-team.is-win .ac-name {
-  color: #ffffff;
-  font-weight: 600;
+  color: var(--dota-gold, #C8A951);
+  font-weight: 700;
 }
+/* 胜方行竖线（左侧 A / 右侧 B） */
+.ac-team.side-a.is-win { border-left-color: var(--dota-gold, #C8A951); }
+.ac-team.side-b.is-win { border-right-color: var(--dota-gold, #C8A951); }
+/* 胜方「胜」徽章 */
+.ac-win-badge {
+  margin-top: 4rpx;
+  font-size: 18rpx;
+  font-weight: 700;
+  color: #1a1205;
+  background: linear-gradient(135deg, #ffcf5c, #C8A951);
+  border-radius: 999rpx;
+  padding: 2rpx 14rpx;
+  line-height: 1.4;
+  letter-spacing: 1rpx;
+}
+/* 首次进入页面时胜方光晕（仅播放一次） */
+@keyframes ac-glow {
+  0%   { box-shadow: 0 0 0rpx rgba(200, 169, 81, 0); }
+  35%  { box-shadow: 0 0 26rpx rgba(200, 169, 81, 0.6); }
+  100% { box-shadow: 0 0 0rpx rgba(200, 169, 81, 0); }
+}
+.ac-glow { animation: ac-glow 1.5s ease-out 1 both; border-radius: 16rpx; }
 
 .ac-vs {
   font-size: 30rpx;

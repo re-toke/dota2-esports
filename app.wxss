@@ -476,6 +476,19 @@ page {
 }
 .vs-score.win { color: var(--status-ongoing); }
 .vs-score.lose { color: var(--dire); }
+/* 胜方「胜」徽章（金色强调，区别于 faction 绿/红比分） */
+.vs-win-badge {
+  margin-left: 8rpx;
+  font-size: 18rpx;
+  font-weight: 700;
+  color: #1a1205;
+  background: linear-gradient(135deg, #ffcf5c, #C8A951);
+  border-radius: 999rpx;
+  padding: 2rpx 12rpx;
+  line-height: 1.4;
+  letter-spacing: 1rpx;
+  flex-shrink: 0;
+}
 .vs-center {
   display: flex;
   flex-direction: column;
