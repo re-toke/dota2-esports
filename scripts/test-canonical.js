@@ -428,6 +428,56 @@ check('G13: Offstage 官方确认的 12 支小组赛队名均在列表中', () =
   assert(missing.length === 0, '缺少官方队伍: ' + missing.join(', '));
 });
 
+section('\n--- G14: Liquipedia 解析双源一致性（客户端 / 云函数镜像）---');
+check('G14: 客户端 liquipedia-parse 导出 parseParticipants / parseLeagueMetadata', () => {
+  const lp = require(path.join(SRC, 'liquipedia-parse.js'));
+  assert(typeof lp.parseParticipants === 'function', 'parseParticipants 应为函数');
+  assert(typeof lp.parseLeagueMetadata === 'function', 'parseLeagueMetadata 应为函数');
+});
+check('G14: 云函数镜像 liquipedia-parse 与客户端一致（防双源漂移）', () => {
+  const fs = require('fs');
+  const ROOT = path.resolve(__dirname, '..');
+  const miniPath = path.join(SRC, 'liquipedia-parse.js');
+  const cloudPath = path.join(ROOT, 'cloudfunctions', 'aggregation', 'liquipedia-parse.js');
+  const mini = require(miniPath);
+  let cloud;
+  try {
+    cloud = require(cloudPath);
+  } catch (e) {
+    // 云函数镜像尚未由 npm run sync:parse 生成：仅告警，不阻断 npm test（sync:parse 是硬闸）。
+    console.log('  ⚠️ 云函数镜像 liquipedia-parse.js 不存在，跳过逐字节比对（请运行 npm run sync:parse）');
+    return;
+  }
+  // 逐字节一致（sync-liquipedia-parse.js 的核心不变量）
+  const a = fs.readFileSync(miniPath, 'utf8');
+  const b = fs.readFileSync(cloudPath, 'utf8');
+  assert(a === b, '两侧 liquipedia-parse.js 必须字节一致（防双源漂移）');
+  // 同一合成输入解析结果一致
+  const synthetic = [
+    '{{Infobox league',
+    '|name=Drift Check Cup',
+    '|prizepool=1000000',
+    '}}',
+    '{{TeamParticipants',
+    '|{{Opponent|Team Alpha|qualification={{Qualification|method=invite|qual}}}}',
+    '|{{Opponent|Team Beta|qualification={{Qualification|method=qual|qual}}}}',
+    '}}'
+  ].join('\n');
+  const o1 = mini.parseLeagueMetadata(synthetic, 'Drift Check Cup');
+  const o2 = cloud.parseLeagueMetadata(synthetic, 'Drift Check Cup');
+  assert(JSON.stringify(o1) === JSON.stringify(o2), 'parseLeagueMetadata 两侧结果必须一致');
+
+  // 真实 EPL wikitext 漂移校验（若 fixture 存在）
+  const eplFixture = path.join(__dirname, 'epl-wikitext.json');
+  if (fs.existsSync(eplFixture)) {
+    const raw = JSON.parse(fs.readFileSync(eplFixture, 'utf8'));
+    const wt = raw.query.pages[0].revisions[0].slots.main.content;
+    const p1 = mini.parseParticipants(wt);
+    const p2 = cloud.parseParticipants(wt);
+    assert(JSON.stringify(p1) === JSON.stringify(p2), 'EPL parseParticipants 两侧结果必须一致');
+  }
+});
+
 // ===== 5. 运行全部测试（与 test-sources 同范式：顺序执行，支持 async，末尾输出汇总与退出码）=====
 async function runAll() {
   for (const t of tests) {

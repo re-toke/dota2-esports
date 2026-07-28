@@ -80,6 +80,14 @@ proxy.steamProxy = function (path, params) {
   return call('steamProxy', { path: path, params: params || {} });
 };
 
+// Liquipedia 赛事元数据代理（A+B 双源）：客户端走云函数（Node.js 可设 UA），
+// 规避 wx.request 禁设 User-Agent 的限制。云函数 aggregation 的 liquipediaLeagueMeta
+// action 抓取 + 纯解析，返回与 liquipedia.getLeagueMetadata 同形状的 metadata。
+// 调用方（liquipedia.getLeagueMetadata）已对 wx.cloud + 熔断器做前置守卫，此处仅封装 action。
+proxy.liquipediaProxy = function (pageName) {
+  return call('liquipediaLeagueMeta', { pageName: pageName });
+};
+
 // 暴露给其它模块（api.js / stratz.js / leagues.js 复用）
 proxy.isAvailable = isAvailable;
 proxy.call = call;

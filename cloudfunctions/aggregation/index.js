@@ -160,6 +160,9 @@ async function fetchSteam(path, params) {
 // ===== Liquipedia 代理常量（描述性 UA，微信端不可设；供 upcoming 实时赛程等使用）=====
 const LIQUIPEDIA_BASE = 'https://liquipedia.net/dota2/api.php';
 const LIQUIPEDIA_UA = 'DOTA2-Esports-Hub/1.0 (WeChat Mini Program; contact: dev@local)';
+// 纯 wikitext 解析模块（镜像自 utils/liquipedia-parse.js，由 scripts/sync-liquipedia-parse.js 同步）。
+// 云函数用 got 抓取 wikitext 后，复用与客户端完全一致的解析逻辑，避免"客户端/云端"双源漂移。
+const liquipediaParse = require('./liquipedia-parse');
 
 // ===== Liquipedia 赛事列表（"即将到来"实时源，无需 STRATZ key）=====
 // 通过 action=parse 取 Portal:Tournaments 渲染后的 HTML，解析 "Upcoming" 段落的
@@ -247,6 +250,69 @@ async function fetchLiquipediaUpcoming() {
     });
   }
   return out;
+}
+
+// ===== Liquipedia 赛事元数据（服务端抓取 + 纯解析，A+B 双源策略的云端侧）=====
+// 客户端经 cloudProxy.liquipediaProxy → 本 action；云函数用 got 自由设 UA + gzip 抓取
+// wikitext，再用与客户端完全一致的纯解析模块（liquipedia-parse.js，镜像自 utils/）解析，
+// 规避 wx.request 禁止设置 User-Agent 的限制（Liquipedia 官方强制要求描述性 UA）。
+async function fetchLiquipediaWikitext(pageName) {
+  if (!pageName) return null;
+  try {
+    const res = await GOT(LIQUIPEDIA_BASE, {
+      searchParams: {
+        action: 'query',
+        prop: 'revisions',
+        rvprop: 'content',
+        rvslots: 'main',
+        titles: pageName,
+        format: 'json',
+        formatversion: '2'
+      },
+      headers: {
+        'User-Agent': LIQUIPEDIA_UA,
+        'Accept': 'application/json',
+        'Accept-Encoding': 'gzip'
+      },
+      responseType: 'json',
+      timeout: { request: 15000 }
+    });
+    const body = res.body;
+    if (!body || !body.query || !body.query.pages) return null;
+    let pages = body.query.pages;
+    if (!Array.isArray(pages)) {
+      const arr = [];
+      for (const k in pages) { if (pages.hasOwnProperty(k)) arr.push(pages[k]); }
+      pages = arr;
+    }
+    if (!pages.length) return null;
+    const page = pages[0];
+    if (page.missing) return null;
+    if (!page.revisions || !page.revisions.length) return null;
+    const rev = page.revisions[0];
+    const content = (rev.slots && rev.slots.main && rev.slots.main.content) || rev['*'] || rev.content;
+    return content || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// 解析赛事元数据（云端）：抓取 wikitext → 纯解析 → 落库缓存。
+// 与客户端 liquipedia.js 共用 liquipedia-parse.js 同一份解析逻辑（镜像保证一致）。
+async function liquipediaLeagueMeta(params, force) {
+  const pageName = (params && (params.pageName || params.name)) || null;
+  if (!pageName) return { data: null, error: 'pageName required' };
+  const cacheKey = 'liquipedia_league_' + pageName;
+  if (!force) {
+    const cached = await getCache(cacheKey);
+    if (cached) return { data: cached, source: 'cache' };
+  }
+  const wikitext = await fetchLiquipediaWikitext(pageName);
+  if (!wikitext) return { data: null, source: 'liquipedia' };
+  const meta = liquipediaParse.parseLeagueMetadata(wikitext, pageName);
+  if (!meta) return { data: null, source: 'liquipedia' };
+  await setCache(cacheKey, meta, 6 * 3600 * 1000).catch(() => {});
+  return { data: meta, source: 'liquipedia' };
 }
 
 // 知名 S 级赛事关键词（与客户端 leagues.js 保持一致）
@@ -556,6 +622,12 @@ exports.main = async (event, context) => {
     } catch (e) {
       return { error: 'liquipedia upcoming error: ' + (e && e.message) };
     }
+  }
+
+  // Liquipedia 赛事元数据（A+B 双源：客户端云代理优先 → 本 action 抓取 + 纯解析）。
+  // 规避 wx.request 禁设 User-Agent 的限制；返回与客户端 getLeagueMetadata 同形状的 metadata。
+  if (action === 'liquipediaLeagueMeta') {
+    return await liquipediaLeagueMeta(params, force);
   }
 
   if (action === 'getUpcomingSchedule') {

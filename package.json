@@ -8,6 +8,7 @@
     "test": "node scripts/test-canonical.js",
     "test:all": "node scripts/test-sources.js && node scripts/test-consensus.js && node scripts/test-canonical.js",
     "sync:canon": "node scripts/sync-canon-map.js",
+    "sync:parse": "node scripts/sync-liquipedia-parse.js",
     "check:syntax": "node scripts/check-syntax.js",
     "prepare": "husky"
   },
