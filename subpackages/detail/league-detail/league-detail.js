@@ -6,6 +6,7 @@ const subscribe = require('../../../utils/subscribe.js');
 const config = require('../../../utils/config.js');
 const liveSources = require('../../../utils/liveSources.js');
 const remoteCuration = require('../../../utils/remoteCuration.js');
+const liquipedia = require('../../../utils/liquipedia.js');
 const heroes = require('../../../utils/heroes.js');
 
 // Steam CDN 英雄头像基址（_sb.png = 小横幅图，约 59x33，aspectFill 裁切填满方形框）
@@ -126,6 +127,14 @@ Page({
     // F1 直播聚合入口
     liveSources: [],   // 各平台直播搜索入口
     isLive: false,     // 赛事是否正在进行（卡片高亮置顶）
+    // ===== 三段式分段计数（2026-07-28 新增） =====
+    // series[] 按 phase 分段：live(desc) → upcoming(asc) → recent(desc)
+    // liveCount/upcomingCount/recentCount 供 wxml 渲染分段分隔符与计数
+    liveCount: 0,
+    upcomingCount: 0,
+    recentCount: 0,
+    // 已结束段默认折叠（聚焦 LIVE/UPCOMING），点击分隔符展开
+    recentCollapsed: false,
     // ===== 三 Tab 状态（C 风格 Tournament Center） =====
     tab: 'matches',          // matches | teams | standings
     expandedGame: '',        // 当前展开的小场 "seriesIdx-gameIdx"（A 风格就地展开英雄阵容）
@@ -324,10 +333,19 @@ Page({
       return Promise.resolve([]);
     }
     this.setData({ loading: true, error: '' });
-    return api.getLeagueMatches(this.data.leagueId)
-      .then((list) => {
+    // ★ 并行拉取 OpenDota 比赛数据 + Liquipedia 赛程数据
+    // OpenDota 只返回已结束的比赛（duration>0, radiant_win 有值），
+    // 进行中（LIVE）和未开赛（UPCOMING）的对阵需要从 Liquipedia {{Match}} 模板补充。
+    // Liquipedia 请求失败时静默降级，仅显示 OpenDota 数据。
+    return Promise.all([
+      api.getLeagueMatches(this.data.leagueId),
+      liquipedia.getScheduledMatches(this.data.name)
+    ])
+      .then(([list, scheduledMatches]) => {
         const raw = list || [];
-        console.log('[league-detail] 原始比赛数:', raw.length, '首场字段:', raw[0] ? Object.keys(raw[0]).join(',') : '无数据');
+        const liqScheduled = scheduledMatches || [];
+        console.log('[league-detail] 原始比赛数:', raw.length, 'Liquipedia 赛程数:', liqScheduled.length,
+          raw[0] ? '首场字段:' + Object.keys(raw[0]).join(',') : '无数据');
         this.allMatches = raw;  // 保留原始（供系列赛聚合用）
         // 系列赛聚合：按 series_id 归组 BO3/BO5，同一系列多场聚到一张卡
         // 2026-07-28 修复小圆点颜色 BUG：传入 series 的 A/B 队 team_id 锚点给 fmt，
@@ -338,14 +356,143 @@ Page({
         // 此时 radiant_win=true 反而代表 B 队赢，小圆点会显示错误颜色。
         // 此外 radiant_win=null（未结束）会走 else 分支显示红色，未结束比赛不应着色。
         const seriesAnchor = { teamAId: 0, teamBId: 0 };
+        // nowSec 用于 upcoming 倒计时格式化（与 groupSeries 内部判定保持一致）
+        const fmtNowSec = Math.floor(Date.now() / 1000);
         this.allSeries = sources.groupSeries(raw).map((s) => {
           seriesAnchor.teamAId = s.radiantTeamId;
           seriesAnchor.teamBId = s.direTeamId;
           s.games = s.games.map((m) => this.fmt(m, seriesAnchor));
+          // ★ 为 upcoming series 补全展示字段（2026-07-28 新增）
+          // scheduledTimeText：开赛时间紧凑格式 'M/D HH:MM'，替代比分位显示
+          // countdownText：距开赛时长，如 '2小时后' / '3天后' / '即将开始'（<5分钟）
+          if (s.isUpcoming) {
+            const st = s.lastTime;  // upcoming 段 lastTime 即开赛时间
+            const d = new Date(st * 1000);
+            const md = (d.getMonth() + 1) + '/' + d.getDate();
+            const hh = ('0' + d.getHours()).slice(-2);
+            const mm = ('0' + d.getMinutes()).slice(-2);
+            s.scheduledTimeText = md + ' ' + hh + ':' + mm;
+            const diffSec = st - fmtNowSec;
+            if (diffSec <= 300) {
+              s.countdownText = '即将开始';
+            } else if (diffSec < 3600) {
+              s.countdownText = Math.floor(diffSec / 60) + '分钟后';
+            } else if (diffSec < 86400) {
+              s.countdownText = Math.floor(diffSec / 3600) + '小时后';
+            } else {
+              s.countdownText = Math.floor(diffSec / 86400) + '天后';
+            }
+          }
           return s;
         });
         console.log('[league-detail] 聚合后系列赛数:', this.allSeries.length,
           'BO分布:', this.allSeries.map(function(s){return s.boType;}).join(','));
+
+        // ★ 合并 Liquipedia 赛程数据（2026-07-28 新增）
+        // OpenDota 只返回已结束比赛，进行中/未开赛的对阵需要从 Liquipedia {{Match}} 模板补充。
+        // 转换为与 groupSeries 返回值兼容的 series 对象，去重后合并到 allSeries。
+        if (liqScheduled && liqScheduled.length) {
+          // 构建 OpenDota 已有对阵的去重键（队名归一化：小写+去空格）
+          // 用于剔除 Liquipedia 中已被 OpenDota 返回的已结束对阵
+          const openDotaKeys = new Set();
+          this.allSeries.forEach(function (s) {
+            if (s.radiantName && s.direName) {
+              const k1 = (s.radiantName.toLowerCase().replace(/\s+/g, '')) + '__' +
+                         (s.direName.toLowerCase().replace(/\s+/g, ''));
+              openDotaKeys.add(k1);
+              // 反向也加入（Liquipedia 的 team1/team2 顺序可能与 OpenDota 相反）
+              openDotaKeys.add(k1.split('__').reverse().join('__'));
+            }
+          });
+          // 将 Liquipedia 赛程转换为 series 对象
+          const liqSeries = liqScheduled
+            .filter(function (m) {
+              // 去重：剔除 OpenDota 已返回的对阵（队名归一化后匹配）
+              if (!m.team1Name || !m.team2Name) return false;
+              const k = (m.team1Name.toLowerCase().replace(/\s+/g, '')) + '__' +
+                        (m.team2Name.toLowerCase().replace(/\s+/g, ''));
+              const kRev = k.split('__').reverse().join('__');
+              return !openDotaKeys.has(k) && !openDotaKeys.has(kRev);
+            })
+            .map(function (m, idx) {
+              // 为 upcoming series 补全展示字段
+              var scheduledTimeText = '', countdownText = '';
+              if (m.startTime) {
+                var d = new Date(m.startTime * 1000);
+                var md = (d.getMonth() + 1) + '/' + d.getDate();
+                var hh = ('0' + d.getHours()).slice(-2);
+                var mm = ('0' + d.getMinutes()).slice(-2);
+                scheduledTimeText = md + ' ' + hh + ':' + mm;
+                var diffSec = m.startTime - fmtNowSec;
+                if (diffSec <= 300) countdownText = '即将开始';
+                else if (diffSec < 3600) countdownText = Math.floor(diffSec / 60) + '分钟后';
+                else if (diffSec < 86400) countdownText = Math.floor(diffSec / 3600) + '小时后';
+                else countdownText = Math.floor(diffSec / 86400) + '天后';
+              }
+              return {
+                key: 'liq-' + idx + '-' + m.startTime,
+                games: [],               // Liquipedia 赛程无小场数据
+                scoreA: 0,
+                scoreB: 0,
+                boType: m.boType,
+                boLabel: m.boType === 'BO1' ? '单局制' : (m.boType === 'BO2' ? '双局积分' : (m.boType === 'BO3' ? '三局两胜' : '五局三胜')),
+                boTagCls: m.boType === 'BO2' ? 'bo-bo2' : (m.boType === 'BO5' ? 'bo-bo5' : ''),
+                isDraw: false,
+                isLive: m.phase === 'live',
+                isRecent: m.phase === 'recent',
+                isUpcoming: m.phase === 'upcoming',
+                phase: m.phase,
+                isMulti: m.boType !== 'BO1',
+                radiantName: m.team1Name,
+                direName: m.team2Name,
+                radiantTeamId: 0,        // Liquipedia 赛程无 team_id
+                direTeamId: 0,
+                radiantWin: false,
+                direWin: false,
+                scoreACls: '',
+                scoreBCls: '',
+                teamACls: '',
+                teamBCls: '',
+                teamALogoCls: '',
+                teamBLogoCls: '',
+                radiantLogo: '',
+                direLogo: '',
+                radiantLogoSource: '',
+                direLogoSource: '',
+                scheduledTimeText: scheduledTimeText,
+                countdownText: countdownText,
+                lastTime: m.startTime
+              };
+            });
+          console.log('[league-detail] Liquipedia 补充赛程:', liqSeries.length, '场 (去重后)',
+            '其中 LIVE:', liqSeries.filter(s => s.phase === 'live').length,
+            'UPCOMING:', liqSeries.filter(s => s.phase === 'upcoming').length,
+            'RECENT:', liqSeries.filter(s => s.phase === 'recent').length);
+          this.allSeries = this.allSeries.concat(liqSeries);
+        }
+
+        // ★ 三段式分段排序（2026-07-28 新增）
+        // groupSeries 末尾已 sort by lastTime desc，但未区分 phase；
+        // 这里按 phase 重新分段排序：
+        //   LIVE：进行中（isLive），按 lastTime desc —— 最近开赛的在前
+        //   UPCOMING：未开赛（isUpcoming），按 lastTime asc —— 最早开赛的在前
+        //   RECENT：已结束（其他），按 lastTime desc —— 最近结束的在前
+        // 合并顺序：live → upcoming → recent
+        // 注意：groupSeries 返回的 series 已含 phase/isLive/isUpcoming 字段（步骤 1 新增）
+        // ★ 2026-07-28 修复：统一用 s.phase 判定（而非 isLive/isUpcoming），避免字段语义冲突
+        const liveList = [], upcomingList = [], recentList = [];
+        this.allSeries.forEach(function (s) {
+          if (s.phase === 'live') liveList.push(s);
+          else if (s.phase === 'upcoming') upcomingList.push(s);
+          else recentList.push(s);
+        });
+        liveList.sort(function (a, b) { return b.lastTime - a.lastTime; });
+        upcomingList.sort(function (a, b) { return a.lastTime - b.lastTime; });
+        recentList.sort(function (a, b) { return b.lastTime - a.lastTime; });
+        this.allSeries = liveList.concat(upcomingList, recentList);
+        console.log('[league-detail] 分段统计: LIVE=%d UPCOMING=%d RECENT=%d',
+          liveList.length, upcomingList.length, recentList.length);
+
         const pageSize = this.data.pageSize;
         const slice = this.allSeries.slice(0, pageSize);
         const at = api.fetchedAtOf('leagueMatches', this.data.leagueId);
@@ -423,10 +570,16 @@ Page({
           updatedAt: at,
           updatedLabel: util.formatAgo(at),
           isLive: isLive,
-          eventWindow: eventWindow
+          eventWindow: eventWindow,
+          // ★ 三段式分段计数（供 wxml 渲染分隔符与计数）
+          liveCount: liveList.length,
+          upcomingCount: upcomingList.length,
+          recentCount: recentList.length,
+          recentCollapsed: false   // 每次重新加载时重置折叠状态
         });
         this.refreshMetadataDerived();
         this.enrichTeamNames();
+        this.enrichTeamLogos();
       })
       .catch((err) => {
         console.error('[league-detail] 加载失败:', err);
@@ -502,6 +655,171 @@ Page({
         // 2026-07-27：队名补全失败日志（非静默吞错），方便排查「队伍名显示为占位」的根因。
         console.warn('[league-detail] enrichTeamNames 失败，队伍将保留为 "Team {id}" 占位:', err);
       });
+  },
+
+  // 异步批量补全 series 头部战队 logo
+  // 设计要点：
+  //   ① 全段去重：所有 series 的 radiantTeamId/direTeamId 汇总去重，跨 LIVE/UPCOMING/RECENT 段复用
+  //   ② 并行查询：用 Promise.all 并发，每个内部 .catch 隔离，任一失败不影响其他
+  //   ③ 跳过已有 logo：allSeries 内存缓存中已有 http logo 字段的队伍跳过，避免重复请求
+  //   ④ 路径更新：用 series[i].radiantLogo 形式批量 setData，不重建整个 series 数组
+  //   ⑤ 失败静默：logo 非关键信息，加载失败时 wxml 走 fallback 显示首字母圆
+  //   ⑥ 同步更新 participantsList：参赛队伍 Tab 的 logo 也一并补全
+  enrichTeamLogos() {
+    if (!this.allSeries || !this.allSeries.length) return;
+
+    // ★ inflight 去重守卫（2026-07-28 步骤 5 新增）
+    // 用户快速滚动触发多次 appendPage → enrichTeamLogos 时，避免并发重复请求同一批 team_id。
+    // 复用 _enrichLogosInflight Promise，并发调用方都 await 同一个 Promise，结果共享。
+    if (this._enrichLogosInflight) return this._enrichLogosInflight;
+
+    this._enrichLogosInflight = this._doEnrichTeamLogos().then((done) => {
+      this._enrichLogosInflight = null;  // 清理 inflight 标记
+      return done;
+    }).catch(() => {
+      this._enrichLogosInflight = null;
+    });
+    return this._enrichLogosInflight;
+  },
+
+  // 实际执行 logo 批量补全（由 enrichTeamLogos 调用，含 inflight 去重）
+  _doEnrichTeamLogos() {
+    // 1) 收集所有 team_id（去重）
+    //    同时收集 participantsList 中的占位 id（与 enrichTeamNames 一致）
+    const teamIds = {};
+    this.allSeries.forEach((s) => {
+      const aids = [s.radiantTeamId, s.direTeamId];
+      aids.forEach((tid) => {
+        if (tid != null && tid > 0 && !teamIds[tid]) {
+          // allSeries 中已有 logo 的直接跳过，避免重复请求
+          if (s.radiantLogo && /^https?:\/\//i.test(s.radiantLogo) && tid === s.radiantTeamId) {
+            teamIds[tid] = { id: tid, name: s.radiantName || '', skip: true };
+          } else if (s.direLogo && /^https?:\/\//i.test(s.direLogo) && tid === s.direTeamId) {
+            teamIds[tid] = { id: tid, name: s.direName || '', skip: true };
+          } else {
+            // ★ 2026-07-28 修复 name 归属 BUG：
+            //   原 name: s.radiantName || s.direName 会把 dire 队名误赋给 radiant team_id
+            //   修复：按 tid 归属取对应队名
+            const teamName = (tid === s.radiantTeamId) ? (s.radiantName || '')
+                          : (tid === s.direTeamId) ? (s.direName || '')
+                          : '';
+            teamIds[tid] = { id: tid, name: teamName };
+          }
+        }
+      });
+    });
+    (this.data.participantsList || []).forEach((t) => {
+      if (t && t.id > 0 && !teamIds[t.id]) {
+        teamIds[t.id] = { id: t.id, name: t.name || '' };
+      }
+    });
+
+    // 过滤出需要查询的 team_id（skip=true 的跳过）
+    const needQueryIds = Object.keys(teamIds).filter((tid) => !teamIds[tid].skip);
+    if (!needQueryIds.length) return Promise.resolve(false);
+
+    // 2) 并行批量查询（每个 .catch 隔离，任一失败不影响其他）
+    //    ★ 2026-07-28 修复 LOGO 不显示 BUG：
+    //    原 BUG：直接传 { id, name } 给 enrichTeamLogo，但 enrichTeamLogo 依赖 team.logo 字段
+    //           OpenDota /leagues/{id}/matches 不返回 team.logo_url，导致 existing='' → 走 STRATZ
+    //           STRATZ 限流/失败时返回 null，logo 永远为空
+    //    修复：先调 api.getTeam(id) 获取 logo_url，再传给 enrichTeamLogo
+    //         enrichTeamLogo 内部 existing 命中 → 直接返回，不走 STRATZ
+    //    参考：team-detail.js L250 也是先获取 team.logo 再传给 enrichTeamLogo
+    //    缓存：api.getTeam 内部有 15min 新鲜 + team TTL 缓存，跨赛事复用
+    const tasks = needQueryIds.map((tid) => {
+      const team = teamIds[tid];
+      // 先调 api.getTeam 拿 logo_url（OpenDota /teams/{id} 端点返回 logo_url 字段）
+      return api.getTeam(team.id)
+        .then((teamInfo) => {
+          const logoUrl = (teamInfo && teamInfo.logo_url) || '';
+          // 再传给 enrichTeamLogo：existing 命中 → 直接返回；未命中 → 走 STRATZ 兜底
+          return sources.enrichTeamLogo({ id: team.id, name: team.name, logo: logoUrl });
+        })
+        .then((r) => ({ id: team.id, logo: r && r.logo, source: r && r.source }))
+        .catch(() => ({ id: team.id, logo: null, source: '' }));
+    });
+
+    return Promise.all(tasks).then((results) => {
+      // 3) 构建 team_id → logo 映射（仅保留有效 http URL）
+      const logoMap = {};
+      results.forEach((r) => {
+        if (r.logo && /^https?:\/\//i.test(r.logo)) {
+          logoMap[r.id] = { logo: r.logo, source: r.source };
+        }
+      });
+      if (!Object.keys(logoMap).length) return false;
+
+      // 4) 路径更新：仅更新当前可见的 series 头部 logo
+      //    （不可见 series 不更新，避免无谓 setData；allSeries 内存缓存同步更新，
+      //     loadMore 加载新页时 enrichTeamLogos 会从内存读取并路径更新）
+      const patch = {};
+      const visible = this.data.series;
+      visible.forEach((s, si) => {
+        if (s.radiantTeamId && logoMap[s.radiantTeamId] &&
+            (!s.radiantLogo || !/^https?:\/\//i.test(s.radiantLogo))) {
+          patch['series[' + si + '].radiantLogo'] = logoMap[s.radiantTeamId].logo;
+          patch['series[' + si + '].radiantLogoSource'] = logoMap[s.radiantTeamId].source;
+        }
+        if (s.direTeamId && logoMap[s.direTeamId] &&
+            (!s.direLogo || !/^https?:\/\//i.test(s.direLogo))) {
+          patch['series[' + si + '].direLogo'] = logoMap[s.direTeamId].logo;
+          patch['series[' + si + '].direLogoSource'] = logoMap[s.direTeamId].source;
+        }
+      });
+
+      // 5) 同步更新 allSeries 内存缓存（loadMore 加载新页时可直接用）
+      this.allSeries.forEach((s) => {
+        if (s.radiantTeamId && logoMap[s.radiantTeamId] &&
+            (!s.radiantLogo || !/^https?:\/\//i.test(s.radiantLogo))) {
+          s.radiantLogo = logoMap[s.radiantTeamId].logo;
+          s.radiantLogoSource = logoMap[s.radiantTeamId].source;
+        }
+        if (s.direTeamId && logoMap[s.direTeamId] &&
+            (!s.direLogo || !/^https?:\/\//i.test(s.direLogo))) {
+          s.direLogo = logoMap[s.direTeamId].logo;
+          s.direLogoSource = logoMap[s.direTeamId].source;
+        }
+      });
+
+      // 6) 参赛队伍 Tab 的 participantsList logo 同步更新
+      const curParticipants = this.data.participantsList || [];
+      if (curParticipants.length) {
+        const patched = curParticipants.map((t) => {
+          if (t && t.id && logoMap[t.id] && (!t.logo || !/^https?:\/\//i.test(t.logo))) {
+            return Object.assign({}, t, { logo: logoMap[t.id].logo });
+          }
+          return t;
+        });
+        const changed = patched.some((t, i) => t.logo !== curParticipants[i].logo);
+        if (changed) patch.participantsList = patched;
+      }
+
+      if (Object.keys(patch).length) this.setData(patch);
+      return true;
+    });
+  },
+
+  // logo <image> 加载失败时回退到首字母圆，避免破图
+  // 通过清空对应 series 的 logo URL，触发 wxml 走 wx:else 分支显示首字母
+  onLogoError(e) {
+    const { si, side } = e.currentTarget.dataset;
+    if (si == null || !side) return;
+    const key = side === 'radiant' ? 'radiantLogo' : 'direLogo';
+    // 清空 logo URL，触发 wxml 走 wx:else 分支显示首字母
+    this.setData({
+      ['series[' + si + '].' + key]: ''
+    });
+  },
+
+  // 参赛队伍 Tab 的 logo <image> 加载失败时回退到首字母圆
+  // 路径更新 participantsList[idx].logo = ''，触发 wxml 走 wx:else 分支
+  onParticipantLogoError(e) {
+    const { idx } = e.currentTarget.dataset;
+    if (idx == null) return;
+    this.setData({
+      ['participantsList[' + idx + '].logo']: ''
+    });
   },
 
   fmt(m, anchor) {
@@ -757,7 +1075,14 @@ Page({
     const page = this.data.page + 1;
     const pageSize = this.data.pageSize;
     const slice = this.allSeries.slice(0, (page + 1) * pageSize);
-    this.setData({ series: slice, page: page, hasMore: this.allSeries.length > slice.length });
+    this.setData({
+      series: slice,
+      page: page,
+      hasMore: this.allSeries.length > slice.length
+    }, () => {
+      // ★ 新页加载后补全可见 series 的 logo（allSeries 内存已有则路径更新直接命中）
+      this.enrichTeamLogos();
+    });
   },
 
   onReachBottom() {
@@ -830,6 +1155,14 @@ Page({
     }).catch(() => {
       this.setData({ standingsLoading: false, standingsLoaded: true });
     });
+  },
+
+  // ===== 三段式：已结束段折叠/展开（2026-07-28 新增） =====
+  // 点击 RECENT 分隔符切换折叠态。折叠时隐藏 RECENT 段所有 series-card，
+  // 让用户聚焦 LIVE/UPCOMING。展开时恢复显示。
+  // 注意：仅切换 recentCollapsed 布尔，不重建 series 数组（wxml 用 wx:if 控制可见性）
+  toggleRecentCollapse() {
+    this.setData({ recentCollapsed: !this.data.recentCollapsed });
   },
 
   // ===== A 风格就地展开小场英雄阵容（双索引 seriesIdx-gameIdx） =====

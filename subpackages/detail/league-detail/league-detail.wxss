@@ -199,6 +199,7 @@
   font-weight: 700;
   color: #8a8f99;
   flex-shrink: 0;
+  overflow: hidden;  /* ★ 新增：让 <image> 被裁剪到圆角内 */
   transition: border-color 200ms ease, background 200ms ease;
 }
 .series-team-name {
@@ -729,6 +730,7 @@
   font-weight: 700;
   color: #8a8f99;
   flex-shrink: 0;
+  overflow: hidden;  /* ★ 新增：让 <image> 被裁剪到圆角内 */
 }
 .team-chip-name {
   flex: 1;
@@ -821,3 +823,114 @@
 }
 .meta-extra-label { color: #8a8f99; }
 .meta-extra-link { color: #5fd3ff; text-decoration: underline; }
+
+/* ===== 战队 LOGO image 通用样式（2026-07-28 新增） ===== */
+/* logo image 填满父容器（series-team-logo / team-chip-logo），
+   父容器已设 overflow: hidden + border-radius，image 自动被裁剪到圆角内。
+   aspectFill 模式保持比例填满，避免拉伸变形。 */
+.team-logo-img {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* ===== 三段式分段分隔符（2026-07-28 新增） ===== */
+/* 分段标题：左侧色条 + 文案 + 计数 + 可折叠按钮（仅 RECENT） */
+.phase-divider {
+  display: flex;
+  align-items: center;
+  padding: 24rpx 32rpx 12rpx;
+  margin-top: 8rpx;
+}
+.phase-divider-bar {
+  width: 6rpx;
+  height: 28rpx;
+  border-radius: 3rpx;
+  margin-right: 16rpx;
+  flex-shrink: 0;
+}
+.phase-divider-text {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #c0c4cc;
+  flex: 1;
+}
+.phase-divider-toggle {
+  font-size: 22rpx;
+  color: #8a8f99;
+  padding: 4rpx 12rpx;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 6rpx;
+}
+/* LIVE 段：绿色色条 */
+.phase-divider-live .phase-divider-bar {
+  background: #1ec896;
+  box-shadow: 0 0 12rpx rgba(30, 200, 150, 0.4);
+}
+.phase-divider-live .phase-divider-text {
+  color: #1ec896;
+}
+/* UPCOMING 段：黄色色条 */
+.phase-divider-upcoming .phase-divider-bar {
+  background: #ffcf5c;
+  box-shadow: 0 0 12rpx rgba(255, 207, 92, 0.4);
+}
+.phase-divider-upcoming .phase-divider-text {
+  color: #ffcf5c;
+}
+/* RECENT 段：灰色色条，可点击折叠 */
+.phase-divider-recent .phase-divider-bar {
+  background: #5a6068;
+}
+.phase-divider-recent {
+  /* 点击折叠区域 */
+}
+.phase-divider-recent .phase-divider-toggle {
+  cursor: pointer;
+}
+
+/* ===== 三段式 series-card 差异化样式（2026-07-28 新增） ===== */
+/* 基础卡片样式不动，仅追加 phase 差异化 class */
+
+/* LIVE 段：绿色左边框 + 轻微发光 */
+.series-card.series-live {
+  border-left: 3rpx solid #1ec896;
+  box-shadow: 0 0 24rpx -8rpx rgba(30, 200, 150, 0.25);
+}
+/* LIVE 标签已有样式（series-live-tag），这里仅强化脉冲 */
+.series-card.series-live .series-live-tag {
+  color: #1ec896;
+  animation: live-pulse 1.8s ease-in-out infinite;
+}
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* UPCOMING 段：黄色左边框 + 浅黄背景 */
+.series-card.series-upcoming {
+  border-left: 3rpx solid #ffcf5c;
+  background: linear-gradient(90deg, rgba(255, 207, 92, 0.05) 0%, transparent 100%);
+}
+/* 未开赛：开赛时间样式（替代比分位） */
+.series-scheduled-time {
+  font-size: 28rpx;
+  color: #ffcf5c;
+  font-weight: 600;
+  letter-spacing: 1rpx;
+}
+/* 未开赛：倒计时标签 */
+.series-upcoming-tag {
+  color: #ffcf5c;
+  font-size: 22rpx;
+  margin-left: auto;
+}
+
+/* RECENT 段：整体降透明度，弱化次要信息 */
+.series-card.series-recent {
+  opacity: 0.75;
+}
+.series-card.series-recent .series-team-logo {
+  opacity: 0.9;
+}
+

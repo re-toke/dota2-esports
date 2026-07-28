@@ -111,7 +111,7 @@ OpenDota 的 `tier` 是字符串枚举（`professional`/`premium`/`amateur`/`exc
   若已配置 STRATZ_API_KEY，则 `preheatUpcoming()` 优先走 STRATZ（数据最全，含真实联赛 id 便于跳转详情）。
 
 时间窗口的数据来源：
-- **OpenDota `/explorer`**：一条 SQL 聚合拿所有赛事近一年的 `{earliest, latest, count}`
+- **OpenDota `/explorer`**：一条 SQL 聚合拿所有赛事近半年的 `{earliest, latest, count}`
   （`api.getLeagueWindows()`），避免逐个拉 `/leagues/{id}/matches`，单次请求即可覆盖全部赛事。
 - **云端 `getUpcomingSchedule`（Liquipedia / STRATZ）**：客户端 `tryCloudUpcoming()` 优先读云函数预热的
   `upcoming_schedule` 缓存（秒开）；未命中则现场预热一次（Liquipedia 实时解析，无需 key）。

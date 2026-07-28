@@ -35,6 +35,23 @@ var cloudProxy = require('./cloudProxy.js');
 // 保证两侧解析逻辑一致（消除"客户端解析 / 云端解析"漂移）。
 var LiquiParse = require('./liquipedia-parse.js');
 
+// Liquipedia slug 映射表（由 scripts/generate-liquipedia-slugmap.js 生成，sync:slugmap 镜像到云端）
+// OpenDota 联赛名 ≠ Liquipedia 页面 slug（扁平长名 vs 层级路径），直查命中率仅 2.5%；
+// 映射表把 OpenDota name 转成正确 Liquipedia slug，命中率提升到 ~60%+ 且全为准确映射。
+var slugMapCache = null;
+function getSlugMap() {
+  if (slugMapCache === null) {
+    try { slugMapCache = require('./liquipedia-slugmap.json'); }
+    catch (e) { slugMapCache = { mappings: {} }; }
+  }
+  return slugMapCache;
+}
+function liquipediaSlugFor(name) {
+  var m = getSlugMap();
+  if (m && m.mappings && m.mappings[name]) return m.mappings[name];
+  return name;
+}
+
 var ENABLED = !!(config.liquipedia && config.liquipedia.enabled);
 var BASE = (config.liquipedia && config.liquipedia.base) || 'https://liquipedia.net/dota2/api.php';
 var USER_AGENT = (config.liquipedia && config.liquipedia.userAgent) || 'DOTA2-Esports-Hub/1.0 (WeChat Mini Program; contact: dev@local)';
@@ -182,6 +199,7 @@ function getLeagueMetadata(name) {
   if (!ENABLED) return Promise.resolve(null);
   if (!name) return Promise.resolve(null);
 
+  var slug = liquipediaSlugFor(name);
   var cacheKey = 'liquipedia_league_' + consensus.normName(name);
   var cached = cache.get(cacheKey, CACHE_TTL);
   if (cached) return Promise.resolve(cached);
@@ -196,19 +214,19 @@ function getLeagueMetadata(name) {
         return remote;
       }
       // 云代理无结果（如页面不存在）→ 回退本地 wx.request（兜底，一般不会走到）
-      return fetchAndParseLeague(name, cacheKey);
+      return fetchAndParseLeague(slug, cacheKey, name);
     }).catch(function () {
-      return fetchAndParseLeague(name, cacheKey);
+      return fetchAndParseLeague(slug, cacheKey, name);
     });
   }
   return fetchAndParseLeague(name, cacheKey);
 }
 
 // 本地抓取 + 解析（wx.request 路径，云代理不可用时兜底）
-function fetchAndParseLeague(name, cacheKey) {
-  return fetchPageWikitext(name).then(function (wikitext) {
+function fetchAndParseLeague(slug, cacheKey, fallbackName) {
+  return fetchPageWikitext(slug).then(function (wikitext) {
     if (!wikitext) return null;
-    var meta = LiquiParse.parseLeagueMetadata(wikitext, name);
+    var meta = LiquiParse.parseLeagueMetadata(wikitext, fallbackName || slug);
     if (meta) cache.set(cacheKey, meta, CACHE_TTL);
     return meta;
   }).catch(function () { return null; });
@@ -379,10 +397,61 @@ function getPlayerProfile(name) {
   }).catch(function () { return null; });
 }
 
+// 3. 赛程数据（未开赛/进行中的对阵）
+// 从 Liquipedia wikitext 的 {{Match}} 模板中提取赛程数据，
+// 补充 OpenDota 不返回的"未开赛"和"进行中"对阵。
+// 返回 [{ team1Name, team2Name, startTime, boType, finished, phase }] 或 []
+//
+// ★ 2026-07-28 修复 LOGO 不显示 BUG：
+//   原实现直接调 fetchPageWikitext（wx.request 路径，无 User-Agent），
+//   被 Liquipedia 反爬拦截 → 返回空 → UI 无进行中/未开赛对阵。
+//   修复：与 getLeagueMetadata 一致，优先走云代理路径（云函数可设 UA + gzip），
+//   云代理不可用/失败时回退本地 wx.request（兜底，一般走不到）。
+function getScheduledMatches(name) {
+  if (!ENABLED) return Promise.resolve([]);
+  if (!name) return Promise.resolve([]);
+
+  var slug = liquipediaSlugFor(name);
+  var cacheKey = 'liquipedia_schedule_' + consensus.normName(name);
+  var cached = cache.get(cacheKey, CACHE_TTL);
+  if (cached) return Promise.resolve(cached);
+
+  // 云代理优先：通过云函数（Node.js 环境，可自由设 User-Agent + gzip）代理 Liquipedia 请求，
+  // 规避 wx.request 禁止设置 User-Agent 的限制（Liquipedia 官方强制要求描述性 UA）。
+  if (typeof wx !== 'undefined' && wx.cloud && cloudProxy.isAvailable()) {
+    return cloudProxy.liquipediaScheduledProxy(name).then(function (res) {
+      // 云函数返回 { data: [...], source: 'liquipedia' | 'cache' }
+      var scheduled = (res && res.data) || [];
+      if (scheduled.length) {
+        cache.set(cacheKey, scheduled, CACHE_TTL);
+      }
+      return scheduled;
+    }).catch(function () {
+      // 云代理失败 → 回退本地 wx.request（兜底）
+      return fetchScheduledLocal(slug, cacheKey);
+    });
+  }
+  // 本地兜底（云代理不可用时）
+  return fetchScheduledLocal(slug, cacheKey);
+}
+
+// 本地抓取 wikitext + 解析赛程（云代理不可用时的兜底路径）
+function fetchScheduledLocal(slug, cacheKey) {
+  return fetchPageWikitext(slug)
+    .then(function (wikitext) {
+      if (!wikitext) return [];
+      var scheduled = LiquiParse.parseScheduledMatches(wikitext);
+      cache.set(cacheKey, scheduled, CACHE_TTL);
+      return scheduled;
+    })
+    .catch(function () { return []; });
+}
+
 module.exports = {
   ENABLED: ENABLED,
   getLeagueMetadata: getLeagueMetadata,
   getTeamRoster: getTeamRoster,
   getPlayerProfile: getPlayerProfile,
+  getScheduledMatches: getScheduledMatches,
   parseParticipants: LiquiParse.parseParticipants  // 2026-07-28 导出供单元测试直接调用（单一来源：liquipedia-parse.js）
 };

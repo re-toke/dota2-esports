@@ -123,108 +123,155 @@
       <view class="hint-desc">下拉刷新或稍后重试</view>
     </view>
 
-    <view
-      class="series-card {{s.isLive ? 'series-live' : (s.isRecent ? 'series-recent' : '')}}"
-      wx:for="{{series}}"
-      wx:for-item="s"
-      wx:for-index="si"
-      wx:key="key"
-    >
-      <!-- 系列头部：队A · 大比分 · 队B -->
-      <view class="series-head">
-        <view class="series-team" catchtap="openTeam" data-id="{{s.radiantTeamId}}">
-          <view class="series-team-logo {{s.teamALogoCls}}">{{s.radiantName ? s.radiantName[0] : '?'}}</view>
-          <text class="series-team-name {{s.teamACls}}">{{s.radiantName || '天辉'}}</text>
-        </view>
-        <view class="series-score">
-          <text class="series-score-num {{s.scoreACls}}">{{s.scoreA}}</text>
-          <text class="series-score-sep">:</text>
-          <text class="series-score-num {{s.scoreBCls}}">{{s.scoreB}}</text>
-          <text wx:if="{{s.isDraw}}" class="series-draw-badge">平</text>
-        </view>
-        <view class="series-team right" catchtap="openTeam" data-id="{{s.direTeamId}}">
-          <text class="series-team-name {{s.teamBCls}}">{{s.direName || '夜魇'}}</text>
-          <view class="series-team-logo {{s.teamBLogoCls}}">{{s.direName ? s.direName[0] : '?'}}</view>
-        </view>
+    <block wx:for="{{series}}" wx:for-item="s" wx:for-index="si" wx:key="key">
+      <!-- ===== 三段式分段分隔符（2026-07-28 新增） ===== -->
+      <!-- LIVE 段分隔符：当 series 属于 LIVE 段（phase=live）且为该段第一项时显示
+           修复 BUG：原用 si === 0 判定，当 LIVE 段为空时 UPCOMING 段第一个 series 索引为 0，会误显示 LIVE 分隔符
+           修复：改用 si === 0 仅在 liveCount > 0 时才显示（即 LIVE 段非空） -->
+      <view wx:if="{{s.phase === 'live' && si === 0 && liveCount > 0}}" class="phase-divider phase-divider-live">
+        <view class="phase-divider-bar"></view>
+        <text class="phase-divider-text">进行中 · {{liveCount}} 场</text>
+      </view>
+      <!-- UPCOMING 段分隔符：si === liveCount 时显示（即 LIVE 段结束后）
+           修复 BUG：原用 s.isUpcoming 判定，但 isUpcoming 字段在 groupSeries 中已新增
+           修复：统一用 s.phase === 'upcoming' 判定，与 phase 字段语义一致 -->
+      <view wx:if="{{s.phase === 'upcoming' && si === liveCount && upcomingCount > 0}}" class="phase-divider phase-divider-upcoming">
+        <view class="phase-divider-bar"></view>
+        <text class="phase-divider-text">即将开始 · {{upcomingCount}} 场</text>
+      </view>
+      <!-- RECENT 段分隔符：si === (liveCount + upcomingCount) 时显示，可点击折叠/展开
+           修复 BUG：原用 !s.isUpcoming && !s.isLive 判定，但 isRecent 字段语义冲突
+                  （isRecent 仅表示「2h 内结束」，超 2h 的已结束比赛 isRecent=false）
+           修复：改用 s.phase === 'recent' 判定，phase 字段是 groupSeries 统一计算的状态 -->
+      <view wx:if="{{s.phase === 'recent' && si === (liveCount + upcomingCount) && recentCount > 0}}"
+            class="phase-divider phase-divider-recent"
+            bindtap="toggleRecentCollapse">
+        <view class="phase-divider-bar"></view>
+        <text class="phase-divider-text">已结束 · {{recentCount}} 场</text>
+        <text class="phase-divider-toggle">{{recentCollapsed ? '展开 ▾' : '折叠 ▴'}}</text>
       </view>
 
-      <!-- 系列元信息：BO标签 + 赛制说明 + LIVE/时间 + 小圆点序列 -->
-      <view class="series-meta">
-        <view class="series-bo-group">
-          <text class="series-bo-tag {{s.boTagCls}}">{{s.boType}}</text>
-          <text class="series-bo-label">{{s.boLabel}}</text>
-        </view>
-        <text wx:if="{{s.isLive}}" class="series-live-tag">● LIVE</text>
-        <view class="series-dots" wx:if="{{s.isMulti}}">
-          <!-- 2026-07-28 修复小圆点颜色 BUG：用 aWin/bWin 判定（按 A/B 队归属），不用 radiantWin（按天辉/夜魇边）。
-               BO3/BO5 换边后，radiant_win=true 不等于 A 队赢；未结束（aWin/bWin 均 false）显示灰色。 -->
-          <view wx:for="{{s.games}}" wx:for-item="g" wx:key="match_id" class="series-dot {{g.aWin ? 'a-win' : (g.bWin ? 'b-win' : 'pending')}}"></view>
-        </view>
-        <text wx:else class="series-time">{{s.games[0].time}}</text>
-      </view>
-
-      <!-- 小场列表（单场也走此结构，BO1 仅显示时间行） -->
-      <view class="series-games">
-        <view
-          class="series-game {{expandedGame === (si + '-' + gi) ? 'expanded' : ''}}"
-          wx:for="{{s.games}}"
-          wx:for-item="g"
-          wx:for-index="gi"
-          wx:key="match_id"
-        >
-          <view class="series-game-main" bindtap="toggleGame" data-idx="{{si + '-' + gi}}">
-            <text class="series-game-idx" wx:if="{{s.isMulti}}">G{{gi + 1}}</text>
-            <view class="series-game-mini" wx:if="{{s.isMulti}}">
-              <text class="series-game-score {{g.radiantWin ? 'win' : 'lose'}}">{{g.radiantScore || 0}}</text>
-              <text class="series-game-sep">:</text>
-              <text class="series-game-score {{!g.radiantWin ? 'win' : 'lose'}}">{{g.direScore || 0}}</text>
+      <!-- ===== series-card（RECENT 段在折叠时隐藏） =====
+           修复 BUG：原用 !s.isRecent 判定，但 isRecent 仅表示「2h 内结束」
+                  超 2h 的已结束比赛 isRecent=false → !s.isRecent=true → 折叠时仍显示（不受控）
+           修复：改用 s.phase !== 'recent' 判定，phase 字段统一表示状态
+           class 同步修复：用 s.phase 替代 isLive/isUpcoming/isRecent，避免字段语义冲突 -->
+      <view
+        wx:if="{{s.phase !== 'recent' || !recentCollapsed}}"
+        class="series-card {{s.phase === 'live' ? 'series-live' : (s.phase === 'upcoming' ? 'series-upcoming' : (s.phase === 'recent' ? 'series-recent' : ''))}}"
+      >
+        <!-- 系列头部：队A · 大比分/开赛时间 · 队B -->
+        <view class="series-head">
+          <view class="series-team" catchtap="openTeam" data-id="{{s.radiantTeamId}}">
+            <view class="series-team-logo {{s.teamALogoCls}}">
+              <image wx:if="{{s.radiantLogo}}" class="team-logo-img" src="{{s.radiantLogo}}" mode="aspectFill" lazy-load binderror="onLogoError" data-si="{{si}}" data-side="radiant" />
+              <text wx:else>{{s.radiantName ? s.radiantName[0] : '?'}}</text>
             </view>
-            <text class="series-game-time">{{g.time}}</text>
-            <text class="series-game-duration" wx:if="{{g.duration}}">· {{g.duration}}</text>
-            <text class="series-game-expand">{{expandedGame === (si + '-' + gi) ? '▴' : '▾'}}</text>
+            <text class="series-team-name {{s.teamACls}}">{{s.radiantName || '天辉'}}</text>
           </view>
-
-          <!-- 展开态：英雄阵容 mini 卡 -->
-          <view class="series-game-expand-box" wx:if="{{expandedGame === (si + '-' + gi)}}">
-            <view wx:if="{{g.loadingDetail}}" class="expand-loading">加载英雄阵容中…</view>
-            <block wx:elif="{{g.detail}}">
-              <view class="mvp-row" wx:if="{{g.detail.mvp}}">
-                <text class="mvp-tag">★ MVP</text>
-                <text class="mvp-name">{{g.detail.mvp.name}}</text>
-                <text class="mvp-kda">{{g.detail.mvp.kda}} · GPM {{g.detail.mvp.gpm}}</text>
-              </view>
-              <view class="hero-lineup">
-                <view class="hero-side radiant">
-                  <text class="hero-side-label">{{s.radiantName}}</text>
-                  <view class="hero-icons">
-                    <view class="hero-icon" wx:for="{{g.detail.radiantHeroes}}" wx:for-item="h" wx:key="*this">
-                      <image wx:if="{{h.img}}" class="hero-icon-img" src="{{h.img}}" mode="aspectFill" lazy-load />
-                      <view wx:else class="hero-icon-box">{{h.short}}</view>
-                      <text class="hero-icon-kda">{{h.kda}}</text>
-                    </view>
-                  </view>
-                </view>
-                <view class="hero-side dire">
-                  <text class="hero-side-label">{{s.direName}}</text>
-                  <view class="hero-icons">
-                    <view class="hero-icon" wx:for="{{g.detail.direHeroes}}" wx:for-item="h" wx:key="*this">
-                      <image wx:if="{{h.img}}" class="hero-icon-img" src="{{h.img}}" mode="aspectFill" lazy-load />
-                      <view wx:else class="hero-icon-box">{{h.short}}</view>
-                      <text class="hero-icon-kda">{{h.kda}}</text>
-                    </view>
-                  </view>
-                </view>
-              </view>
-              <view class="report-link" catchtap="openMatch" data-id="{{g.match_id}}">
-                <text>查看完整战报（KDA 表 / GPM / XPM）</text>
-                <t-icon name="chevron-right" size="32rpx" color="#5b9bff" />
-              </view>
+          <view class="series-score">
+            <!-- 未开赛：显示开赛时间，不显示 0:0 比分 -->
+            <block wx:if="{{s.phase === 'upcoming'}}">
+              <text class="series-scheduled-time">{{s.scheduledTimeText}}</text>
             </block>
-            <view wx:else class="expand-empty">暂无英雄阵容数据</view>
+            <block wx:else>
+              <text class="series-score-num {{s.scoreACls}}">{{s.scoreA}}</text>
+              <text class="series-score-sep">:</text>
+              <text class="series-score-num {{s.scoreBCls}}">{{s.scoreB}}</text>
+              <text wx:if="{{s.isDraw}}" class="series-draw-badge">平</text>
+            </block>
+          </view>
+          <view class="series-team right" catchtap="openTeam" data-id="{{s.direTeamId}}">
+            <text class="series-team-name {{s.teamBCls}}">{{s.direName || '夜魇'}}</text>
+            <view class="series-team-logo {{s.teamBLogoCls}}">
+              <image wx:if="{{s.direLogo}}" class="team-logo-img" src="{{s.direLogo}}" mode="aspectFill" lazy-load binderror="onLogoError" data-si="{{si}}" data-side="dire" />
+              <text wx:else>{{s.direName ? s.direName[0] : '?'}}</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- 系列元信息：BO标签 + 赛制说明 + LIVE/即将开始/时间 + 小圆点序列 -->
+        <view class="series-meta">
+          <view class="series-bo-group">
+            <text class="series-bo-tag {{s.boTagCls}}">{{s.boType}}</text>
+            <text class="series-bo-label">{{s.boLabel}}</text>
+          </view>
+          <text wx:if="{{s.phase === 'live'}}" class="series-live-tag">● LIVE</text>
+          <!-- 未开赛：显示⏰ 倒计时标签（替代 LIVE 标签位置） -->
+          <text wx:elif="{{s.phase === 'upcoming'}}" class="series-upcoming-tag">⏰ {{s.countdownText}}</text>
+          <!-- 未开赛不显示小圆点序列（无 match 数据），仅显示开赛时间兜底 -->
+          <view class="series-dots" wx:if="{{s.isMulti && s.phase !== 'upcoming'}}">
+            <!-- 2026-07-28 修复小圆点颜色 BUG：用 aWin/bWin 判定（按 A/B 队归属），不用 radiantWin（按天辉/夜魇边）。
+                 BO3/BO5 换边后，radiant_win=true 不等于 A 队赢；未结束（aWin/bWin 均 false）显示灰色。 -->
+            <view wx:for="{{s.games}}" wx:for-item="g" wx:key="match_id" class="series-dot {{g.aWin ? 'a-win' : (g.bWin ? 'b-win' : 'pending')}}"></view>
+          </view>
+          <text wx:elif="{{s.phase !== 'upcoming'}}" class="series-time">{{s.games[0].time}}</text>
+        </view>
+
+        <!-- 小场列表（单场也走此结构，BO1 仅显示时间行）
+             未开赛不渲染小场列表（无 match_id 数据，避免 toggleGame/openMatch 异常） -->
+        <view class="series-games" wx:if="{{s.phase !== 'upcoming'}}">
+          <view
+            class="series-game {{expandedGame === (si + '-' + gi) ? 'expanded' : ''}}"
+            wx:for="{{s.games}}"
+            wx:for-item="g"
+            wx:for-index="gi"
+            wx:key="match_id"
+          >
+            <view class="series-game-main" bindtap="toggleGame" data-idx="{{si + '-' + gi}}">
+              <text class="series-game-idx" wx:if="{{s.isMulti}}">G{{gi + 1}}</text>
+              <view class="series-game-mini" wx:if="{{s.isMulti}}">
+                <text class="series-game-score {{g.radiantWin ? 'win' : 'lose'}}">{{g.radiantScore || 0}}</text>
+                <text class="series-game-sep">:</text>
+                <text class="series-game-score {{!g.radiantWin ? 'win' : 'lose'}}">{{g.direScore || 0}}</text>
+              </view>
+              <text class="series-game-time">{{g.time}}</text>
+              <text class="series-game-duration" wx:if="{{g.duration}}">· {{g.duration}}</text>
+              <text class="series-game-expand">{{expandedGame === (si + '-' + gi) ? '▴' : '▾'}}</text>
+            </view>
+
+            <!-- 展开态：英雄阵容 mini 卡 -->
+            <view class="series-game-expand-box" wx:if="{{expandedGame === (si + '-' + gi)}}">
+              <view wx:if="{{g.loadingDetail}}" class="expand-loading">加载英雄阵容中…</view>
+              <block wx:elif="{{g.detail}}">
+                <view class="mvp-row" wx:if="{{g.detail.mvp}}">
+                  <text class="mvp-tag">★ MVP</text>
+                  <text class="mvp-name">{{g.detail.mvp.name}}</text>
+                  <text class="mvp-kda">{{g.detail.mvp.kda}} · GPM {{g.detail.mvp.gpm}}</text>
+                </view>
+                <view class="hero-lineup">
+                  <view class="hero-side radiant">
+                    <text class="hero-side-label">{{s.radiantName}}</text>
+                    <view class="hero-icons">
+                      <view class="hero-icon" wx:for="{{g.detail.radiantHeroes}}" wx:for-item="h" wx:key="*this">
+                        <image wx:if="{{h.img}}" class="hero-icon-img" src="{{h.img}}" mode="aspectFill" lazy-load />
+                        <view wx:else class="hero-icon-box">{{h.short}}</view>
+                        <text class="hero-icon-kda">{{h.kda}}</text>
+                      </view>
+                    </view>
+                  </view>
+                  <view class="hero-side dire">
+                    <text class="hero-side-label">{{s.direName}}</text>
+                    <view class="hero-icons">
+                      <view class="hero-icon" wx:for="{{g.detail.direHeroes}}" wx:for-item="h" wx:key="*this">
+                        <image wx:if="{{h.img}}" class="hero-icon-img" src="{{h.img}}" mode="aspectFill" lazy-load />
+                        <view wx:else class="hero-icon-box">{{h.short}}</view>
+                        <text class="hero-icon-kda">{{h.kda}}</text>
+                      </view>
+                    </view>
+                  </view>
+                </view>
+                <view class="report-link" catchtap="openMatch" data-id="{{g.match_id}}">
+                  <text>查看完整战报（KDA 表 / GPM / XPM）</text>
+                  <t-icon name="chevron-right" size="32rpx" color="#5b9bff" />
+                </view>
+              </block>
+              <view wx:else class="expand-empty">暂无英雄阵容数据</view>
+            </view>
           </view>
         </view>
       </view>
-    </view>
+    </block>
 
     <view class="loadmore" wx:if="{{hasMore}}">
       <t-button theme="light" size="medium" bindtap="appendPage" t-class="more-btn">加载更多</t-button>
@@ -244,8 +291,11 @@
       </view>
       <view class="teams-grid">
         <!-- 参赛队伍 chip：已公布可点击跳转，待公布灰色不可点击 -->
-        <view class="team-chip {{item.status === 'TBD' || item.name === '待公布' ? 'is-pending' : ''}}" wx:for="{{participantsList}}" wx:key="id" catchtap="openTeam" data-id="{{item.id}}">
-          <view class="team-chip-logo">{{item.name ? item.name[0] : '?'}}</view>
+        <view class="team-chip {{item.status === 'TBD' || item.name === '待公布' ? 'is-pending' : ''}}" wx:for="{{participantsList}}" wx:for-index="pidx" wx:key="id" catchtap="openTeam" data-id="{{item.id}}">
+          <view class="team-chip-logo">
+            <image wx:if="{{item.logo}}" class="team-logo-img" src="{{item.logo}}" mode="aspectFill" lazy-load binderror="onParticipantLogoError" data-idx="{{pidx}}" />
+            <text wx:else>{{item.name ? item.name[0] : '?'}}</text>
+          </view>
           <view class="team-chip-info">
             <text class="team-chip-name">{{item.name}}</text>
             <view class="team-chip-tags">

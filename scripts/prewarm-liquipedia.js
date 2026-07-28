@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 近一年联赛 Liquipedia 元数据预热启动器
+// 近半年联赛 Liquipedia 元数据预热启动器
 // 把 liquipediaLeagueMeta 从"纯懒加载"升级为"懒加载 + 预热"双轨。
 //
 // 两种运行模式：

@@ -478,6 +478,35 @@ check('G14: 云函数镜像 liquipedia-parse 与客户端一致（防双源漂�
   }
 });
 
+section('\n--- G15: Liquipedia slug 映射表双源一致性（客户端 / 云函数镜像）---');
+check('G15: 客户端 slugmap 存在且含 mappings 对象', () => {
+  const fs = require('fs');
+  const ROOT = path.resolve(__dirname, '..');
+  const miniPath = path.join(ROOT, 'utils', 'liquipedia-slugmap.json');
+  assert(fs.existsSync(miniPath), 'utils/liquipedia-slugmap.json 应存在（先跑 generate-liquipedia-slugmap.js）');
+  const mini = require(miniPath);
+  assert(mini && typeof mini.mappings === 'object' && mini.mappings !== null, 'mappings 应为对象');
+});
+check('G15: 云函数镜像 slugmap 与客户端一致（防双源漂移）', () => {
+  const fs = require('fs');
+  const ROOT = path.resolve(__dirname, '..');
+  const miniPath = path.join(ROOT, 'utils', 'liquipedia-slugmap.json');
+  const cloudPath = path.join(ROOT, 'cloudfunctions', 'aggregation', 'liquipedia-slugmap.json');
+  if (!fs.existsSync(cloudPath)) {
+    // 镜像尚未由 npm run sync:slugmap 生成：仅告警，不阻断 npm test（sync:slugmap 是硬闸）。
+    console.log('  ⚠️ 云函数镜像 liquipedia-slugmap.json 不存在，跳过比对（请运行 npm run sync:slugmap）');
+    return;
+  }
+  const mini = require(miniPath);
+  const cloud = require(cloudPath);
+  const sk = Object.keys(mini.mappings);
+  const dk = Object.keys(cloud.mappings);
+  assert(sk.length === dk.length, '映射条数不一致: 源 ' + sk.length + ' vs 镜像 ' + dk.length);
+  for (const k of sk) {
+    assert(cloud.mappings[k] === mini.mappings[k], '映射不一致 key=' + k);
+  }
+});
+
 // ===== 5. 运行全部测试（与 test-sources 同范式：顺序执行，支持 async，末尾输出汇总与退出码）=====
 async function runAll() {
   for (const t of tests) {

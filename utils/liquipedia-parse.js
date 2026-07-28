@@ -435,6 +435,160 @@ function parseLeagueMetadata(wikitext, fallbackName) {
   }
 }
 
+// ===== 赛程解析：从 wikitext 中提取未开赛/进行中的对阵 =====
+//
+// Liquipedia 赛事页面用 {{Matchlist}} 容器 + 嵌套 {{Match}} 模板记录赛程：
+//   {{Matchlist|title=April 22-A|collapsed=true
+//   |M1={{Match
+//     |bestof=2
+//     |opponent1={{TeamOpponent|team falcons}}
+//     |opponent2={{TeamOpponent|betboom team}}
+//     |date=April 22, 2024 - 13:00 {{Abbr/CEST}}
+//     |finished=true
+//     |map1={{Map|team1side=dir|t1h1=...}}
+//     ...
+//   }}
+//   |M2={{Match|...}}
+//   }}
+//
+// 本函数扫描所有 {{Match}} 模板（跳过 {{Matchlist}} 容器），提取：
+//   - team1Name / team2Name：从 opponent1/opponent2 的 {{TeamOpponent|队名}} 提取
+//   - startTime：从 date 字段解析为 unix 秒
+//   - boType：从 bestof 字段
+//   - finished：是否已结束
+//   - phase：live（已开赛未结束）/ upcoming（未开赛）/ recent（已结束）
+//
+// nowSec 用于判定 phase：start < now 且未结束 → live；start > now → upcoming；已结束 → recent
+function parseScheduledMatches(wikitext, nowSec) {
+  if (!wikitext) return [];
+  nowSec = nowSec || Math.floor(Date.now() / 1000);
+  var matches = [];
+  // 匹配 {{Match 后紧跟 | 或 }}（排除 {{Matchlist}}）
+  var re = /\{\{Match(?![a-zA-Z])\s*\|/g;
+  var m;
+  while ((m = re.exec(wikitext)) !== null) {
+    var startPos = m.index;
+    var endPos = findTemplateEnd(wikitext, startPos);
+    if (endPos < 0) break;  // 模板未闭合，停止扫描
+    var body = wikitext.substring(startPos + 2, endPos);  // 去掉外层 {{ }}
+    // 解析参数
+    var fields = parseMatchFields(body);
+    if (!fields) { re.lastIndex = endPos + 2; continue; }
+    matches.push(fields);
+    re.lastIndex = endPos + 2;  // 跳过已处理的模板
+  }
+  // 去重：同队对+同日期的对阵只保留一个（Liquipedia 可能在不同 Matchlist 中重复）
+  var seen = {};
+  var deduped = [];
+  matches.forEach(function (mch) {
+    var key = mch.team1Name + '__' + mch.team2Name + '__' + mch.startTime;
+    if (!seen[key]) {
+      seen[key] = true;
+      deduped.push(mch);
+    }
+  });
+  return deduped;
+}
+
+// 解析 {{Match}} 模板参数，提取对阵信息
+function parseMatchFields(body) {
+  // 去掉开头的 'Match|'
+  var afterName = body.replace(/^Match\s*\|\s*/, '');
+  var parts = splitTopLevel(afterName, '|');
+  var fields = {};
+  parts.forEach(function (part) {
+    part = part.trim();
+    var eqIdx = part.indexOf('=');
+    if (eqIdx < 0) return;
+    var key = part.substring(0, eqIdx).trim().toLowerCase();
+    var val = part.substring(eqIdx + 1).trim();
+    fields[key] = val;
+  });
+  // 提取队名：opponent1={{TeamOpponent|队名}} 或 {{TeamOpponent|[[队名|显示名]]}}
+  var team1Name = extractTeamOpponentName(fields.opponent1 || '');
+  var team2Name = extractTeamOpponentName(fields.opponent2 || '');
+  if (!team1Name || !team2Name) return null;  // 队名缺失，跳过
+  // 解析日期
+  var startTime = parseLiquipediaDate(fields.date || '');
+  if (!startTime) return null;  // 日期解析失败，跳过
+  // bestof
+  var bo = fields.bestof ? parseInt(fields.bestof, 10) : 1;
+  var boType = 'BO' + (isNaN(bo) || bo < 1 ? 1 : bo);
+  // finished
+  var finished = fields.finished === 'true' || fields.finished === '1';
+  // phase 判定
+  var nowSec = Math.floor(Date.now() / 1000);
+  var phase;
+  if (finished) {
+    phase = 'recent';
+  } else if (startTime > nowSec) {
+    phase = 'upcoming';
+  } else {
+    phase = 'live';  // 已开赛但未结束
+  }
+  return {
+    team1Name: team1Name,
+    team2Name: team2Name,
+    startTime: startTime,
+    boType: boType,
+    finished: finished,
+    phase: phase
+  };
+}
+
+// 从 {{TeamOpponent|队名}} 嵌套模板中提取队名
+// 输入 '{{TeamOpponent|team falcons}}' → 'team falcons'
+// 输入 '{{TeamOpponent|[[Team Spirit|TS]]}}' → 'TS'
+// 输入 '{{TeamOpponent}}' → ''
+function extractTeamOpponentName(raw) {
+  if (!raw) return '';
+  // 匹配 {{TeamOpponent|...}} 模板
+  var m = raw.match(/\{\{TeamOpponent\s*\|([^}]*)\}\}/i);
+  if (!m) return '';
+  var inner = m[1].trim();
+  // 处理 [[链接|显示名]] 格式
+  var linkMatch = inner.match(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/);
+  if (linkMatch) {
+    return linkMatch[2] ? linkMatch[2].trim() : linkMatch[1].split('/').pop().trim();
+  }
+  // 纯文本队名
+  return stripWikitextMarkup(inner).trim();
+}
+
+// 解析 Liquipedia 日期格式为 unix 秒
+// 输入 'April 22, 2024 - 13:00 {{Abbr/CEST}}' → 1713781200
+// 输入 '2024-04-22 13:00' → 1713781200
+// 失败返回 0
+function parseLiquipediaDate(dateStr) {
+  if (!dateStr) return 0;
+  // 去掉 {{Abbr/XXX}} 等模板
+  var cleaned = dateStr.replace(/\{\{[^}]*\}\}/g, '').trim();
+  // 去掉时区缩写尾部（如 CEST、UTC、CST 等）
+  cleaned = cleaned.replace(/\s+[A-Z]{3,5}\s*$/, '').trim();
+  // 尝试解析 "April 22, 2024 - 13:00" 格式
+  var m1 = cleaned.match(/(\w+)\s+(\d+),\s*(\d{4})\s*[-–]?\s*(\d{1,2}):(\d{2})/);
+  if (m1) {
+    var monthMap = {
+      'january': 0, 'february': 1, 'march': 2, 'april': 3, 'may': 4, 'june': 5,
+      'july': 6, 'august': 7, 'september': 8, 'october': 9, 'november': 10, 'december': 11
+    };
+    var monthIdx = monthMap[m1[1].toLowerCase()];
+    if (monthIdx == null) return 0;
+    var d = new Date(Date.UTC(parseInt(m1[3]), monthIdx, parseInt(m1[2]), parseInt(m1[4]), parseInt(m1[5])));
+    return Math.floor(d.getTime() / 1000);
+  }
+  // 尝试解析 "2024-04-22 13:00" 格式
+  var m2 = cleaned.match(/(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})/);
+  if (m2) {
+    var d2 = new Date(Date.UTC(parseInt(m2[1]), parseInt(m2[2]) - 1, parseInt(m2[3]), parseInt(m2[4]), parseInt(m2[5])));
+    return Math.floor(d2.getTime() / 1000);
+  }
+  // 尝试 Date.parse 兜底
+  var t = Date.parse(cleaned);
+  if (!isNaN(t)) return Math.floor(t / 1000);
+  return 0;
+}
+
 module.exports = {
   parseTemplate: parseTemplate,
   splitTopLevel: splitTopLevel,
@@ -447,5 +601,6 @@ module.exports = {
   parseOpponentBlock: parseOpponentBlock,
   parseTeamCardBlock: parseTeamCardBlock,
   parseParticipants: parseParticipants,
-  parseLeagueMetadata: parseLeagueMetadata
+  parseLeagueMetadata: parseLeagueMetadata,
+  parseScheduledMatches: parseScheduledMatches
 };

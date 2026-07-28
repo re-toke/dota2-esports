@@ -27,7 +27,7 @@ const GOT = require('got');
 const BASE = 'https://api.opendota.com/api';
 // Keep in sync with utils/sqlFragments.js (single source of truth)
 // 增加 max(start_time + duration) AS last_end：真实比赛结束时间，用于列表"进行中"准确判定
-const LEAGUE_WINDOWS_SQL = "SELECT leagueid, min(start_time) AS earliest, max(start_time) AS latest, max(start_time + duration) AS last_end, count(*) AS n FROM matches WHERE start_time > extract(epoch FROM now() - interval '1 year') GROUP BY leagueid";
+const LEAGUE_WINDOWS_SQL = "SELECT leagueid, min(start_time) AS earliest, max(start_time) AS latest, max(start_time + duration) AS last_end, count(*) AS n FROM matches WHERE start_time > extract(epoch FROM now() - interval '6 months') GROUP BY leagueid";
 const CACHE_COLL = 'aggregation_cache';
 
 // 赛事展示名规范覆盖（G4 单一数据源）。
@@ -163,6 +163,22 @@ const LIQUIPEDIA_UA = 'DOTA2-Esports-Hub/1.0 (WeChat Mini Program; contact: dev@
 // 纯 wikitext 解析模块（镜像自 utils/liquipedia-parse.js，由 scripts/sync-liquipedia-parse.js 同步）。
 // 云函数用 got 抓取 wikitext 后，复用与客户端完全一致的解析逻辑，避免"客户端/云端"双源漂移。
 const liquipediaParse = require('./liquipedia-parse');
+
+// Liquipedia slug 映射（镜像自 utils/liquipedia-slugmap.json，由 sync:slugmap 同步）
+// OpenDota 联赛名 ≠ Liquipedia 页面 slug，直查命中率仅 2.5%；映射表把 name 转成正确 slug。
+let liquipediaSlugMapCache = null;
+function getLiquipediaSlugMap() {
+  if (liquipediaSlugMapCache === null) {
+    try { liquipediaSlugMapCache = require('./liquipedia-slugmap.json'); }
+    catch (e) { liquipediaSlugMapCache = { mappings: {} }; }
+  }
+  return liquipediaSlugMapCache;
+}
+function liquipediaSlugFor(name) {
+  const m = getLiquipediaSlugMap();
+  if (m && m.mappings && m.mappings[name]) return m.mappings[name];
+  return name;
+}
 
 // ===== Liquipedia 赛事列表（"即将到来"实时源，无需 STRATZ key）=====
 // 通过 action=parse 取 Portal:Tournaments 渲染后的 HTML，解析 "Upcoming" 段落的
@@ -302,17 +318,41 @@ async function fetchLiquipediaWikitext(pageName) {
 async function liquipediaLeagueMeta(params, force) {
   const pageName = (params && (params.pageName || params.name)) || null;
   if (!pageName) return { data: null, error: 'pageName required' };
-  const cacheKey = 'liquipedia_league_' + pageName;
+  const slug = liquipediaSlugFor(pageName);
+  const cacheKey = 'liquipedia_league_' + slug;
   if (!force) {
     const cached = await getCache(cacheKey);
     if (cached) return { data: cached, source: 'cache' };
   }
-  const wikitext = await fetchLiquipediaWikitext(pageName);
+  const wikitext = await fetchLiquipediaWikitext(slug);
   if (!wikitext) return { data: null, source: 'liquipedia' };
   const meta = liquipediaParse.parseLeagueMetadata(wikitext, pageName);
   if (!meta) return { data: null, source: 'liquipedia' };
   await setCache(cacheKey, meta, 6 * 3600 * 1000).catch(() => {});
   return { data: meta, source: 'liquipedia' };
+}
+
+// ===== Liquipedia 赛程数据（未开赛/进行中的对阵）=====
+// 与 liquipediaLeagueMeta 同样的「云函数抓取 wikitext + 纯解析」模式，
+// 但用 parseScheduledMatches 解析 {{Match}} 模板，返回赛程数组而非元数据。
+// 缓存 TTL 30 分钟（与 match data 一致，比元数据更短，赛程变更敏感）。
+async function liquipediaScheduledMatches(params, force) {
+  const pageName = (params && (params.pageName || params.name)) || null;
+  if (!pageName) return { data: null, error: 'pageName required' };
+  const slug = liquipediaSlugFor(pageName);
+  const cacheKey = 'liquipedia_schedule_' + slug;
+  if (!force) {
+    const cached = await getCache(cacheKey);
+    if (cached) return { data: cached, source: 'cache' };
+  }
+  const wikitext = await fetchLiquipediaWikitext(slug);
+  if (!wikitext) return { data: null, source: 'liquipedia' };
+  // 用 parseScheduledMatches 解析赛程，传入当前时间戳用于 phase 判定
+  const nowSec = Math.floor(Date.now() / 1000);
+  const matches = liquipediaParse.parseScheduledMatches(wikitext, nowSec);
+  if (!matches || !matches.length) return { data: [], source: 'liquipedia' };
+  await setCache(cacheKey, matches, 30 * 60 * 1000).catch(() => {});
+  return { data: matches, source: 'liquipedia' };
 }
 
 // 知名 S 级赛事关键词（与客户端 leagues.js 保持一致）
@@ -321,7 +361,7 @@ const KNOWN_KEYWORDS = /(international|major|esl\s+one|esl\s+pro|dreamleague|bla
 // 批量预热 Liquipedia 赛事元数据：把"懒加载"升级为"懒加载 + 预热"双轨。
 // - 显式 pageNames：按传入列表处理（适合定向回填已知赛事）。
 // - 未传 pageNames：自动从 OpenDota /leagues 枚举知名/职业联赛（与客户端 KNOWN_KEYWORDS 一致），
-//   覆盖近一年 + 未来已公布的 notable 联赛（Liquipedia 仅收录 notable 赛事，故该筛选即对齐数据源）。
+//   覆盖近半年 + 未来已公布的 notable 联赛（Liquipedia 仅收录 notable 赛事，故该筛选即对齐数据源）。
 // 每个联赛固定 2s 间隔（Liquipedia MediaWiki API 软限流），单条失败不影响其余，最终返回汇总。
 // 设计说明：本 action 单条处理约 1-3s；若由脚本逐条调用（每条一个 pageName）可规避云函数超时，
 //   若在 DevTools 控制台一次性粘贴批量，建议 ≤30 条以免触发函数超时。
@@ -346,7 +386,7 @@ async function liquipediaPrewarm(params, force) {
       });
     } catch (e) { /* 枚举失败则走空列表 */ }
   }
-  const limit = (p.limit && Number(p.limit) > 0) ? Number(p.limit) : 80;
+  const limit = (p.limit && Number(p.limit) > 0) ? Number(p.limit) : 50;
   pageNames = pageNames.slice(0, limit);
 
   const summary = {
@@ -689,7 +729,13 @@ exports.main = async (event, context) => {
     return await liquipediaLeagueMeta(params, force);
   }
 
-  // 批量预热 Liquipedia 赛事元数据（懒加载 + 预热双轨）。默认自动枚举近一年/未来 notable 联赛，
+  // Liquipedia 赛程数据（未开赛/进行中的对阵）：云函数抓取 wikitext + parseScheduledMatches 解析。
+  // 同样规避 wx.request 禁设 User-Agent 的限制；返回 [{ team1Name, team2Name, startTime, boType, finished, phase }]。
+  if (action === 'liquipediaScheduledMatches') {
+    return await liquipediaScheduledMatches(params, force);
+  }
+
+  // 批量预热 Liquipedia 赛事元数据（懒加载 + 预热双轨）。默认自动枚举近半年/未来 notable 联赛，
   // 或由 params.pageNames 定向回填；每条 2s 限流，单条失败隔离，返回汇总。
   if (action === 'liquipediaPrewarm') {
     return await liquipediaPrewarm(params, force);

@@ -331,7 +331,7 @@ function getLeagues() {
   return direct();
 }
 
-// 一次 SQL 拿所有赛事近一年的时间窗口：{ leagueid -> { earliest, latest, count } }
+// 一次 SQL 拿所有赛事近半年的时间窗口：{ leagueid -> { earliest, latest, count } }
 // 用于「正在进行 / 全部（按最近比赛排序）」判定，避免逐个拉 /leagues/{id}/matches。
 function transformLeagueWindows(data) {
   const rows = (data && data.rows) || [];

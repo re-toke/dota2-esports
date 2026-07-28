@@ -9,6 +9,7 @@
     "test:all": "node scripts/test-sources.js && node scripts/test-consensus.js && node scripts/test-canonical.js",
     "sync:canon": "node scripts/sync-canon-map.js",
     "sync:parse": "node scripts/sync-liquipedia-parse.js",
+    "sync:slugmap": "node scripts/sync-slugmap.js",
     "prewarm:liquipedia": "node scripts/prewarm-liquipedia.js",
     "check:syntax": "node scripts/check-syntax.js",
     "prepare": "husky"

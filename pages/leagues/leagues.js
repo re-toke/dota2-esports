@@ -223,7 +223,7 @@ Page({
     cache.remove('/leagues|{}');
     cache.remove('/explorer?sql=' + encodeURIComponent(
       "SELECT leagueid, min(start_time) AS earliest, max(start_time) AS latest, count(*) AS n " +
-      "FROM matches WHERE start_time > extract(epoch FROM now() - interval '1 year') " +
+      "FROM matches WHERE start_time > extract(epoch FROM now() - interval '6 months') " +
       "GROUP BY leagueid"
     ));
     this.upcomingList = null;

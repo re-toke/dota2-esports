@@ -659,6 +659,9 @@ function groupSeries(matches) {
     const hasValidAnchors = (teamAId != null && teamAId > 0) && (teamBId != null && teamBId > 0);
     let scoreA = 0, scoreB = 0;
     let isLive = false;
+    let isUpcoming = false;
+    // nowMs 为毫秒，start_time 为秒级 unix；统一换算后比较
+    const nowSec = Math.floor(now / 1000);
     games.forEach(function (g) {
       if (hasValidAnchors) {
         // 该场获胜方 team_id：radiant_win=true → radiant_team_id，否则 dire_team_id
@@ -677,11 +680,23 @@ function groupSeries(matches) {
         // 首场 team_id 缺失：无法按队归属，直接按边累加
         if (g.radiant_win) scoreA++; else if (g.radiant_win === false) scoreB++;
       }
-      // 进行中：无 duration 或 duration=0 且 start_time 在最近 24h
-      if ((!g.duration || g.duration === 0) && g.start_time && (now - g.start_time * 1000) < 24 * 3600 * 1000) {
+      // 进行中：未结算（duration=0）且 start_time 已过去（已开赛但未结束）
+      // 2026-07-28 修正：原判定 (now - start_time*1000) < 24h 对未来 start_time 也成立
+      // （负数 < 24h），会误判未开赛对阵为 LIVE。新增 start_time <= nowSec 上界守卫。
+      const gStartSec = g.start_time || 0;
+      if ((!g.duration || g.duration === 0) && gStartSec &&
+          gStartSec <= nowSec && (nowSec - gStartSec) < 24 * 3600) {
         isLive = true;
       }
+      // 未开赛：未结算（radiant_win=null）且 start_time 在未来
+      // 仅当整场都未结算且未开赛时标记，避免与 isLive 冲突
+      if (g.radiant_win == null && gStartSec > nowSec) {
+        isUpcoming = true;
+      }
     });
+    // 统一 phase：优先级 live > upcoming > recent
+    // 一场未结束的系列赛（isLive）不可能同时有未来场，二者互斥
+    const phase = isLive ? 'live' : (isUpcoming ? 'upcoming' : 'recent');
     // 系列 BO 类型判定（基于胜负场数，比 series_type 更可靠）
     // 规则：
     //   一方赢3局 → BO5（五局三胜，BO3 不可能出现3胜）
@@ -745,6 +760,12 @@ function groupSeries(matches) {
       isDraw: isDraw,
       isLive: isLive,
       isRecent: isRecent,
+      // ★ 新增字段（2026-07-28）：未开赛判定 + 统一 phase + logo 占位
+      // isUpcoming：系列赛中存在未结算且 start_time 在未来的场
+      // phase：live|upcoming|recent，供详情页分段排序使用（live 优先 > upcoming > recent）
+      // radiantLogo/direLogo：初始空字符串，由 league-detail.js enrichTeamLogos 异步注入
+      isUpcoming: isUpcoming,
+      phase: phase,
       isMulti: games.length > 1,
       radiantName: radiantName,
       direName: direName,
@@ -758,6 +779,12 @@ function groupSeries(matches) {
       teamBCls: teamBCls,
       teamALogoCls: teamALogoCls,
       teamBLogoCls: teamBLogoCls,
+      // ★ 新增 logo 字段：初始为空，league-detail.enrichTeamLogos 异步注入 URL
+      // wxml 渲染时 logo 为空则 fallback 显示首字母圆
+      radiantLogo: '',
+      direLogo: '',
+      radiantLogoSource: '',
+      direLogoSource: '',
       lastTime: last.start_time || 0
     };
   });

@@ -88,6 +88,13 @@ proxy.liquipediaProxy = function (pageName) {
   return call('liquipediaLeagueMeta', { pageName: pageName });
 };
 
+// Liquipedia 赛程数据云代理：调云函数 action=liquipediaScheduledMatches，
+// 云端抓取 wikitext + parseScheduledMatches 解析，返回 [{ team1Name, team2Name, startTime, boType, finished, phase }]。
+// 与 liquipediaProxy 同样规避 wx.request 禁设 User-Agent 的限制。
+proxy.liquipediaScheduledProxy = function (pageName) {
+  return call('liquipediaScheduledMatches', { pageName: pageName });
+};
+
 // 暴露给其它模块（api.js / stratz.js / leagues.js 复用）
 proxy.isAvailable = isAvailable;
 proxy.call = call;
