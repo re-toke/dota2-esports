@@ -62,6 +62,20 @@ Page({
     try { this.setData({ history: wx.getStorageSync('search_history') || [] }); } catch (e) {}
   },
 
+  onShow() {
+    // 用户进入搜索页（很可能要搜物品/英雄）时，在 wifi 下预加载 data 分包
+    // 移动网络下不预加载，避免消耗用户流量
+    if (wx.preloadSubpackage) {
+      wx.getNetworkType({
+        success(res) {
+          if (res.networkType === 'wifi') {
+            wx.preloadSubpackage({ name: 'data', success() {}, fail() {} });
+          }
+        }
+      });
+    }
+  },
+
   onSearch(e) {
     const kw = (e.detail.value || '').trim();
     this.setData({ keyword: kw });

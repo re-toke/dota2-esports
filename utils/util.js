@@ -27,12 +27,16 @@ function formatDuration(sec) {
 }
 
 // unix 秒 -> "2024-08-03"
+// 2026-07-28 修复：使用 UTC 年月日，与 curation.start/end（Date.UTC）和
+// liquipediaDateToUnix（Date.UTC）保持同一时区，避免跨时区导致日期 ±1 天偏差。
+// 之前的 getFullYear/getMonth/getDate 使用本地时区（如 UTC+8），
+// 在 UTC 0:00~8:00 之间 unix 秒会落到「前一天」，导致赛期显示比公示早一天。
 function formatTime(unix) {
   if (!unix) return '';
   const d = new Date(unix * 1000);
-  const y = d.getFullYear();
-  const mo = ('0' + (d.getMonth() + 1)).slice(-2);
-  const da = ('0' + d.getDate()).slice(-2);
+  const y = d.getUTCFullYear();
+  const mo = ('0' + (d.getUTCMonth() + 1)).slice(-2);
+  const da = ('0' + d.getUTCDate()).slice(-2);
   return y + '-' + mo + '-' + da;
 }
 
@@ -138,6 +142,37 @@ function statusOf(win, now) {
   return 'ended';
 }
 
+// 数据校验：归一化赛事窗口数据，确保列表页与详情页使用一致的数据源。
+// 检查项：
+//   1. earliest/latest/lastEnd 为正数（无效值置 0）
+//   2. 单调性：lastEnd >= latest >= earliest，违反则丢弃异常值（防 SQL 返回脏数据）
+//   3. curation startDate/endDate 有效性：start > 0 且 end >= start，否则置 null
+// 返回归一化后的 { earliest, latest, lastEnd, startDate, endDate }。
+// 2026-07-28：列表页 loadLeagueEntry/loadUpcomingSerial 与详情页 load() 均应调用此函数，
+//   确保两边对「赛期」与「状态判定」使用完全一致的数据源，防止同类不一致 BUG 复发。
+function validateLeagueWindow(win) {
+  if (!win) return { earliest: 0, latest: 0, lastEnd: 0, startDate: null, endDate: null };
+  const num = function (v) { const n = Number(v); return (isFinite(n) && n > 0) ? n : 0; };
+  const earliest = num(win.earliest);
+  const latest = num(win.latest);
+  const lastEnd = num(win.lastEnd);
+  // 单调性校验：lastEnd >= latest >= earliest
+  const validLatest = (latest >= earliest) ? latest : 0;
+  const validLastEnd = (lastEnd >= validLatest) ? lastEnd : validLatest;
+  // curation/外部源日期校验
+  const curS = num(win.startDate);
+  const curE = num(win.endDate);
+  const startDate = (curS > 0 && curE >= curS) ? curS : null;
+  const endDate = (startDate != null) ? curE : null;
+  return {
+    earliest: earliest,
+    latest: validLatest,
+    lastEnd: validLastEnd,
+    startDate: startDate,
+    endDate: endDate
+  };
+}
+
 // 把 Unix 秒格式化为 "M/D"，用于紧凑展示日期范围
 function fmtShort(t) {
   if (!t) return '';
@@ -182,6 +217,7 @@ module.exports = {
   isOngoing,
   isUpcoming,
   statusOf,
+  validateLeagueWindow,
   formatDateRange,
   formatAgo,
   nowSec

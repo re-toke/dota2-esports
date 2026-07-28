@@ -74,12 +74,15 @@ function liquipediaDateToUnix(text) {
 // 候选来源：community(本地规则) -> curation(权威库) -> opendota(枚举) -> stratz(启用时)
 async function getLeagueTier(league) {
   const name = (league && league.name) || '';
+  const leagueId = league && (league.leagueid || league.id);
   const candidates = [];
 
   const c = tiers.communityTierFromName(name);
   if (c) candidates.push({ grade: c.grade, rank: c.rank, label: c.label, source: 'community' });
 
-  const cu = curation.curatedEventFor(name);
+  // 传入 leagueId + game 上下文，启用 curation 精确 pin + 跨游戏隔离，
+  // 防止 CS2 同名联赛（如「ESL Pro League」）的分级污染 DOTA2 详情页。
+  const cu = curation.curatedEventFor(name, { leagueId: leagueId, game: 'dota2' });
   if (cu && cu.tier) candidates.push({ grade: cu.tier.grade, rank: cu.tier.rank, label: cu.tier.label, source: 'curation' });
 
   const u = util.unifiedTier(league || {});
@@ -108,12 +111,14 @@ async function getLeagueTier(league) {
 async function voteLeagueNameForMatch(league) {
   const candidates = [];
   const name = (league && league.name) || '';
+  const id = league && (league.leagueid || league.id);
   if (name) candidates.push({ value: name, source: 'opendota' });
 
-  const cu = curation.curatedEventFor(name);
+  // 传入 leagueId + game 上下文，与 getLeagueTier / getLeagueMetadata 保持一致，
+  // 启用 curation 精确 pin + 跨游戏隔离（防止 CS2 同名联赛污染投票候选）。
+  const cu = curation.curatedEventFor(name, { leagueId: id, game: 'dota2' });
   if (cu) candidates.push({ value: cu.canonical, source: 'curation' });
 
-  const id = league && (league.leagueid || league.id);
   // 优化：stratz 和 liquipedia 是独立来源，并行发起，各自隔离错误
   const tasks = [];
   if (stratz.ENABLED && id) {
@@ -577,15 +582,22 @@ function getLeagueStandings(leagueId) {
     list.forEach(function (m) {
       const rId = m.radiant_team_id;
       const dId = m.dire_team_id;
+      // 数据校验：radiant_win 为 null/undefined（比赛未结束或数据异常）时不计入胜负，
+      // 否则 null 走 else 分支会错误计入败场，导致排名偏差。
+      const hasResult = (m.radiant_win === true || m.radiant_win === false);
       if (rId) {
         if (!stats[rId]) stats[rId] = { wins: 0, losses: 0, name: m.radiant_team_name || ('Team ' + rId), tag: '' };
-        if (m.radiant_win) stats[rId].wins++;
-        else stats[rId].losses++;
+        if (hasResult) {
+          if (m.radiant_win) stats[rId].wins++;
+          else stats[rId].losses++;
+        }
       }
       if (dId) {
         if (!stats[dId]) stats[dId] = { wins: 0, losses: 0, name: m.dire_team_name || ('Team ' + dId), tag: '' };
-        if (m.radiant_win) stats[dId].losses++;
-        else stats[dId].wins++;
+        if (hasResult) {
+          if (m.radiant_win) stats[dId].losses++;
+          else stats[dId].wins++;
+        }
       }
     });
     const out = Object.keys(stats).map(function (id) {
@@ -635,10 +647,36 @@ function groupSeries(matches) {
     const last = games[games.length - 1];
     const radiantName = first.radiant_team_name || '天辉';
     const direName = first.dire_team_name || '夜魇';
+    // 系列比分按「队」计算，而非按「天辉/夜魇」边。
+    // 原因：BO3/BO5 中双方会换边，第 2/3 场的 radiant 可能是首场的 dire。
+    // 若按 radiant_win 累加 scoreA，会把换边后 radiant 的胜场错误计入首场 radiant 队，
+    // 导致系列比分与胜负方颠倒。这里以首场的 radiant_team_id / dire_team_id 为锚，
+    // 逐场用「该场获胜方的 team_id」归属到对应队伍。
+    // 数据校验：team_id 必须 > 0 才视为有效锚点，否则 null===null 会误判归属。
+    // 当首场 team_id 缺失（数据异常）时，回退到按「天辉/夜魇」边累加，保证不漏计。
+    const teamAId = first.radiant_team_id;
+    const teamBId = first.dire_team_id;
+    const hasValidAnchors = (teamAId != null && teamAId > 0) && (teamBId != null && teamBId > 0);
     let scoreA = 0, scoreB = 0;
     let isLive = false;
     games.forEach(function (g) {
-      if (g.radiant_win) scoreA++; else scoreB++;
+      if (hasValidAnchors) {
+        // 该场获胜方 team_id：radiant_win=true → radiant_team_id，否则 dire_team_id
+        const winnerId = (g.radiant_win != null)
+          ? (g.radiant_win ? g.radiant_team_id : g.dire_team_id)
+          : null;
+        if (winnerId != null && winnerId > 0 && winnerId === teamAId) {
+          scoreA++;
+        } else if (winnerId != null && winnerId > 0 && winnerId === teamBId) {
+          scoreB++;
+        } else {
+          // team_id 缺失或属第三方（数据异常）时回退到按边累加，保证不漏计
+          if (g.radiant_win) scoreA++; else if (g.radiant_win === false) scoreB++;
+        }
+      } else {
+        // 首场 team_id 缺失：无法按队归属，直接按边累加
+        if (g.radiant_win) scoreA++; else if (g.radiant_win === false) scoreB++;
+      }
       // 进行中：无 duration 或 duration=0 且 start_time 在最近 24h
       if ((!g.duration || g.duration === 0) && g.start_time && (now - g.start_time * 1000) < 24 * 3600 * 1000) {
         isLive = true;

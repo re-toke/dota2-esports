@@ -100,6 +100,46 @@ for (const [page, fields] of pairs) {
   }
 }
 
+// 5) 全量 TDesign 组件 vendor 检查（防止按需清理后误删仍在使用的组件）
+console.log('\n=== 全量 TDesign 组件 vendor 检查 ===');
+function walkJson(dir, missing) {
+  const es = fs.readdirSync(dir, { withFileTypes: true });
+  for (const e of es) {
+    const full = path.join(dir, e.name);
+    if (e.isDirectory()) {
+      if (e.name === 'miniprogram_npm' || e.name === 'node_modules' || e.name === '.git') continue;
+      walkJson(full, missing);
+    } else if (e.name.endsWith('.json')) {
+      try {
+        const j = JSON.parse(fs.readFileSync(full, 'utf8'));
+        const uc = j.usingComponents || {};
+        for (const k of Object.keys(uc)) {
+          const v = uc[k] || '';
+          const m = v.match(/tdesign-miniprogram\/([^\/]+)\//);
+          if (m) {
+            const compDir = path.join(NPM, m[1]);
+            if (!fs.existsSync(compDir) || !fs.existsSync(path.join(compDir, m[1] + '.json'))) {
+              missing.push({ file: path.relative(ROOT, full), comp: m[1] });
+            }
+          }
+        }
+      } catch (e) {}
+    }
+  }
+}
+const tdesignMissing = [];
+walkJson(ROOT, tdesignMissing);
+if (tdesignMissing.length) {
+  console.error('FAIL 以下 TDesign 组件被引用但未 vendor:');
+  tdesignMissing.forEach(function (m) {
+    console.error('  ' + m.file + ' → ' + m.comp);
+    errors++;
+  });
+  console.error('请重新执行 npm install 后用开发者工具「构建 npm」，或恢复对应组件目录。');
+} else {
+  console.log('OK   所有引用的 TDesign 组件均已 vendor');
+}
+
 console.log('\n=== 结果 ===');
 console.log(errors === 0 ? '全部通过 ✅' : (errors + ' 处问题 ❌'));
 process.exit(errors === 0 ? 0 : 1);

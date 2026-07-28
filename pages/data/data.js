@@ -7,6 +7,11 @@ Page({
     if (typeof this.getTabBar === 'function' && this.getTabBar()) {
       this.getTabBar().setData({ selected: 4 });
     }
+    // 进入资料库时主动预加载 data 分包，后续 hero/item 跳转秒开
+    // 已加载过分包会自动跳过，无副作用
+    if (wx.preloadSubpackage) {
+      wx.preloadSubpackage({ name: 'data', success() {}, fail() {} });
+    }
   },
 
   goHero() {

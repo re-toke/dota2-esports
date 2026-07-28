@@ -355,6 +355,21 @@ async function triggerPreMatchReminder(match, openid, opts) {
 var OPENID_KEY = 'dota2_openid';
 
 /**
+ * 同步读取本地缓存的 openid（不发起云调用）。
+ * 仅在 app.js 已预热（globalData.openidReady=true）时使用，避免 await。
+ * @returns {string|null}
+ */
+function getOpenIdSync() {
+  try {
+    var cached = wx.getStorageSync(OPENID_KEY);
+    if (cached && typeof cached === 'string' && cached.length > 10) {
+      return cached;
+    }
+  } catch (e) {}
+  return null;
+}
+
+/**
  * 确保有可用的 openid。优先从本地缓存读取，缓存未命中时调用云函数获取。
  * @param {boolean} [fresh=false] 强制刷新（忽略缓存）
  * @returns {Promise<string|null>} openid 或 null
@@ -436,6 +451,7 @@ module.exports = {
 
   // OpenID
   ensureOpenId: ensureOpenId,
+  getOpenIdSync: getOpenIdSync,
   clearOpenId: clearOpenId,
 
   // #20 服务端策略引擎数据层

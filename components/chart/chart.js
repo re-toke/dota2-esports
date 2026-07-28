@@ -5,11 +5,11 @@
 // 适配 dpr，observer 驱动重绘，tap 命中最近数据点。
 
 function dpr() {
+  // 2026-07-28：wx.getSystemInfoSync 已废弃，pixelRatio 字段归 wx.getWindowInfo。
+  //   新基础库（libVersion >= 2.20.1，本项目 libVersion 3.0.0）一定支持 getWindowInfo。
+  //   极旧基础库回退到默认值 2，避免触发废弃 API 警告。
   try {
     if (wx.getWindowInfo) return wx.getWindowInfo().pixelRatio || 2;
-  } catch (e) {}
-  try {
-    return wx.getSystemInfoSync().pixelRatio || 2;
   } catch (e) {}
   return 2;
 }

@@ -235,38 +235,62 @@ Page({
   // ===== 2.2 订阅闭环：赛前提醒静默检查 =====
   // 遍历关注战队的比赛列表，对「即将开始」且在提醒窗口内的比赛触发推送。
   // 后台执行，失败不响应用户（静默模式）。
+  // ★ 优化：优先用 app.js 预热的同步 openid（getOpenIdSync），未就绪时回退异步 ensureOpenId；
+  //   候选筛选并行执行（纯计算无副作用），trigger 串行执行（避免 daily_limit 竞态）。
   checkPreMatchReminders(rows, now) {
-    var self = this;
-    // #20 读取用户智能提醒策略（提前量 + 分级过滤）
     var strategy = reminderStrategy.getStrategy();
-    // 先确保有 openid（异步缓存）
-    subscribe.ensureOpenId().then(function (openid) {
-      if (!openid) return; // 无 openid 无法推送，静默跳过
-      // 遍历每个战队的比赛，找即将开始的
-      rows.forEach(function ({ t, ms }) {
-        if (!ms || !ms.length) return;
-        var upcoming = ms.filter(function (m) { return m.start_time > now; })
-          .sort(function (a, b) { return a.start_time - b.start_time; });
-        var match = upcoming[0]; // 只取最近一场
-        if (!match) return;
-        // #20 策略评估：分级过滤 + 提前量窗口；不满足则跳过（降低推送噪声）
-        var ev = reminderStrategy.evaluate(match, strategy, now);
-        if (!ev.should) {
-          console.log('[subscribe] skip reminder:', match.league_name, '| reason=', ev.reason, '| grade=', ev.grade);
-          return;
-        }
-        // 补充战队名称（用于消息 payload 的对阵字段）
-        match.radiant_name = match.radiant_name || (match.radiant ? t.name : '');
-        match.dire_name = match.dire_name || (!match.radiant ? t.name : match.opposing_team_name || '');
-        match.match_id = match.match_id || String(match.leagueid || '') + '_' + String(match.start_time || '');
-        // 触发推送（fire-and-forget）
-        subscribe.triggerPreMatchReminder(match, openid)
-          .then(function (result) {
-            if (result.sent) {
-              console.log('[subscribe] 提醒已发送:', match.league_name, match.radiant_name, 'VS', match.dire_name);
-            }
-          });
+    var openid = subscribe.getOpenIdSync();
+    if (openid) {
+      this._runPreMatchReminders(rows, now, strategy, openid);
+    } else {
+      subscribe.ensureOpenId().then((oid) => {
+        if (!oid) return;
+        this._runPreMatchReminders(rows, now, strategy, oid);
       });
+    }
+  },
+
+  // 抽出实际遍历逻辑，与 openid 获取解耦
+  _runPreMatchReminders(rows, now, strategy, openid) {
+    // 阶段1：并行筛选出真正需要触发的比赛（纯计算，无副作用）
+    var candidates = [];
+    rows.forEach(function ({ t, ms }) {
+      if (!ms || !ms.length) return;
+      var upcoming = ms.filter(function (m) { return m.start_time > now; })
+        .sort(function (a, b) { return a.start_time - b.start_time; });
+      var match = upcoming[0];
+      if (!match) return;
+      var ev = reminderStrategy.evaluate(match, strategy, now);
+      if (!ev.should) {
+        console.log('[subscribe] skip reminder:', match.league_name, '| reason=', ev.reason, '| grade=', ev.grade);
+        return;
+      }
+      match.radiant_name = match.radiant_name || (match.radiant ? t.name : '');
+      match.dire_name = match.dire_name || (!match.radiant ? t.name : match.opposing_team_name || '');
+      match.match_id = match.match_id || String(match.leagueid || '') + '_' + String(match.start_time || '');
+      candidates.push(match);
     });
+    if (!candidates.length) return;
+
+    // 阶段2：串行 trigger（避免 getTodayCount 竞态导致 daily_limit 突破）
+    function triggerNext(idx) {
+      if (idx >= candidates.length) return;
+      subscribe.triggerPreMatchReminder(candidates[idx], openid)
+        .then(function (result) {
+          if (result.sent) {
+            console.log('[subscribe] 提醒已发送:',
+              candidates[idx].league_name,
+              candidates[idx].radiant_name, 'VS', candidates[idx].dire_name);
+          }
+          // daily_limit 命中时提前终止，避免无效请求
+          if (result.reason === 'daily_limit') {
+            console.log('[subscribe] 今日限额已达，停止后续 trigger');
+            return;
+          }
+          triggerNext(idx + 1);
+        })
+        .catch(function () { triggerNext(idx + 1); });
+    }
+    triggerNext(0);
   }
 });

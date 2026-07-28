@@ -15,8 +15,18 @@ const MAX_SEEN = 300;
 
 function inDevtools() {
   try {
-    const info = wx.getSystemInfoSync && wx.getSystemInfoSync();
-    return !!(info && info.platform === 'devtools');
+    // 2026-07-28：wx.getSystemInfoSync 已废弃，改用细分 API。
+    //   platform 字段归 wx.getDeviceInfo / wx.getAppBaseInfo（两者均含 platform）。
+    //   优先用新 API，回退到旧 API 仅在极旧基础库下使用（不再触发废弃警告的常规路径）。
+    let platform = '';
+    if (wx.getDeviceInfo) {
+      platform = wx.getDeviceInfo().platform || '';
+    } else if (wx.getAppBaseInfo) {
+      platform = wx.getAppBaseInfo().platform || '';
+    } else if (wx.getSystemInfoSync) {
+      platform = (wx.getSystemInfoSync() || {}).platform || '';
+    }
+    return platform === 'devtools';
   } catch (e) {
     return false;
   }

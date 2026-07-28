@@ -334,10 +334,196 @@ function collectDates(text) {
 
 // ===== 公共方法 =====
 
+// 0. 解析赛事页 Participants 区块，提取参赛队伍列表。
+// wikitext 支持两种模板（Liquipedia 标准，互斥使用）：
+//
+//   ① 嵌套式（近 1-2 年新赛事）：
+//   {{TeamParticipants
+//   |{{Opponent|队伍名|players=...|qualification={{Qualification|method=invite|qual}}}}
+//   |{{Opponent|...}}
+//   }}
+//   {{FormerParticipants|{{TeamParticipants|{{Opponent|...}}}}}}  ← 已替换的队伍
+//
+//   ② 扁平式（旧赛事，如 ESL One Birmingham 2024）：
+//   {{TeamCard columns start|cols=4}}
+//   {{TeamCard|team=队伍名|p1=...|p5=...|qualifier=[[...]]}}
+//   {{TeamCard|...}}
+//   {{TeamCard columns end}}
+//   {{FormerParticipants|{{TeamCard|team=...}}}}  ← 已替换的队伍
+//
+// 返回数组 [{ name, status, liquipediaSlug }] 或 null。
+//   - status: 'invited'（直邀）/ 'qualifier'（预选）/ 'TBD'（未公布）
+//   - name 为空时返回 TBD（Opponent/TeamCard 模板队名参数为空表示未公布）
+//   - liquipediaSlug: 队伍在 Liquipedia 的页面 slug（用于跳转），优先取 [[...]] 内部链接
+// 不解析选手 roster（{{Persons}}/{{Person}}/{{p1..p5}}），仅取队伍级信息，
+// 避免解析过深导致性能问题（roster 数据需求由战队详情页单独拉取）。
+// 用深度计数法处理嵌套花括号。
+// 2026-07-28 新增 TeamCard 解析分支：兼容旧版赛事页（如 ESL One Birmingham 2024）。
+
+// 用深度计数法从 startPos 开始查找匹配的 }} 结束位置（含）。
+// startPos 应指向首个 `{` 的位置。返回 -1 表示未找到。
+function findTemplateEnd(wikitext, startPos) {
+  var depth = 1;
+  for (var i = startPos + 2; i < wikitext.length - 1; i++) {
+    if (wikitext[i] === '{' && wikitext[i + 1] === '{') { depth++; i++; }
+    else if (wikitext[i] === '}' && wikitext[i + 1] === '}') {
+      depth--;
+      if (depth === 0) return i;
+      i++;
+    }
+  }
+  return -1;
+}
+
+// 从 [[...]] wikitext 链接中提取展示名与 slug。
+// 输入 '[[Team Spirit|TS]]' → { name: 'TS', slug: 'Team Spirit' }
+// 输入 '[[Team Spirit]]' → { name: 'Team Spirit', slug: 'Team Spirit' }
+// 输入 'Team Spirit' → { name: 'Team Spirit', slug: null }
+function extractLink(nameRaw) {
+  var name = nameRaw;
+  var slug = null;
+  var linkMatch = nameRaw.match(/\[\[([^\]|]+)(?:\|[^\]]*)?\]\]/);
+  if (linkMatch) {
+    slug = linkMatch[1];
+    var textMatch = nameRaw.match(/\[\[[^\]]*\|([^\]]+)\]\]/);
+    name = textMatch ? textMatch[1].trim() : slug.split('/').pop();
+  } else {
+    name = stripWikitextMarkup(nameRaw);
+  }
+  return { name: name, slug: slug };
+}
+
+// 解析 {{Opponent|...}} 模板内容，提取队伍信息。
+// 结构：{{Opponent|队伍名|players=...|qualification={{Qualification|method=invite|qual}}}}
+//   - 队名：首个无名参数（去掉 Opponent| 前缀后的第一个 | 分段）
+//   - 资格：|qualification= 字段内嵌 {{Qualification|method=invite|qual}}
+function parseOpponentBlock(body) {
+  var afterName = body.replace(/^Opponent\s*\|\s*/, '');
+  var parts = splitTopLevel(afterName, '|');
+  var nameRaw = (parts[0] || '').trim();
+  var linkInfo = extractLink(nameRaw);
+  var name = linkInfo.name;
+  var slug = linkInfo.slug;
+  var status = 'TBD';
+  for (var p = 1; p < parts.length; p++) {
+    var part = parts[p].trim();
+    if (/^qualification\s*=/.test(part)) {
+      var qualVal = part.replace(/^qualification\s*=\s*/, '').trim();
+      if (/method\s*=\s*invite/i.test(qualVal)) status = 'invited';
+      else if (/method\s*=\s*qual/i.test(qualVal)) status = 'qualifier';
+      break;
+    }
+  }
+  if (!name) name = 'TBD';
+  return { name: name, status: status, liquipediaSlug: slug };
+}
+
+// 解析 {{TeamCard|...}} 模板内容，提取队伍信息。
+// 结构：{{TeamCard|team=队伍名|p1=...|p5=...|c=...|qualifier=[[...]]|logo=...}}
+//   - 队名：|team= 命名参数（必填，缺失视为 TBD）
+//   - 资格：|qualifier= 字段，可能是 [[链接|显示名]] 或纯文本
+//     启发式判定（无 method 结构）：
+//       含 'invite'/'Direct'/'Leaderboard'/'Seed'/'Top' → invited
+//       含 'qualifier'/'Qual'/'Play-In'/'Open'/'Closed' → qualifier
+//       空或其它 → TBD
+// 不解析 p1..p5 选手（选手走 getTeamRoster 单独查，避免主赛事页过大）。
+function parseTeamCardBlock(body) {
+  var afterName = body.replace(/^TeamCard\s*\|\s*/, '');
+  var parts = splitTopLevel(afterName, '|');
+  var name = '';
+  var slug = null;
+  var qualifierRaw = '';
+  for (var i = 0; i < parts.length; i++) {
+    var part = parts[i].trim();
+    var m = part.match(/^([^=]+)\s*=\s*(.*)$/);
+    if (!m) continue;
+    var key = m[1].trim().toLowerCase();
+    var val = m[2].trim();
+    if (key === 'team' || key === 'teamtemplate') {
+      var linkInfo = extractLink(val);
+      name = linkInfo.name;
+      slug = linkInfo.slug;
+    } else if (key === 'qualifier' || key === 'qualification') {
+      qualifierRaw = val;
+    } else if (key === 'linkteam' && !slug) {
+      // |linkteam= 显式指定跳转目标，优先级低于 team= 中的 [[...]]
+      slug = val;
+    }
+  }
+  var status = 'TBD';
+  if (qualifierRaw) {
+    if (/invite|direct|leaderboard|seed|top/i.test(qualifierRaw)) status = 'invited';
+    else if (/qual|play-?in|open|closed/i.test(qualifierRaw)) status = 'qualifier';
+  }
+  if (!name) name = 'TBD';
+  return { name: name, status: status, liquipediaSlug: slug };
+}
+
+function parseParticipants(wikitext) {
+  if (!wikitext) return null;
+  try {
+    var teams = [];
+    // 一次扫描同时识别 {{Opponent|...}} 和 {{TeamCard|...}}
+    // 注意：{{TeamCardToggleButton}} 和 {{TeamCard columns start}} 不含 | 后跟 team=，故不会被误匹配
+    var tplRegex = /\{\{(Opponent|TeamCard)\s*\|/g;
+    var match;
+    while ((match = tplRegex.exec(wikitext)) !== null) {
+      var tplType = match[1];
+      var startIdx = match.index + 2; // 跳过 {{
+      var endIdx = findTemplateEnd(wikitext, match.index);
+      if (endIdx < 0) break;
+      var body = wikitext.substring(startIdx, endIdx);
+      var team = tplType === 'Opponent'
+        ? parseOpponentBlock(body)
+        : parseTeamCardBlock(body);
+      teams.push(team);
+      // 推进 regex 位置避免重复匹配嵌套模板
+      tplRegex.lastIndex = endIdx + 2;
+    }
+    // 过滤掉 FormerParticipants（已替换的队伍）：检测 wikitext 中 {{FormerParticipants|...}} 区块，
+    // 并从结果中移除该区块内出现的队伍名。
+    // 2026-07-28：同时收集 {{Opponent}} 和 {{TeamCard}} 的队名，兼容两种模板。
+    var formerNames = {};
+    var fpStart = wikitext.indexOf('{{FormerParticipants');
+    while (fpStart >= 0) {
+      var fpEnd = findTemplateEnd(wikitext, fpStart);
+      if (fpEnd < 0) break;
+      var fblock = wikitext.substring(fpStart, fpEnd);
+      var fTplRegex = /\{\{(Opponent|TeamCard)\s*\|/g;
+      var fm;
+      while ((fm = fTplRegex.exec(fblock)) !== null) {
+        var fStart = fm.index + 2;
+        var fEnd = findTemplateEnd(fblock, fm.index);
+        if (fEnd < 0) break;
+        var fBody = fblock.substring(fStart, fEnd);
+        var fTeam = fm[1] === 'Opponent'
+          ? parseOpponentBlock(fBody)
+          : parseTeamCardBlock(fBody);
+        if (fTeam && fTeam.name && fTeam.name !== 'TBD') {
+          formerNames[fTeam.name.toLowerCase()] = true;
+        }
+        fTplRegex.lastIndex = fEnd + 2;
+      }
+      fpStart = wikitext.indexOf('{{FormerParticipants', fpEnd + 2);
+    }
+    // 移除已替换的队伍
+    if (Object.keys(formerNames).length) {
+      teams = teams.filter(function (t) {
+        return !formerNames[(t.name || '').toLowerCase()];
+      });
+    }
+    return teams.length ? teams : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 // 1. 赛事元数据
-// 返回 { canonical, startDate, endDate, prizePool, prizePoolCurrency, location, format, organizer, source }
+// 返回 { canonical, startDate, endDate, prizePool, prizePoolCurrency, location, format, organizer, participants, source }
 // 或 null。每个字段独立 try/catch，缺一个不影响其它字段。
-// 解析 Liquipedia 赛事页的 {{Infobox league}} 模板参数。
+// 解析 Liquipedia 赛事页的 {{Infobox league}} 模板参数，及 Participants 区块参赛队伍。
+// 2026-07-28 新增 participants 字段：解析 {{TeamParticipants}} 中的 {{Opponent}} 列表，
+//   为未开赛赛事提供已公布的参赛队伍，与 Liquipedia 公示一致。
 function getLeagueMetadata(name) {
   if (!ENABLED) return Promise.resolve(null);
   if (!name) return Promise.resolve(null);
@@ -388,6 +574,17 @@ function getLeagueMetadata(name) {
 
     try { result.format = tpl.format || null; if (result.format) anyField = true; } catch (e) { result.format = null; }
     try { result.organizer = tpl.organizer || tpl.organizers || null; if (result.organizer) anyField = true; } catch (e) { result.organizer = null; }
+
+    // 2026-07-28 新增：解析 Participants 区块参赛队伍。
+    // 即使 Infobox 无任何字段（under construction 页面），Participants 也能提供已公布队伍。
+    // 解析失败不影响其它字段，participants 为 null 时由调用方走 curation/占位兜底。
+    try {
+      var participants = parseParticipants(wikitext);
+      if (participants && participants.length) {
+        result.participants = participants;
+        anyField = true;
+      }
+    } catch (e) { result.participants = null; }
 
     if (!anyField) return null;
 
@@ -565,5 +762,6 @@ module.exports = {
   ENABLED: ENABLED,
   getLeagueMetadata: getLeagueMetadata,
   getTeamRoster: getTeamRoster,
-  getPlayerProfile: getPlayerProfile
+  getPlayerProfile: getPlayerProfile,
+  parseParticipants: parseParticipants  // 2026-07-28 导出供单元测试直接调用
 };

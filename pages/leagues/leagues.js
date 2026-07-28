@@ -350,13 +350,15 @@ Page({
     // 传入 curation 日期范围（cur.start/cur.end），使 isOngoing() 的第二条判定路径生效：
     // 当 SQL 聚合的 lastEnd 因缓存陈旧（2h TTL）或进行中比赛 duration=0 未计入时，
     // 仍可依据 curation 的官方赛期正确判定"进行中"。
-    const mixed = {
+    // 2026-07-28：统一使用 util.validateLeagueWindow 校验归一化，与详情页 league-detail.js
+    //   load() 共用同一函数，确保两页数据源完全一致，防止同类不一致 BUG 复发。
+    const mixed = util.validateLeagueWindow({
       earliest: w.earliest || 0,
       latest: w.latest || 0,
       lastEnd: w.lastEnd || 0,
       startDate: (cur && cur.start) || null,
       endDate: (cur && cur.end) || null
-    };
+    });
     // curation 显式状态硬覆盖：如果策展库明确标记「已结束」/「进行中」，
     // 信任人工维护的状态，不再依赖自动时间窗口判定（避免数据回填/修正导致误判）。
     let status = util.statusOf(mixed);
@@ -388,11 +390,13 @@ Page({
       status: status,
       statusText: badge.text,
       statusColor: badge.color,
-      // 赛期优先用 curation 完整周期（cur.start/cur.end），无则回退 OpenDota 真实比赛窗口。
-      // 修复：此前直接用比赛窗口，导致 EPL 显示 "7/20–7/27" 而非权威赛期 "7/20–8/12"。
+      // 赛期优先用 curation 完整周期（mixed.startDate/endDate），无则回退真实比赛窗口。
+      // 2026-07-28：回退分支使用 lastEnd（最晚结束时间）而非 latest（最晚开赛时间），
+      //   与详情页 load() 的 mEnd = max(start_time + duration) 一致。
+      //   mixed 已由 validateLeagueWindow 校验，lastEnd >= latest >= earliest 单调性保证。
       dateRange: (mixed.startDate && mixed.endDate)
         ? util.formatDateRange(mixed.startDate, mixed.endDate)
-        : util.formatDateRange(mixed.earliest, mixed.latest),
+        : util.formatDateRange(mixed.earliest, (mixed.lastEnd || mixed.latest)),
       startDate: mixed.startDate,
       endDate: mixed.endDate,
       _win: mixed
@@ -661,14 +665,19 @@ Page({
       const er = item._win && item._win.earliest;
       if (er && er > nowSec && er <= horizon) {
         // earliest 在未来范围内：直接添加到 results
+        // 2026-07-28 修复：endDate 使用 lastEnd（最晚结束时间 = start_time + duration），
+        //   而非 latest（最晚开赛时间），与详情页 league-detail.js load() 和
+        //   loadLeagueEntry 的回退分支一致，避免列表赛期少算最后一场 duration。
+        //   数据校验：lastEnd 为 0 时回退 latest（纯未来赛未打 duration=0，lastEnd=latest）。
+        const endT = (item._win && (item._win.lastEnd || item._win.latest)) || null;
         const daysToStart = Math.ceil((er - nowSec) / 86400);
         results.push(Object.assign({}, item, {
           startDate: er,
-          endDate: item._win.latest || null,
+          endDate: endT,
           status: 'upcoming',
           statusText: '即将到来',
           statusColor: statusBadgeOf('upcoming').color,
-          dateRange: util.formatDateRange(er, item._win.latest),
+          dateRange: util.formatDateRange(er, endT),
           daysToStart: daysToStart,
           countdownText: daysToStart <= 0 ? '今日开赛' : (daysToStart === 1 ? '明天开赛' : daysToStart + ' 天后开赛')
         }));
