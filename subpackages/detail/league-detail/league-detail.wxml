@@ -164,8 +164,7 @@
         <view class="series-head">
           <view class="series-team {{s.teamACls}}" catchtap="openTeam" data-id="{{s.radiantTeamId}}">
             <view class="series-team-logo {{s.teamALogoCls}}">
-              <image wx:if="{{s.radiantLogo}}" class="team-logo-img" src="{{s.radiantLogo}}" mode="aspectFill" lazy-load binderror="onLogoError" data-si="{{si}}" data-side="radiant" />
-              <text wx:else>{{s.radiantName ? s.radiantName[0] : '?'}}</text>
+              <image-fallback src="{{s.radiantLogo}}" placeholder="{{s.radiantName ? s.radiantName[0] : '?'}}" />
             </view>
             <text class="series-team-name">{{s.radiantName || '天辉'}}</text>
             <text wx:if="{{s.seriesWinner === 'A'}}" class="series-win-badge">{{s.aForfeit ? '胜（判胜）' : '胜'}}</text>
@@ -190,8 +189,7 @@
             <text class="series-team-name">{{s.direName || '夜魇'}}</text>
             <text wx:if="{{s.seriesWinner === 'B'}}" class="series-win-badge">{{s.bForfeit ? '胜（判胜）' : '胜'}}</text>
             <view class="series-team-logo {{s.teamBLogoCls}}">
-              <image wx:if="{{s.direLogo}}" class="team-logo-img" src="{{s.direLogo}}" mode="aspectFill" lazy-load binderror="onLogoError" data-si="{{si}}" data-side="dire" />
-              <text wx:else>{{s.direName ? s.direName[0] : '?'}}</text>
+              <image-fallback src="{{s.direLogo}}" placeholder="{{s.direName ? s.direName[0] : '?'}}" />
             </view>
           </view>
         </view>

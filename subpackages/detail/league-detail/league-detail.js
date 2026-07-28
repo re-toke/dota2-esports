@@ -8,6 +8,7 @@ const liveSources = require('../../../utils/liveSources.js');
 const remoteCuration = require('../../../utils/remoteCuration.js');
 const liquipedia = require('../../../utils/liquipedia.js');
 const heroes = require('../../../utils/heroes.js');
+const logoPreload = require('../../../utils/logoPreload.js'); // P2-E：logo 预热（门控）
 
 // Steam CDN 英雄头像基址（_sb.png = 小横幅图，约 59x33，aspectFill 裁切填满方形框）
 const HERO_IMG_BASE = 'https://cdn.cloudflare.steamstatic.com/apps/dota2/images/heroes/';
@@ -752,6 +753,9 @@ Page({
       });
       if (!Object.keys(logoMap).length) return false;
 
+      // 3.5) P2-E：解析完成后预热 logo 缓存（门控：predownloadEnabled && proxyBase 才生效）
+      try { logoPreload.warmLogos(Object.keys(logoMap).map((k) => logoMap[k].logo)); } catch (e) { /* 隔离 */ }
+
       // 4) 路径更新：仅更新当前可见的 series 头部 logo
       //    （不可见 series 不更新，避免无谓 setData；allSeries 内存缓存同步更新，
       //     loadMore 加载新页时 enrichTeamLogos 会从内存读取并路径更新）
@@ -799,18 +803,6 @@ Page({
 
       if (Object.keys(patch).length) this.setData(patch);
       return true;
-    });
-  },
-
-  // logo <image> 加载失败时回退到首字母圆，避免破图
-  // 通过清空对应 series 的 logo URL，触发 wxml 走 wx:else 分支显示首字母
-  onLogoError(e) {
-    const { si, side } = e.currentTarget.dataset;
-    if (si == null || !side) return;
-    const key = side === 'radiant' ? 'radiantLogo' : 'direLogo';
-    // 清空 logo URL，触发 wxml 走 wx:else 分支显示首字母
-    this.setData({
-      ['series[' + si + '].' + key]: ''
     });
   },
 

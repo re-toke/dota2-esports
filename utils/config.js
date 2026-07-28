@@ -164,5 +164,20 @@ module.exports = {
   experiment: {
     action: 'getExperiments',   // 云函数 aggregation 的 action 名
     storageKey: 'ab_flags'      // 本地缓存 key
+  },
+
+  // 图片优化（LOGO/头像加载慢治理，见项目记忆「LOGO 图片加载优化债」）。
+  // 当前 proxyBase 为空 → 不启用代理，沿用原行为（直连源 CDN，仅 OpenDota 走 optimizeImageUrl）。
+  // 填 proxyBase 后（如 'https://img.yourdomain.com/img'），所有 logo/头像经 toLogoUrl 改写为
+  //   <base>?u=<encodeURIComponent(源URL)>&w=<proxyWidth>&fmt=webp
+  // 由该图片层回源 Steam/STRATZ/OpenDota、按显示尺寸@2x 裁剪、转 WebP、长缓存。
+  // 这是根治「LOGO 加载慢」的关键（P0 落地后此处填值即生效，无需改业务代码）。
+  images: {
+    proxyBase: '',             // 图片处理层基址；空=不启用
+    proxyWidth: 160,           // 代理目标宽度(px，已含@2x)；Steam 队标显示框约40px→160足够清晰
+    // P2-E：enrich 完成后是否用 wx.preDownloadFile 预热 logo 缓存。
+    // 需 proxyBase 已填 且该域已加入小程序 downloadFile 白名单；默认 false（待 P0 落地后开启）。
+    predownloadEnabled: false,
+    predownloadMax: 20         // 单次最多预下载条数（避免配额浪费）
   }
 };

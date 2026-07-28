@@ -6,7 +6,7 @@
   <!-- 真实图片：仅当存在地址且未失败时渲染，加载完成覆盖占位 -->
   <image
     wx:if="{{src && !failed}}"
-    class="imgfb-img"
+    class="imgfb-img {{loaded ? 'imgfb-img--loaded' : ''}}"
     src="{{src}}"
     mode="{{mode}}"
     lazy-load="{{true}}"

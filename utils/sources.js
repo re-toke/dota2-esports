@@ -29,6 +29,7 @@ const liquipedia = require('./liquipedia.js');
 const consensus = require('./consensus.js');
 const curation = require('./remoteCuration.js');
 const imageUtil = require('./image.js');
+const logoCache = require('./logoCache'); // P2-F：本地队标/头像缓存
 // G4 单一数据源：与云函数共用的精确归一映射（来自 curation-shared.js 模块，非 .json）
 const leagueCanon = require('./league-canon-map.js');
 // G8 运行时监控（安全降级，无 wx 时不打点）
@@ -322,32 +323,62 @@ async function getLeagueMetadata(league) {
   return Object.keys(result).length > 1 ? result : null;
 }
 
-// 多源增强战队 logo：优先级 [stratz]（已有 http logo 直接复用）
+// 多源增强战队 logo：优先级 [本地缓存] -> [直连 existing] -> [stratz]
+// P2-F：命中 logoCache 直接返回（秒出，跳过网络）；P1-C：最终 URL 经 toLogoUrl（代理就绪）。
 async function enrichTeamLogo(team) {
   const name = (team && team.name) || '';
   const id = (team && team.id);
   const existing = (team && team.logo) || (team && team.logo_url) || '';
-  if (existing && /^https?:\/\//i.test(existing)) return { logo: imageUtil.optimizeImageUrl(existing), source: 'opendota' };
+
+  // ① 本地缓存优先（仅当本次无直连 existing 时才依赖缓存，避免覆盖更权威的源 URL）
+  if (!existing && id) {
+    const cached = logoCache.get(id);
+    if (cached && cached.logo) return { logo: cached.logo, source: cached.source };
+  }
+
+  if (existing && /^https?:\/\//i.test(existing)) {
+    const logo = imageUtil.toLogoUrl(existing);
+    if (id) logoCache.set(id, logo, 'opendota');
+    return { logo, source: 'opendota' };
+  }
 
   if (stratz.ENABLED && id) {
     try {
       const r = await stratz.getTeamLogo(id);
-      if (r && /^https?:\/\//i.test(r)) return { logo: imageUtil.optimizeImageUrl(r), source: 'stratz' };
+      if (r && /^https?:\/\//i.test(r)) {
+        const logo = imageUtil.toLogoUrl(r);
+        logoCache.set(id, logo, 'stratz');
+        return { logo, source: 'stratz' };
+      }
     } catch (e) { /* 隔离 */ }
   }
   return null;
 }
 
-// 多源增强队员头像：优先级 [stratz]（已有 http avatar 直接复用）
+// 多源增强队员头像：优先级 [本地缓存] -> [直连 existing] -> [stratz]
 async function enrichPlayerAvatar(player) {
   const accountId = (player && player.accountId);
   const existing = (player && player.avatar) || '';
-  if (existing && /^https?:\/\//i.test(existing)) return { avatar: imageUtil.optimizeImageUrl(existing), source: 'opendota' };
+
+  if (!existing && accountId) {
+    const cached = logoCache.get(accountId);
+    if (cached && cached.logo) return { avatar: cached.logo, source: cached.source };
+  }
+
+  if (existing && /^https?:\/\//i.test(existing)) {
+    const avatar = imageUtil.toLogoUrl(existing);
+    logoCache.set(accountId, avatar, 'opendota');
+    return { avatar, source: 'opendota' };
+  }
 
   if (stratz.ENABLED && accountId) {
     try {
       const r = await stratz.getPlayerAvatar(accountId);
-      if (r && /^https?:\/\//i.test(r)) return { avatar: imageUtil.optimizeImageUrl(r), source: 'stratz' };
+      if (r && /^https?:\/\//i.test(r)) {
+        const avatar = imageUtil.toLogoUrl(r);
+        logoCache.set(accountId, avatar, 'stratz');
+        return { avatar, source: 'stratz' };
+      }
     } catch (e) { /* 隔离 */ }
   }
   return null;
