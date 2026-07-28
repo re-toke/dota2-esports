@@ -90,23 +90,6 @@
     </view>
   </view>
 
-  <!-- 参赛队伍：从比赛数据推导，无数据时显示提示 -->
-  <view class="teams-card" wx:if="{{metadata}}">
-    <view class="teams-head">
-      <text class="teams-title">参赛队伍</text>
-      <text class="teams-count" wx:if="{{participantsList.length}}">{{participantsList.length}} 支</text>
-    </view>
-    <view class="teams-grid" wx:if="{{participantsList.length}}">
-      <view class="team-chip" wx:for="{{participantsList}}" wx:key="id" catchtap="openTeam" data-id="{{item.id}}">
-        <view class="team-chip-logo">{{item.name ? item.name[0] : '?'}}</view>
-        <text class="team-chip-name">{{item.name}}</text>
-      </view>
-    </view>
-    <view wx:else class="teams-empty">
-      <text>暂无参赛队伍数据，可能赛事尚未开赛或未收录。</text>
-    </view>
-  </view>
-
   <!-- 赛事信息补充（curation 兜底字段，Liquipedia 禁用时尤其有用） -->
   <view class="meta-extra" wx:if="{{metadata && metadata.liquipediaSlug}}">
     <text class="meta-extra-label">Liquipedia：</text>
@@ -117,6 +100,9 @@
   <view class="seg">
     <view class="seg-item {{tab === 'matches' ? 'active' : ''}}" bindtap="switchTab" data-key="matches">
       对阵<text class="seg-count">{{totalSeries}}</text>
+    </view>
+    <view class="seg-item {{tab === 'teams' ? 'active' : ''}}" bindtap="switchTab" data-key="teams">
+      参赛队伍<text class="seg-count" wx:if="{{participantsList.length}}">{{participantsList.length}}</text>
     </view>
     <view class="seg-item {{tab === 'standings' ? 'active' : ''}}" bindtap="switchTab" data-key="standings">赛事排名</view>
   </view>
@@ -170,7 +156,9 @@
         </view>
         <text wx:if="{{s.isLive}}" class="series-live-tag">● LIVE</text>
         <view class="series-dots" wx:if="{{s.isMulti}}">
-          <view wx:for="{{s.games}}" wx:for-item="g" wx:key="match_id" class="series-dot {{g.radiantWin ? 'a-win' : 'b-win'}}"></view>
+          <!-- 2026-07-28 修复小圆点颜色 BUG：用 aWin/bWin 判定（按 A/B 队归属），不用 radiantWin（按天辉/夜魇边）。
+               BO3/BO5 换边后，radiant_win=true 不等于 A 队赢；未结束（aWin/bWin 均 false）显示灰色。 -->
+          <view wx:for="{{s.games}}" wx:for-item="g" wx:key="match_id" class="series-dot {{g.aWin ? 'a-win' : (g.bWin ? 'b-win' : 'pending')}}"></view>
         </view>
         <text wx:else class="series-time">{{s.games[0].time}}</text>
       </view>
@@ -243,7 +231,36 @@
     </view>
   </block>
 
-  <!-- ===== Tab 2: 赛事排名（C 风格 · 仅已结束赛事展示） ===== -->
+  <!-- ===== Tab 2: 参赛队伍（方案 A 数据 + 方案 C 独立 Tab） ===== -->
+  <block wx:elif="{{tab === 'teams'}}">
+    <view wx:if="{{participantsList.length === 0}}" class="hint-card-enhanced">
+      <view class="hint-title">暂无参赛队伍数据</view>
+      <view class="hint-desc">可能赛事尚未开赛或未收录</view>
+    </view>
+    <view wx:else class="teams-card">
+      <view class="teams-head">
+        <text class="teams-title">参赛队伍</text>
+        <text class="teams-count">{{participantsList.length}} 支</text>
+      </view>
+      <view class="teams-grid">
+        <!-- 参赛队伍 chip：已公布可点击跳转，待公布灰色不可点击 -->
+        <view class="team-chip {{item.status === 'TBD' || item.name === '待公布' ? 'is-pending' : ''}}" wx:for="{{participantsList}}" wx:key="id" catchtap="openTeam" data-id="{{item.id}}">
+          <view class="team-chip-logo">{{item.name ? item.name[0] : '?'}}</view>
+          <view class="team-chip-info">
+            <text class="team-chip-name">{{item.name}}</text>
+            <view class="team-chip-tags">
+              <text wx:if="{{item.group}}" class="team-chip-group group-{{item.group}}">{{item.group === 'Play-In' ? 'PI' : item.group}}</text>
+              <text wx:if="{{item.region}}" class="team-chip-region">{{item.region}}</text>
+            </view>
+          </view>
+          <text wx:if="{{item.status === 'invited'}}" class="team-chip-badge">直邀</text>
+          <text wx:elif="{{item.status === 'qualifier'}}" class="team-chip-badge">预选</text>
+        </view>
+      </view>
+    </view>
+  </block>
+
+  <!-- ===== Tab 3: 赛事排名（C 风格 · 仅已结束赛事展示） ===== -->
   <block wx:elif="{{tab === 'standings'}}">
     <view wx:if="{{standingsLoading}}" class="loading-row">聚合队伍排名中…</view>
     <view wx:elif="{{standings.length === 0}}" class="hint-card-enhanced">

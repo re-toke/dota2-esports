@@ -365,7 +365,7 @@ check('G6: 修复回归 — 展示层 "EPL Masters 2026" 不再误解析为 "EPL
 });
 
 // ===== G8：运行时监控安全降级（无 wx / 无 reportAnalytics 时不得影响主流程）=====
-section('\n--- G8 运行时监控安全降级 ---');
+section('\n--- G8 运行监控安全降级 ---');
 check('G8: leagueDisplayName 无 curation 覆盖时不抛错（监控安全降级）', () => {
   const r = sources.leagueDisplayName('Some Random Unknown League 2099');
   assert(r === 'Some Random Unknown League 2099', '未覆盖应原样返回，实际: ' + r);
@@ -374,6 +374,58 @@ check('G8: monitor 在 mock 环境（无 reportAnalytics）为 no-op 不抛错',
   monitor.leagueNameUncovered('Test League X');
   monitor.statusConflict('123', 'ongoing', 'ended');
   monitor.report('probe_event', { a: 1 });
+});
+
+// ===== G13：curation participants 数组 + 参赛队伍增强展示（2026-07-28）=====
+// 覆盖场景：EPL Masters I 的 participants 从数字改为数组后，
+//   refreshMetadataDerived 分支②应正确解析全部 16 支队伍（含 region/group），
+//   不再出现"待定队伍 N"占位。
+section('\n--- G13 curation participants 数组 + 参赛队伍增强 ---');
+check('G13: EPL Masters I curation.participants 是数组（非数字）', () => {
+  const epl = ALL_EVENTS.find((ev) => ev.canonical === 'EPL Masters I' && ev.leagueId === 19944);
+  assert(!!epl, 'EPL Masters I curation 条目存在');
+  assert(Array.isArray(epl.participants), 'participants 应为数组，实际 type=' + typeof epl.participants);
+});
+check('G13: EPL participants 数组包含 16 支队伍', () => {
+  const epl = ALL_EVENTS.find((ev) => ev.canonical === 'EPL Masters I' && ev.leagueId === 19944);
+  assert(epl.participants.length === 16, '应有 16 支，实际 ' + epl.participants.length + ' 支');
+});
+check('G13: 每支队伍都有 name / region / group 字段', () => {
+  const epl = ALL_EVENTS.find((ev) => ev.canonical === 'EPL Masters I' && ev.leagueId === 19944);
+  for (let i = 0; i < epl.participants.length; i++) {
+    const t = epl.participants[i];
+    assert(t && typeof t.name === 'string' && t.name.length > 0,
+      'participants[' + i + '] 缺少有效 name');
+    assert(t && typeof t.region === 'string' && t.region.length > 0,
+      'participants[' + i + '] 缺少有效 region');
+    assert(t && typeof t.group === 'string' && t.group.length > 0,
+      'participants[' + i + '] 缺少有效 group');
+  }
+});
+check('G13: 全部 16 队名均不含"待定"/"待公布"（无占位符）', () => {
+  const epl = ALL_EVENTS.find((ev) => ev.canonical === 'EPL Masters I' && ev.leagueId === 19944);
+  const names = epl.participants.map((t) => t.name);
+  const hasPlaceholder = names.some((n) => n.includes('待定') || n.includes('待公布') || n.includes('TBD'));
+  assert(!hasPlaceholder, '存在占位符队名: ' + names.filter((n) => n.includes('待定') || n.includes('待公布')).join(', '));
+});
+check('G13: Group A=6 / Group B=6 / Play-In=4（分组计数一致）', () => {
+  const epl = ALL_EVENTS.find((ev) => ev.canonical === 'EPL Masters I' && ev.leagueId === 19944);
+  const gA = epl.participants.filter((t) => t.group === 'A').length;
+  const gB = epl.participants.filter((t) => t.group === 'B').length;
+  const gPI = epl.participants.filter((t) => t.group === 'Play-In').length;
+  assert(gA === 6, 'Group A 应有 6 队，实际 ' + gA);
+  assert(gB === 6, 'Group B 应有 6 队，实际 ' + gB);
+  assert(gPI === 4, 'Play-In 应有 4 队，实际 ' + gPI);
+});
+check('G13: Offstage 官方确认的 12 支小组赛队名均在列表中', () => {
+  const epl = ALL_EVENTS.find((ev) => ev.canonical === 'EPL Masters I' && ev.leagueId === 19944);
+  const names = epl.participants.map((t) => t.name.toLowerCase());
+  // Offstage.gg Group A+B 官方名单（大小写不敏感）
+  const official = ['team jenz', 'team syntax', 'ilbirs esports', 'level up esports',
+    'nemiga gaming', 'zero tenacity', 'puckchamp', 'kw', 're arise',
+    'amaru gaming', 'team bald', 'power rangers'];
+  const missing = official.filter((n) => !names.some((en) => en.includes(n.toLowerCase()) || n.toLowerCase().includes(en)));
+  assert(missing.length === 0, '缺少官方队伍: ' + missing.join(', '));
 });
 
 // ===== 5. 运行全部测试（与 test-sources 同范式：顺序执行，支持 async，末尾输出汇总与退出码）=====

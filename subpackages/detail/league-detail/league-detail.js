@@ -126,8 +126,8 @@ Page({
     // F1 直播聚合入口
     liveSources: [],   // 各平台直播搜索入口
     isLive: false,     // 赛事是否正在进行（卡片高亮置顶）
-    // ===== 两 Tab 状态（C 风格 Tournament Center） =====
-    tab: 'matches',          // matches | standings
+    // ===== 三 Tab 状态（C 风格 Tournament Center） =====
+    tab: 'matches',          // matches | teams | standings
     expandedGame: '',        // 当前展开的小场 "seriesIdx-gameIdx"（A 风格就地展开英雄阵容）
     // 赛事排名
     standings: [],
@@ -203,6 +203,14 @@ Page({
       }
       // 元数据：Liquipedia/Steam 结果 与 curation 兜底合并，确保所有赛事都有完整 KPI 结构
       const mergedMeta = mergeMetadataWithFallback(p.meta, this.data.name, this.data.leagueId);
+      // 2026-07-28 修复 BUG 3：统一 KPI 名称与头部名称的取值来源。
+      // 此前 meta.canonical 来自 Liquipedia（tpl.name），patch.displayName 来自 curation canonical，
+      // 两者走不同路径，可能产生「头部显示 EPL Masters I 而 KPI 显示 EPL Masters 2026」的不一致。
+      // 修复：以已计算的 display（curation canonical 优先）覆盖 meta.canonical，
+      // 保证 KPI 概述卡与头部展示名完全一致。
+      if (display && display !== mergedMeta.canonical) {
+        mergedMeta.canonical = display;
+      }
       patch.metadata = mergedMeta;
       patch.sourcesText = (mergedMeta.sources || []).map((s) => sources.SOURCE_LABEL[s] || s).join(' / ');
       // 合并 quality + sourceBadges 计算
@@ -225,7 +233,7 @@ Page({
     // 8s 超时兜底，避免某个源 hang 住导致永远不刷新
     this._pendingTimer = setTimeout(finalize, 8000);
 
-    sources.getLeagueTier({ name: name }).then((t) => {
+    sources.getLeagueTier({ name: name, leagueid: leagueId }).then((t) => {
       if (t && t.grade) {
         this._pending.tier = {
           label: t.label,
@@ -322,8 +330,18 @@ Page({
         console.log('[league-detail] 原始比赛数:', raw.length, '首场字段:', raw[0] ? Object.keys(raw[0]).join(',') : '无数据');
         this.allMatches = raw;  // 保留原始（供系列赛聚合用）
         // 系列赛聚合：按 series_id 归组 BO3/BO5，同一系列多场聚到一张卡
+        // 2026-07-28 修复小圆点颜色 BUG：传入 series 的 A/B 队 team_id 锚点给 fmt，
+        // 让每场 game 计算 aWin（A 队是否赢该场），WXML 据此着色。
+        // 此前 fmt 只赋值 radiantWin（=radiant_win 原始值），WXML 用 g.radiantWin 判定颜色，
+        // 但 radiant_win 只代表「天辉是否赢」，不等于「A 队（首场 radiant 方）是否赢」。
+        // BO3/BO5 中双方会换边，第 2/3 场 radiant 可能是首场的 dire（B 队），
+        // 此时 radiant_win=true 反而代表 B 队赢，小圆点会显示错误颜色。
+        // 此外 radiant_win=null（未结束）会走 else 分支显示红色，未结束比赛不应着色。
+        const seriesAnchor = { teamAId: 0, teamBId: 0 };
         this.allSeries = sources.groupSeries(raw).map((s) => {
-          s.games = s.games.map((m) => this.fmt(m));
+          seriesAnchor.teamAId = s.radiantTeamId;
+          seriesAnchor.teamBId = s.direTeamId;
+          s.games = s.games.map((m) => this.fmt(m, seriesAnchor));
           return s;
         });
         console.log('[league-detail] 聚合后系列赛数:', this.allSeries.length,
@@ -332,37 +350,69 @@ Page({
         const slice = this.allSeries.slice(0, pageSize);
         const at = api.fetchedAtOf('leagueMatches', this.data.leagueId);
         // F1：赛事进行中判定 —— 存在「未分胜负 + 近 12h 开赛」的比赛即视为直播中
+        // 注意：isLive 表示「当前有比赛正在打」，与「赛事窗口进行中」(ongoing) 是不同概念：
+        //   - isLive：F1 直播聚合入口高亮，必须基于真实未结算比赛（curation 无法感知）。
+        //   - ongoing：赛事处于官方赛期内，包含「DOTA2 比赛已结束但嘉年华仍在进行」场景。
         const nowSec = Math.floor(Date.now() / 1000);
         const isLive = (raw || []).some((m) =>
           (m.radiant_win == null) && m.start_time && (nowSec - m.start_time) > 0 && (nowSec - m.start_time) < 12 * 3600
         );
-        // 统一赛事窗口（与列表页一致）：用真实比赛数据 min(start_time) ~ max(start_time + duration)。
-        // 有比赛时，覆盖 curation/Liquipedia 的"嘉年华"宽窗口（如 EWC 全代 07-06~08-23），
-        // 避免与列表的 7/20-7/25 冲突；状态同样基于真实结束时间，已结束即显示"已结束"。
+        // 统一赛事窗口（与列表页 leagues.js loadLeagueEntry 完全一致）：
+        // 构建 mixed 对象同时包含真实比赛数据（earliest/latest/lastEnd）和 curation 权威赛期
+        //（startDate/endDate），让 util.statusOf 走 isOngoing 全部三条判定路径：
+        //   ① 真实 lastEnd 在缓冲期内 → 精确匹配
+        //   ② curation 赛期窗口内 → 覆盖 DOTA2 比赛已结束但赛事仍在进行（如 EWC 嘉年华）
+        //   ③ 未结算比赛兜底
+        // 并应用 cur.status 显式覆盖（与列表页 leagues.js 第 362-364 行一致），
+        // 防止「赛事仍在进行但 DOTA2 比赛已结束」被误判为「已结束」。
+        // 2026-07-28 修复：此前详情页仅用真实比赛窗口，导致与列表页赛期/状态显示不一致。
         const mList = raw || [];
-        let mStart = 0, mEnd = 0;
+        let mStart = 0, mEnd = 0, mLatestStart = 0;
         mList.forEach((m) => {
           const st = m.start_time || 0;
           const en = st + (m.duration || 0);
-          if (st && (!mStart || st < mStart)) mStart = st;
-          if (en > mEnd) mEnd = en;
+          if (st && (!mStart || st < mStart)) mStart = st;       // 最早开赛
+          if (st > mLatestStart) mLatestStart = st;               // 最晚开赛（供 isOngoing 路径③）
+          if (en > mEnd) mEnd = en;                               // 最晚结束
         });
+        // 数据校验：真实比赛窗口完整性（start>0 且 end>=start）
+        const hasRealWindow = mStart > 0 && mEnd >= mStart;
+        // 2026-07-27：传入 leagueId + game 上下文，启用 curation 精确 pin + 跨游戏隔离
+        const cur = remoteCuration.curatedEventFor(this.data.name, { leagueId: Number(this.data.leagueId), game: 'dota2' });
+        // 2026-07-28：统一使用 util.validateLeagueWindow 校验，与列表页 leagues.js 共用同一函数，
+        // 确保两页对赛期/状态的数据源完全一致，防止同类不一致 BUG 复发。
+        const mixed = util.validateLeagueWindow({
+          earliest: mStart,
+          latest: mLatestStart,
+          lastEnd: mEnd,
+          startDate: (cur && cur.start) || null,
+          endDate: (cur && cur.end) || null
+        });
+        // 状态判定：statusOf(mixed) + curation 显式状态覆盖（与列表页完全一致）
+        let status = util.statusOf(mixed);
+        if (cur && cur.status === '已结束') status = 'ended';
+        else if (cur && cur.status === '进行中') status = 'ongoing';
+        const badge = statusBadgeOf(status);
+        // 赛期显示优先级（与列表页 leagues.js loadLeagueEntry 完全一致）：
+        //   ① curation 完整周期（mixed.startDate/endDate）—— 覆盖嘉年华全周期
+        //   ② 真实比赛窗口（mStart/mEnd）—— 非策展赛事兜底
+        // 数据校验：winStart/winEnd 必须都 > 0 才构建 eventWindow，避免半空数据导致渲染异常
+        // 注意：mixed 已由 validateLeagueWindow 校验归一化，startDate/endDate 为 null 表示无有效 curation 日期
+        const winStart = mixed.startDate || (hasRealWindow ? mStart : 0);
+        const winEnd = mixed.endDate || (hasRealWindow ? mEnd : 0);
         let eventWindow = null;
-        if (mStart && mEnd) {
-          const wn = { earliest: mStart, latest: mStart, lastEnd: mEnd };
-          const st = util.statusOf(wn);
-          const badge = statusBadgeOf(st);
+        if (winStart > 0 && winEnd >= winStart) {
           eventWindow = {
-            start: mStart,
-            end: mEnd,
-            range: util.formatDateRange(mStart, mEnd),                        // M/D，与列表一致
-            fullRange: util.formatTime(mStart) + ' ~ ' + util.formatTime(mEnd), // KPI 全日期
-            status: st,
+            start: winStart,
+            end: winEnd,
+            range: util.formatDateRange(winStart, winEnd),                        // M/D，与列表页一致
+            fullRange: util.formatTime(winStart) + ' ~ ' + util.formatTime(winEnd), // KPI 全日期
+            status: status,
             statusText: badge.text,
             statusColor: badge.color
           };
         }
-        this._matchWindow = eventWindow ? { start: mStart, end: mEnd } : null;
+        this._matchWindow = hasRealWindow ? { start: mStart, end: mEnd } : null;
         // 合并为单次 setData
         this.setData({
           totalSeries: this.allSeries.length,
@@ -454,16 +504,43 @@ Page({
       });
   },
 
-  fmt(m) {
+  fmt(m, anchor) {
+    // 2026-07-28 修复小圆点颜色 BUG：新增 aWin/bWin 字段，表示该场 A 队/B 队是否赢。
+    // A 队 = 系列赛首场的 radiant 方（anchor.teamAId）；B 队 = 首场的 dire 方。
+    // 必须按 team_id 归属，不能直接用 radiant_win：
+    //   ① BO3/BO5 换边：第 2/3 场 radiant 可能是 B 队，radiant_win=true 反而代表 B 队赢；
+    //   ② 未结束：radiant_win=null，不应显示任何颜色（aWin/bWin 均为 false）；
+    //   ③ 数据异常：team_id 缺失时回退到 radiant_win，与 groupSeries 的回退逻辑一致。
+    const aId = anchor && anchor.teamAId > 0 ? anchor.teamAId : 0;
+    const bId = anchor && anchor.teamBId > 0 ? anchor.teamBId : 0;
+    let aWin = false, bWin = false;
+    if (m.radiant_win === true || m.radiant_win === false) {
+      const winnerId = m.radiant_win ? m.radiant_team_id : m.dire_team_id;
+      if (aId > 0 && bId > 0 && winnerId > 0) {
+        // 有有效锚点：按 team_id 归属
+        if (winnerId === aId) aWin = true;
+        else if (winnerId === bId) bWin = true;
+      } else {
+        // 无有效锚点：回退到按边归属（A=radiant, B=dire）
+        if (m.radiant_win) aWin = true; else bWin = true;
+      }
+    }
+    // 未结束（radiant_win=null）→ aWin/bWin 均为 false，WXML 显示灰色（未着色）
     return {
       match_id: m.match_id,
-      radiantName: m.radiant_team_name || '',
-      direName: m.dire_team_name || '',
+      // 队名兜底用 '天辉'/'夜魇'，与 groupSeries 保持一致，
+      // 避免 enrichTeamNames 中 !m.radiantName 对空字符串和 '天辉' 行为不一致。
+      radiantName: m.radiant_team_name || '天辉',
+      direName: m.dire_team_name || '夜魇',
       radiantTeamId: m.radiant_team_id,
       direTeamId: m.dire_team_id,
-      radiantScore: m.radiant_score,
-      direScore: m.dire_score,
+      // 比分兜底 0，防止 null/undefined 在 wxml 算术运算中产生 NaN
+      radiantScore: Number(m.radiant_score) || 0,
+      direScore: Number(m.dire_score) || 0,
       radiantWin: m.radiant_win,
+      // 小圆点颜色用 aWin/bWin（按 A/B 队归属），不用 radiantWin（按天辉/夜魇边）
+      aWin: aWin,
+      bWin: bWin,
       time: util.formatTime(m.start_time),
       duration: m.duration ? util.formatDuration(m.duration) : ''
     };
@@ -494,48 +571,176 @@ Page({
     Object.keys(teamMap).forEach((k) => { if (!teamMap[k]) teamMap[k] = 'Team ' + k; });
     let participantsList = Object.keys(teamMap).map((id) => ({ id: Number(id), name: teamMap[id] }));
 
-    // 1.5) Roster 完成（2026-07-27）：赛事进行中常出现「metadata 标 16 队但仅 13 队登场」的场景
-    // （如 EPL Masters I 86 场只覆盖 13 支队伍）。原先只在 participantsList 为空时才补占位，
-    // 导致 metadata 「参赛队 16」与实际显示「13 支」长期不一致 —— 给人"数据错误"的错觉。
-    // 修复：只要 metadata.participants > 实际参赛队数，补足到与 metadata 一致（占位「待定队伍 N」，
-    // id 用负数，避免与真实 team_id 冲突，且不会被 teamMap 反向覆盖）。
-    const metaParticipants = Number(meta.participants);
-    if (metaParticipants > 0 && metaParticipants > participantsList.length) {
-      const need = metaParticipants - participantsList.length;
-      const existingIds = new Set(participantsList.map((t) => t && t.id));
-      const fillers = [];
-      for (let i = 0; i < need; i++) {
-        const fakeId = -1 - i;
-        if (!existingIds.has(fakeId)) {
-          fillers.push({ id: fakeId, name: '待定队伍 ' + (i + 1) });
+    // ===== 参赛队数一致性策略（2026-07-28 重构，修复 EWC 2026 显示 16 实际 24 的 BUG） =====
+    // metadata.participants 来源：curation 硬编码 / Liquipedia 人工策展。
+    // 实际参赛队数：从 OpenDota /leagues/{id}/matches 的 team_id 去重得到。
+    // 两者不一致时的优先级（按可信度从高到低）：
+    //   ① 实际 > meta  → curation 过时，以实际为准（覆盖 meta.participants，并告警）
+    //   ② meta > 实际  → 赛事进行中尚有未登场队伍（常见于 BO3 小组赛未全部开打），
+    //                    补「待定队伍 N」占位至 meta 一致（保留 2026-07-27 的 Roster 完成逻辑）
+    //   ③ meta == 实际 → 一致，无需处理
+    //   ④ 无比赛数据   → 仅用 meta 生成纯占位列表（保留旧行为）
+    // 设计原则：硬编码 curation 永远不可信过实际比赛数据；占位仅用于"已知未登场"场景。
+    // 2026-07-28：meta.participants 可能是数字（curation）或数组（Liquipedia parseParticipants）。
+    //   - 数字：直接用作品数判定
+    //   - 数组：用长度作 meta 参赛队数，数组本身保留供分支④兜底使用
+    //   Liquipedia 数组优先于 curation 数字（mergeMetadataWithFallback 中 Object.assign 已覆盖）。
+    //   2026-07-28 增强：curation 的 participants 也可为数组（含 name/region/group），
+    //   当 Liquipedia 被 CAPTCHA 拦截时，curation 数组作为同等数据源参与重建。
+    const liqParticipantsArr = Array.isArray(meta.participants) ? meta.participants : null;
+    const metaParticipants = liqParticipantsArr ? liqParticipantsArr.length : (Number(meta.participants) || 0);
+    const actualCount = participantsList.length;
+
+    if (actualCount > 0 && actualCount > metaParticipants && metaParticipants > 0) {
+      // ① 实际 > meta（且 meta > 0）：curation/Liquipedia 过时，以实际为准
+      // 2026-07-28：增加 metaParticipants > 0 守卫，避免 meta=0（Liquipedia 尚未返回）
+      //   的加载中间态误报"curation 过时"。meta=0 时仅静默更新 meta.participants，
+      //   不输出警告，等 finalize 后 Liquipedia 返回再做一致性校验。
+      meta.participants = actualCount;
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn('[league-detail] 参赛队数实际 > metadata：curation 可能过时',
+          'actual=' + actualCount, 'meta=' + metaParticipants,
+          '— 已以实际数据为准更新 KPI');
+      }
+    } else if (actualCount > 0 && metaParticipants === 0) {
+      // ①-bis meta=0：Liquipedia/curation 尚未加载，静默用实际数填充，不警告
+      meta.participants = actualCount;
+    } else if (metaParticipants > 0 && metaParticipants > actualCount) {
+      // ② meta > 实际：赛事进行中尚有未登场队伍
+      // 2026-07-28 修复 EPL Masters I BUG：Liquipedia 已公布 16 支队伍但比赛数据只有 7 支时，
+      // 此前用「待定队伍 N」占位，丢失真实队名（如 Team Jenz / Level UP）。
+      // 修复：Liquipedia 提供完整队伍列表时，以该列表为基础重建 participantsList，
+      //   并通过队名匹配关联实际比赛数据中的 team_id（保留已参赛队伍的真实 id 用于跳转/统计）。
+      //   未参赛队伍用负数占位 id，未公布队伍（TBD）显示「待公布」。
+      if (liqParticipantsArr && liqParticipantsArr.length) {
+        // 1) 构建实际队名(lower) -> team_id 映射（仅真实队名，排除 "Team {id}" 占位）
+        const nameToId = {};
+        const normList = [];
+        participantsList.forEach((t) => {
+          if (!t || !t.name || t.id == null || t.id < 0) return;
+          if (/^Team \d+$/.test(t.name)) return;
+          nameToId[t.name.toLowerCase()] = t.id;
+          normList.push({ name: t.name, id: t.id });
+        });
+        // 2) 模糊匹配规范化：去 esports/gaming/team 等后缀 + 非字母数字字符
+        const normalize = function (s) {
+          return (s || '').toLowerCase()
+            .replace(/\s*(esports|eports?|gaming|team|dota)\s*/gi, '')
+            .replace(/[^a-z0-9]/g, '');
+        };
+        const normIndexed = normList.map((it) => ({ norm: normalize(it.name), id: it.id, name: it.name }));
+        // 3) 以 Liquipedia 列表为基础重建，关联 team_id
+        participantsList = liqParticipantsArr.map((t, i) => {
+          const liqName = (t && t.name) || '';
+          const isTBD = !liqName || liqName === 'TBD';
+          let matchedId = null;
+          if (!isTBD) {
+            // 精确匹配（忽略大小写）
+            matchedId = nameToId[liqName.toLowerCase()];
+            // 模糊匹配（去后缀 + 包含关系）
+            if (matchedId == null) {
+              const liqNorm = normalize(liqName);
+              if (liqNorm) {
+                for (let j = 0; j < normIndexed.length; j++) {
+                  const it = normIndexed[j];
+                  if (!it.norm) continue;
+                  if (it.norm === liqNorm ||
+                      (it.norm.length >= 3 && (it.norm.indexOf(liqNorm) >= 0 || liqNorm.indexOf(it.norm) >= 0))) {
+                    matchedId = it.id;
+                    break;
+                  }
+                }
+              }
+            }
+          }
+          return {
+            id: matchedId != null ? matchedId : -1 - i,
+            name: isTBD ? '待公布' : liqName,
+            status: (t && t.status) || 'TBD',
+            liquipediaSlug: (t && t.liquipediaSlug) || null,
+            // 2026-07-28 透传扩展字段：curation/Liquipedia 数据源可能提供 region/group 等信息，
+            // 统一拷贝到 participantsList 供 WXML 渲染赛区标签与分组徽标。
+            region: (t && t.region) || null,
+            group: (t && t.group) || null
+          };
+        });
+      } else {
+        // 无 Liquipedia 列表（meta.participants 是数字，来自 curation 兜底）：
+        // 保留原「待定队伍 N」占位逻辑，但不再输出 warn（这是预期场景）。
+        // 2026-07-28：Liquipedia API 失败/限流时，mergeMetadataWithFallback 会用 curation
+        //   的数字 participants 兜底（如 EPL Masters I = 16），此时分支②走此 else 分支，
+        //   补占位是预期行为，不是 BUG。改为 console.log 避免海量 warn 污染控制台。
+        const need = metaParticipants - actualCount;
+        const existingIds = new Set(participantsList.map((t) => t && t.id));
+        const fillers = [];
+        for (let i = 0; i < need; i++) {
+          const fakeId = -1 - i;
+          if (!existingIds.has(fakeId)) {
+            fillers.push({ id: fakeId, name: '待定队伍 ' + (i + 1) });
+          }
+        }
+        if (fillers.length) {
+          participantsList = participantsList.concat(fillers);
+          // 仅 devtools 下输出 info 级别日志，生产环境静默
+          if (typeof console !== 'undefined' && console.info) {
+            console.info('[league-detail] 参赛队伍占位补齐（Liquipedia 未返回列表，用 curation 数字兜底）',
+              'actual=' + actualCount, 'meta=' + metaParticipants,
+              '— 已补 ' + fillers.length + ' 个待定队伍占位');
+          }
         }
       }
-      if (fillers.length) {
-        participantsList = participantsList.concat(fillers);
-        // 数据完整性告警：与 metadata 不一致便于排查（云函数缓存/Curation 漂移）
-        if (typeof console !== 'undefined' && console.warn) {
-          console.warn('[league-detail] 参赛队数与 metadata 不一致：',
-            'actual=' + (participantsList.length - fillers.length),
-            'meta=' + metaParticipants,
-            '— 已补 ' + fillers.length + ' 个待定队伍占位');
-        }
+    } else if (metaParticipants > 0 && metaParticipants !== actualCount && actualCount === 0) {
+      // ④ 无比赛数据：赛事未开赛场景
+      // 2026-07-28 新增 Liquipedia 兜底：若 meta.participants 是数组（来自 Liquipedia
+      //   getLeagueMetadata 的 parseParticipants 解析），优先使用已公布的参赛队伍，
+      //   而非纯「待定队伍 N」占位。与 Liquipedia 公示保持一致。
+      //   - 已公布的队伍（name !== 'TBD'）显示真实队名，id 用负数占位（无 OpenDota team_id）
+      //   - 未公布的队伍（name === 'TBD'）仍显示「待公布」，区分已公布与未公布
+      //   - 若 Liquipedia 无 participants 数据，回退到原纯占位逻辑
+      const liqParticipants = Array.isArray(meta.participants) ? meta.participants : null;
+      if (liqParticipants && liqParticipants.length) {
+        participantsList = liqParticipants.map((t, i) => ({
+          id: -1 - i,
+          name: (t.name && t.name !== 'TBD') ? t.name : '待公布',
+          status: t.status || 'TBD',
+          liquipediaSlug: t.liquipediaSlug || null
+        }));
+        // 更新 meta.participants 为实际解析到的队伍数
+        meta.participants = participantsList.length;
+      } else {
+        participantsList = Array.from({ length: metaParticipants }, (_, i) => ({ id: -1 - i, name: '待定队伍 ' + (i + 1) }));
       }
-    }
-    // 1.6) 无比赛数据时，用 curation/Liquipedia 提供的参赛队数生成纯占位列表（保留旧行为）
-    if (!participantsList.length && metaParticipants > 0) {
-      participantsList = Array.from({ length: metaParticipants }, (_, i) => ({ id: -1 - i, name: '待定队伍 ' + (i + 1) }));
     }
 
-    // 2) 用真实比赛窗口补齐 metadata
+    // 2) 用统一赛事窗口补齐 metadata（与列表页 leagues.js loadLeagueEntry 完全一致）
+    // 优先级（与列表页完全一致）：
+    //   - status：eventWindow.statusText（已用 mixed + cur.status 覆盖计算）
+    //   - 赛期：eventWindow.start/end（已优先 curation 宽窗口，回退真实比赛窗口）
+    // 数据校验：eventWindow 存在时直接覆盖 meta 的 status/startDate/endDate，
+    //   保证 KPI Strip 与头部徽标完全一致；eventWindow 为 null（无 curation 也无真实比赛）
+    //   时保留 mergeMetadataWithFallback 注入的 Liquipedia/curation 兜底值，避免 KPI 空白。
+    // 2026-07-28 修复：此前详情页仅用真实比赛窗口覆盖 meta，导致：
+    //   ① KPI 赛期（真实窗口 7/15-7/25）与列表页赛期（curation 宽窗口 7/6-8/23）不一致；
+    //   ② 状态评定缺少 curation 路径②，DOTA2 比赛已结束但赛事仍在进行时误判为「已结束」。
     const ew = this.data.eventWindow;
     if (ew) {
-      meta.status = meta.status || ew.statusText;
-      meta.startDate = meta.startDate || util.formatTime(ew.start);
-      meta.endDate = meta.endDate || util.formatTime(ew.end);
+      meta.status = ew.statusText;
+      meta.startDate = util.formatTime(ew.start);
+      meta.endDate = util.formatTime(ew.end);
     }
-    // 3) 参赛队数：curation/Liquipedia 优先；无则用比赛数据推导
+    // 3) 参赛队数兜底：若 meta.participants 仍为空（curation/Liquipedia 均无数据），
+    //    用实际比赛数据推导的参赛队数填入。
+    //    注意：实际 > meta 的覆盖已在上方「参赛队数一致性策略①」处理，
+    //    这里仅处理 meta 为空的边缘场景，避免重复赋值。
     if ((meta.participants == null || meta.participants === '') && participantsList.length) {
       meta.participants = participantsList.length;
+    }
+    // 2026-07-28：归一化 participants 为数字（KPI Strip 显示用）。
+    //   meta.participants 可能是数组（Liquipedia parseParticipants）或数字（curation/推导）。
+    //   WXML 直接显示 metadata.participants，若为数组会渲染为 [object Object]。
+    //   保留 liqParticipantsArr 供分支④兜底使用，最终 setData 前统一转为数字。
+    if (Array.isArray(meta.participants)) {
+      meta.participants = meta.participants.length;
     }
 
     this.setData({ metadata: meta, participantsList: participantsList });
@@ -568,7 +773,8 @@ Page({
 
   openTeam(e) {
     const id = e.currentTarget.dataset.id;
-    if (!id) return;
+    // 2026-07-28：id < 0 是待公布/占位队伍（无 OpenDota team_id），不跳转
+    if (!id || id < 0) return;
     wx.navigateTo({ url: '/subpackages/detail/team-detail/team-detail?teamId=' + id });
   },
 

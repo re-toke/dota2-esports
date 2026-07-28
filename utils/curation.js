@@ -95,12 +95,24 @@ const CURATED_EVENTS = [
     prizePool: '$1,000,000', organizer: 'ESL', region: '欧洲', format: '双败淘汰',
     participants: 16, status: '已结束', liquipediaSlug: 'DreamLeague/Season_26',
     valve: false, topThirdParty: false },
-  // 2026 电竞世界杯 DOTA2 项目：7月6日-8月23日，利雅得（顶级第三方，S 级）
+  // 2026 电竞世界杯 DOTA2 项目：7月7日-7月19日，法国巴黎（顶级第三方，S 级）
+  // ⚠️ 2026-07-28 重大修正（依据 Liquipedia 官方页面核实）：
+  //   1. 赛期：原存 7/6-8/23 是整个 EWC 多项目嘉年华宽窗口（24 个游戏），DOTA2 项目实际
+  //      赛期为 7/7-7/19（小组赛 7/7-7/12 + 突围赛 7/14-7/15 + 淘汰赛 7/16-7/19）。
+  //   2. 地点：原存「沙特阿拉伯·利雅得」错误。EWC 2026 原计划在利雅得，但 2026-05-20 官方
+  //      宣布 DOTA2 项目移师法国巴黎（Paris Expo Porte de Versailles）。
+  //   3. 奖金池：原存 $1,000,000 错误，实际 $2,000,000（冠军 $750,000）。
+  //   4. 状态：原存「进行中」错误，7/19 已收官（PARIVISION 3-1 BetBoom 夺冠），应改为「已结束」。
+  //   5. 主办方：原存「ESL / Savvy Games」错误，实际为 Esports Foundation / ESL FACEIT Group。
+  //   6. liquipediaSlug：原存 'Esports_World_Cup/2026/Dota_2' 404，实际页面为 'Esports_World_Cup/2026'。
+  //   7. 参赛队数 24 正确（12 直邀 + 12 预选），保留不变。
+  //   今后：curation 的赛期必须存「该游戏项目的实际赛期」，不能存整个嘉年华宽窗口。
   { canonical: 'Esports World Cup 2026', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['esportsworldcup2026', 'ewc2026', 'ewcdota2026'], year: 2026,
-    start: Math.floor(Date.UTC(2026, 6, 6) / 1000), end: Math.floor(Date.UTC(2026, 7, 23) / 1000),
-    prizePool: '$1,000,000', organizer: 'ESL / Savvy Games', region: '沙特阿拉伯·利雅得', format: '循环小组赛 + 单败淘汰附加赛',
-    participants: 16, status: '已结束', liquipediaSlug: 'Esports_World_Cup/2026/Dota_2',
+    start: Math.floor(Date.UTC(2026, 6, 7) / 1000), end: Math.floor(Date.UTC(2026, 6, 19) / 1000),
+    prizePool: '$2,000,000', organizer: 'Esports Foundation / ESL FACEIT Group', region: '法国·巴黎',
+    format: '循环小组赛(Bo2) + 突围赛(Bo3) + 单败淘汰(Bo3/Bo5决赛)',
+    participants: 24, status: '已结束', liquipediaSlug: 'Esports_World_Cup/2026',
     valve: false, topThirdParty: true },
   // EPL Masters I（ESL / European Pro League Masters 第一季）：DOTA2 线上赛事
   // ⚠️ 关联模型（2026-07-27 第二次修复，对应「修复 A 比赛影响 B 比赛」Bug）：
@@ -114,14 +126,43 @@ const CURATED_EVENTS = [
   //     ③ 仅保留字面 alias 'epl masters i'，供 canonical 字面名（如 focus / 详情 fallback）查找使用。
   //   —— 今后新增 curation 条目：若 OpenDota 有明确 leagueid，应「显式 pin（leagueId + game）」
   //      而非靠模糊别名；模糊别名只作为 canonical 字面名 fallback。
+  //
+  // 参赛队伍（2026-07-28 从 Offstage.gg 官方预览 + e-rankings + OpenDota 比赛数据三方核对）：
+  //   赛制：Play-In → 小组赛(2 组×6 队, Bo3 循环) → 双败淘汰(Bo3)
+  //   Group A：Team Jenz / Syntax / Ilbirs eSports / Level UP / Nemiga Gaming / Zero Tenacity
+  //   Group B：PuckChamp / KW / RE Arise / Amaru Gaming / Team Bald(Aion) / Power Rangers
+  //   Play-In 淘汰/未晋级：Team Spirit Academy / Dandelions / Team Lynx 等
+  //   participants 数组格式与 Liquipedia parseParticipants 输出一致，
+  //   refreshMetadataDerived 分支② 会优先使用此数组重建 participantsList（当 Liquipedia 不可用时）。
   { canonical: 'EPL Masters I', tier: { grade: 'A', rank: 8, label: 'A-Tier' },
     leagueId: 19944,
     game: 'dota2',
     aliases: ['epl masters i'], year: 2026,
     start: Math.floor(Date.UTC(2026, 6, 20) / 1000), end: Math.floor(Date.UTC(2026, 7, 12) / 1000),
-    prizePool: '$100,000', organizer: 'ESL / EPL', region: '欧洲/CIS · 线上',
-    format: '小组赛(Bo3) + 双败淘汰(Bo3/Bo5决赛)',
-    participants: 16, status: '进行中', liquipediaSlug: 'EPL/Masters/I',
+    prizePool: '$100,000', organizer: 'EPL', region: '欧洲/CIS · 线上',
+    format: 'Play-In + 小组赛(Bo3) + 双败淘汰(Bo3)',
+    participants: [
+      // ── Group A ──
+      { name: 'Nemiga Gaming', region: '欧洲/白俄罗斯', group: 'A' },
+      { name: 'Zero Tenacity', region: 'CIS/多国', group: 'A' },
+      { name: 'Ilbirs Esports', region: 'CIS/哈萨克斯坦', group: 'A' },
+      { name: 'Level UP esports', region: '欧洲/俄罗斯', group: 'A' },
+      { name: 'Team Syntax', region: '欧洲/土耳其', group: 'A' },
+      { name: 'Team Jenz', region: '美洲/秘鲁', group: 'A' },
+      // ── Group B ──
+      { name: 'PuckChamp', region: '欧洲/多国', group: 'B' },
+      { name: 'KW', region: '中东/伊朗', group: 'B' },
+      { name: 'RE Arise', region: '欧洲/乌克兰', group: 'B' },
+      { name: 'Team Bald', region: '欧洲/北欧', group: 'B' },
+      { name: 'Power Rangers', region: '欧洲/俄罗斯', group: 'B' },
+      { name: 'Amaru Gaming', region: '美洲/秘鲁', group: 'B' },
+      // ── Play-In（已淘汰/未晋级小组赛，但有比赛记录在 league 19944 中）──
+      { name: 'Team Spirit Academy', region: '欧洲/俄罗斯', group: 'Play-In' },
+      { name: 'Dandelions', region: '中国', group: 'Play-In' },
+      { name: 'Team Lynx', region: '欧洲/俄罗斯', group: 'Play-In' },
+      { name: 'Aion', region: '欧洲/北欧', group: 'Play-In' }
+    ],
+    status: '进行中', liquipediaSlug: 'EPL/Masters/1',
     valve: false, topThirdParty: true },
 
   // ── 2026 下半年即将到来（Tier 1，来源：Liquipedia Tournaments，已核实日期）──

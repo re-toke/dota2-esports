@@ -346,6 +346,8 @@
 }
 .series-dot.a-win { background: #5fd35f; border-color: #5fd35f; box-shadow: 0 0 4rpx rgba(95, 211, 95, 0.4); }
 .series-dot.b-win { background: #e8443b; border-color: #e8443b; box-shadow: 0 0 4rpx rgba(232, 68, 59, 0.4); }
+/* 2026-07-28：未结束比赛（aWin/bWin 均为 false）显示空心灰边，不亮红/绿，避免误判胜负 */
+.series-dot.pending { background: transparent; border-color: #3a4250; }
 
 /* 小场列表 */
 .series-games {
@@ -736,6 +738,67 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* 2026-07-28：参赛队伍 chip 信息区（队名 + 标签行）与赛区/分组标签 */
+.team-chip-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+.team-chip-tags {
+  display: flex;
+  gap: 6rpx;
+  flex-wrap: nowrap;
+}
+.team-chip-group {
+  font-size: 18rpx;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, #1ec896, #17a083);
+  border-radius: 4rpx;
+  padding: 1rpx 8rpx;
+  line-height: 1.6;
+  flex-shrink: 0;
+  text-align: center;
+  min-width: 28rpx;
+}
+.team-chip-group.group-B {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+}
+.team-chip-group.group-Play-In {
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  font-size: 16rpx;
+}
+.team-chip-region {
+  font-size: 18rpx;
+  color: #9ca3af;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4rpx;
+  padding: 1rpx 8rpx;
+  line-height: 1.6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 160rpx;
+}
+/* 2026-07-28：参赛队伍 chip 状态徽标（直邀/预选）与待公布样式 */
+.team-chip-badge {
+  font-size: 20rpx;
+  color: #8a8f99;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 6rpx;
+  padding: 2rpx 8rpx;
+  flex-shrink: 0;
+}
+.team-chip.is-pending {
+  opacity: 0.5;
+  border-style: dashed;
+}
+.team-chip.is-pending .team-chip-name {
+  color: #5b626d;
+  font-style: italic;
 }
 .teams-empty {
   font-size: 24rpx;
