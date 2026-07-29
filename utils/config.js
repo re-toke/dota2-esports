@@ -17,7 +17,14 @@ module.exports = {
     // 发送记录本地存储 key 前缀
     sendLogKey: 'dota2_sub_send_log',
     // 订阅状态存储 key
-    statusKey: 'dota2_sub_status'
+    statusKey: 'dota2_sub_status',
+    // §8.3 云端推送重试（2026-07-29）：失败时的退避重试参数
+    //   - retryMax: 最大重试次数（总尝试次数 = 1 + retryMax）
+    //   - retryBaseMs: 退避基数（指数增长：base * 2^attempt，如 2000 → 2s/4s/8s）
+    //   - retryMaxMs: 单次退避上限，避免过长等待（默认 30s）
+    retryMax: 2,
+    retryBaseMs: 2000,
+    retryMaxMs: 30000
   },
 
   // 缓存 TTL（秒）。调大可减少 OpenDota 请求，调小可获取更实时数据。

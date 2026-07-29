@@ -95,6 +95,13 @@ proxy.liquipediaScheduledProxy = function (pageName) {
   return call('liquipediaScheduledMatches', { pageName: pageName });
 };
 
+// §8.3 Liquipedia 战队 Logo 云代理（2026-07-29）：OpenDota 无 logo 的兜底源。
+// 调云函数 action=liquipediaTeamLogo，云端两步获取（wikitext → imageinfo API）。
+// 返回 { logo: url, source: 'liquipedia' } 或 reject（由调用方 catch 降级）。
+proxy.liquipediaTeamLogoProxy = function (teamName) {
+  return call('liquipediaTeamLogo', { teamName: teamName });
+};
+
 // 暴露给其它模块（api.js / stratz.js / leagues.js 复用）
 proxy.isAvailable = isAvailable;
 proxy.call = call;

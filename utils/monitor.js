@@ -68,4 +68,58 @@ function statusConflict(leagueid, listStatus, detailStatus) {
   });
 }
 
-module.exports = { report, leagueNameUncovered, statusConflict };
+// G7.4 监控补充（2026-07-29）：logo/api/多源 三类可观测性埋点。
+//   - logoLoadFailed：OpenDota + STRATZ 均未拿到 logo（enrichTeamLogo 返回 null）。按 team_id 去重。
+//   - apiCallError：API 请求重试耗尽仍失败（api.js request catch 兜底）。按 path 去重，防海量噪声。
+//   - sourceCacheMiss：多源聚合时某源失败（sources.js crossTeamMembers/getLeagueMetadata 等）。
+//     按 source+op 去重，用于发现某数据源不稳定/限流。
+// 所有埋点复用 _seen 去重集合，同会话同 key 最多上报一次，避免重复打点污染数据。
+
+// 队标加载失败：team_id 非 0 时按 id 去重；id 缺失时按 name 去重。
+function logoLoadFailed(teamId, name, reason) {
+  const key = 'logo:' + (teamId || ('name:' + (name || '')));
+  if (_seen.has(key)) return;
+  if (_seen.size >= MAX_SEEN) return;
+  _seen.add(key);
+  report('logo_load_failed', {
+    team_id: String(teamId || ''),
+    name: String(name || '').slice(0, 40),
+    reason: String(reason || '').slice(0, 30)
+  });
+}
+
+// API 调用最终失败：重试耗尽。按 path 去重，避免同端点反复失败刷屏。
+function apiCallError(path, statusCode, message) {
+  const key = 'api:' + path;
+  if (_seen.has(key)) return;
+  if (_seen.size >= MAX_SEEN) return;
+  _seen.add(key);
+  report('api_call_error', {
+    path: String(path || '').slice(0, 80),
+    status_code: String(statusCode || ''),
+    message: String(message || '').slice(0, 60)
+  });
+}
+
+// 多源聚合某源失败：source 为数据源名（opendota/stratz/steam/liquipedia），
+// op 为操作名（teamLogo/teamMembers/leagueMeta 等）。按 source+op 去重。
+function sourceCacheMiss(source, op, reason) {
+  const key = 'src:' + source + ':' + op;
+  if (_seen.has(key)) return;
+  if (_seen.size >= MAX_SEEN) return;
+  _seen.add(key);
+  report('source_cache_miss', {
+    source: String(source || ''),
+    op: String(op || ''),
+    reason: String(reason || '').slice(0, 40)
+  });
+}
+
+module.exports = {
+  report,
+  leagueNameUncovered,
+  statusConflict,
+  logoLoadFailed,
+  apiCallError,
+  sourceCacheMiss
+};

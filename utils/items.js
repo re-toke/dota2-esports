@@ -28,7 +28,7 @@ let _items = null;   // 合并后的物品数组（常规 + 中立，去重）
 let _byId = null;    // String(id) -> item
 
 function buildAll(list, constants) {
-  // constants：OpenDota 按 id 索引的常量表 { [id]: {name,img,dname} }
+  // constants：OpenDota 按 id 索引的常量表 { [id]: { name,img,dname } }
   // neutralItems：dota2.com.cn Tab2 权威中立数据，name -> { id, nameZh, tier, tierName }
   const cMap = constants || {};
   const neuMap = neutralItems || {};
@@ -60,7 +60,9 @@ function buildAll(list, constants) {
         category: isNeutral ? 'neutral' : 'basic',
         tier: isNeutral ? neu.tier : 0,
         tierName: isNeutral ? neu.tierName : '',
-        img: normalizeItemImg(c.img, it.name)
+        img: normalizeItemImg(c.img, it.name),
+        // §8.3 物品深度数据（2026-07-29）：合成树组件（来自 OpenDota /constants/items 的 components 字段）
+        components: Array.isArray(it.components) ? it.components.slice() : []
       };
     });
 }
@@ -90,4 +92,38 @@ function loadAll() {
 function getItems() { return loadAll(); }
 function getItem(id) { return loadAll().then(() => _byId[String(id)] || null); }
 
-module.exports = { getItems, getItem };
+// §8.3 物品深度数据（2026-07-29）：合成树解析
+// 根据物品 id 查询其组件树（递归解析 components），返回扁平组件列表（去重）。
+// 用于详情页展示"该物品由 X / Y / Z 合成"。
+function getRecipeTree(id) {
+  return loadAll().then(() => {
+    const visited = {};
+    const result = [];
+    function dfs(itemId) {
+      const key = String(itemId);
+      if (visited[key]) return;
+      visited[key] = true;
+      const item = _byId[key];
+      if (!item) return;
+      const comps = item.components || [];
+      comps.forEach((compId) => {
+        const cKey = String(compId);
+        const cItem = _byId[cKey];
+        if (cItem) {
+          result.push({
+            id: cItem.id,
+            name: cItem.name,
+            cost: cItem.cost || 0,
+            img: cItem.img
+          });
+          // 递归解析子组件
+          dfs(compId);
+        }
+      });
+    }
+    dfs(id);
+    return result;
+  });
+}
+
+module.exports = { getItems, getItem, getRecipeTree };

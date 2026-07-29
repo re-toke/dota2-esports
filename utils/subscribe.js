@@ -23,6 +23,13 @@ const STATUS_KEY = CFG.statusKey || 'dota2_sub_status';
 const LOG_KEY = CFG.sendLogKey || 'dota2_sub_send_log';
 const COOLDOWN = (CFG.cooldownSec || 86400) * 1000;   // ms
 const DAILY_LIMIT = CFG.dailyLimit || 5;
+// §8.3 云端推送重试（2026-07-29）：失败退避重试参数
+//   - RETRY_MAX: 最大重试次数（总尝试 = 1 + RETRY_MAX）
+//   - RETRY_BASE_MS: 退避基数（指数 2x：2000 → 2s/4s）
+//   - RETRY_MAX_MS: 单次退避上限，避免赛前提醒窗口内错过推送时机
+const RETRY_MAX = CFG.retryMax != null ? CFG.retryMax : 2;
+const RETRY_BASE_MS = CFG.retryBaseMs || 2000;
+const RETRY_MAX_MS = CFG.retryMaxMs || 30000;
 
 // ===== 本地状态读写 =====
 
@@ -228,17 +235,44 @@ function formatMatchTime(startTime) {
 
 // ===== 云函数调用：发送订阅消息 =====
 
+// §8.3 云端推送重试（2026-07-29）
+// 判断错误是否可重试。微信订阅消息错误码分类：
+//   可重试（瞬时/速率/系统类）：
+//     - 'network'  云函数调用失败（网络抖动、超时）
+//     - -1         系统繁忙
+//     - 45009      接口调用超过限额（等待后可能恢复）
+//   不可重试（确定性错误，重试无用且浪费配额）：
+//     - 43101      用户拒绝订阅（需用户重新授权）
+//     - 43102      用户未订阅（需用户授权）
+//     - 43103      用户拒绝次数过多（进入冷却期）
+//     - 43004      openid 无效
+//     - 40037      template_id 无效
+//     - 41030      page 路径无效
+//     - 47003      模板参数错误
+//     - 40013      appid 无效
+//     - 50001      接口未授权
+//     - 200011     签名无效
+function isRetryableError(errcode, errorType) {
+  if (errorType === 'network') return true;     // 云函数调用失败
+  if (errcode === -1) return true;              // 系统繁忙
+  if (errcode === 45009) return true;           // 限频，等待后可恢复
+  return false;
+}
+
+// 计算第 attempt 次重试的退避时间（指数退避，封顶 RETRY_MAX_MS）
+function backoffMs(attempt) {
+  var ms = RETRY_BASE_MS * Math.pow(2, attempt);
+  return Math.min(ms, RETRY_MAX_MS);
+}
+
 /**
- * 通过云函数发送一条订阅消息
- * @param {Object} opts
- * @param {string} opts.toUser  用户的 openid（需登录获取）
- * @param {Object} opts.data    消息数据（buildMessageData 的返回值）
- * @param {string} opts.page    点击跳转页路径
- * @param {string} [opts.miniprogramState='formal']  程序状态 formal/developer/trial
- * @returns {Promise<Object>} { ok: boolean, msgid?, errcode?, errmsg? }
+ * 单次发送尝试（不含重试逻辑）。
+ * 返回 { ok, msgid, errcode, errmsg, errorType }
+ *   errorType: 'ok' | 'network' | 'errcode' | 'no_template'
+ * 用于 sendSubscribeMessage 内部重试，外部通常不直接调用。
  */
-function sendSubscribeMessage(opts) {
-  if (!TMPL_ID) return Promise.resolve({ ok: false, error: 'no_template' });
+function sendOnce(opts) {
+  if (!TMPL_ID) return Promise.resolve({ ok: false, error: 'no_template', errorType: 'no_template' });
 
   var payload = {
     action: 'sendSubscribeMessage',
@@ -258,31 +292,104 @@ function sendSubscribeMessage(opts) {
       success: function (res) {
         var result = (res && res.result) || {};
         var ok = result.errcode === 0 || result.errcode === undefined;
-        // 记录发送日志
-        recordSend({
-          toUser: opts.toUser.substring(0, 8) + '***',  // 脱敏
-          templateId: TMPL_ID,
-          matchId: opts.matchId || '',
-          leagueName: opts.leagueName || '',
-          status: ok ? 'ok' : 'error',
+        resolve({
+          ok: ok,
+          msgid: result.msgid,
           errcode: result.errcode,
-          errmsg: result.errmsg || ''
+          errmsg: result.errmsg || '',
+          errorType: ok ? 'ok' : 'errcode'
         });
-        resolve({ ok: ok, msgid: result.msgid, errcode: result.errcode, errmsg: result.errmsg });
       },
       fail: function (err) {
-        recordSend({
-          toUser: opts.toUser.substring(0, 8) + '***',
-          templateId: TMPL_ID,
-          matchId: opts.matchId || '',
-          leagueName: opts.leagueName || '',
-          status: 'cloud_fail',
-          errmsg: err.errMsg || 'cloud call failed'
+        resolve({
+          ok: false,
+          errcode: null,
+          errmsg: err.errMsg || 'cloud call failed',
+          errorType: 'network'
         });
-        resolve({ ok: false, error: 'cloud_fail', detail: err.errMsg });
       }
     });
   });
+}
+
+/**
+ * 通过云函数发送一条订阅消息（含失败退避重试）。
+ *
+ * 重试策略（§8.3）：
+ *   - 仅对瞬时/可恢复错误重试（网络失败、系统繁忙、限频）
+ *   - 指数退避：2s → 4s（最多 RETRY_MAX 次）
+ *   - 单次退避封顶 RETRY_MAX_MS（默认 30s），避免赛前提醒窗口内错过推送时机
+ *   - 不可重试错误（用户拒绝、参数错误等）立即返回，避免浪费配额
+ *   - 最终成功/失败只记录一次 send 日志（含尝试次数）
+ *
+ * @param {Object} opts
+ * @param {string} opts.toUser  用户的 openid（需登录获取）
+ * @param {Object} opts.data    消息数据（buildMessageData 的返回值）
+ * @param {string} opts.page    点击跳转页路径
+ * @param {string} [opts.miniprogramState='formal']  程序状态 formal/developer/trial
+ * @returns {Promise<Object>} { ok: boolean, msgid?, errcode?, errmsg?, attempts }
+ */
+function sendSubscribeMessage(opts) {
+  if (!TMPL_ID) return Promise.resolve({ ok: false, error: 'no_template' });
+
+  var attempts = 0;
+  var lastResult = null;
+
+  function attemptOnce() {
+    attempts++;
+    return sendOnce(opts).then(function (res) {
+      lastResult = res;
+      // 成功 → 返回
+      if (res.ok) {
+        return finalize(res);
+      }
+      // 不可重试错误 → 立即返回
+      if (!isRetryableError(res.errcode, res.errorType)) {
+        return finalize(res);
+      }
+      // 可重试但已达到上限 → 返回
+      if (attempts > RETRY_MAX) {
+        return finalize(res);
+      }
+      // 可重试：等待退避时间后重试
+      var delay = backoffMs(attempts - 1);
+      return delayPromise(delay).then(attemptOnce);
+    });
+  }
+
+  function delayPromise(ms) {
+    return new Promise(function (resolve) {
+      // 微信小程序支持 setTimeout，重试异步进行不阻塞主线程
+      setTimeout(resolve, ms);
+    });
+  }
+
+  function finalize(res) {
+    // 仅在最终结果时记录一次发送日志（含尝试次数，避免重试中重复写日志）
+    var ok = !!res.ok;
+    recordSend({
+      toUser: opts.toUser.substring(0, 8) + '***',  // 脱敏
+      templateId: TMPL_ID,
+      matchId: opts.matchId || '',
+      leagueName: opts.leagueName || '',
+      status: ok ? 'ok' : (res.errorType === 'network' ? 'cloud_fail' : 'error'),
+      errcode: res.errcode,
+      errmsg: res.errmsg || '',
+      attempts: attempts,          // §8.3 记录总尝试次数（1=未重试，>1=有重试）
+      retried: attempts > 1        // 是否发生过重试
+    });
+    return {
+      ok: ok,
+      msgid: res.msgid,
+      errcode: res.errcode,
+      errmsg: res.errmsg,
+      // 兼容旧调用方：network 失败时填 'cloud_fail'，errcode 失败时填 'errcode'
+      error: ok ? null : (res.errorType === 'network' ? 'cloud_fail' : (res.errcode != null ? 'errcode_' + res.errcode : 'error')),
+      attempts: attempts
+    };
+  }
+
+  return attemptOnce();
 }
 
 // ===== 高级接口：赛前提醒触发器 =====
@@ -433,6 +540,10 @@ module.exports = {
   // 发送相关
   sendSubscribeMessage: sendSubscribeMessage,
   triggerPreMatchReminder: triggerPreMatchReminder,
+
+  // §8.3 重试辅助（供单元测试调用，跳过 wx.cloud 层）
+  isRetryableError: isRetryableError,
+  backoffMs: backoffMs,
 
   // Payload 构建
   buildMessageData: buildMessageData,

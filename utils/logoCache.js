@@ -7,12 +7,18 @@
 //   本缓存的价值是省掉 enrichTeamLogo / enrichPlayerAvatar 的「网络解析」这一步。
 // - TTL 30 天 + 上限 2000 条（按 ts 裁剪最旧），避免无限增长。
 // - wx 在 Node 测试环境不存在 → 全部 try/catch 安全降级为空（不影响单测/构建）。
+// - Phase 1-⑦（2026-07-29）：persist 防抖优化。原实现每次 set() 都全量序列化（200KB+），
+//   高频调用（如批量 enrichTeamLogos 16 支队伍）会阻塞主线程。
+//   优化：标记 dirty + 500ms 防抖，合并短时间内的多次 set 为单次全量写入。
 
 const KEY = 'dota2_logo_cache_v1';
 const MAX = 2000;
 const TTL = 30 * 24 * 3600 * 1000; // 30 天
+const PERSIST_DEBOUNCE_MS = 500;  // 防抖间隔：500ms 内的多次 set 合并为单次写入
 
 let mem = null;
+let dirty = false;       // 是否有未写入的变更
+let persistTimer = null; // 防抖定时器
 
 function load() {
   if (mem) return mem;
@@ -24,7 +30,22 @@ function load() {
   return mem;
 }
 
+// 防抖持久化：标记 dirty 并在 500ms 后统一写入，避免高频 set 时反复全量序列化。
+// 立即写入场景（如 onUnload / 页面销毁）调用 persistNow() 强制刷新。
 function persist() {
+  dirty = true;
+  if (persistTimer) return;  // 已有待执行的写入，等待合并
+  persistTimer = setTimeout(function () {
+    persistTimer = null;
+    persistNow();
+  }, PERSIST_DEBOUNCE_MS);
+}
+
+// 强制立即写入（用于 onUnload 等需要确保持久化的场景）
+function persistNow() {
+  if (!dirty) return;
+  dirty = false;
+  if (!mem) return;  // 未 load 过，无需写入
   try {
     wx.setStorageSync(KEY, mem);
   } catch (e) { /* 忽略：存储不可用（如 Node 环境） */ }
@@ -52,7 +73,12 @@ function set(id, logo, source) {
     keys.sort((a, b) => (m[a].ts || 0) - (m[b].ts || 0));
     keys.slice(0, keys.length - MAX).forEach((k) => { delete m[k]; });
   }
-  persist();
+  persist();  // 防抖写入：500ms 内的多次 set 合并为单次全量序列化
 }
 
-module.exports = { get, set };
+module.exports = {
+  get: get,
+  set: set,
+  // 暴露 persistNow 供页面 onUnload 时强制刷新（确保离开页面前数据落盘）
+  persistNow: persistNow
+};
