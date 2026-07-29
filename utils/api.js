@@ -12,6 +12,8 @@ const config = require('./config.js');
 const inc = require('./incremental.js');
 const sqlFragments = require('./sqlFragments.js');
 const breaker = require('./cloudBreaker.js');
+// G7.4：API 失败监控（按 path 去重，避免刷屏）。monitor.js 无其他依赖，无循环风险。
+const monitor = require('./monitor.js');
 // 2026-07-27：curation 数据版本戳。缓存 key 前缀，确保代码/curation 变更后旧缓存自动失效。
 // 由 scripts/sync-canon-map.js 生成 curation-shared.js 时填入（同云函数侧），仅作 fallback。
 let _dataVersion = '0';
@@ -112,6 +114,9 @@ function request(path, data, opts) {
         return sleep(delay).then(() =>
           request(path, data, { retries: (opts.retries || 0) + 1 }));
       }
+      // G7.4：重试耗尽 / 不可重试的最终失败上报（按 path 去重，避免刷屏）。
+      // 注：cached() 可能用陈旧缓存兜底不抛到调用方，但本次回源失败仍值得监控。
+      monitor.apiCallError(path, code, (err && err.message) || 'unknown');
       throw err;
     });
 }
@@ -168,6 +173,12 @@ function cached(path, data, ttlSec) {
   }).then((v) => {
     delete inflight[key];
     return v;
+  }, (err) => {
+    // 兜底：validateResponse 校验失败（非网络错误）时第一层 .then 抛出的拒绝
+    // 不会被上一层的 onRejected 捕获（它只处理 request 的网络错误），必须在此清理，
+    // 否则 inflight[key] 会泄漏，导致后续相同请求永远复用这条被拒绝的 Promise。
+    delete inflight[key];
+    throw err;
   });
   inflight[key] = p;
   return p;
@@ -285,6 +296,11 @@ function cachedFreshIncremental(resPath, resource, id, freshSec, ttlSec) {
 // 反向 require('./cloudProxy.js')，否则循环依赖。cloudFetch 内联了相同逻辑。
 function cloudFetch(action, params) {
   const threshold = (config.cloudProxy && config.cloudProxy.circuitBreakerThreshold) || 0;
+  // 防御：wx.cloud 未初始化（测试环境 / 未开通云开发 / 用户拒绝授权）时直接 reject，
+  // 交由 tryCloudOrDirect 回退到直连，避免 `wx.cloud.callFunction` 同步抛 TypeError 击穿调用链。
+  if (!wx.cloud || !wx.cloud.callFunction) {
+    return Promise.reject(new Error('cloud proxy unavailable'));
+  }
   return wx.cloud.callFunction({
     name: 'aggregation',
     data: { action: action, params: params || {} }
@@ -320,15 +336,25 @@ const ACTION_MAP = {
   getHeroes: function () { return { action: 'getHeroes', params: {} }; }
 };
 
+// C1 高阶函数（2026-07-29）：统一「云代理优先 → 失败回退直连」模式。
+// 原实现：9 个方法各自重复 cloudFetch(action, params).catch(() => direct()) 模板。
+// 修复：提取为 tryCloudOrDirect(methodName, args, directFn, transform?)，
+// 消除重复代码，集中管理熔断/回退逻辑。
+// transform 可选：对云代理返回的数据做转换（与直连路径一致）。
+function tryCloudOrDirect(methodName, args, directFn, transform) {
+  const direct = directFn;
+  if (!cloudEnabled()) return direct();
+  const m = ACTION_MAP[methodName].apply(null, args || []);
+  const cloud = cloudFetch(m.action, m.params);
+  const chain = transform ? cloud.then(transform) : cloud;
+  return chain.catch(function () { return direct(); });
+}
+
 // ===== 对外方法 =====
 
 function getLeagues() {
-  const direct = function () { return cached('/leagues', null, config.cacheTTL.leagues); };
-  if (cloudEnabled()) {
-    const m = ACTION_MAP.getLeagues();
-    return cloudFetch(m.action, m.params).catch(function () { return direct(); });
-  }
-  return direct();
+  return tryCloudOrDirect('getLeagues', [],
+    function () { return cached('/leagues', null, config.cacheTTL.leagues); });
 }
 
 // 一次 SQL 拿所有赛事近半年的时间窗口：{ leagueid -> { earliest, latest, count } }
@@ -351,26 +377,17 @@ function transformLeagueWindows(data) {
 
 function getLeagueWindows() {
   const path = '/explorer?sql=' + encodeURIComponent(sqlFragments.LEAGUE_WINDOWS_SQL);
-  const direct = function () {
-    return cached(path, null, config.cacheTTL.leagueWindows).then(transformLeagueWindows);
-  };
-  if (cloudEnabled()) {
-    const m = ACTION_MAP.getLeagueWindows();
-    return cloudFetch(m.action, m.params).then(transformLeagueWindows).catch(function () { return direct(); });
-  }
-  return direct();
+  return tryCloudOrDirect('getLeagueWindows', [],
+    function () { return cached(path, null, config.cacheTTL.leagueWindows).then(transformLeagueWindows); },
+    transformLeagueWindows);
 }
 
 function getLeagueMatches(leagueId) {
   // 比赛结果频繁变动：较短新鲜窗口 + 较长硬 TTL；陈旧时后台按游标增量合并
-  const direct = function () {
-    return cachedFreshIncremental('/leagues/' + leagueId + '/matches', 'league', leagueId, 10 * 60, config.cacheTTL.leagueMatches);
-  };
-  if (cloudEnabled()) {
-    const m = ACTION_MAP.getLeagueMatches(leagueId);
-    return cloudFetch(m.action, m.params).catch(function () { return direct(); });
-  }
-  return direct();
+  return tryCloudOrDirect('getLeagueMatches', [leagueId],
+    function () {
+      return cachedFreshIncremental('/leagues/' + leagueId + '/matches', 'league', leagueId, 10 * 60, config.cacheTTL.leagueMatches);
+    });
 }
 
 // 单场比赛详情（含 players 数组：英雄/KDA/GPM/XPM）。
@@ -380,12 +397,8 @@ function getLeagueMatches(leagueId) {
 //   players: [{ account_id, hero_id, kills, deaths, assists,
 //               gold_per_min, xp_per_min, player_slot, team, personaname, name }]
 function getMatch(matchId) {
-  const direct = function () { return cached('/matches/' + matchId, null, config.cacheTTL.match); };
-  if (cloudEnabled()) {
-    const m = ACTION_MAP.getMatch(matchId);
-    return cloudFetch(m.action, m.params).catch(function () { return direct(); });
-  }
-  return direct();
+  return tryCloudOrDirect('getMatch', [matchId],
+    function () { return cached('/matches/' + matchId, null, config.cacheTTL.match); });
 }
 
 // 比赛双方选手明细：从 getMatch 结果中拆出 players 数组并按阵营分组。
@@ -425,50 +438,31 @@ function transformSearchTeams(list) {
 
 function searchTeams(name) {
   // 搜索结果短时缓存，避免连续相同搜索重复消耗配额
-  const direct = function () { return cached('/search', { q: name }, 5 * 60).then(transformSearchTeams); };
-  if (cloudEnabled()) {
-    const m = ACTION_MAP.searchTeams(name);
-    return cloudFetch(m.action, m.params).then(transformSearchTeams).catch(function () { return direct(); });
-  }
-  return direct();
+  return tryCloudOrDirect('searchTeams', [name],
+    function () { return cached('/search', { q: name }, 5 * 60).then(transformSearchTeams); },
+    transformSearchTeams);
 }
 
 function getTeam(teamId) {
-  const direct = function () { return cachedFresh('/teams/' + teamId, null, 15 * 60, config.cacheTTL.team); };
-  if (cloudEnabled()) {
-    const m = ACTION_MAP.getTeam(teamId);
-    return cloudFetch(m.action, m.params).catch(function () { return direct(); });
-  }
-  return direct();
+  return tryCloudOrDirect('getTeam', [teamId],
+    function () { return cachedFresh('/teams/' + teamId, null, 15 * 60, config.cacheTTL.team); });
 }
 
 function getTeamPlayers(teamId) {
-  const direct = function () { return cachedFresh('/teams/' + teamId + '/players', null, 20 * 60, config.cacheTTL.teamPlayers); };
-  if (cloudEnabled()) {
-    const m = ACTION_MAP.getTeamPlayers(teamId);
-    return cloudFetch(m.action, m.params).catch(function () { return direct(); });
-  }
-  return direct();
+  return tryCloudOrDirect('getTeamPlayers', [teamId],
+    function () { return cachedFresh('/teams/' + teamId + '/players', null, 20 * 60, config.cacheTTL.teamPlayers); });
 }
 
 function getTeamMatches(teamId) {
-  const direct = function () {
-    return cachedFreshIncremental('/teams/' + teamId + '/matches', 'team', teamId, 10 * 60, config.cacheTTL.teamMatches);
-  };
-  if (cloudEnabled()) {
-    const m = ACTION_MAP.getTeamMatches(teamId);
-    return cloudFetch(m.action, m.params).catch(function () { return direct(); });
-  }
-  return direct();
+  return tryCloudOrDirect('getTeamMatches', [teamId],
+    function () {
+      return cachedFreshIncremental('/teams/' + teamId + '/matches', 'team', teamId, 10 * 60, config.cacheTTL.teamMatches);
+    });
 }
 
 function getHeroes() {
-  const direct = function () { return cached('/heroes', null, config.cacheTTL.heroes); };
-  if (cloudEnabled()) {
-    const m = ACTION_MAP.getHeroes();
-    return cloudFetch(m.action, m.params).catch(function () { return direct(); });
-  }
-  return direct();
+  return tryCloudOrDirect('getHeroes', [],
+    function () { return cached('/heroes', null, config.cacheTTL.heroes); });
 }
 
 // 职业赛场英雄统计（登场 / 胜场 / 禁用）。返回数组，元素含

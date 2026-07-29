@@ -55,6 +55,12 @@ const curation = require(path.join(SRC, 'curation.js'));
 const sources = require(path.join(SRC, 'sources.js'));
 const liquipedia = require(path.join(SRC, 'liquipedia.js'));
 
+// 与 api.js 内部 _v() 保持一致：缓存 key 前缀 = (dataVersion || '0') + ':'。
+// test 3/4 注入与读取陈旧缓存必须使用同一前缀，否则 cached() 的 peek 命中不到。
+let cshared = null;
+try { cshared = require(path.join(SRC, 'curation-shared.js')); } catch (e) { cshared = null; }
+const V = ((cshared && cshared.dataVersion) || '0') + ':';
+
 // ===== 4. 导出结构检查 =====
 section('\n--- 模块导出结构 ---');
 check('stratz.ENABLED (目前开启)', () => assert(stratz.ENABLED === true));
@@ -62,7 +68,7 @@ check('stratz.getLeagues exists', () => assert(typeof stratz.getLeagues === 'fun
 check('stratz.getLeagueTier exists', () => assert(typeof stratz.getLeagueTier === 'function'));
 check('stratz.getTeamLogo exists', () => assert(typeof stratz.getTeamLogo === 'function'));
 check('stratz.getPlayerAvatar exists', () => assert(typeof stratz.getPlayerAvatar === 'function'));
-check('steam.ENABLED (目前关闭)', () => assert(steam.ENABLED === false));
+check('steam.ENABLED (云代理已启用)', () => assert(steam.ENABLED === true));
 check('sources.getLeagueTier exists', () => assert(typeof sources.getLeagueTier === 'function'));
 check('sources.getLeagueWindow exists', () => assert(typeof sources.getLeagueWindow === 'function'));
 check('sources.enrichTeamLogo exists', () => assert(typeof sources.enrichTeamLogo === 'function'));
@@ -130,7 +136,7 @@ check('stratz.getTeamLogo disabled -> null', async () => {
   const r = await stratz.getTeamLogo(15);
   assert(r === null, 'disabled should return null');
 });
-check('steam.ENABLED === false', () => assert(!steam.ENABLED));
+check('steam.ENABLED === true (云代理已启用)', () => assert(!!steam.ENABLED));
 
 // ===== 8. 战队 logo / 队员头像多源增强 =====
 section('\n--- 战队 logo / 队员头像多源增强 ---');
@@ -167,7 +173,7 @@ section('\n--- 响应校验（api.cached 拒绝畸形 body 并回退）---');
 // 注意：cache.get() 对过期条目会主动删除，导致 peek() 读不到陈旧值。
 // 这里临时阻止删除该测试 key，以验证 cached()「回退 stale」逻辑分支。
 check('cached() 拒绝畸形 body(null) 并回退陈旧缓存', async () => {
-  const cacheKey = '/leagues|{}';
+  const cacheKey = V + '/leagues|{}';
   const storeKey = 'dota2_cache_' + cacheKey;
   // 预置一份「已过期但合法」的陈旧缓存
   storage[storeKey] = JSON.stringify({
@@ -198,7 +204,7 @@ check('cached() 拒绝畸形 body(null) 并回退陈旧缓存', async () => {
 
 // 空数组 [] 是合法响应（OpenDota 合理地返回空列表），应被缓存。
 check('cached() 接受空数组 []（合法响应）', async () => {
-  const cacheKey = '/leagues|{}';
+  const cacheKey = V + '/leagues|{}';
   cache.remove(cacheKey);
   requestHandler = function (opts) { opts.success({ statusCode: 200, data: [] }); };
   try {
@@ -240,6 +246,11 @@ section('\n--- STRATZ 精确名匹配（精确归一 > 子串）---');
 check('stratz.getLeagueTier 精确名命中 DPC_MAJOR→S（非子串误命中）', async () => {
   // 清除 stratz 联赛缓存，强制走 mock wx.request
   cache.remove('stratz_leagues');
+  // 测试环境无 wx.cloud，stratz 默认走云代理路径会返回 null；填入 apiKey 使其进入
+  // 「云代理优先 + 直连兜底」混合模式，云代理不可用时空格回退到 wx.request 直连，
+  // 从而命中下面 mock 的联赛列表。
+  const origStratzApiKey = config.stratz.apiKey;
+  config.stratz.apiKey = 'test-key-for-direct-path';
   requestHandler = function (opts) {
     opts.success({
       statusCode: 200,
@@ -261,6 +272,7 @@ check('stratz.getLeagueTier 精确名命中 DPC_MAJOR→S（非子串误命中�
     assert(r.label === 'S级', 'label 应为 S级');
   } finally {
     requestHandler = defaultRequestHandler;
+    config.stratz.apiKey = origStratzApiKey;
     cache.remove('stratz_leagues');
   }
 });
@@ -275,15 +287,15 @@ check('sources.getLeagueMetadata 聚合 Liquipedia + Steam 奖金池', async () 
   const origLiq = liquipedia.getLeagueMetadata;
   const origSteamEnabled = steam.ENABLED;
   const origSteamPP = steam.getTournamentPrizePool;
-  liquipedia.getLeagueMetadata = async function () {
-    return {
+  liquipedia.getLeagueMetadata = function () {
+    return Promise.resolve({
       canonical: 'TI 2024', prizePool: 1500000, prizePoolCurrency: 'USD',
       startDate: null, endDate: null, location: null, format: null, organizer: null
-    };
+    });
   };
   steam.ENABLED = true;
-  steam.getTournamentPrizePool = async function () {
-    return { prizePool: 1600000, prizePoolCurrency: 'USD', leagueId: 1, source: 'steam' };
+  steam.getTournamentPrizePool = function () {
+    return Promise.resolve({ prizePool: 1600000, prizePoolCurrency: 'USD', leagueId: 1, source: 'steam' });
   };
   try {
     const r = await sources.getLeagueMetadata({ name: 'TI 2024', leagueid: 1 });
@@ -305,15 +317,15 @@ check('sources.getLeagueMetadata Steam 兜底（Liquipedia 缺失奖金池）', 
   const origLiq = liquipedia.getLeagueMetadata;
   const origSteamEnabled = steam.ENABLED;
   const origSteamPP = steam.getTournamentPrizePool;
-  liquipedia.getLeagueMetadata = async function () {
-    return {
+  liquipedia.getLeagueMetadata = function () {
+    return Promise.resolve({
       canonical: 'TI 2024', prizePool: null, prizePoolCurrency: null,
       startDate: null, endDate: null, location: null, format: null, organizer: null
-    };
+    });
   };
   steam.ENABLED = true;
-  steam.getTournamentPrizePool = async function () {
-    return { prizePool: 1600000, prizePoolCurrency: 'USD', leagueId: 1, source: 'steam' };
+  steam.getTournamentPrizePool = function () {
+    return Promise.resolve({ prizePool: 1600000, prizePoolCurrency: 'USD', leagueId: 1, source: 'steam' });
   };
   try {
     const r = await sources.getLeagueMetadata({ name: 'TI 2024', leagueid: 1 });
@@ -334,10 +346,10 @@ check('sources.getLeagueMetadata Steam 兜底（Liquipedia 缺失奖金池）', 
 check('sources.getLeagueName 包含 Liquipedia 候选', async () => {
   const origLiq = liquipedia.getLeagueMetadata;
   const origStratzDisp = stratz.getLeagueDisplayName;
-  liquipedia.getLeagueMetadata = async function () {
-    return { canonical: 'The International 2024' };
+  liquipedia.getLeagueMetadata = function () {
+    return Promise.resolve({ canonical: 'The International 2024' });
   };
-  stratz.getLeagueDisplayName = async function () { return null; };
+  stratz.getLeagueDisplayName = function () { return Promise.resolve(null); };
   try {
     const r = await sources.getLeagueName({ name: 'TI 2024' });
     assert(r !== null, '返回不应为 null');

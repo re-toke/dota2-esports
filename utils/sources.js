@@ -323,8 +323,11 @@ async function getLeagueMetadata(league) {
   return Object.keys(result).length > 1 ? result : null;
 }
 
-// 多源增强战队 logo：优先级 [本地缓存] -> [直连 existing] -> [stratz]
+// 多源增强战队 logo：优先级 [本地缓存] -> [直连 existing] -> [stratz] -> [liquipedia 兜底]
 // P2-F：命中 logoCache 直接返回（秒出，跳过网络）；P1-C：最终 URL 经 toLogoUrl（代理就绪）。
+// §8.3 Liquipedia 兜底（2026-07-29）：前三源均派生自 Valve 数据（同源冗余），
+//   OpenDota logo_url 为空时 STRATZ 通常也无数据。Liquipedia 是独立人工策展源，
+//   可覆盖 OpenDota 无 logo 的队伍（如 10201538 / 10201970 / 10207521）。
 async function enrichTeamLogo(team) {
   const name = (team && team.name) || '';
   const id = (team && team.id);
@@ -350,8 +353,30 @@ async function enrichTeamLogo(team) {
         logoCache.set(id, logo, 'stratz');
         return { logo, source: 'stratz' };
       }
-    } catch (e) { /* 隔离 */ }
+    } catch (e) {
+      // G7.4：STRATZ 源失败上报，便于发现 STRATZ 限流/不可用
+      monitor.sourceCacheMiss('stratz', 'teamLogo', (e && e.message) || 'error');
+    }
   }
+  // ④ Liquipedia 兜底（仅当前三源均无 logo 时调用，独立人工策展源，覆盖 Valve 数据缺口）
+  if (liquipedia.ENABLED && name) {
+    try {
+      const r = await liquipedia.getTeamLogo(name);
+      if (r && r.logo && /^https?:\/\//i.test(r.logo)) {
+        const logo = imageUtil.toLogoUrl(r.logo);
+        if (id) logoCache.set(id, logo, 'liquipedia');
+        console.info('[enrichTeamLogo] liquipedia 兜底成功 id=' + id + ' name=' + name + ' logo=' + logo.substring(0, 60));
+        return { logo, source: 'liquipedia' };
+      }
+      console.warn('[enrichTeamLogo] liquipedia 兜底无结果 id=' + id + ' name=' + name + ' r=' + JSON.stringify(r));
+    } catch (e) {
+      console.warn('[enrichTeamLogo] liquipedia 兜底异常 id=' + id + ' name=' + name + ' err=' + (e && e.message || e));
+      monitor.sourceCacheMiss('liquipedia', 'teamLogo', (e && e.message) || 'error');
+    }
+  }
+  // G7.4：所有源均未拿到 logo，上报失败（按 team_id 去重）
+  console.warn('[enrichTeamLogo] 全源失败 id=' + id + ' name=' + name + ' existing=' + (existing ? '有但无效' : '空'));
+  monitor.logoLoadFailed(id, name, existing ? 'existing_invalid' : 'no_source');
   return null;
 }
 
@@ -433,7 +458,7 @@ async function crossTeamMembers(teamId) {
           });
         }
       })
-      .catch(() => { /* 隔离 */ })
+      .catch((e) => { monitor.sourceCacheMiss('opendota', 'teamMembers', (e && e.message) || 'error'); })
   );
 
   // STRATZ
@@ -441,7 +466,7 @@ async function crossTeamMembers(teamId) {
     tasks.push(
       stratz.getTeamRoster(teamId)
         .then((rs) => { if (rs && rs.length) lists.push({ source: 'stratz', members: rs }); })
-        .catch(() => { /* 隔离 */ })
+        .catch((e) => { monitor.sourceCacheMiss('stratz', 'teamMembers', (e && e.message) || 'error'); })
     );
   }
 
@@ -457,7 +482,7 @@ async function crossTeamMembers(teamId) {
     tasks.push(
       liquipedia.getTeamRoster(teamName)
         .then((rs) => { if (rs && rs.length) lists.push({ source: 'liquipedia', members: rs }); })
-        .catch(() => { /* 隔离 */ })
+        .catch((e) => { monitor.sourceCacheMiss('liquipedia', 'teamMembers', (e && e.message) || 'error'); })
     );
   }
 

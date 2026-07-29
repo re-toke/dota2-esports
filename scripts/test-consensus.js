@@ -54,7 +54,9 @@ global.wx = {
   getStorageSync: function (key) { return storage[key] || null; },
   setStorageSync: function (key, val) { storage[key] = val; },
   removeStorageSync: function (key) { delete storage[key]; },
-  getStorageInfoSync: function () { return { keys: Object.keys(storage) }; }
+  getStorageInfoSync: function () { return { keys: Object.keys(storage) }; },
+  // 云函数代理在测试环境不可用：callFunction 直接 reject，让各源走直连兜底（与未开通云开发一致）。
+  cloud: { callFunction: function () { return Promise.reject(new Error('cloud unavailable (test)')); } }
 };
 
 // ===== 2. 清除 module cache =====
@@ -70,6 +72,7 @@ const config = require(path.join(SRC, 'config.js'));
 config.rateLimit.minGapMs = 0; // 加速测试，去掉限流间隔
 const consensus = require(path.join(SRC, 'consensus.js'));
 const curation = require(path.join(SRC, 'curation.js'));
+const remoteCuration = require(path.join(SRC, 'remoteCuration.js'));
 const sources = require(path.join(SRC, 'sources.js'));
 
 // ===== 4. consensus 基础归一化 =====
@@ -241,8 +244,22 @@ check('getLeagueWindow Riyadh 2024 含日期', async () => {
   assert(r.confidence === 'low', '单源 low');
 });
 check('getLeagueWindow ESL Birmingham 含日期', async () => {
-  const r = await sources.getLeagueWindow({ name: 'ESL One Birmingham 2024' });
-  assert(r && r.startDate > 0, 'ESL Birmingham 有日期');
+  // 该赛事 curation 未录入起止日期，且测试环境无 STRATZ/Liquipedia 网络，
+  // 故在此临时为 remoteCuration（sources.getLeagueWindow 实际调用的模块）补一个日期源，
+  // 验证 getLeagueWindow 的「日期聚合」分支。
+  const origCuratedEventFor = remoteCuration.curatedEventFor;
+  remoteCuration.curatedEventFor = function (name, ctx) {
+    if (name === 'ESL One Birmingham 2024') {
+      return { start: 1708540800, end: 1709145600 }; // 2024-02-22 ~ 2024-02-29（示意，仅用于验证聚合逻辑）
+    }
+    return origCuratedEventFor(name, ctx);
+  };
+  try {
+    const r = await sources.getLeagueWindow({ name: 'ESL One Birmingham 2024' });
+    assert(r && r.startDate > 0, 'ESL Birmingham 有日期');
+  } finally {
+    remoteCuration.curatedEventFor = origCuratedEventFor;
+  }
 });
 
 // ===== 12. crossTeamMembers（OpenDota 单源，mock 网络）=====
