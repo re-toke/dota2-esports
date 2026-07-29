@@ -1,0 +1,83 @@
+<!-- components/skeleton/skeleton.wxml -->
+<!-- §8.3 自定义骨架屏（2026-07-29）：按 type 渲染匹配实际布局的骨架 -->
+
+<!-- ===== card：卡片列表骨架（leagues/teams 列表页） ===== -->
+<block wx:if="{{type === 'card'}}">
+  <view class="sk-card" wx:for="{{items}}" wx:key="*this">
+    <view class="sk-card-head">
+      <view class="sk-block sk-badge" />
+      <view class="sk-block sk-title" />
+      <view class="sk-block sk-tier" />
+    </view>
+    <view class="sk-card-body">
+      <view class="sk-block sk-line sk-line-80" />
+      <view class="sk-block sk-line sk-line-60" />
+    </view>
+  </view>
+</block>
+
+<!-- ===== detail：详情页骨架（league/match/team/hero/item detail） ===== -->
+<block wx:elif="{{type === 'detail'}}">
+  <!-- 头部区块 -->
+  <view class="sk-detail-head">
+    <view class="sk-block sk-head-icon" />
+    <view class="sk-detail-head-info">
+      <view class="sk-block sk-head-title" />
+      <view class="sk-block sk-head-sub" />
+    </view>
+  </view>
+  <!-- KPI 条 -->
+  <view class="sk-kpi-strip">
+    <view class="sk-kpi-cell" wx:for="{{[0,1,2,3]}}" wx:key="*this">
+      <view class="sk-block sk-kpi-label" />
+      <view class="sk-block sk-kpi-value" />
+    </view>
+  </view>
+  <!-- Tab 栏占位 -->
+  <view class="sk-tabs">
+    <view class="sk-block sk-tab" wx:for="{{[0,1,2]}}" wx:key="*this" />
+  </view>
+  <!-- 内容卡片 -->
+  <view class="sk-detail-card" wx:for="{{[0,1]}}" wx:key="*this">
+    <view class="sk-block sk-card-title" />
+    <view class="sk-block sk-line sk-line-90" />
+    <view class="sk-block sk-line sk-line-70" />
+    <view class="sk-block sk-line sk-line-50" />
+  </view>
+</block>
+
+<!-- ===== follow：关注卡片横向流骨架（index 首页） ===== -->
+<block wx:elif="{{type === 'follow'}}">
+  <view class="sk-follow-row">
+    <view class="sk-follow-card" wx:for="{{[0,1,2]}}" wx:key="*this">
+      <view class="sk-block sk-follow-tier" />
+      <view class="sk-block sk-follow-vs" />
+      <view class="sk-block sk-follow-meta" />
+    </view>
+  </view>
+</block>
+
+<!-- ===== row：简单行骨架（h2h/搜索结果/排名） ===== -->
+<block wx:elif="{{type === 'row'}}">
+  <view class="sk-row" wx:for="{{items}}" wx:key="*this">
+    <view class="sk-block sk-row-icon" />
+    <view class="sk-row-info">
+      <view class="sk-block sk-row-title" />
+      <view class="sk-block sk-row-sub" />
+    </view>
+    <view class="sk-block sk-row-tail" />
+  </view>
+</block>
+
+<!-- ===== 默认：fallback 到 card ===== -->
+<block wx:else>
+  <view class="sk-card" wx:for="{{items}}" wx:key="*this">
+    <view class="sk-card-head">
+      <view class="sk-block sk-badge" />
+      <view class="sk-block sk-title" />
+    </view>
+    <view class="sk-card-body">
+      <view class="sk-block sk-line sk-line-80" />
+    </view>
+  </view>
+</block>
