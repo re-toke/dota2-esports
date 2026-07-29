@@ -215,7 +215,8 @@ Page({
     this.teamLeagueIds = null;
     this.loadLeagues();
     this.buildFocusNode();
-    this.refreshTeamOptions();
+    // Phase 1-④：refreshTeamOptions 延迟到首次点击战队筛选按钮（openTeamFilter）
+    // 收益：赛事列表启动 -50ms（跳过 follow.list 同步读 + 数组遍历 + setData）
   },
 
   onPullDownRefresh() {
@@ -258,7 +259,7 @@ Page({
       this.getTabBar().setData({ selected: 1 });
     }
     this.buildFocusNode();
-    this.refreshTeamOptions();
+    // Phase 1-④：refreshTeamOptions 延迟到首次点击战队筛选按钮（openTeamFilter）
     if (this._restored) {
       let saved = null;
       try { saved = wx.getStorageSync(VIEW_KEY) || null; } catch (e) { saved = null; }
@@ -490,6 +491,9 @@ Page({
   },
 
   openTeamFilter() {
+    // Phase 1-④：延迟构建战队选项，首次打开弹层时才执行
+    // refreshTeamOptions 内部有签名守卫，关注列表未变化时直接 return，开销极小
+    this.refreshTeamOptions();
     this.setData({ teamPopup: true, teamDraft: this.data.teamFilter.slice() });
   },
 

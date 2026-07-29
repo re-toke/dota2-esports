@@ -83,11 +83,35 @@ Page({
         const card = this.buildFollowCard(t, ms, now);
         if (card) cards.push(card);
       });
-      this.setData({
-        followCards: cards,
-        hasFollowMatches: cards.length > 0,
-        followLoading: false
-      });
+      // F4 分步渲染（2026-07-29）：卡片在横向 scroll-view 中，首屏仅可见 2-3 张。
+      //   - 步骤1（首屏）：先渲染前 3 张 + loading:false，用户立即看到首批卡片
+      //   - 步骤2（补齐）：剩余卡片异步渲染，避免一次 setData 50-80KB 阻塞
+      // 收益：首屏可交互时间提前；关注卡片多时（10+）体感更流畅。
+      const FIRST_BATCH = 3;
+      if (cards.length <= FIRST_BATCH) {
+        // 卡片少时无需分步，单次 setData 即可
+        this.setData({
+          followCards: cards,
+          hasFollowMatches: cards.length > 0,
+          followLoading: false
+        });
+      } else {
+        // 步骤1：首屏批次 + 状态
+        this.setData({
+          followCards: cards.slice(0, FIRST_BATCH),
+          hasFollowMatches: true,
+          followLoading: false
+        });
+        // 步骤2：补齐剩余卡片（用 splice 合并到已渲染数组，避免全量重建）
+        const remaining = cards.slice(FIRST_BATCH);
+        if (remaining.length) {
+          const patch = {};
+          remaining.forEach((c, i) => {
+            patch['followCards[' + (FIRST_BATCH + i) + ']'] = c;
+          });
+          this.setData(patch);
+        }
+      }
       // 2.2 闭环：后台静默检查赛前提醒（不阻塞 UI）
       this.checkPreMatchReminders(rows, now);
     }).catch(() => {

@@ -6,6 +6,7 @@
   "usingComponents": {
     "t-icon": "../../miniprogram_npm/tdesign-miniprogram/icon/icon",
     "t-search": "../../miniprogram_npm/tdesign-miniprogram/search/search",
-    "empty-state": "../../components/empty-state/empty-state"
+    "empty-state": "../../components/empty-state/empty-state",
+    "skeleton": "../../components/skeleton/skeleton"
   }
 }

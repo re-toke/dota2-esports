@@ -107,9 +107,7 @@
 
   <!-- 加载骨架 -->
   <block wx:if="{{loading}}">
-    <view class="skeleton-wrap" wx:for="{{[1,2,3,4,5]}}" wx:key="*this">
-      <t-skeleton theme="paragraph" loading="{{true}}" />
-    </view>
+    <skeleton type="card" count="5" />
   </block>
 
   <empty-state wx:elif="{{error}}" type="error" title="加载失败" desc="{{error}}" actionText="重试" bind:action="retry" />

@@ -24,8 +24,8 @@
       <text class="ff-more">›</text>
     </view>
 
-    <view wx:if="{{followLoading}}" class="ff-skeleton-row">
-      <view class="ff-skeleton-card" wx:for="{{[1,2,3]}}" wx:key="*this" />
+    <view wx:if="{{followLoading}}">
+      <skeleton type="follow" />
     </view>
 
     <scroll-view wx:elif="{{hasFollowMatches}}" scroll-x class="ff-scroll" enhanced show-scrollbar="{{false}}">
