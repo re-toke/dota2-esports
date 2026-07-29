@@ -25,8 +25,8 @@
       }
     ],
     "compileWorklet": false,
-    "uglifyFileName": false,
-    "uploadWithSourceMap": true,
+    "uglifyFileName": true,
+    "uploadWithSourceMap": false,
     "minifyWXSS": true,
     "minifyWXML": true,
     "localPlugins": false,

@@ -70,11 +70,12 @@
     "no-control-regex": "off",
     "no-misleading-character-class": "off",
     "no-async-promise-executor": "warn",
-    "require-await": "warn",
+    "require-await": "error",
     "no-return-await": "warn",
     "no-throw-literal": "warn",
     "no-shadow": "off",
     "no-use-before-define": ["warn", { "functions": false, "classes": true, "variables": false }],
-    "no-raw-league-name": "error"
+    "no-raw-league-name": "error",
+    "no-console-warn-in-production": "warn"
   }
 }

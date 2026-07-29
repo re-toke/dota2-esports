@@ -5,8 +5,7 @@
     "pages/teams/teams",
     "pages/follow/follow",
     "pages/data/data",
-    "pages/search/search",
-    "pages/stratz-test/stratz-test"
+    "pages/search/search"
   ],
   "subpackages": [
     {

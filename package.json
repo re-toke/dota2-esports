@@ -12,7 +12,10 @@
     "sync:slugmap": "node scripts/sync-slugmap.js",
     "prewarm:liquipedia": "node scripts/prewarm-liquipedia.js",
     "check:syntax": "node scripts/check-syntax.js",
-    "prepare": "husky"
+    "coverage": "node scripts/curation-coverage.js",
+    "coverage:offline": "node scripts/curation-coverage.js --offline",
+    "prepare": "husky",
+    "precommit": "node scripts/check-syntax.js && npx eslint --rulesdir scripts/eslint-rules && npm test"
   },
   "dependencies": {
     "tdesign-miniprogram": "^1.15.3",

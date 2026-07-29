@@ -2,6 +2,7 @@ const api = require('./utils/api.js');
 const remoteCuration = require('./utils/remoteCuration.js');
 const config = require('./utils/config.js');
 const experiment = require('./utils/experiment.js');
+const cache = require('./utils/cache.js');
 
 App({
   globalData: {
@@ -18,6 +19,8 @@ App({
     // 避免 onLaunch 同步阶段堆满 wx.getStorageSync / JSON.parse / 云调用而触发长任务告警。
     // 页面已用 heroReady / itemReady 守卫，延迟填充不影响首屏与交互。
     setTimeout(() => {
+      // §6.4 启动时清理过期/超限缓存（LRU prune），释放存储空间
+      try { cache.prune(); } catch (e) {}
       // CloudBase 初始化（若启用云代理）。
       // 传入 envId（config.cloudProxy.envId）确保真机与模拟器行为一致；
       // 留空则走默认环境（仅单环境账号有效）。

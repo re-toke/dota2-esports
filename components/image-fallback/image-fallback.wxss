@@ -6,18 +6,35 @@
   overflow: hidden;
 }
 .imgfb--round { border-radius: 50%; }
+/* 圆形模式（队徽/头像）：金色圆环，模拟队徽轮廓，让占位有"队徽感"而非空框 */
+.imgfb--round .imgfb-ph {
+  border: 2rpx solid rgba(200, 169, 81, 0.6);
+  border-radius: 50%;
+  box-sizing: border-box;
+}
 .imgfb-ph {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  /* 斜线底纹：低透明度金色斜纹，暗示"占位状态"而非 bug 空框 */
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent 0,
+    transparent 10rpx,
+    rgba(200, 169, 81, 0.08) 10rpx,
+    rgba(200, 169, 81, 0.08) 20rpx
+  );
 }
 .imgfb-ph-text {
   font-size: 28rpx;
-  font-weight: 700;
+  font-weight: 800;
   color: var(--dota-gold, #C8A951);
   font-family: var(--font-mono, monospace);
+  /* 文字阴影：暗底上增强对比度，避免金字"陷进"暗背景 */
+  text-shadow: 0 1rpx 3rpx rgba(0, 0, 0, 0.8);
+  letter-spacing: 1rpx;
 }
 .imgfb-img {
   position: absolute;
