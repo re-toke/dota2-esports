@@ -1,7 +1,6 @@
 .container { padding: 24rpx; }
-.container.with-tab-bar {
-  padding-bottom: calc(148rpx + env(safe-area-inset-bottom));
-}
+/* .with-tab-bar 底部 padding 已在 app.wxss 全局抬到 160rpx（2026-07-29 修复 teams/follow 底部被 tabBar 遮挡），
+   leagues 此处不再覆写。 */
 
 /* 底部 spacer：配合 with-tab-bar 留出自定义 tabBar 区域 */
 .bottom-spacer {
