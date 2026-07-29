@@ -118,6 +118,7 @@ async function resolveSlug(name) {
 async function main() {
   const args = process.argv.slice(2);
   const all = args.includes('--all');
+  const includeMissed = args.includes('--include-missed');  // §6.2 优先处理 pending 列表
   const outArg = args.find((a) => a.startsWith('--out'));
   const outPath = outArg ? outArg.split('=')[1] : path.join(__dirname, '..', 'utils', 'liquipedia-slugmap.json');
   let limit = 20;
@@ -127,10 +128,28 @@ async function main() {
   }
   if (!Number.isFinite(limit) || limit <= 0) limit = 20;
 
+  // §6.2 优先处理未命中项：读取现有 slugmap 的 pending 列表，作为首批候选
+  let pendingFromLast = [];
+  if (includeMissed) {
+    try {
+      const existing = JSON.parse(fs.readFileSync(outPath, 'utf8'));
+      if (existing && Array.isArray(existing.pending)) {
+        pendingFromLast = existing.pending;
+        console.log(`[slugmap] --include-missed：从上次 pending 列表加载 ${pendingFromLast.length} 个待处理项`);
+      }
+    } catch (e) { /* 首次运行无文件 */ }
+  }
+
   console.log('[slugmap] 拉取 OpenDota /leagues ...');
   const leagues = await fetchOpendotaLeagues();
   const seen = {};
   let candidates = [];
+  // §6.2 优先：pending 列表中的 name 直接作为候选（无需再匹配 KNOWN_KEYWORDS）
+  pendingFromLast.forEach((name) => {
+    if (!name || seen[name]) return;
+    seen[name] = true;
+    candidates.push({ name: name, leagueid: 0, tier: 'unknown' });
+  });
   (leagues || []).forEach((l) => {
     const nm = (l && l.name) || '';
     if (!nm || seen[nm]) return;
@@ -158,6 +177,20 @@ async function main() {
     }
   }
 
+  // §6.2 合并上次已存在的映射（保留人工补的，不覆盖）
+  if (includeMissed) {
+    try {
+      const existing = JSON.parse(fs.readFileSync(outPath, 'utf8'));
+      if (existing && existing.mappings) {
+        let merged = 0;
+        Object.keys(existing.mappings).forEach((k) => {
+          if (!mappings[k]) { mappings[k] = existing.mappings[k]; merged++; }
+        });
+        if (merged) console.log(`[slugmap] 保留 ${merged} 个上次已有映射`);
+      }
+    } catch (e) { /* 忽略 */ }
+  }
+
   const payload = { generatedAt: new Date().toISOString(), mappings, pending };
   fs.writeFileSync(outPath, JSON.stringify(payload, null, 2), 'utf8');
 
@@ -166,6 +199,12 @@ async function main() {
   console.log(`✅ 自动映射 : ${ok}  (${candidates.length ? ((ok / candidates.length) * 100).toFixed(1) : 0}%)`);
   console.log(`⚠️  待人工   : ${pending.length}`);
   console.log(`输出文件 : ${outPath}`);
+  // §6.2 命中率提升建议
+  if (pending.length > 0) {
+    console.log('\n💡 提升命中率：');
+    console.log('  1. 检查 pending 列表中是否有可通过人工补的（直接编辑 liquipedia-slugmap.json）');
+    console.log('  2. 再次运行：node scripts/generate-liquipedia-slugmap.js --include-missed --all');
+  }
   process.exit(0);
 }
 

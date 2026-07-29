@@ -21,8 +21,9 @@ const MINI_JS = path.join(ROOT, 'utils', 'curation-shared.js');
 const CLOUD_JS = path.join(ROOT, 'cloudfunctions', 'aggregation', 'curation-shared.js');
 
 // 复用 curation 的归一口径（与 consensus.normName 一致，ASCII 名等价）
+// §8.3 多语言支持（2026-07-29）：与 consensus.normName 同步，保留西里尔字母
 function normKey(s) {
-  return String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]/g, '');
+  return String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9一-鿿а-яё]/g, '');
 }
 
 function buildMap() {
@@ -79,6 +80,40 @@ function main() {
   // 解决"云函数部署后数据未正确更新"的根因：之前 cloud DB 缓存 + 客户端 wx.storage 缓存都跨部署持久化，
   // 现通过版本戳使旧 key 自动失效。
   const dataVersion = String(Date.now());
+
+  // §6.2 差异检测（2026-07-29）：对比新旧 map，输出新增/删除/变更条目
+  // 便于本地调试时确认 curation 变更是否生效，避免"改了 curation 但没 sync"的困惑
+  let diffSummary = '';
+  try {
+    const oldModule = require(MINI_JS);
+    const oldMap = (oldModule && oldModule.map) || {};
+    const added = [], removed = [], changed = [];
+    Object.keys(map).forEach((k) => {
+      if (!(k in oldMap)) added.push(k + ' -> ' + map[k]);
+      else if (oldMap[k] !== map[k]) changed.push(k + ': ' + oldMap[k] + ' -> ' + map[k]);
+    });
+    Object.keys(oldMap).forEach((k) => {
+      if (!(k in map)) removed.push(k + ' (was: ' + oldMap[k] + ')');
+    });
+    if (added.length || removed.length || changed.length) {
+      diffSummary = '\n  新增 ' + added.length + ' 条，删除 ' + removed.length + ' 条，变更 ' + changed.length + ' 条';
+      if (added.length) console.log('[sync-canon-map] + 新增映射:');
+      added.slice(0, 10).forEach((s) => console.log('    + ' + s));
+      if (added.length > 10) console.log('    ... 等共 ' + added.length + ' 条');
+      if (removed.length) console.log('[sync-canon-map] - 删除映射:')
+      removed.slice(0, 10).forEach((s) => console.log('    - ' + s));
+      if (removed.length > 10) console.log('    ... 等共 ' + removed.length + ' 条');
+      if (changed.length) console.log('[sync-canon-map] ~ 变更映射:')
+      changed.slice(0, 10).forEach((s) => console.log('    ~ ' + s));
+      if (changed.length > 10) console.log('    ... 等共 ' + changed.length + ' 条');
+    } else {
+      diffSummary = '\n  映射无变化（仅 dataVersion 更新）';
+    }
+  } catch (e) {
+    // 首次生成无旧文件，跳过 diff
+    diffSummary = '\n  (首次生成，无旧版本可对比)';
+  }
+
   const text = serialize(map, leagueIdMap, count, dataVersion);
 
   // 写入小程序侧
@@ -119,7 +154,7 @@ function main() {
     process.exit(1);
   }
 
-  console.log('[sync-canon-map] OK · 事件覆盖 ' + count + ' 条 · 两侧 curation-shared.js 内容一致 · EPL pin+映射完整');
+  console.log('[sync-canon-map] OK · 事件覆盖 ' + count + ' 条 · 两侧 curation-shared.js 内容一致 · EPL pin+映射完整' + diffSummary);
 }
 
 main();

@@ -589,6 +589,35 @@ function parseLiquipediaDate(dateStr) {
   return 0;
 }
 
+// ===== 战队 Logo 解析（§8.3 2026-07-29）=====
+// 从战队页 wikitext 中提取 {{Infobox team}} 模板的 image 字段值。
+// Liquipedia 战队页结构：
+//   {{Infobox team
+//   |name=Team Spirit
+//   |image=Team_Spirit_logo.png
+//   |imagecaption=
+//   |...
+//   }}
+// image 字段是图片文件名（不含 File: 前缀），需配合 imageinfo API 获取可访问 URL。
+//
+// 返回 { image: 'Team_Spirit_logo.png' } 或 null（未找到模板 / 无 image 字段）
+function parseTeamLogo(wikitext) {
+  if (!wikitext) return null;
+  var tpl = parseTemplate(wikitext, 'Infobox team');
+  if (!tpl) return null;
+  // image 字段优先，image_dark / logo / logo_dark 兜底（部分战队页用 logo 命名）
+  var image = tpl.image || tpl.image_dark || tpl.logo || tpl.logo_dark || null;
+  if (!image) return null;
+  // parseTemplate 内部已执行 stripWikitextMarkup，但再清理一次防御 [[File:xxx|200px]] 形式
+  image = stripWikitextMarkup(image);
+  // 去掉可能的 "File:" / "Image:" 前缀（部分页面直接写带命名空间的文件名）
+  image = image.replace(/^File:/i, '').replace(/^Image:/i, '').trim();
+  // 去掉 | 后的尺寸参数（如 "Team_Spirit_logo.png|200px" → "Team_Spirit_logo.png"）
+  image = image.split('|')[0].trim();
+  if (!image) return null;
+  return { image: image };
+}
+
 module.exports = {
   parseTemplate: parseTemplate,
   splitTopLevel: splitTopLevel,
@@ -602,5 +631,6 @@ module.exports = {
   parseTeamCardBlock: parseTeamCardBlock,
   parseParticipants: parseParticipants,
   parseLeagueMetadata: parseLeagueMetadata,
-  parseScheduledMatches: parseScheduledMatches
+  parseScheduledMatches: parseScheduledMatches,
+  parseTeamLogo: parseTeamLogo
 };

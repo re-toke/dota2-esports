@@ -23,21 +23,26 @@ function main() {
     console.error('[sync-liquipedia-parse] 致命：源文件不存在: ' + MINI_JS);
     process.exit(1);
   }
-  const text = fs.readFileSync(MINI_JS, 'utf8');
+  // G7.2 修复换行符坑（2026-07-29）：用 Buffer 直接读写，避免 Windows 上
+  // fs.writeFileSync 的 'utf8' 模式把 \n 静默转换为 \r\n，导致两侧字节不一致。
+  // 原实现：readFileSync(utf8) → writeFileSync(utf8) 会引入 CRLF 污染。
+  // 修复：Buffer 直读直写 + 字节级对比，保留源文件原始换行符格式。
+  const buf = fs.readFileSync(MINI_JS);
 
   // 写入小程序侧（源，已存在，覆写保证）
   fs.mkdirSync(path.dirname(MINI_JS), { recursive: true });
-  fs.writeFileSync(MINI_JS, text, 'utf8');
+  fs.writeFileSync(MINI_JS, buf);
 
   // 镜像到云函数侧（独立部署，无法共享小程序 utils）
   fs.mkdirSync(path.dirname(CLOUD_JS), { recursive: true });
-  fs.writeFileSync(CLOUD_JS, text, 'utf8');
+  fs.writeFileSync(CLOUD_JS, buf);
 
-  // 断言两侧字节一致（核心不变量）
-  const a = fs.readFileSync(MINI_JS, 'utf8');
-  const b = fs.readFileSync(CLOUD_JS, 'utf8');
-  if (a !== b) {
-    console.error('[sync-liquipedia-parse] 致命：两侧 liquipedia-parse.js 不一致，镜像写入失败');
+  // 断言两侧字节一致（核心不变量）—— 字节级对比，不经字符串转换
+  const a = fs.readFileSync(MINI_JS);
+  const b = fs.readFileSync(CLOUD_JS);
+  if (!a.equals(b)) {
+    console.error('[sync-liquipedia-parse] 致命：两侧 liquipedia-parse.js 字节不一致，镜像写入失败');
+    console.error('  mini size=' + a.length + ' cloud size=' + b.length);
     process.exit(1);
   }
 
@@ -51,12 +56,35 @@ function main() {
   const exportNames = [
     'parseTemplate', 'splitTopLevel', 'stripWikitextMarkup', 'stripTags',
     'parsePrizePool', 'collectDates', 'findTemplateEnd', 'extractLink',
-    'parseOpponentBlock', 'parseTeamCardBlock', 'parseParticipants', 'parseLeagueMetadata'
+    'parseOpponentBlock', 'parseTeamCardBlock', 'parseParticipants', 'parseLeagueMetadata',
+    'parseScheduledMatches', 'parseTeamLogo'
   ];
   const missingMini = exportNames.filter((n) => typeof mini[n] !== 'function');
   const missingCloud = exportNames.filter((n) => typeof cloud[n] !== 'function');
   if (missingMini.length || missingCloud.length) {
     console.error('[sync-liquipedia-parse] 致命：导出形状缺失 mini=[' + missingMini + '] cloud=[' + missingCloud + ']');
+    process.exit(1);
+  }
+
+  // §8.3 parseTeamLogo 漂移自检（2026-07-29）：两侧对同一战队页 wikitext 的解析结果必须一致
+  const teamWikitext = [
+    '{{Infobox team',
+    '|name=Team Spirit',
+    '|image=Team_Spirit_logo.png',
+    '|imagecaption=',
+    '|region=CIS',
+    '}}'
+  ].join('\n');
+  const miniLogo = mini.parseTeamLogo(teamWikitext);
+  const cloudLogo = cloud.parseTeamLogo(teamWikitext);
+  if (JSON.stringify(miniLogo) !== JSON.stringify(cloudLogo)) {
+    console.error('[sync-liquipedia-parse] 致命：parseTeamLogo 两侧结果不一致');
+    console.error('  mini : ' + JSON.stringify(miniLogo));
+    console.error('  cloud: ' + JSON.stringify(cloudLogo));
+    process.exit(1);
+  }
+  if (!miniLogo || miniLogo.image !== 'Team_Spirit_logo.png') {
+    console.error('[sync-liquipedia-parse] 致命：parseTeamLogo 合成用例解析异常: ' + JSON.stringify(miniLogo));
     process.exit(1);
   }
 
@@ -94,7 +122,7 @@ function main() {
 
   console.log(
     '[sync-liquipedia-parse] OK · 两侧 liquipedia-parse.js 字节一致 · 导出 ' +
-    exportNames.length + ' 个纯函数 · 合成用例解析漂移自检通过'
+    exportNames.length + ' 个纯函数 · 合成用例解析漂移自检通过（含 parseTeamLogo）'
   );
 }
 

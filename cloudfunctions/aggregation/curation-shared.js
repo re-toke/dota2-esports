@@ -5,7 +5,7 @@
 // cannot load .json directly).
 module.exports = {
   "version": 3,
-  "generatedAt": "2026-07-27T15:49:19.746Z",
+  "generatedAt": "2026-07-29T02:36:33.426Z",
   "source": "utils/curation.js#CURATED_EVENTS",
   "eventCount": 224,
   "map": {
@@ -179,5 +179,5 @@ module.exports = {
   "leagueIdMap": {
     "19944": "EPL Masters I"
   },
-  "dataVersion": "1785167359746"
+  "dataVersion": "1785292593423"
 };

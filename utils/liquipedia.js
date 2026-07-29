@@ -46,10 +46,35 @@ function getSlugMap() {
   }
   return slugMapCache;
 }
+// §6.2 slug 命中率统计（2026-07-29）：记录命中/未命中次数，未命中 name 收集到集合。
+//   - getSlugStats() 供调试/日志输出命中率
+//   - getMissedSlugs() 供 generate-liquipedia-slugmap 优先处理（未来可通过脚本拉取）
+//   - 去重集合上限 50，避免无限增长
+var _slugHitCount = 0;
+var _slugMissCount = 0;
+var _slugMissedNames = {};
+var SLUG_MISS_LIMIT = 50;
 function liquipediaSlugFor(name) {
   var m = getSlugMap();
-  if (m && m.mappings && m.mappings[name]) return m.mappings[name];
+  if (m && m.mappings && m.mappings[name]) {
+    _slugHitCount++;
+    return m.mappings[name];
+  }
+  _slugMissCount++;
+  if (Object.keys(_slugMissedNames).length < SLUG_MISS_LIMIT) {
+    _slugMissedNames[name] = 1;
+  }
   return name;
+}
+function getSlugStats() {
+  var total = _slugHitCount + _slugMissCount;
+  return {
+    hit: _slugHitCount,
+    miss: _slugMissCount,
+    total: total,
+    hitRate: total > 0 ? (_slugHitCount / total) : 0,
+    missedNames: Object.keys(_slugMissedNames)
+  };
 }
 
 var ENABLED = !!(config.liquipedia && config.liquipedia.enabled);
@@ -58,6 +83,8 @@ var USER_AGENT = (config.liquipedia && config.liquipedia.userAgent) || 'DOTA2-Es
 // 官方要求普通端点 ≤ 1 次/2 秒；这里留余量用 2200ms
 var RATE_GAP_MS = (config.liquipedia && config.liquipedia.rateLimitMs) || 2200;
 var CACHE_TTL = (config.liquipedia && config.liquipedia.cacheTTL) || (6 * 3600);
+// 2026-07-29 差异化 TTL（Phase 1-②）：赛程变化敏感，30min 短缓存（与云函数对齐）
+var CACHE_TTL_SCHEDULE = (config.liquipedia && config.liquipedia.cacheTtlSchedule) || (30 * 60);
 
 // 启动日志：在开发者工具 Console 中一眼确认配置是否生效
 if (ENABLED) {
@@ -77,6 +104,25 @@ function isRetriable(statusCode) {
   return statusCode === 429 || (statusCode >= 500 && statusCode < 600);
 }
 
+// ===== 会话级熔断（Phase 1-③，2026-07-29）=====
+// Liquipedia 连续失败 3 次后，本会话内标记不可用，避免反复请求不可用源。
+// 内存变量（会话级，不持久化，冷启动重置）；成功一次即复位。
+// 阈值 3 次：覆盖瞬时 CAPTCHA + 网络 + 服务端故障的常见场景。
+var LIQ_FAILURES = 0;
+var LIQ_BREAKER_THRESHOLD = 3;
+function liquipediaBroken() {
+  return LIQ_FAILURES >= LIQ_BREAKER_THRESHOLD;
+}
+function liquipediaMarkFailure() {
+  LIQ_FAILURES++;
+  if (LIQ_FAILURES === LIQ_BREAKER_THRESHOLD) {
+    console.warn('[liquipedia] 连续失败 ' + LIQ_BREAKER_THRESHOLD + ' 次，本会话熔断 → 停止请求 Liquipedia');
+  }
+}
+function liquipediaMarkSuccess() {
+  if (LIQ_FAILURES > 0) LIQ_FAILURES = 0;
+}
+
 // 内部请求：调用 MediaWiki action API，返回解析后的 JSON。
 // 始终 resolve（失败时 resolve null），绝不 reject —— 优雅降级。
 // 注意：wx.request 禁止设置 "User-Agent"（微信运行时会报 Refused to set unsafe header），
@@ -84,6 +130,8 @@ function isRetriable(statusCode) {
 //       Liquipedia 官方要求描述性 UA → 需通过云函数代理（Node.js 可设 UA）。
 function request(params) {
   if (!ENABLED) return Promise.resolve(null);
+  // 会话级熔断：连续失败达阈值后直接返回 null，不再发起请求
+  if (liquipediaBroken()) return Promise.resolve(null);
 
   // 串行限流：立即预留槽位，保证两次请求间隔不小于 RATE_GAP_MS
   var now = Date.now();
@@ -115,9 +163,11 @@ function attempt(params, retryCount) {
           // 检测反爬虫拦截页（返回 HTML 而非 JSON）：Liquipedia 违规时会返回 CAPTCHA 页面
           if (typeof res.data === 'string' && res.data.indexOf('temporarily blocked') >= 0) {
             console.warn('[liquipedia] 被反爬虫层拦截（IP 临时封禁），请降低请求频率或完成 CAPTCHA 解锁');
+            liquipediaMarkFailure();  // 会话级熔断计数
             resolve(null);
             return;
           }
+          liquipediaMarkSuccess();  // 成功：复位熔断计数
           resolve(res.data);
           return;
         }
@@ -129,6 +179,7 @@ function attempt(params, retryCount) {
           return;
         }
         console.warn('[liquipedia] HTTP ' + res.statusCode + ' 请求失败，降级返回 null');
+        liquipediaMarkFailure();  // 会话级熔断计数
         resolve(null);
       },
       fail: function (err) {
@@ -140,6 +191,7 @@ function attempt(params, retryCount) {
           return;
         }
         console.warn('[liquipedia] 请求失败（重试耗尽）:', err && err.errMsg);
+        liquipediaMarkFailure();  // 会话级熔断计数
         resolve(null);
       }
     });
@@ -164,7 +216,10 @@ function fetchPageWikitext(pageName) {
     rvslots: 'main',
     titles: pageName,
     format: 'json',
-    formatversion: '2'   // version 2 返回更扁平结构，pages 为数组
+    formatversion: '2',   // version 2 返回更扁平结构，pages 为数组
+    redirects: 1          // ★ 2026-07-28 修复重定向 BUG：自动跟随 #REDIRECT，返回最终页面的 wikitext
+                          // 不加此参数时，"ESL One Birmingham 2024" 会返回 "#REDIRECT [[ESL One/Birmingham/2024]]"（仅几百字节），
+                          // 而非真实页面内容，导致 parseScheduledMatches/parseLeagueMetadata 在重定向文本中找不到任何模板
   }).then(function (data) {
     try {
       if (!data || !data.query || !data.query.pages) return null;
@@ -244,7 +299,7 @@ function getTeamRoster(name) {
   if (!ENABLED) return Promise.resolve([]);
   if (!name) return Promise.resolve([]);
 
-  var cacheKey = 'liquipedia_team_' + consensus.normName(name);
+  var cacheKey = 'liquipedia_team_roster_' + consensus.normName(name);
   var cached = cache.get(cacheKey, CACHE_TTL);
   if (cached) return Promise.resolve(cached);
 
@@ -320,8 +375,9 @@ function getTeamRoster(name) {
 }
 
 // 3. 选手资料
-// 返回 { name, country, role, teamHistory: [{team, joinDate, leaveDate}], achievements: [] } 或 null。
+// 返回 { name, realName, country, role, team, birthDate, status, alternateIds, teamHistory, achievements } 或 null。
 // 解析 {{Infobox player}} 模板参数。
+// §8.3 选手档案完善（2026-07-29）：新增 realName/birthDate/status/alternateIds 字段
 function getPlayerProfile(name) {
   if (!ENABLED) return Promise.resolve(null);
   if (!name) return Promise.resolve(null);
@@ -340,6 +396,12 @@ function getPlayerProfile(name) {
     var anyField = false;
 
     try { result.name = tpl.name || tpl.romanized || name; anyField = true; } catch (e) { result.name = name; }
+    // §8.3 真实姓名（区别于游戏 ID）：优先 romanized，其次 realname/fullname
+    try {
+      result.realName = tpl.romanized || tpl.realname || tpl.fullname || tpl.real_name || null;
+      if (result.realName && result.realName === result.name) result.realName = null;  // 避免与 ID 重复
+      if (result.realName) anyField = true;
+    } catch (e) { result.realName = null; }
     try {
       result.country = tpl.country || tpl.nationality || tpl.region || null;
       if (result.country) anyField = true;
@@ -352,6 +414,32 @@ function getPlayerProfile(name) {
       result.team = tpl.team || tpl.currentteam || null;
       if (result.team) anyField = true;
     } catch (e) { result.team = null; }
+    // §8.3 出生日期（用于计算年龄/职业生涯时长）
+    try {
+      result.birthDate = tpl.birthdate || tpl.birth_date || tpl.born || null;
+      if (result.birthDate) {
+        // 清理 wikitext 标记（如 {{birth date and age|...}}）
+        result.birthDate = LiquiParse.stripWikitextMarkup(result.birthDate);
+        if (result.birthDate) anyField = true;
+      }
+    } catch (e) { result.birthDate = null; }
+    // §8.3 状态（active/retired/inactive）
+    try {
+      result.status = tpl.status || null;
+      if (result.status) anyField = true;
+    } catch (e) { result.status = null; }
+    // §8.3 曾用 ID（别称/历史 ID）
+    try {
+      result.alternateIds = tpl.ids || tpl.aliases || tpl.altid || null;
+      if (result.alternateIds) {
+        // 拆分为数组（逗号分隔）
+        if (typeof result.alternateIds === 'string') {
+          result.alternateIds = result.alternateIds.split(/[,，]/).map(function (s) { return s.trim(); }).filter(Boolean);
+        }
+        if (result.alternateIds && result.alternateIds.length) anyField = true;
+        else result.alternateIds = null;
+      }
+    } catch (e) { result.alternateIds = null; }
 
     // 历史队伍表：解析 wikitext 表格
     result.teamHistory = [];
@@ -413,7 +501,7 @@ function getScheduledMatches(name) {
 
   var slug = liquipediaSlugFor(name);
   var cacheKey = 'liquipedia_schedule_' + consensus.normName(name);
-  var cached = cache.get(cacheKey, CACHE_TTL);
+  var cached = cache.get(cacheKey, CACHE_TTL_SCHEDULE);
   if (cached) return Promise.resolve(cached);
 
   // 云代理优先：通过云函数（Node.js 环境，可自由设 User-Agent + gzip）代理 Liquipedia 请求，
@@ -423,7 +511,7 @@ function getScheduledMatches(name) {
       // 云函数返回 { data: [...], source: 'liquipedia' | 'cache' }
       var scheduled = (res && res.data) || [];
       if (scheduled.length) {
-        cache.set(cacheKey, scheduled, CACHE_TTL);
+        cache.set(cacheKey, scheduled, CACHE_TTL_SCHEDULE);
       }
       return scheduled;
     }).catch(function () {
@@ -441,10 +529,41 @@ function fetchScheduledLocal(slug, cacheKey) {
     .then(function (wikitext) {
       if (!wikitext) return [];
       var scheduled = LiquiParse.parseScheduledMatches(wikitext);
-      cache.set(cacheKey, scheduled, CACHE_TTL);
+      cache.set(cacheKey, scheduled, CACHE_TTL_SCHEDULE);
       return scheduled;
     })
     .catch(function () { return []; });
+}
+
+// §8.3 战队 Logo（2026-07-29）：OpenDota logo_url 为空 + STRATZ 无数据时的兜底源。
+// Liquipedia 是独立人工策展源，与 Valve 数据链路无关，可覆盖 OpenDota 无 logo 的队伍。
+//
+// 仅走云函数代理路径：Liquipedia 官方强制要求描述性 User-Agent，而 wx.request 禁止设置
+// 该 header，直连会被反爬虫层拦截。云函数 Node.js 环境可自由设 header。
+// 云函数内两步获取：wikitext → parseTeamLogo → imageinfo API → 缩略图 URL。
+//
+// 返回 { logo: url, source: 'liquipedia' } 或 null。
+// 任何失败（云函数不可用 / 页面不存在 / 无 image 字段 / imageinfo 失败）均 resolve null，不影响其它源。
+function getTeamLogo(name) {
+  if (!ENABLED || !name) return Promise.resolve(null);
+
+  // 本地缓存优先（与 enrichTeamLogo 共用 logoCache，但此处用通用 cache.js 30 天 TTL）
+  var cacheKey = 'liquipedia_team_logo_' + consensus.normName(name);
+  var cached = cache.get(cacheKey, CACHE_TTL);
+  if (cached) return Promise.resolve(cached);
+
+  // 云代理优先（Node.js 可设 UA + gzip）
+  if (typeof wx !== 'undefined' && wx.cloud && cloudProxy.isAvailable()) {
+    return cloudProxy.liquipediaTeamLogoProxy(name).then(function (remote) {
+      if (remote && remote.logo) {
+        cache.set(cacheKey, remote, CACHE_TTL);
+        return remote;
+      }
+      return null;
+    }).catch(function () { return null; });
+  }
+  // 无云代理可用 → 无法获取（wx.request 禁设 UA，直连必被拦）
+  return Promise.resolve(null);
 }
 
 module.exports = {
@@ -453,5 +572,7 @@ module.exports = {
   getTeamRoster: getTeamRoster,
   getPlayerProfile: getPlayerProfile,
   getScheduledMatches: getScheduledMatches,
-  parseParticipants: LiquiParse.parseParticipants  // 2026-07-28 导出供单元测试直接调用（单一来源：liquipedia-parse.js）
+  getTeamLogo: getTeamLogo,
+  parseParticipants: LiquiParse.parseParticipants,  // 2026-07-28 导出供单元测试直接调用（单一来源：liquipedia-parse.js）
+  getSlugStats: getSlugStats  // §6.2 slug 命中率统计（供调试/日志输出）
 };
