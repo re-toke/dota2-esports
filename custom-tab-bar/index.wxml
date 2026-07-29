@@ -1,4 +1,4 @@
-<view class="tab-bar" style="background-color: {{backgroundColor}};">
+<view class="tab-bar {{blurDisabled ? 'tab-bar--no-blur' : ''}}" style="background-color: {{backgroundColor}};">
   <view class="tab-bar__border"></view>
   <view
     wx:for="{{list}}"
