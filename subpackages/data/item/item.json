@@ -5,6 +5,7 @@
     "t-icon": "tdesign-miniprogram/icon/icon",
     "t-skeleton": "tdesign-miniprogram/skeleton/skeleton",
     "empty-state": "../../../components/empty-state/empty-state",
-    "image-fallback": "../../../components/image-fallback/image-fallback"
+    "image-fallback": "../../../components/image-fallback/image-fallback",
+    "skeleton": "../../../components/skeleton/skeleton"
   }
 }

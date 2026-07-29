@@ -23,9 +23,7 @@
   </view>
 
   <block wx:if="{{loading}}">
-    <view wx:for="{{[1,2,3,4,5,6,7,8]}}" wx:key="*this" class="item-row skel">
-      <t-skeleton theme="paragraph" loading="{{true}}" />
-    </view>
+    <skeleton type="row" count="8" />
   </block>
 
   <empty-state wx:elif="{{error}}" type="error" title="加载失败" desc="{{error}}" actionText="重试" bind:action="onRetry" />

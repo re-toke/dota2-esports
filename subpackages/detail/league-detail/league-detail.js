@@ -9,6 +9,7 @@ const remoteCuration = require('../../../utils/remoteCuration.js');
 const liquipedia = require('../../../utils/liquipedia.js');
 const heroes = require('../../../utils/heroes.js');
 const logoPreload = require('../../../utils/logoPreload.js'); // P2-E：logo 预热（门控）
+const logoCache = require('../../../utils/logoCache.js'); // Phase 1-⑦：persistNow onUnload
 
 // Steam CDN 英雄头像基址（_sb.png = 小横幅图，约 59x33，aspectFill 裁切填满方形框）
 const HERO_IMG_BASE = 'https://cdn.cloudflare.steamstatic.com/apps/dota2/images/heroes/';
@@ -300,6 +301,8 @@ Page({
       clearTimeout(this._pendingTimer);
       this._pendingTimer = null;
     }
+    // Phase 1-⑦：离开页面前强制刷新 logoCache（确保防抖期间的数据落盘）
+    try { logoCache.persistNow(); } catch (e) { /* 隔离 */ }
   },
 
   // refreshQuality / refreshSourceBadges 已内联到 onLoad 的 finalize，
@@ -563,10 +566,13 @@ Page({
           };
         }
         this._matchWindow = hasRealWindow ? { start: mStart, end: mEnd } : null;
-        // 合并为单次 setData
+        // F3 分步渲染（2026-07-29）：将原单次大 payload setData 拆为两步。
+        //   - 步骤1（骨架）：loading:false + eventWindow + 计数 + 分页元数据，用户立即看到赛事框架
+        //   - 步骤2（明细）：series 数组（50-200KB），独立 setData 避免阻塞骨架渲染
+        // 收益：首屏可交互时间提前；用户先看到赛事状态/窗口，再看到对阵列表。
+        // 步骤1：骨架（标量 + 锚点，体积小，渲染快）
         this.setData({
           totalSeries: this.allSeries.length,
-          series: slice,
           page: 0,
           hasMore: this.allSeries.length > slice.length,
           loading: false,
@@ -580,6 +586,8 @@ Page({
           recentCount: recentList.length,
           recentCollapsed: false   // 每次重新加载时重置折叠状态
         });
+        // 步骤2：明细（series 数组体积大，独立 setData 避免阻塞骨架渲染）
+        this.setData({ series: slice });
         this.refreshMetadataDerived();
         // F2 修复：enrichTeamNames 与 enrichTeamLogos 并行执行，省去串行等待（慢网平均省 300-800ms）
         Promise.all([this.enrichTeamNames(), this.enrichTeamLogos()]);
@@ -717,9 +725,31 @@ Page({
       }
     });
 
+    // ★ §8.3 名称兜底（2026-07-29）：Liquipedia 赛程补充的 upcoming/live 对阵
+    //   team_id=0（{{Match}} 模板不提供 OpenDota team_id），按队名收集，
+    //   走 enrichTeamLogo 第④源（Liquipedia 按名兜底，不依赖 team_id）。
+    //   归一化：小写 + 去空白（与上方 OpenDota 去重键一致）
+    function normName(s) { return String(s || '').toLowerCase().replace(/\s+/g, ''); }
+    const nameTeams = {};  // 归一化队名 → { name, skip }
+    this.allSeries.forEach((s) => {
+      if ((!s.radiantTeamId || s.radiantTeamId <= 0) && s.radiantName) {
+        const norm = normName(s.radiantName);
+        if (norm && !nameTeams[norm]) {
+          nameTeams[norm] = { name: s.radiantName, skip: !!(s.radiantLogo && /^https?:\/\//i.test(s.radiantLogo)) };
+        }
+      }
+      if ((!s.direTeamId || s.direTeamId <= 0) && s.direName) {
+        const norm = normName(s.direName);
+        if (norm && !nameTeams[norm]) {
+          nameTeams[norm] = { name: s.direName, skip: !!(s.direLogo && /^https?:\/\//i.test(s.direLogo)) };
+        }
+      }
+    });
+
     // 过滤出需要查询的 team_id（skip=true 的跳过）
     const needQueryIds = Object.keys(teamIds).filter((tid) => !teamIds[tid].skip);
-    if (!needQueryIds.length) return Promise.resolve(false);
+    const needQueryNames = Object.keys(nameTeams).filter((norm) => !nameTeams[norm].skip);
+    if (!needQueryIds.length && !needQueryNames.length) return Promise.resolve(false);
 
     // 2) 并行批量查询（每个 .catch 隔离，任一失败不影响其他）
     //    ★ 2026-07-28 修复 LOGO 不显示 BUG：
@@ -742,23 +772,52 @@ Page({
         .then((r) => ({ id: team.id, logo: r && r.logo, source: r && r.source }))
         .catch(() => ({ id: team.id, logo: null, source: '' }));
     });
+    // ★ 名称兜底任务：id=0 跳过 api.getTeam（无效 id），直接调 enrichTeamLogo。
+    //   enrichTeamLogo 内部：id=0 跳过缓存/STRATZ（均依赖 id），直接走第④源 Liquipedia 按名兜底。
+    const nameTasks = needQueryNames.map((norm) => {
+      const team = nameTeams[norm];
+      return sources.enrichTeamLogo({ id: 0, name: team.name, logo: '' })
+        .then((r) => ({ normName: norm, logo: r && r.logo, source: r && r.source }))
+        .catch(() => ({ normName: norm, logo: null, source: '' }));
+    });
 
-    return Promise.all(tasks).then((results) => {
-      // 3) 构建 team_id → logo 映射（仅保留有效 http URL）
+    return Promise.all(tasks.concat(nameTasks)).then((results) => {
+      // 3) 构建 team_id → logo 映射 + 归一化队名 → logo 映射（仅保留有效 http URL）
       const logoMap = {};
+      const nameLogoMap = {};  // 归一化队名 → { logo, source }（team_id=0 的 Liquipedia 赛程专用）
+      const failedIds = [];
       results.forEach((r) => {
-        if (r.logo && /^https?:\/\//i.test(r.logo)) {
+        if (r.normName) {
+          // 名称兜底结果
+          if (r.logo && /^https?:\/\//i.test(r.logo)) {
+            nameLogoMap[r.normName] = { logo: r.logo, source: r.source };
+          } else {
+            failedIds.push('name:' + r.normName);
+          }
+        } else if (r.logo && /^https?:\/\//i.test(r.logo)) {
           logoMap[r.id] = { logo: r.logo, source: r.source };
+        } else {
+          failedIds.push(r.id);
         }
       });
-      if (!Object.keys(logoMap).length) return false;
+      // §8.3 诊断日志（2026-07-29）：汇总 logo 获取结果，便于定位缺失源
+      const total = results.length;
+      const ok = Object.keys(logoMap).length + Object.keys(nameLogoMap).length;
+      console.info('[enrichLogos] 总计=' + total + ' 成功=' + ok + ' 失败=' + failedIds.length +
+        (failedIds.length ? ' 失败ids=' + failedIds.join(',') : ''));
+      if (!Object.keys(logoMap).length && !Object.keys(nameLogoMap).length) return false;
 
       // 3.5) P2-E：解析完成后预热 logo 缓存（门控：predownloadEnabled && proxyBase 才生效）
-      try { logoPreload.warmLogos(Object.keys(logoMap).map((k) => logoMap[k].logo)); } catch (e) { /* 隔离 */ }
+      try {
+        const allLogos = Object.keys(logoMap).map((k) => logoMap[k].logo)
+          .concat(Object.keys(nameLogoMap).map((k) => nameLogoMap[k].logo));
+        logoPreload.warmLogos(allLogos);
+      } catch (e) { /* 隔离 */ }
 
       // 4) 路径更新：仅更新当前可见的 series 头部 logo
       //    （不可见 series 不更新，避免无谓 setData；allSeries 内存缓存同步更新，
       //     loadMore 加载新页时 enrichTeamLogos 会从内存读取并路径更新）
+      //    ★ team_id=0 的 Liquipedia 赛程对阵按归一化队名匹配 nameLogoMap
       const patch = {};
       const visible = this.data.series;
       visible.forEach((s, si) => {
@@ -766,11 +825,23 @@ Page({
             (!s.radiantLogo || !/^https?:\/\//i.test(s.radiantLogo))) {
           patch['series[' + si + '].radiantLogo'] = logoMap[s.radiantTeamId].logo;
           patch['series[' + si + '].radiantLogoSource'] = logoMap[s.radiantTeamId].source;
+        } else if ((!s.radiantTeamId || s.radiantTeamId <= 0) && s.radiantName) {
+          const norm = normName(s.radiantName);
+          if (nameLogoMap[norm] && (!s.radiantLogo || !/^https?:\/\//i.test(s.radiantLogo))) {
+            patch['series[' + si + '].radiantLogo'] = nameLogoMap[norm].logo;
+            patch['series[' + si + '].radiantLogoSource'] = nameLogoMap[norm].source;
+          }
         }
         if (s.direTeamId && logoMap[s.direTeamId] &&
             (!s.direLogo || !/^https?:\/\//i.test(s.direLogo))) {
           patch['series[' + si + '].direLogo'] = logoMap[s.direTeamId].logo;
           patch['series[' + si + '].direLogoSource'] = logoMap[s.direTeamId].source;
+        } else if ((!s.direTeamId || s.direTeamId <= 0) && s.direName) {
+          const norm = normName(s.direName);
+          if (nameLogoMap[norm] && (!s.direLogo || !/^https?:\/\//i.test(s.direLogo))) {
+            patch['series[' + si + '].direLogo'] = nameLogoMap[norm].logo;
+            patch['series[' + si + '].direLogoSource'] = nameLogoMap[norm].source;
+          }
         }
       });
 
@@ -780,11 +851,23 @@ Page({
             (!s.radiantLogo || !/^https?:\/\//i.test(s.radiantLogo))) {
           s.radiantLogo = logoMap[s.radiantTeamId].logo;
           s.radiantLogoSource = logoMap[s.radiantTeamId].source;
+        } else if ((!s.radiantTeamId || s.radiantTeamId <= 0) && s.radiantName) {
+          const norm = normName(s.radiantName);
+          if (nameLogoMap[norm] && (!s.radiantLogo || !/^https?:\/\//i.test(s.radiantLogo))) {
+            s.radiantLogo = nameLogoMap[norm].logo;
+            s.radiantLogoSource = nameLogoMap[norm].source;
+          }
         }
         if (s.direTeamId && logoMap[s.direTeamId] &&
             (!s.direLogo || !/^https?:\/\//i.test(s.direLogo))) {
           s.direLogo = logoMap[s.direTeamId].logo;
           s.direLogoSource = logoMap[s.direTeamId].source;
+        } else if ((!s.direTeamId || s.direTeamId <= 0) && s.direName) {
+          const norm = normName(s.direName);
+          if (nameLogoMap[norm] && (!s.direLogo || !/^https?:\/\//i.test(s.direLogo))) {
+            s.direLogo = nameLogoMap[norm].logo;
+            s.direLogoSource = nameLogoMap[norm].source;
+          }
         }
       });
 
@@ -1083,6 +1166,25 @@ Page({
     //   保留 liqParticipantsArr 供分支④兜底使用，最终 setData 前统一转为数字。
     if (Array.isArray(meta.participants)) {
       meta.participants = meta.participants.length;
+    }
+
+    // 2026-07-29 修复 logo 丢失 BUG：refreshMetadataDerived 重建 participantsList 时
+    // 丢失了 enrichTeamLogos 已填充的 logo 字段（竞态：finalize 后重建覆盖 logo）。
+    // 修复：从 this.data.participantsList 构建 id→logo 映射，重建后统一回填。
+    // 覆盖所有重建分支（①实际>meta / ②Liquipedia重建 / ②占位补齐 / ④无比赛数据）。
+    const oldLogoMap = {};
+    (this.data.participantsList || []).forEach((t) => {
+      if (t && t.id != null && t.logo && /^https?:\/\//i.test(t.logo)) {
+        oldLogoMap[t.id] = t.logo;
+      }
+    });
+    if (Object.keys(oldLogoMap).length) {
+      participantsList = participantsList.map((t) => {
+        if (t && t.id != null && oldLogoMap[t.id] && (!t.logo || !/^https?:\/\//i.test(t.logo))) {
+          return Object.assign({}, t, { logo: oldLogoMap[t.id] });
+        }
+        return t;
+      });
     }
 
     this.setData({ metadata: meta, participantsList: participantsList });

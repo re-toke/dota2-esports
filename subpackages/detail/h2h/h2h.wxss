@@ -222,6 +222,26 @@
 .h2h-skeleton {
   padding: 40rpx 0;
 }
+/* §8.3 骨架屏 shimmer 动画（2026-07-29）：与 components/skeleton 保持一致 */
+.sk-logo, .sk-bar {
+  position: relative;
+  overflow: hidden;
+}
+.sk-logo::after, .sk-bar::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 50%, transparent 100%);
+  transform: translateX(-100%);
+  animation: sk-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes sk-shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sk-logo::after, .sk-bar::after { animation: none; }
+}
 .sk-logo {
   width: 96rpx;
   height: 96rpx;

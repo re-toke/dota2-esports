@@ -136,7 +136,18 @@ Page({
   },
 
   // 解析并渲染比赛数据（load 与实时推送共用，避免重复逻辑）
+  // F3/F4 优化（2026-07-29）：实时推送走轻量更新路径，避免每 30s/事件全量重建选手数组+图表。
+  //   - 首次加载 / 比赛结束（radiant_win 从 null 变为布尔）→ 完整渲染
+  //   - 直播中推送（已有数据 + 仍在进行 + 仅比分/时长变化）→ 仅更新标量
   applyMatch(m) {
+    if (!m) return;
+    // 轻量更新判定：已有选手数据 + 比赛仍在进行（未分胜负）+ 之前也是直播态
+    const hasData = this.data.radiant && this.data.radiant.length > 0;
+    const stillLive = m.radiant_win == null && this.data.isLive;
+    if (hasData && stillLive) {
+      this._applyLiveUpdate(m);
+      return;
+    }
     const heroMap = (app.globalData && app.globalData.heroMap) || {};
     let itemMap = (app.globalData && app.globalData.itemMap) || {};
 
@@ -149,6 +160,32 @@ Page({
     Promise.all([heroesP, itemsP]).then((res) => {
       this._applyMatchWithData(m, res[0], res[1]);
     });
+  },
+
+  // F3/F4 轻量更新：直播推送时仅更新变化的核心标量（比分/时长/状态/更新时间），
+  // 跳过选手数组与图表的全量重建（这些在比赛中变化小，重建开销大）。
+  // 比赛结束（radiant_win 有值）会走完整渲染路径，确保最终图表/MVP 正确。
+  _applyLiveUpdate(m) {
+    const at = Date.now();
+    const nowSec = Math.floor(at / 1000);
+    const isLive = (m.radiant_win == null) && m.start_time &&
+                   (nowSec - m.start_time) > 0 && (nowSec - m.start_time) < 12 * 3600;
+    const duration = m.duration ? util.formatDuration(m.duration) : '';
+    const patch = {
+      radiantScore: m.radiant_score || 0,
+      direScore: m.dire_score || 0,
+      duration: duration,
+      isLive: isLive,
+      updatedAt: at,
+      updatedLabel: util.formatAgo(at)
+    };
+    // 比赛结束：补胜负态，下次推送将走完整渲染刷新图表/MVP
+    if (m.radiant_win != null) {
+      patch.radiantWin = !!m.radiant_win;
+      patch.anchorWinSide = m.radiant_win ? 'A' : 'B';
+      patch.isLive = false;
+    }
+    this.setData(patch);
   },
 
   // 核心渲染逻辑（抽取为独立方法，供 applyMatch 直接调用）
@@ -249,9 +286,12 @@ Page({
     if (duration) anchorMeta.push({ label: '时长', value: duration });
     if (time) anchorMeta.push({ label: '开赛', value: time });
 
+    // F3/F4 分步渲染（2026-07-29）：将原单次大 payload setData 拆为两步。
+    //   - 步骤1（骨架）：loading:false + 比分/胜负/状态/锚点/liveSources，用户立即看到核心信息
+    //   - 步骤2（明细）：选手数组 + 图表数据，下一帧渲染避免阻塞骨架
+    // 收益：首屏可交互时间提前；直播推送场景步骤1即可满足"看比分"需求。
+    // 步骤1：骨架（标量 + 锚点，体积小，渲染快）
     this.setData({
-      // 优化：不再传整个原始 match 对象（含 objectives/players 原始数组/timelines 等冗余字段，
-      // 已被提取到 radiant/dire/goldAdv/xpAdv 等字段）。改存最小必需标量字段供其它方法引用。
       match: {
         match_id: m.match_id,
         radiant_win: m.radiant_win,
@@ -261,8 +301,6 @@ Page({
         dire_team_id: m.dire_team_id,
         league: m.league
       },
-      radiant: radiant,
-      dire: dire,
       radiantWin: !!m.radiant_win,
       radiantName: m.radiant_name || m.radiant_team_name || '天辉',
       direName: m.dire_name || m.dire_team_name || '夜魇',
@@ -273,13 +311,6 @@ Page({
       league: leagueName,
       radiantTeamId: m.radiant_team_id || '',
       direTeamId: m.dire_team_id || '',
-      mvp: mvp,
-      goldAdv: goldAdv,
-      xpAdv: xpAdv,
-      goldFinal: goldFinal,
-      chartSeries: chartSeries,
-      chartCats: chartCats,
-      chartEvents: chartEvents,
       loading: false,
       updatedAt: at,
       updatedLabel: util.formatAgo(at),
@@ -289,6 +320,19 @@ Page({
       anchorTierClass: tier ? ('tier-' + (tier.grade || '').toLowerCase()) : '',
       anchorMeta: anchorMeta,
       anchorWinSide: isLive ? '' : (m.radiant_win ? 'A' : 'B')
+    });
+
+    // 步骤2：明细（选手数组 + 图表，体积大，独立 setData 避免阻塞骨架渲染）
+    this.setData({
+      radiant: radiant,
+      dire: dire,
+      mvp: mvp,
+      goldAdv: goldAdv,
+      xpAdv: xpAdv,
+      goldFinal: goldFinal,
+      chartSeries: chartSeries,
+      chartCats: chartCats,
+      chartEvents: chartEvents
     });
 
     // T4：直播中进行时建立实时连接（WebSocket 或降级轮询）

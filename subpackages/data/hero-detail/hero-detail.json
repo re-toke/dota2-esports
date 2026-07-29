@@ -3,6 +3,7 @@
   "usingComponents": {
     "t-icon": "tdesign-miniprogram/icon/icon",
     "t-skeleton": "tdesign-miniprogram/skeleton/skeleton",
-    "empty-state": "../../../components/empty-state/empty-state"
+    "empty-state": "../../../components/empty-state/empty-state",
+    "skeleton": "../../../components/skeleton/skeleton"
   }
 }

@@ -8,7 +8,7 @@
   <!-- F1 直播聚合入口（isLive 时高亮置顶） -->
   <live-card wx:if="{{liveSources.length}}" sources="{{liveSources}}" live="{{isLive}}" event-name="{{league}}" />
 
-  <t-skeleton wx:if="{{loading}}" theme="paragraph" loading="{{true}}" />
+  <skeleton wx:if="{{loading}}" type="detail" />
   <view wx:elif="{{error}}" class="error-block">
     <t-empty icon="info-circle" description="{{error}}" />
     <view class="retry-wrap">

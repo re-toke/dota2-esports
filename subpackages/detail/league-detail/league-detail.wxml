@@ -107,7 +107,7 @@
     <view class="seg-item {{tab === 'standings' ? 'active' : ''}}" bindtap="switchTab" data-key="standings">赛事排名</view>
   </view>
 
-  <t-skeleton wx:if="{{loading}}" theme="paragraph" loading="{{true}}" />
+  <skeleton wx:if="{{loading}}" type="detail" />
 
   <view wx:elif="{{error}}" class="error-block">
     <t-empty icon="info-circle" description="{{error}}" />

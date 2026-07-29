@@ -8,6 +8,7 @@
     "t-icon": "../../../miniprogram_npm/tdesign-miniprogram/icon/icon",
     "t-empty": "../../../miniprogram_npm/tdesign-miniprogram/empty/empty",
     "t-skeleton": "../../../miniprogram_npm/tdesign-miniprogram/skeleton/skeleton",
-    "anchor-card": "../../../components/anchor-card/anchor-card"
+    "anchor-card": "../../../components/anchor-card/anchor-card",
+    "skeleton": "../../../components/skeleton/skeleton"
   }
 }

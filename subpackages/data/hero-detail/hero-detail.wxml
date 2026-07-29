@@ -1,5 +1,5 @@
 <view class="container">
-  <t-skeleton wx:if="{{loading}}" theme="paragraph" loading="{{true}}" />
+  <skeleton wx:if="{{loading}}" type="detail" />
 
   <empty-state wx:elif="{{error}}" type="error" title="加载失败" desc="{{error}}" actionText="重试" bind:action="onRetry" />
 

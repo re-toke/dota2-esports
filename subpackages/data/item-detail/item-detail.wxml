@@ -1,5 +1,5 @@
 <view class="container">
-  <t-skeleton wx:if="{{loading}}" theme="paragraph" loading="{{true}}" />
+  <skeleton wx:if="{{loading}}" type="detail" />
 
   <empty-state wx:elif="{{error}}" type="error" title="加载失败" desc="{{error}}" actionText="重试" bind:action="onRetry" />
 
@@ -41,10 +41,28 @@
       </view>
     </view>
 
+    <!-- §8.3 合成树（2026-07-29）：从 OpenDota /constants/items 的 components 字段解析 -->
+    <!-- wx:for-item="comp" 避免与外层 item 变量名冲突 -->
+    <view class="block" wx:if="{{recipeTree.length > 0}}">
+      <view class="block-title">合成组件（{{recipeTree.length}}）</view>
+      <view class="recipe-list">
+        <view class="recipe-item" wx:for="{{recipeTree}}" wx:for-item="comp" wx:key="id">
+          <view class="recipe-icon">
+            <image-fallback src="{{comp.img}}" placeholder="{{comp.initial}}" round="{{false}}" />
+          </view>
+          <view class="recipe-info">
+            <text class="recipe-name">{{comp.name}}</text>
+            <text class="recipe-cost" wx:if="{{comp.cost}}">{{comp.cost}} 金</text>
+            <text class="recipe-cost muted" wx:else>免费</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
     <!-- 深度数据：待补充 -->
     <view class="block pending">
       <view class="block-title">深度数据（待补充）</view>
-      <view class="pending-item"><t-icon name="info-circle" size="28rpx" color="#6b7280" /><text>合成树：需策展配方数据（OpenDota 未直接提供组件清单）</text></view>
+      <view class="pending-item" wx:if="{{recipeTree.length === 0}}"><t-icon name="info-circle" size="28rpx" color="#6b7280" /><text>合成树：该物品无组件或为基础物品</text></view>
       <view class="pending-item"><t-icon name="info-circle" size="28rpx" color="#6b7280" /><text>适用英雄：需赛后出装样本分析</text></view>
       <view class="pending-item"><t-icon name="info-circle" size="28rpx" color="#6b7280" /><text>赛事出装率：需职业比赛物品统计</text></view>
     </view>
