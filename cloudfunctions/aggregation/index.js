@@ -50,6 +50,27 @@ function canonicalLeagueNameWithCtx(raw, ctx) {
   if (lm && lm[ctx.leagueId] && lm[ctx.leagueId] !== raw) return lm[ctx.leagueId];
   return base;
 }
+// ===== B3 统一错误码格式（Phase 1-④，2026-07-29）=====
+// 标准化错误对象：{ code, message, detail?, error }
+// code：机器可读错误码（客户端可据此做精细处理）
+// message：人类可读错误描述（中文，便于排查）
+// detail：可选，附加上下文（如异常堆栈/原始错误）
+// error：向后兼容字段（字符串形式，供旧客户端 r.error 判断）
+const ERROR_CODES = {
+  BAD_REQUEST: 'bad_request',           // 参数缺失/非法（4xx 类）
+  NOT_CONFIGURED: 'not_configured',     // API key 未配置
+  UPSTREAM_ERROR: 'upstream_error',     // 外部 API 请求失败（5xx/网络）
+  PARSE_ERROR: 'parse_error',           // 数据解析失败
+  NOT_FOUND: 'not_found',               // 资源不存在
+  UNKNOWN: 'unknown'                   // 未知错误
+};
+function makeError(code, message, detail) {
+  const err = { code: code || ERROR_CODES.UNKNOWN, message: message || '未知错误' };
+  if (detail != null) err.detail = detail;
+  err.error = err.message;  // 向后兼容：旧客户端用 r.error 字符串判断
+  return err;
+}
+
 const TTL = {
   leagues: 6 * 3600 * 1000,
   leagueMatches: 30 * 60 * 1000,
@@ -57,7 +78,14 @@ const TTL = {
   teamMatches: 30 * 60 * 1000,
   player: 6 * 3600 * 1000,
   playerMatches: 30 * 60 * 1000,
-  heroes: 24 * 3600 * 1000
+  heroes: 24 * 3600 * 1000,
+  // 2026-07-29 差异化 TTL（Phase 1-②）
+  // 元数据（奖金池/地点/赛制/参赛队等）变化极慢，24h 长缓存减少重复请求
+  liquipediaMeta: 24 * 3600 * 1000,
+  // 赛程（未开赛/进行中的对阵）变化敏感，30min 短缓存保证时效性
+  liquipediaSchedule: 30 * 60 * 1000,
+  // §8.3 战队 Logo（2026-07-29）：战队 logo 几乎不变，30 天长缓存减少 Liquipedia 请求
+  liquipediaTeamLogo: 30 * 24 * 3600 * 1000
 };
 
 // ===== 缓存操作（可选，依赖 cloud DB collection） =====
@@ -65,25 +93,64 @@ const TTL = {
 // 每次 scripts/sync-canon-map.js 运行即更新。语义：curation/代码变更后云函数重新部署，
 // 新 dataVersion 使所有旧缓存 key 自动失效，相当于"代码部署即缓存失效"，
 // 根治"云函数部署后数据未正确更新"的根因（旧 cloud DB 缓存跨部署持久化）。
+//
+// B5 L1 内存缓存（2026-07-29）：在 cloud DB（L2）之前加一层内存缓存（L1）。
+// 云函数实例存活期间 L1 有效，命中后跳过 cloud DB 读，减少 50-200ms 延迟。
+// 实例回收后 L1 丢失，自动降级为 L2 only（无功能影响，仅性能回退）。
+// L1 上限 100 条（LRU 裁剪最旧），key 带 dataVersion 前缀，部署后自动失效。
+const L1_MAX = 100;
+const l1Cache = new Map();  // key → { data, expire }
+function l1Get(key) {
+  const e = l1Cache.get(key);
+  if (!e) return null;
+  if (Date.now() > e.expire) {
+    l1Cache.delete(key);
+    return null;
+  }
+  // LRU：删除后重新插入，使最近访问的排到末尾（Map 保持插入顺序）
+  l1Cache.delete(key);
+  l1Cache.set(key, e);
+  return e.data;
+}
+function l1Set(key, data, ttlMs) {
+  l1Cache.set(key, { data: data, expire: Date.now() + (ttlMs || 30 * 60 * 1000) });
+  // 超上限裁剪最旧条目（Map 迭代顺序 = 插入顺序，最早插入的最先被删）
+  if (l1Cache.size > L1_MAX) {
+    const oldest = l1Cache.keys().next().value;
+    if (oldest !== undefined) l1Cache.delete(oldest);
+  }
+}
+
 function _v() {
   try { return (require('./curation-shared').dataVersion || '0') + ':'; } catch (e) { return '0:'; }
 }
 async function getCache(key) {
+  const fullKey = _v() + key;
+  // L1 命中：跳过 cloud DB 读，减少 50-200ms 延迟
+  const l1 = l1Get(fullKey);
+  if (l1 !== null) return l1;
+  // L1 未命中 → 走 cloud DB（L2）
   try {
     const db = cloud.database();
-    const res = await db.collection(CACHE_COLL).doc(_v() + key).get();
+    const res = await db.collection(CACHE_COLL).doc(fullKey).get();
     const item = res && res.data;
-    if (item && item.expire > Date.now()) return item.data;
-    if (item) db.collection(CACHE_COLL).doc(_v() + key).remove().catch(() => {});
+    if (item && item.expire > Date.now()) {
+      l1Set(fullKey, item.data, item.expire - Date.now());  // L2 命中 → 回填 L1
+      return item.data;
+    }
+    if (item) db.collection(CACHE_COLL).doc(fullKey).remove().catch(() => {});
   } catch (e) {}
   return null;
 }
 
 async function setCache(key, data, ttlMs) {
+  const fullKey = _v() + key;
+  const expire = Date.now() + (ttlMs || 30 * 60 * 1000);
+  // 同时写 L1 + L2
+  l1Set(fullKey, data, ttlMs);
   try {
     const db = cloud.database();
-    const expire = Date.now() + (ttlMs || 30 * 60 * 1000);
-    await db.collection(CACHE_COLL).doc(_v() + key).set({
+    await db.collection(CACHE_COLL).doc(fullKey).set({
       data: data,
       expire: expire,
       fetchedAt: Date.now()
@@ -91,33 +158,96 @@ async function setCache(key, data, ttlMs) {
   } catch (e) {}
 }
 
+// ===== §5.4 冷启动探测（2026-07-29）=====
+// 云函数实例刚启动时（L1 为空），异步探测最重要的几个缓存 key 是否在 L2 可用。
+//   - 命中：回填 L1，后续请求直接走 L1（省 50-200ms cloud DB 读）
+//   - 全未命中：说明是全新部署或 L2 被清，不触发预热（等 cron 周期），仅记录状态
+//   - 非阻塞：失败/超时静默忽略，不影响首个请求
+// 探测 key 选取原则：高频读 + 体积适中 + 预热过的（/leagues、/heroes、upcoming_schedule）
+const PROBE_KEYS = ['/leagues', '/heroes', 'upcoming_schedule'];
+let _coldStartProbed = false;
+function coldStartProbe() {
+  if (_coldStartProbed) return;
+  _coldStartProbed = true;
+  // 异步执行，不阻塞主入口
+  Promise.all(PROBE_KEYS.map((k) => getCache(k).catch(() => null)))
+    .then((hits) => {
+      const hitCount = hits.filter((v) => v != null).length;
+      if (typeof console !== 'undefined' && console.info) {
+        console.info('[coldStart] 探测 ' + PROBE_KEYS.length + ' key，命中 ' + hitCount +
+          '（L1 已回填），状态：' + (hitCount > 0 ? 'L2 可用' : 'L2 空/全新部署'));
+      }
+    })
+    .catch(() => { /* 静默 */ });
+}
+
+// ===== safeFetch：统一外部 API 请求包装（B1 优化，2026-07-29）=====
+// 包装所有外部 API 调用（OpenDota/STRATZ/Steam/Liquipedia），统一：
+//   ① 5xx + 429 退避重试（可配置 retryCount，默认 2）
+//   ② 超时控制（默认 15s）
+//   ③ 错误格式化（标准化 error 对象，便于客户端处理）
+//   ④ 重试日志（记录重试次数和原因，便于排查）
+// 可重试状态码：500-599（源站错误）+ 429（限流）
+// 退避策略：指数退避 1.5s * 2^attempt（与原 fetchWithRetry 一致）
+// 2026-07-29 新增 429 重试：Liquipedia/STRATZ 限流场景常见，原 fetchWithRetry 仅 5xx
+async function safeFetch(options) {
+  const opts = options || {};
+  const retryCount = opts.retryCount != null ? opts.retryCount : 2;
+  const source = opts.source || 'unknown';
+  // 移除自定义字段，避免传给 got
+  const gotOpts = Object.assign({}, opts);
+  delete gotOpts.retryCount;
+  delete gotOpts.source;
+  // 确保超时配置存在
+  if (!gotOpts.timeout) gotOpts.timeout = { request: 15000 };
+
+  let attempt = 0;
+  while (true) {
+    try {
+      const res = await GOT(gotOpts);
+      return res;
+    } catch (err) {
+      const code = err && err.response && err.response.statusCode;
+      // 可重试：5xx 源站错误 + 429 限流
+      const isRetryable = (code >= 500 && code < 600) || code === 429;
+      if (isRetryable && attempt < retryCount) {
+        const delay = 1500 * Math.pow(2, attempt);
+        if (typeof console !== 'undefined' && console.warn) {
+          console.warn('[safeFetch] ' + source + ' 重试 ' + (attempt + 1) + '/' + retryCount +
+            ' (HTTP ' + code + ')，' + delay + 'ms 后重试');
+        }
+        await new Promise((r) => setTimeout(r, delay));
+        attempt++;
+        continue;
+      }
+      // 不可重试或重试次数用尽，格式化错误
+      const formatted = new Error(source + ' 请求失败: HTTP ' + (code || 'NETWORK_ERROR') +
+        ' - ' + (err.message || 'unknown'));
+      formatted.statusCode = code || 0;
+      formatted.source = source;
+      formatted.attempts = attempt + 1;
+      throw formatted;
+    }
+  }
+}
+
 // ===== OpenDota 请求 =====
 // OpenDota 经 Cloudflare 常返回 521/502/503 等瞬时源站错误（got 会抛 HTTPError）。
 // 这里做 2 次退避重试（与客户端 api.js 的 5xx 重试策略一致）：多数瞬时故障可重试恢复，
 // 避免把 521 一路抛到客户端触发回退直连（直连再 521 → 真机/模拟器 Console 报错 + 页面加载失败）。
-async function fetchWithRetry(path, attempt) {
-  attempt = attempt || 0;
-  try {
-    const res = await GOT(BASE + path, {
-      responseType: 'json',
-      timeout: { request: 15000 },
-      headers: { 'User-Agent': 'DOTA2-Esports-Hub/1.0' }
-    });
-    return res.body;
-  } catch (err) {
-    const code = err && err.response && err.response.statusCode;
-    const isRetryable = code >= 500 && code < 600;
-    if (isRetryable && attempt < 2) {
-      const delay = 1500 * Math.pow(2, attempt);
-      await new Promise((r) => setTimeout(r, delay));
-      return fetchWithRetry(path, attempt + 1);
-    }
-    throw err;
-  }
+// 2026-07-29：改用 safeFetch 统一包装，新增 429 重试（原仅 5xx）
+async function fetchWithRetry(path) {
+  const res = await safeFetch({
+    url: BASE + path,
+    responseType: 'json',
+    headers: { 'User-Agent': 'DOTA2-Esports-Hub/1.0' },
+    source: 'OpenDota'
+  });
+  return res.body;
 }
 
-async function fetch(path) {
-  return fetchWithRetry(path, 0);
+function fetch(path) {
+  return fetchWithRetry(path);
 }
 
 // ===== STRATZ GraphQL 请求（用于赛程预热）=====
@@ -128,14 +258,17 @@ const STRATZ_KEY = process.env.STRATZ_API_KEY || '';
 
 async function fetchStratz(query, variables) {
   if (!STRATZ_KEY) return null;
-  const res = await GOT.post(STRATZ_BASE, {
+  // 2026-07-29：改用 safeFetch 统一包装，新增 5xx+429 重试（原无重试）
+  const res = await safeFetch({
+    method: 'POST',
+    url: STRATZ_BASE,
     json: { query: query, variables: variables || {} },
     headers: {
       'content-type': 'application/json',
       'Authorization': 'Bearer ' + STRATZ_KEY
     },
     responseType: 'json',
-    timeout: { request: 15000 }
+    source: 'STRATZ'
   });
   return res.body && res.body.data;
 }
@@ -149,10 +282,12 @@ async function fetchSteam(path, params) {
   const ps = Object.assign({ key: STEAM_KEY }, params || {});
   const qs = Object.keys(ps).map((k) => k + '=' + encodeURIComponent(ps[k])).join('&');
   const url = STEAM_BASE + path + '/v1/?' + qs;
-  const res = await GOT(url, {
+  // 2026-07-29：改用 safeFetch 统一包装，新增 5xx+429 重试（原无重试）
+  const res = await safeFetch({
+    url: url,
     responseType: 'json',
-    timeout: { request: 15000 },
-    headers: { 'User-Agent': 'DOTA2-Esports-Hub/1.0' }
+    headers: { 'User-Agent': 'DOTA2-Esports-Hub/1.0' },
+    source: 'Steam'
   });
   return res.body;
 }
@@ -222,11 +357,13 @@ function liquipediaTierToGrade(t) {
 }
 
 async function fetchLiquipediaUpcoming() {
-  const res = await GOT(LIQUIPEDIA_BASE, {
+  // 2026-07-29：改用 safeFetch 统一包装，新增 5xx+429 重试（原无重试）
+  const res = await safeFetch({
+    url: LIQUIPEDIA_BASE,
     searchParams: { action: 'parse', page: 'Portal:Tournaments', prop: 'text', format: 'json' },
     headers: { 'User-Agent': LIQUIPEDIA_UA, 'Accept': 'application/json' },
     responseType: 'json',
-    timeout: { request: 15000 }
+    source: 'Liquipedia-Upcoming'
   });
   const html = res.body && res.body.parse && res.body.parse.text && res.body.parse.text['*'];
   if (!html) return [];
@@ -275,7 +412,9 @@ async function fetchLiquipediaUpcoming() {
 async function fetchLiquipediaWikitext(pageName) {
   if (!pageName) return null;
   try {
-    const res = await GOT(LIQUIPEDIA_BASE, {
+    // 2026-07-29：改用 safeFetch 统一包装，新增 5xx+429 重试（原无重试）
+    const res = await safeFetch({
+      url: LIQUIPEDIA_BASE,
       searchParams: {
         action: 'query',
         prop: 'revisions',
@@ -283,7 +422,10 @@ async function fetchLiquipediaWikitext(pageName) {
         rvslots: 'main',
         titles: pageName,
         format: 'json',
-        formatversion: '2'
+        formatversion: '2',
+        redirects: 1   // ★ 2026-07-28 修复重定向 BUG：自动跟随 #REDIRECT，返回最终页面的 wikitext
+                       // 不加此参数时，"ESL One Birmingham 2024" 会返回 "#REDIRECT [[...]]"（仅几百字节），
+                       // 导致 parseScheduledMatches/parseLeagueMetadata 找不到任何模板
       },
       headers: {
         'User-Agent': LIQUIPEDIA_UA,
@@ -291,7 +433,7 @@ async function fetchLiquipediaWikitext(pageName) {
         'Accept-Encoding': 'gzip'
       },
       responseType: 'json',
-      timeout: { request: 15000 }
+      source: 'Liquipedia-Wikitext'
     });
     const body = res.body;
     if (!body || !body.query || !body.query.pages) return null;
@@ -317,7 +459,7 @@ async function fetchLiquipediaWikitext(pageName) {
 // 与客户端 liquipedia.js 共用 liquipedia-parse.js 同一份解析逻辑（镜像保证一致）。
 async function liquipediaLeagueMeta(params, force) {
   const pageName = (params && (params.pageName || params.name)) || null;
-  if (!pageName) return { data: null, error: 'pageName required' };
+  if (!pageName) return { data: null, error: makeError(ERROR_CODES.BAD_REQUEST, 'pageName required') };
   const slug = liquipediaSlugFor(pageName);
   const cacheKey = 'liquipedia_league_' + slug;
   if (!force) {
@@ -328,7 +470,7 @@ async function liquipediaLeagueMeta(params, force) {
   if (!wikitext) return { data: null, source: 'liquipedia' };
   const meta = liquipediaParse.parseLeagueMetadata(wikitext, pageName);
   if (!meta) return { data: null, source: 'liquipedia' };
-  await setCache(cacheKey, meta, 6 * 3600 * 1000).catch(() => {});
+  await setCache(cacheKey, meta, TTL.liquipediaMeta).catch(() => {});
   return { data: meta, source: 'liquipedia' };
 }
 
@@ -338,7 +480,7 @@ async function liquipediaLeagueMeta(params, force) {
 // 缓存 TTL 30 分钟（与 match data 一致，比元数据更短，赛程变更敏感）。
 async function liquipediaScheduledMatches(params, force) {
   const pageName = (params && (params.pageName || params.name)) || null;
-  if (!pageName) return { data: null, error: 'pageName required' };
+  if (!pageName) return { data: null, error: makeError(ERROR_CODES.BAD_REQUEST, 'pageName required') };
   const slug = liquipediaSlugFor(pageName);
   const cacheKey = 'liquipedia_schedule_' + slug;
   if (!force) {
@@ -351,8 +493,79 @@ async function liquipediaScheduledMatches(params, force) {
   const nowSec = Math.floor(Date.now() / 1000);
   const matches = liquipediaParse.parseScheduledMatches(wikitext, nowSec);
   if (!matches || !matches.length) return { data: [], source: 'liquipedia' };
-  await setCache(cacheKey, matches, 30 * 60 * 1000).catch(() => {});
+  await setCache(cacheKey, matches, TTL.liquipediaSchedule).catch(() => {});
   return { data: matches, source: 'liquipedia' };
+}
+
+// ===== Liquipedia 战队 Logo（§8.3 2026-07-29，OpenDota 无 logo 的兜底源）=====
+// 仅在 OpenDota logo_url 为空 + STRATZ 无数据时调用，作为独立第四源。
+// 两步获取：
+//   1) 抓战队页 wikitext → parseTeamLogo 解析 {{Infobox team}} image 字段
+//   2) imageinfo API 获取图片缩略图 URL（160px，与项目 logo 尺寸一致）
+// 两次 API 调用间隔 ≥2s（Liquipedia action=query 端点限流），结果缓存 30 天。
+async function fetchImageInfoUrl(fileName) {
+  if (!fileName) return null;
+  try {
+    const res = await safeFetch({
+      url: LIQUIPEDIA_BASE,
+      searchParams: {
+        action: 'query',
+        titles: 'File:' + fileName,
+        prop: 'imageinfo',
+        iiprop: 'url',
+        iiurlwidth: '160',      // 160px 缩略图（与项目 logo 尺寸一致）
+        format: 'json',
+        formatversion: '2'
+      },
+      headers: {
+        'User-Agent': LIQUIPEDIA_UA,
+        'Accept': 'application/json',
+        'Accept-Encoding': 'gzip'
+      },
+      responseType: 'json',
+      source: 'Liquipedia-ImageInfo'
+    });
+    const body = res && res.body;
+    if (!body || !body.query || !body.query.pages) return null;
+    let pages = body.query.pages;
+    if (!Array.isArray(pages)) {
+      const arr = [];
+      for (const k in pages) { if (pages.hasOwnProperty(k)) arr.push(pages[k]); }
+      pages = arr;
+    }
+    if (!pages.length) return null;
+    const page = pages[0];
+    if (page.missing) return null;
+    const imageinfo = page.imageinfo;
+    if (!imageinfo || !imageinfo.length) return null;
+    // 优先 thumburl（缩略图），回退 url（原图，体积较大）
+    return imageinfo[0].thumburl || imageinfo[0].url || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function liquipediaTeamLogo(params, force) {
+  const teamName = (params && (params.teamName || params.name)) || null;
+  if (!teamName) return { data: null, error: makeError(ERROR_CODES.BAD_REQUEST, 'teamName required') };
+  const slug = liquipediaSlugFor(teamName);
+  const cacheKey = 'liquipedia_team_logo_' + slug;
+  if (!force) {
+    const cached = await getCache(cacheKey);
+    if (cached) return { data: cached, source: 'cache' };
+  }
+  // 步骤 1：抓 wikitext，解析 image 文件名
+  const wikitext = await fetchLiquipediaWikitext(slug);
+  if (!wikitext) return { data: null, source: 'liquipedia' };
+  const parsed = liquipediaParse.parseTeamLogo(wikitext);
+  if (!parsed || !parsed.image) return { data: null, source: 'liquipedia' };
+  // 步骤 2：遵守 2s 限流后再调 imageinfo API
+  await new Promise((r) => setTimeout(r, 2200));
+  const logoUrl = await fetchImageInfoUrl(parsed.image);
+  if (!logoUrl) return { data: null, source: 'liquipedia' };
+  const result = { logo: logoUrl, source: 'liquipedia' };
+  await setCache(cacheKey, result, TTL.liquipediaTeamLogo).catch(() => {});
+  return { data: result, source: 'liquipedia' };
 }
 
 // 知名 S 级赛事关键词（与客户端 leagues.js 保持一致）
@@ -440,7 +653,14 @@ async function preheatUpcoming() {
       };
     });
     await setCache('upcoming_schedule', windows, 6 * 3600 * 1000);
-    return { ok: true, count: Object.keys(windows).length, source: 'liquipedia' };
+    // B4 预热后 probe（Phase 1-⑤，2026-07-29）：写入后立即读回验证，
+    // 防止缓存被清但未预热的空窗期（如 cloud DB 写入静默失败/限流）
+    const probe = await getCache('upcoming_schedule');
+    if (!probe) {
+      console.warn('[preheat] probe 失败：upcoming_schedule 写入后读回为空');
+      return { ok: false, reason: 'probe failed: cache miss after set' };
+    }
+    return { ok: true, count: Object.keys(windows).length, source: 'liquipedia', probed: true };
   } catch (e) {
     return { ok: false, reason: 'liquipedia error: ' + (e && e.message) };
   }
@@ -481,7 +701,13 @@ async function preheatUpcomingFromStratz() {
 
   // 4. 存 cloud DB（客户端读此缓存秒开）
   await setCache('upcoming_schedule', windows, 6 * 3600 * 1000);
-  return { ok: true, count: Object.keys(windows).length };
+  // B4 预热后 probe（Phase 1-⑤）：写入后立即读回验证
+  const probe = await getCache('upcoming_schedule');
+  if (!probe) {
+    console.warn('[preheat] probe 失败：upcoming_schedule 写入后读回为空（STRATZ 路径）');
+    return { ok: false, reason: 'probe failed: cache miss after set' };
+  }
+  return { ok: true, count: Object.keys(windows).length, source: 'stratz', probed: true };
 }
 
 // ===== 搜索索引构建（#23 自建缓存层 / 搜索索引）=====
@@ -597,6 +823,234 @@ async function getTeamsHot() {
   return { data: {}, source: 'empty' };
 }
 
+// ===== B2 优化：Action Handler 函数（提取自 exports.main 的 if-else 链）=====
+// 每个 handler 接收完整 event 对象，从中提取所需字段。
+// 收益：O(1) Map 查找替代 O(N) 字符串比较，代码结构更清晰，便于单元测试。
+
+async function handleStratzGql(event) {
+  const { query, variables } = event;
+  if (!query) return { error: makeError(ERROR_CODES.BAD_REQUEST, 'query required') };
+  const data = await fetchStratz(query, variables);
+  if (data) return { data: data, source: 'stratz' };
+  return { error: makeError(ERROR_CODES.UPSTREAM_ERROR, 'STRATZ 请求失败') };
+}
+
+async function handleSteamProxy(event) {
+  const { path, params } = event;
+  if (!path) return { error: makeError(ERROR_CODES.BAD_REQUEST, 'path required') };
+  if (!STEAM_KEY) return { error: makeError(ERROR_CODES.NOT_CONFIGURED, 'STEAM_API_KEY not set') };
+  try {
+    const data = await fetchSteam(path, params);
+    if (data) return { data: data, source: 'steam' };
+    return { error: makeError(ERROR_CODES.UPSTREAM_ERROR, 'Steam 请求失败') };
+  } catch (e) {
+    return { error: makeError(ERROR_CODES.UPSTREAM_ERROR, 'Steam 请求异常', (e && e.message) || String(e)) };
+  }
+}
+
+async function handleGetLiquipediaUpcoming() {
+  try {
+    const data = await fetchLiquipediaUpcoming();
+    return { data: data, source: 'liquipedia' };
+  } catch (e) {
+    return { error: makeError(ERROR_CODES.UPSTREAM_ERROR, 'Liquipedia 赛程请求失败', (e && e.message) || String(e)) };
+  }
+}
+
+async function handleGetUpcomingSchedule() {
+  const cached = await getCache('upcoming_schedule');
+  if (cached) return { data: cached, source: 'cache' };
+  // 缓存未命中：现场预热一次（耗时较长，客户端应配 loading 提示）
+  const r = await preheatUpcoming();
+  if (r.ok) {
+    const data = await getCache('upcoming_schedule');
+    return { data: data || {}, source: 'fresh' };
+  }
+  return { error: makeError(ERROR_CODES.UPSTREAM_ERROR, '赛程预热失败', r) };
+}
+
+function handleGetExperiments() {
+  return {
+    experiments: {
+      follow_cta_variant: { variant: 'A', enabled: true }
+    },
+    source: 'cloud'
+  };
+}
+
+async function handleSendSubscribeMessage(event) {
+  const { touser, template_id, page, miniprogram_state, data } = (event.params || {});
+  if (!touser) return { errcode: 400, errmsg: 'touser required' };
+  if (!template_id) return { errcode: 400, errmsg: 'template_id required' };
+  if (!data) return { errcode: 400, errmsg: 'data required' };
+  try {
+    const result = await cloud.openapi.subscribeMessage.send({
+      touser: String(touser),
+      template_id: String(template_id),
+      page: String(page || '/pages/index/index'),
+      miniprogram_state: String(miniprogram_state || 'formal'),
+      data: data || {}
+    });
+    return {
+      errcode: result.errCode || result.errcode || 0,
+      errmsg: result.errMsg || result.errmsg || 'ok',
+      msgid: result.msgid || null
+    };
+  } catch (e) {
+    const errMsg = (e && e.message) || String(e);
+    let errcode = -1;
+    if (errMsg.includes('43101')) errcode = 43101;
+    if (errMsg.includes('47003')) errcode = 47003;
+    if (errMsg.includes('40003')) errcode = 40003;
+    if (errMsg.includes('41030')) errcode = 41030;
+    if (errMsg.includes('43004')) errcode = 43004;
+    return { errcode: errcode, errmsg: errMsg };
+  }
+}
+
+function handleGetOpenId() {
+  try {
+    const wxContext = cloud.getWXContext();
+    return {
+      openid: wxContext.OPENID || null,
+      appid: wxContext.APPID || null,
+      unionid: wxContext.UNIONID || null
+    };
+  } catch (e) {
+    return { error: makeError(ERROR_CODES.UPSTREAM_ERROR, '获取 OpenID 失败', (e && e.message) || String(e)) };
+  }
+}
+
+async function handleGetCached(event) {
+  const { key } = (event.params || {});
+  if (!key) return { error: makeError(ERROR_CODES.BAD_REQUEST, 'key required') };
+  const v = await getCache(key);
+  return { value: v, hit: v != null };
+}
+
+async function handleSetCached(event) {
+  const { key, value, ttlSec } = (event.params || {});
+  if (!key) return { error: makeError(ERROR_CODES.BAD_REQUEST, 'key required') };
+  await setCache(key, value, (ttlSec || 3600) * 1000);
+  return { ok: true };
+}
+
+async function handleGetSearchIndex() {
+  const cached = await getCache('search_index');
+  if (cached) return { data: cached, source: 'cache' };
+  const built = await buildSearchIndex();
+  return { data: built, source: 'fresh' };
+}
+
+async function handleBuildSearchIndex() {
+  const built = await buildSearchIndex();
+  return { data: built, source: 'fresh', count: built.count || 0 };
+}
+
+async function handleRefreshTeams() {
+  const r = await refreshTeams();
+  return { ok: true, ok_count: r.ok, fail_count: r.fail, count: r.count };
+}
+
+async function handleBuildTeamsIndex() {
+  const built = await buildTeamsIndex();
+  return { data: built, source: 'fresh', count: built.count || 0 };
+}
+
+async function handleSaveFollowProfile(event) {
+  const { openid, profile } = (event.params || {});
+  const oid = openid || (cloud.getWXContext() && cloud.getWXContext().OPENID);
+  if (!oid) return { error: makeError(ERROR_CODES.BAD_REQUEST, 'openid required') };
+  await setCache('follow_profile_' + oid, profile || {}, 30 * 24 * 3600 * 1000);
+  return { ok: true };
+}
+
+async function handleGetFollowProfile(event) {
+  const { openid } = (event.params || {});
+  const oid = openid || (cloud.getWXContext() && cloud.getWXContext().OPENID);
+  if (!oid) return { error: makeError(ERROR_CODES.BAD_REQUEST, 'openid required') };
+  const p = await getCache('follow_profile_' + oid);
+  return { profile: p || null };
+}
+
+async function handleSendSmartReminders(event) {
+  const { templateId, page, openid } = (event.params || {});
+  const oid = openid || (cloud.getWXContext() && cloud.getWXContext().OPENID);
+  if (!oid) return { error: makeError(ERROR_CODES.BAD_REQUEST, 'openid required') };
+  if (!templateId) return { error: makeError(ERROR_CODES.BAD_REQUEST, 'templateId required') };
+  const profile = await getCache('follow_profile_' + oid);
+  if (!profile || !profile.teams || !profile.teams.length) {
+    return { ok: true, sent: 0, skipped: 0, failed: 0, reason: 'empty_profile' };
+  }
+  const strategy = profile.strategy || { leadSec: 1800, tiers: ['SSS', 'S', 'A'] };
+  const now = Math.floor(Date.now() / 1000);
+  let sent = 0, skipped = 0, failed = 0;
+  for (const tid of profile.teams) {
+    try {
+      const ms = await fetch('/teams/' + tid + '/matches');
+      if (!ms || !ms.length) { skipped++; continue; }
+      const upcoming = ms.filter((m) => m.start_time > now).sort((a, b) => a.start_time - b.start_time);
+      const m = upcoming[0];
+      if (!m) { skipped++; continue; }
+      const diff = m.start_time - now;
+      if (diff > (strategy.leadSec || 1800)) { skipped++; continue; }
+      const d = new Date(m.start_time * 1000);
+      const pad = (n) => (n < 10 ? '0' + n : '' + n);
+      const timeStr = (d.getMonth() + 1) + '-' + d.getDate() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+      const data = {
+        thing1: { value: canonicalLeagueNameWithCtx(m.league_name, { leagueId: m.leagueid }).slice(0, 20) },
+        thing2: { value: timeStr },
+        thing6: { value: ((m.radiant_name || '天辉') + ' VS ' + (m.dire_name || '夜魇')).slice(0, 20) },
+        thing5: { value: '即将开始，别错过' }
+      };
+      const r = await cloud.openapi.subscribeMessage.send({
+        touser: oid,
+        template_id: String(templateId),
+        page: String(page || '/pages/index/index'),
+        miniprogram_state: 'formal',
+        data: data
+      });
+      if ((r.errCode || r.errcode || 0) === 0) sent++; else failed++;
+    } catch (e) { failed++; }
+  }
+  return { ok: true, sent: sent, skipped: skipped, failed: failed };
+}
+
+// ===== B2 核心：Action → Handler 路由表（O(1) 查找，替代 if-else 链）=====
+const HANDLERS = new Map([
+  // STRATZ / Steam 代理
+  ['stratzGql', handleStratzGql],
+  ['steamProxy', handleSteamProxy],
+  // Liquipedia
+  ['getLiquipediaUpcoming', handleGetLiquipediaUpcoming],
+  ['liquipediaLeagueMeta', (e) => liquipediaLeagueMeta(e.params, e.force)],
+  ['liquipediaScheduledMatches', (e) => liquipediaScheduledMatches(e.params, e.force)],
+  ['liquipediaTeamLogo', (e) => liquipediaTeamLogo(e.params, e.force)],
+  ['liquipediaPrewarm', (e) => liquipediaPrewarm(e.params, e.force)],
+  // 赛程
+  ['getUpcomingSchedule', handleGetUpcomingSchedule],
+  // 实验
+  ['getExperiments', handleGetExperiments],
+  // 订阅消息
+  ['sendSubscribeMessage', handleSendSubscribeMessage],
+  ['getOpenId', handleGetOpenId],
+  ['sendSmartReminders', handleSendSmartReminders],
+  // 通用云缓存
+  ['getCached', handleGetCached],
+  ['setCached', handleSetCached],
+  // 搜索索引
+  ['getSearchIndex', handleGetSearchIndex],
+  ['buildSearchIndex', handleBuildSearchIndex],
+  // 战队
+  ['getTeamsHot', getTeamsHot],
+  ['refreshTeams', handleRefreshTeams],
+  ['getTeamsIndex', getTeamsIndex],
+  ['buildTeamsIndex', handleBuildTeamsIndex],
+  // 关注画像
+  ['saveFollowProfile', handleSaveFollowProfile],
+  ['getFollowProfile', handleGetFollowProfile],
+]);
+
 // ===== 路由：action → OpenDota path =====
 function buildPath(action, params) {
   const p = params || {};
@@ -626,6 +1080,40 @@ function resolveTtl(action) {
 }
 
 // ===== 定时预热：刷新热端点的缓存 + STRATZ 赛程预热 =====
+// §5.4 渐进退避（2026-07-29）：某源连续失败时降低该源的预热频率，避免反复打不可达的源。
+//   - 每个预热任务维护 failCount + nextAllowedTime
+//   - 失败 1-2 次：下次仍尝试（容忍瞬时抖动）
+//   - 失败 3+ 次：nextAllowedTime 推后（每次 2x 退避，上限 4h），未到时间则跳过
+//   - 成功后 failCount 重置为 0
+//   收益：Liquipedia/STRATZ 长时间不可达时不浪费 cron 配额，OpenDota 热端点仍正常预热
+const PREHEAT_BACKOFF = {};  // key → { failCount, nextAllowedTime }
+const PREHEAT_MAX_BACKOFF_MS = 4 * 3600 * 1000;  // 单源最大退避 4h
+function preheatShouldRun(key) {
+  const s = PREHEAT_BACKOFF[key];
+  if (!s) return true;
+  if (Date.now() < s.nextAllowedTime) return false;
+  return true;
+}
+function preheatMarkResult(key, ok) {
+  if (!PREHEAT_BACKOFF[key]) PREHEAT_BACKOFF[key] = { failCount: 0, nextAllowedTime: 0 };
+  const s = PREHEAT_BACKOFF[key];
+  if (ok) {
+    s.failCount = 0;
+    s.nextAllowedTime = 0;
+  } else {
+    s.failCount = (s.failCount || 0) + 1;
+    if (s.failCount >= 3) {
+      // 指数退避：3次=2h, 4次=4h（上限）
+      const backoffMs = Math.min(PREHEAT_MAX_BACKOFF_MS, 2 * 3600 * 1000 * Math.pow(2, s.failCount - 3));
+      s.nextAllowedTime = Date.now() + backoffMs;
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn('[preheat] ' + key + ' 连续失败 ' + s.failCount + ' 次，退避 ' +
+          Math.round(backoffMs / 60000) + 'min');
+      }
+    }
+  }
+}
+
 async function handleTimer() {
   const hotEndpoints = [
     '/leagues',
@@ -634,6 +1122,7 @@ async function handleTimer() {
   ];
   const results = [];
   for (const path of hotEndpoints) {
+    // OpenDota 热端点不参与退避（核心数据源，瞬时抖动由 safeFetch 重试兜底）
     try {
       const data = await fetch(path);
       await setCache(path, data, 6 * 3600 * 1000);
@@ -642,12 +1131,18 @@ async function handleTimer() {
       results.push({ path, ok: false, error: e.message });
     }
   }
-  // STRATZ 赛程预热（解决客户端"即将到来"首次加载慢）
-  try {
-    const r = await preheatUpcoming();
-    results.push({ preheatUpcoming: r });
-  } catch (e) {
-    results.push({ preheatUpcoming: { ok: false, error: e.message } });
+  // STRATZ 赛程预热（解决客户端"即将到来"首次加载慢）—— 参与退避
+  if (preheatShouldRun('preheatUpcoming')) {
+    try {
+      const r = await preheatUpcoming();
+      preheatMarkResult('preheatUpcoming', !!(r && r.ok));
+      results.push({ preheatUpcoming: r });
+    } catch (e) {
+      preheatMarkResult('preheatUpcoming', false);
+      results.push({ preheatUpcoming: { ok: false, error: e.message } });
+    }
+  } else {
+    results.push({ preheatUpcoming: { ok: false, skipped: 'backoff' } });
   }
   // #23 搜索索引定时重建（联赛有限集，落库供全局搜索/推荐位复用，降 OpenDota 限流）
   try {
@@ -657,11 +1152,17 @@ async function handleTimer() {
     results.push({ buildSearchIndex: { ok: false, error: e.message } });
   }
   // 战队模块：定时预热顶级战队详情（teams_hot 共享缓存，降 OpenDota /teams/{id} 限流）
-  try {
-    const rt = await refreshTeams();
-    results.push({ refreshTeams: { ok: true, ok_count: rt.ok, fail_count: rt.fail } });
-  } catch (e) {
-    results.push({ refreshTeams: { ok: false, error: e.message } });
+  if (preheatShouldRun('refreshTeams')) {
+    try {
+      const rt = await refreshTeams();
+      preheatMarkResult('refreshTeams', rt && rt.fail < (rt.ok + rt.fail));  // 多数成功则视为成功
+      results.push({ refreshTeams: { ok: true, ok_count: rt.ok, fail_count: rt.fail } });
+    } catch (e) {
+      preheatMarkResult('refreshTeams', false);
+      results.push({ refreshTeams: { ok: false, error: e.message } });
+    }
+  } else {
+    results.push({ refreshTeams: { ok: false, skipped: 'backoff' } });
   }
   // 战队搜索索引：定时重建历史 S 级语料（teams_search），供全局搜索兜底（修复 TEAM_SEARCH_BUG A）
   try {
@@ -675,266 +1176,80 @@ async function handleTimer() {
 
 // ===== 主入口 =====
 exports.main = async (event, context) => {
+  // §5.4 冷启动探测：首次请求触发 L2→L1 回填（非阻塞）
+  coldStartProbe();
+  // §7.4 结构化日志（2026-07-29）：统一记录请求开始/结束时间、action、cache 命中、耗时、状态
+  // 便于云函数日志排查性能瓶颈与失败原因。JSON 格式便于日志服务检索。
+  const __startTime = Date.now();
+  const __logEnd = (result) => {
+    const durationMs = Date.now() - __startTime;
+    const status = (result && result.error) ? 'error'
+      : (result && result.source === 'cache') ? 'cache_hit'
+      : (result && result.source === 'cache_fallback') ? 'cache_fallback'
+      : (result && result.source === 'fresh') ? 'fresh'
+      : (result && result.data) ? 'ok' : 'unknown';
+    console.log(JSON.stringify({
+      type: 'cloud_call',
+      action: action || '',
+      status: status,
+      durationMs: durationMs,
+      cacheSource: (result && result.source) || '',
+      force: !!force,
+      hasError: !!(result && result.error)
+    }));
+  };
+
   // 定时触发
   if (event.TriggerName === 'cron') {
-    return await handleTimer();
+    const r = await handleTimer();
+    __logEnd(r);
+    return r;
   }
 
   const { action, params, force } = event;
-  if (!action) return { error: 'action required' };
+  if (!action) {
+    const r = { error: makeError(ERROR_CODES.BAD_REQUEST, 'action required') };
+    __logEnd(r);
+    return r;
+  }
 
   // 内置定时指令
-  if (action === '__cron__') return await handleTimer();
+  if (action === '__cron__') {
+    const r = await handleTimer();
+    __logEnd(r);
+    return r;
+  }
 
   // 赛程预热（手动触发，或客户端读取预热结果）
-  if (action === 'preheatUpcoming') return await preheatUpcoming();
-
-  // STRATZ GraphQL 代理：客户端不存 apiKey，通过云函数环境变量 STRATZ_API_KEY 中转
-  if (action === 'stratzGql') {
-    const { query, variables } = event;
-    if (!query) return { error: 'query required' };
-    const data = await fetchStratz(query, variables);
-    if (data) return { data: data, source: 'stratz' };
-    return { error: 'stratz fetch failed' };
-  }
-
-  // Steam Web API 代理：客户端不存 apiKey，通过云函数环境变量 STEAM_API_KEY 中转（T1）
-  if (action === 'steamProxy') {
-    const { path, params } = event;
-    if (!path) return { error: 'path required' };
-    if (!STEAM_KEY) return { error: 'STEAM_API_KEY not set' };
-    try {
-      const data = await fetchSteam(path, params);
-      if (data) return { data: data, source: 'steam' };
-      return { error: 'steam fetch failed' };
-    } catch (e) {
-      return { error: 'steam fetch error: ' + (e && e.message) };
-    }
-  }
-
-  // Liquipedia 赛事列表（"即将到来"实时源，无需 STRATZ key）：解析 Portal:Tournaments
-  // Upcoming 段落，返回 Tier 1/2 赛事数组。供调试 / 直接读取，正式链路走 getUpcomingSchedule。
-  if (action === 'getLiquipediaUpcoming') {
-    try {
-      const data = await fetchLiquipediaUpcoming();
-      return { data: data, source: 'liquipedia' };
-    } catch (e) {
-      return { error: 'liquipedia upcoming error: ' + (e && e.message) };
-    }
-  }
-
-  // Liquipedia 赛事元数据（A+B 双源：客户端云代理优先 → 本 action 抓取 + 纯解析）。
-  // 规避 wx.request 禁设 User-Agent 的限制；返回与客户端 getLeagueMetadata 同形状的 metadata。
-  if (action === 'liquipediaLeagueMeta') {
-    return await liquipediaLeagueMeta(params, force);
-  }
-
-  // Liquipedia 赛程数据（未开赛/进行中的对阵）：云函数抓取 wikitext + parseScheduledMatches 解析。
-  // 同样规避 wx.request 禁设 User-Agent 的限制；返回 [{ team1Name, team2Name, startTime, boType, finished, phase }]。
-  if (action === 'liquipediaScheduledMatches') {
-    return await liquipediaScheduledMatches(params, force);
-  }
-
-  // 批量预热 Liquipedia 赛事元数据（懒加载 + 预热双轨）。默认自动枚举近半年/未来 notable 联赛，
-  // 或由 params.pageNames 定向回填；每条 2s 限流，单条失败隔离，返回汇总。
-  if (action === 'liquipediaPrewarm') {
-    return await liquipediaPrewarm(params, force);
-  }
-
-  if (action === 'getUpcomingSchedule') {
-    const cached = await getCache('upcoming_schedule');
-    if (cached) return { data: cached, source: 'cache' };
-    // 缓存未命中：现场预热一次（耗时较长，客户端应配 loading 提示）
+  if (action === 'preheatUpcoming') {
     const r = await preheatUpcoming();
-    if (r.ok) {
-      const data = await getCache('upcoming_schedule');
-      return { data: data || {}, source: 'fresh' };
-    }
-    return { error: 'preheat failed', detail: r };
+    __logEnd(r);
+    return r;
   }
-
-  // T6 A/B 实验配置下发。生产环境应读云数据库 experiments collection（按用户分桶），
-  // 此处返回静态样本配置，客户端拉取后缓存并按 variant 灰度。后端契约见 README。
-  if (action === 'getExperiments') {
-    return {
-      experiments: {
-        follow_cta_variant: { variant: 'A', enabled: true } // A=去发现战队 / B=浏览热门战队
-      },
-      source: 'cloud'
-    };
-  }
-
-  // ===== 2.2 订阅消息发送（subscribe/send）=====
-  // 通过云调用（cloud.openapi）发送订阅消息，无需自行管理 access_token。
-  // 前置条件：云开发控制台已开通「订阅消息」权限（设置 → 权限管理）。
-  // 环境变量：无需额外配置（wx-server-sdk 自动使用当前环境凭证）。
-  if (action === 'sendSubscribeMessage') {
-    const { touser, template_id, page, miniprogram_state, data } = (params || {});
-    if (!touser) return { errcode: 400, errmsg: 'touser required' };
-    if (!template_id) return { errcode: 400, errmsg: 'template_id required' };
-    if (!data) return { errcode: 400, errmsg: 'data required' };
-
-    try {
-      const result = await cloud.openapi.subscribeMessage.send({
-        touser: String(touser),
-        template_id: String(template_id),
-        page: String(page || '/pages/index/index'),
-        miniprogram_state: String(miniprogram_state || 'formal'),
-        data: data || {}
-      });
-      // 返回微信原始响应 { errcode, errmsg, msgid }
-      return {
-        errcode: result.errCode || result.errcode || 0,
-        errmsg: result.errMsg || result.errmsg || 'ok',
-        msgid: result.msgid || null
-      };
-    } catch (e) {
-      const errMsg = (e && e.message) || String(e);
-      // 常见错误码映射
-      let errcode = -1;
-      if (errMsg.includes('43101')) errcode = 43101;   // 用户拒收
-      if (errMsg.includes('47003')) errcode = 47003;   // 参数错误
-      if (errMsg.includes('40003')) errcode = 40003;   // 无效 openid
-      if (errMsg.includes('41030')) errcode = 41030;   // page 路径不存在
-      if (errMsg.includes('43004')) errcode = 43004;   // 模板未审核通过
-      return { errcode: errcode, errmsg: errMsg };
-    }
-  }
-
-  // ===== 获取用户 OpenID（用于订阅消息推送 touser）=====
-  // 客户端调用此 action 获取当前用户的 openid，缓存到本地后复用。
-  // 云函数端通过 cloud.getWXContext() 直接获取，无需 code 换取。
-  if (action === 'getOpenId') {
-    try {
-      const wxContext = cloud.getWXContext();
-      return {
-        openid: wxContext.OPENID || null,
-        appid: wxContext.APPID || null,
-        unionid: wxContext.UNIONID || null
-      };
-    } catch (e) {
-      return { error: 'getOpenId failed', detail: (e && e.message) || String(e) };
-    }
-  }
-
-  // ===== #23 通用云缓存读写（落库缓存层）=====
-  // 客户端可把任意计算结果（个性化画像 / 搜索索引 / 预聚合数据）存到云数据库，
-  // 跨设备、跨会话复用，避免重复计算与重复打 OpenDota。键空间与 aggregation_cache 共用。
-  if (action === 'getCached') {
-    const { key } = (params || {});
-    if (!key) return { error: 'key required' };
-    const v = await getCache(key);
-    return { value: v, hit: v != null };
-  }
-  if (action === 'setCached') {
-    const { key, value, ttlSec } = (params || {});
-    if (!key) return { error: 'key required' };
-    await setCache(key, value, (ttlSec || 3600) * 1000);
-    return { ok: true };
-  }
-
-  // ===== #23 搜索索引（联赛有限集）=====
-  // 全局搜索 / 推荐位优先读缓存索引；未命中现场构建一次。
-  if (action === 'getSearchIndex') {
-    const cached = await getCache('search_index');
-    if (cached) return { data: cached, source: 'cache' };
-    const built = await buildSearchIndex();
-    return { data: built, source: 'fresh' };
-  }
-  if (action === 'buildSearchIndex') {
-    const built = await buildSearchIndex();
-    return { data: built, source: 'fresh', count: built.count || 0 };
-  }
-
-  // ===== 战队模块：热门战队共享缓存 =====
-  // 客户端 teams 页 enrichHot 优先读此缓存；未命中返回空（由客户端回退逐队拉取，避免并发突发热点）。
-  if (action === 'getTeamsHot') {
-    return await getTeamsHot();
-  }
-  // 手动触发预热（部署后首次调用一次即可暖库；之后由 6h timer 维护）。
-  if (action === 'refreshTeams') {
-    const r = await refreshTeams();
-    return { ok: true, ok_count: r.ok, fail_count: r.fail, count: r.count };
-  }
-
-  // ===== 战队搜索索引（修复 TEAM_SEARCH_BUG · 修复 A）=====
-  // 历史 S 级及以上战队语料（OpenDota /search 漏检部分），落库 teams_search 供全局搜索兜底。
-  if (action === 'getTeamsIndex') {
-    return await getTeamsIndex();
-  }
-  if (action === 'buildTeamsIndex') {
-    const built = await buildTeamsIndex();
-    return { data: built, source: 'fresh', count: built.count || 0 };
-  }
-
-  // ===== #20 服务端策略引擎：关注画像存储 + 批量智能提醒 =====
-  // 客户端把 { teams:[id], strategy:{leadSec,tiers} } 上传到云端（按 openid 分桶），
-  // 服务端可据此在服务端定时批量推送（与客户端 checkPreMatchReminders 双轨并行）。
-  if (action === 'saveFollowProfile') {
-    const { openid, profile } = (params || {});
-    const oid = openid || (cloud.getWXContext() && cloud.getWXContext().OPENID);
-    if (!oid) return { error: 'openid required' };
-    await setCache('follow_profile_' + oid, profile || {}, 30 * 24 * 3600 * 1000);
-    return { ok: true };
-  }
-  if (action === 'getFollowProfile') {
-    const { openid } = (params || {});
-    const oid = openid || (cloud.getWXContext() && cloud.getWXContext().OPENID);
-    if (!oid) return { error: 'openid required' };
-    const p = await getCache('follow_profile_' + oid);
-    return { profile: p || null };
-  }
-  if (action === 'sendSmartReminders') {
-    const { templateId, page, openid } = (params || {});
-    const oid = openid || (cloud.getWXContext() && cloud.getWXContext().OPENID);
-    if (!oid) return { error: 'openid required' };
-    if (!templateId) return { error: 'templateId required' };
-    const profile = await getCache('follow_profile_' + oid);
-    if (!profile || !profile.teams || !profile.teams.length) {
-      return { ok: true, sent: 0, skipped: 0, failed: 0, reason: 'empty_profile' };
-    }
-    const strategy = profile.strategy || { leadSec: 1800, tiers: ['SSS', 'S', 'A'] };
-    const now = Math.floor(Date.now() / 1000);
-    let sent = 0, skipped = 0, failed = 0;
-    for (const tid of profile.teams) {
-      try {
-        const ms = await fetch('/teams/' + tid + '/matches');
-        if (!ms || !ms.length) { skipped++; continue; }
-        const upcoming = ms.filter((m) => m.start_time > now).sort((a, b) => a.start_time - b.start_time);
-        const m = upcoming[0];
-        if (!m) { skipped++; continue; }
-        const diff = m.start_time - now;
-        if (diff > (strategy.leadSec || 1800)) { skipped++; continue; }
-        const d = new Date(m.start_time * 1000);
-        const pad = (n) => (n < 10 ? '0' + n : '' + n);
-        const timeStr = (d.getMonth() + 1) + '-' + d.getDate() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
-        const data = {
-          thing1: { value: canonicalLeagueNameWithCtx(m.league_name, { leagueId: m.leagueid }).slice(0, 20) },
-          thing2: { value: timeStr },
-          thing6: { value: ((m.radiant_name || '天辉') + ' VS ' + (m.dire_name || '夜魇')).slice(0, 20) },
-          thing5: { value: '即将开始，别错过' }
-        };
-        const r = await cloud.openapi.subscribeMessage.send({
-          touser: oid,
-          template_id: String(templateId),
-          page: String(page || '/pages/index/index'),
-          miniprogram_state: 'formal',
-          data: data
-        });
-        if ((r.errCode || r.errcode || 0) === 0) sent++; else failed++;
-      } catch (e) { failed++; }
-    }
-    return { ok: true, sent: sent, skipped: skipped, failed: failed };
+  // B2 优化：专用 action 通过 Map O(1) 路由（替代 if-else 链）
+  const handler = HANDLERS.get(action);
+  if (handler) {
+    const r = await handler(event);
+    __logEnd(r);
+    return r;
   }
 
   const path = buildPath(action, params);
-  if (!path) return { error: 'unknown action: ' + action };
+  if (!path) {
+    const r = { error: makeError(ERROR_CODES.BAD_REQUEST, 'unknown action: ' + action) };
+    __logEnd(r);
+    return r;
+  }
 
   // 查缓存（非 force）
   const cacheKey = path;
   if (!force) {
     const cached = await getCache(cacheKey);
-    if (cached) return { data: cached, source: 'cache' };
+    if (cached) {
+      const r = { data: cached, source: 'cache' };
+      __logEnd(r);
+      return r;
+    }
   }
 
   // 代理请求 OpenDota
@@ -942,11 +1257,19 @@ exports.main = async (event, context) => {
     const data = await fetch(path);
     // 后台缓存（不阻塞返回）
     setCache(cacheKey, data, resolveTtl(action)).catch(() => {});
-    return { data: data, source: 'fresh' };
+    const r = { data: data, source: 'fresh' };
+    __logEnd(r);
+    return r;
   } catch (e) {
     // 请求失败时尝试用过期缓存兜底
     const fallback = await getCache(cacheKey);
-    if (fallback) return { data: fallback, source: 'cache_fallback' };
-    return { error: 'fetch failed: ' + e.message };
+    if (fallback) {
+      const r = { data: fallback, source: 'cache_fallback' };
+      __logEnd(r);
+      return r;
+    }
+    const r = { error: makeError(ERROR_CODES.UPSTREAM_ERROR, 'OpenDota 请求失败', (e && e.message) || String(e)) };
+    __logEnd(r);
+    return r;
   }
 };
