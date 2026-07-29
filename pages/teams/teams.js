@@ -4,7 +4,6 @@ const config = require('../../utils/config.js');
 const util = require('../../utils/util.js');
 const sources = require('../../utils/sources.js');
 const searchHistory = require('../../utils/searchHistory.js');
-const curation = require('../../utils/curation.js');
 const teamSearch = require('../../utils/teamSearch.js');
 
 // 跨页状态持久化键（I5）：离开页面时保存搜索类型/关键词/滚动位置，返回时还原
