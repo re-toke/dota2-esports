@@ -7,7 +7,6 @@
     "t-icon": "tdesign-miniprogram/icon/icon",
     "t-button": "tdesign-miniprogram/button/button",
     "t-skeleton": "tdesign-miniprogram/skeleton/skeleton",
-    "empty-state": "../../components/empty-state/empty-state",
-    "skeleton": "../../components/skeleton/skeleton"
+    "empty-state": "../../components/empty-state/empty-state"
   }
 }

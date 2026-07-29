@@ -54,7 +54,9 @@
 
   <!-- 搜索加载骨架屏 -->
   <block wx:if="{{loading}}">
-    <skeleton type="row" count="5" />
+    <view wx:for="{{[1,2,3,4,5]}}" wx:key="*this" style="margin-bottom:16rpx;">
+      <t-skeleton theme="paragraph" loading="{{true}}" />
+    </view>
   </block>
 
   <empty-state wx:elif="{{error}}" type="error" title="加载失败" desc="{{error}}" actionText="重试" bind:action="onRetry" />
@@ -146,12 +148,6 @@
       <t-button theme="light" size="medium" bind:tap="appendPage" loading="{{loadingMore}}">加载更多战队</t-button>
     </view>
     <view wx:elif="{{mode === 'result' && results.length > pageSize}}" class="center muted">— 已显示全部 {{results.length}} 支 —</view>
-
-    <!-- hot 模式无限下拉：滚到底自动加载下一页（onReachBottom），按钮作为兜底 -->
-    <view class="loadmore" wx:if="{{mode === 'hot' && hotHasMore}}">
-      <t-button theme="light" size="medium" bind:tap="appendHotPage" loading="{{hotLoadingMore}}">加载更多战队</t-button>
-    </view>
-    <view wx:elif="{{mode === 'hot' && hot.length > hotPageSize}}" class="center muted">— 已显示全部 {{hot.length}} 支 —</view>
 
   </block>
 </view>

@@ -5,6 +5,7 @@ const util = require('../../utils/util.js');
 const sources = require('../../utils/sources.js');
 const searchHistory = require('../../utils/searchHistory.js');
 const teamSearch = require('../../utils/teamSearch.js');
+const cloudCache = require('../../utils/cloudCache.js');
 
 // 跨页状态持久化键（I5）：离开页面时保存搜索类型/关键词/滚动位置，返回时还原
 const VIEW_KEY = 'teams_view_state';
@@ -77,7 +78,20 @@ function buildSuggestion(kw) {
 }
 
 // 本地战队模糊匹配已抽到 utils/teamSearch.js（与 pages/search 共用同一套语料/兜底逻辑）。
-// 此处仅保留卡片字段合并等页面级逻辑。
+// 此处仅保留热门战队综合评分等页面级逻辑。
+
+// 热门战队综合评分（用于动态排序，替代写死顺序）
+// 维度：近期度（基于 last_match_time，180 天内线性衰减）+ 评分(rating) + 胜率(winRate)
+// 热点=近期活跃，故近期度权重最高。成员数量需逐队拉 roster（getTeamPlayers），成本高，
+// 暂不纳入；rating/winrate 已是其合理代理信号。
+function scoreTeam(item) {
+  const now = Date.now() / 1000;
+  const days = item.lastMatchTime ? (now - item.lastMatchTime) / 86400 : 9999;
+  const recency = Math.max(0, Math.min(1, 1 - days / 180));        // 0天→1.0，≥180天→0
+  const rating = Math.max(0, Math.min(1, (item.rating || 0) / 2000));
+  const winRate = (item.winRate || 0) / 100;
+  return Math.round((recency * 0.55 + rating * 0.30 + winRate * 0.15) * 1000) / 1000;
+}
 
 // 把 api.getTeam 原始数据合并进展示用的卡片对象
 // 保留 followed 状态；新增 logo / country / rating / wins / losses / winRate / lastMatchLabel
@@ -134,11 +148,6 @@ Page({
     hasMore: false,
     page: 0,
     pageSize: config.pageSize,
-    // hot 模式无限下拉分页状态（与 result 模式的 page/hasMore/loadingMore 相互独立）
-    hotPage: 0,
-    hotPageSize: 12,
-    hotHasMore: false,
-    hotLoadingMore: false,
     searched: false,
     error: '',
     history: [],
@@ -150,74 +159,51 @@ Page({
   },
 
   onLoad() {
-    // hot 池 = 策展 top 队(HOT_TEAMS) + 本地知名战队索引(teamSearch)，按 id 去重后客户端分页，
-    // 实现 hot 模式无限下拉（不再仅 10 队就到底）。
-    const pool = this.buildHotPool();
-    this.allHot = pool;
-    const first = pool.slice(0, this.data.hotPageSize).map((t) => this.decorateHot(t));
     this.setData({
-      hot: first,
-      hotPage: 0,
-      hotHasMore: pool.length > first.length,
-      hotLoadingMore: false,
+      hot: HOT_TEAMS.map((t) => Object.assign({}, t, {
+        id: t.team_id,
+        followed: follow.isFollowed('teams', t.team_id)
+      })),
       history: searchHistory.get('teams')
     });
-    this.enrichHotSlice();
+    // 异步补全：每个热门队伍并行拉取详情（logo/rating/wins/losses/country/last_match_time）
+    this.enrichHot();
   },
 
-  // 构建 hot 滚动池：HOT_TEAMS（策展 top 队）优先，再并入 teamSearch 本地索引里的其余知名战队，
-  // 按 id 去重。返回 [{id,name,tag,navigable}]（不含 followed，渲染时再补）。零网络、稳定 id。
-  buildHotPool() {
-    const pool = [];
-    const seen = {};
-    HOT_TEAMS.forEach((t) => {
-      const id = t.team_id;
-      if (!seen[id]) { seen[id] = true; pool.push({ id: id, name: t.name, tag: t.tag, navigable: true }); }
-    });
-    teamSearch.buildLocalTeamIndex().forEach((t) => {
-      if (!seen[t.id]) { seen[t.id] = true; pool.push({ id: t.id, name: t.name, tag: t.tag, navigable: t.navigable !== false }); }
-    });
-    return pool;
-  },
-
-  // 给 hot 池项补 followed 状态，返回展示用对象。
-  decorateHot(t) {
-    return Object.assign({}, t, { followed: follow.isFollowed('teams', t.id) });
-  },
-
-  // 懒补全：仅对当前可见 hot 切片中尚未补全的项拉取详情（logo/rating/wins 等）。
-  // 逐页滚动时只对可见部分触发，分散 OpenDota 请求、避免一次性 40+ 并行（原 enrichHot 全量补全）。
-  // 已补全项带 _enriched 标记，直接跳过；navigable:false 的占位历史队（负数 id）不请求。
-  enrichHotSlice() {
+  // 批量补全热门队伍详情：优先读云端预热共享缓存 teams_hot（命中 id 则免一次 OpenDota /teams/{id}），
+  // 未命中则回退逐队 api.getTeam。二次增强（curation + Steam）照常进行。任一失败被隔离。
+  enrichHot() {
+    this.setData({ hotEnriching: true });
     const list = this.data.hot.slice();
-    if (!list.length) return;
+    cloudCache.getTeamsHot()
+      .then((hotCache) => {
+        const cacheMap = (hotCache && typeof hotCache === 'object') ? hotCache : {};
+        this.buildHotTasks(list, cacheMap);
+      })
+      .catch(() => this.buildHotTasks(list, {})); // 云端极端不可用：直接逐队拉取（原路径）
+  },
+
+  // 构建补全任务：cacheMap 命中 id 复用云端详情，否则 api.getTeam；完成后做二次增强 + 评分排序。
+  buildHotTasks(list, cacheMap) {
     const tasks = list.map((item) => {
-      if (item._enriched || item.navigable === false) {
-        return Promise.resolve(Object.assign({}, item, { _enriched: true }));
-      }
-      return api.getTeam(item.id)
+      const cached = cacheMap[item.id];
+      const primary = cached ? Promise.resolve(cached) : api.getTeam(item.id);
+      return primary
         .then((t) => enrichItem(item, t))
         .then((merged) => sources.enrichTeamInfo({ id: item.id, name: item.name })
           .then((info) => applyExtra(merged, info))
           .catch(() => merged))
-        .catch(() => item)
-        .then((enriched) => Object.assign({}, enriched, { _enriched: true }));
+        .catch(() => item); // 隔离错误，保持原样
     });
-    this.setData({ hotEnriching: true });
-    Promise.all(tasks).then((enriched) => {
-      this.setData({ hot: enriched, hotEnriching: false });
-    });
+    Promise.all(tasks).then((enriched) => this.rankAndSetHot(enriched));
   },
 
-  // 下拉刷新：清除补全标记后重新补全可见页。
-  refreshHot() {
-    const reset = this.data.hot.map((t) => {
-      const r = Object.assign({}, t);
-      delete r._enriched;
-      return r;
-    });
-    this.setData({ hot: reset, hotEnriching: true });
-    this.enrichHotSlice();
+  // 综合评分排序后写入 hot（近期活跃 + 高评分 + 高胜率 靠前；长期无比赛的队自然下沉）。
+  rankAndSetHot(enriched) {
+    const ranked = enriched
+      .map((it) => Object.assign({}, it, { _score: scoreTeam(it) }))
+      .sort((a, b) => b._score - a._score);
+    this.setData({ hot: ranked, hotEnriching: false });
   },
 
   // 批量补全搜索结果：仅对当前已展示的 slice 进行（避免对未展示项的无谓请求）
@@ -246,7 +232,7 @@ Page({
       this.onRetry();
     } else {
       // 热门模式：重新拉一次详情刷新数据
-      this.refreshHot();
+      this.enrichHot();
       wx.stopPullDownRefresh();
     }
   },
@@ -259,15 +245,8 @@ Page({
   },
 
   onReachBottom() {
-    if (this.data.mode === 'result') {
-      if (this.data.hasMore && !this.data.loading && !this.data.loadingMore) {
-        this.appendPage();
-      }
-    } else if (this.data.mode === 'hot') {
-      // hot 模式无限下拉：滚到底加载下一页（与 result 模式的分页状态相互独立）
-      if (this.data.hotHasMore && !this.data.hotLoadingMore) {
-        this.appendHotPage();
-      }
+    if (this.data.mode === 'result' && this.data.hasMore && !this.data.loading && !this.data.loadingMore) {
+      this.appendPage();
     }
   },
 
@@ -438,24 +417,6 @@ Page({
     });
     // 对新加载的项也异步补全（仅对未增强过的）
     this.enrichResults();
-  },
-
-  // hot 模式加载下一页：从 allHot 追加下一页切片到 hot，更新 hotHasMore，并对新增项做懒补全。
-  appendHotPage() {
-    if (this.data.hotLoadingMore || !this.data.hotHasMore || !this.allHot) return;
-    const pageSize = this.data.hotPageSize;
-    const page = this.data.hotPage + 1;
-    const appended = this.allHot
-      .slice(page * pageSize, (page + 1) * pageSize)
-      .map((t) => this.decorateHot(t));
-    const hot = this.data.hot.concat(appended);
-    this.setData({
-      hot: hot,
-      hotPage: page,
-      hotHasMore: this.allHot.length > hot.length,
-      hotLoadingMore: false
-    });
-    this.enrichHotSlice();
   },
 
   toggleFollow(e) {
