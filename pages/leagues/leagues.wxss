@@ -231,12 +231,10 @@
 
 /* ── 各等级默认态（未选中）：淡品牌色边框 + 淡文字 ── */
 .gc--all   { border-color: #3d4a5c; }
-.gc--sss   { border-color: var(--tier-sss-line); }
 .gc--s     { border-color: var(--tier-s-line); }
 .gc--a     { border-color: var(--tier-a-line); }
 .gc--b     { border-color: var(--tier-b-line); }
 
-.gc--sss .gc__label { color: var(--tier-sss); }
 .gc--s   .gc__label { color: var(--tier-s); }
 .gc--a   .gc__label { color: var(--tier-a); }
 .gc--b   .gc__label { color: var(--tier-b); }
@@ -263,19 +261,6 @@
 .gc--all.gc--active .gc__label {
   color: #e6edf3;
   text-shadow: 0 1rpx 3rpx rgba(0,0,0,.35);
-}
-
-/* SSS 选中：金琥珀渐变 */
-.gc--sss.gc--active {
-  --gc-glow: rgba(255,207,92,.28);
-  background: linear-gradient(135deg, #ffcf5c 0%, #f0a020 100%);
-  box-shadow:
-    0 4rpx 18rpx rgba(255,160,32,.38),
-    0 0 24rpx rgba(255,207,92,.22);
-}
-.gc--sss.gc--active .gc__label {
-  color: #1a1400;
-  text-shadow: 0 1rpx 2rpx rgba(255,207,92,.5);
 }
 
 /* S 选中：翠绿渐变 */

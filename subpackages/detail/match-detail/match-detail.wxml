@@ -29,6 +29,8 @@
       tierLabel="{{anchorTierLabel}}"
       tierClass="{{anchorTierClass}}"
       metaList="{{anchorMeta}}"
+      logoA="{{radiantLogo}}"
+      logoB="{{direLogo}}"
     />
 
     <!-- 5.1 内嵌对战：赛事详情快捷跳双方历史对比（仅战队赛显示） -->

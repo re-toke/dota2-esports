@@ -148,8 +148,8 @@ check('consensusTier curation 权重 3 胜过 opendota+community 权重 2', () =
   eq(r.rank, 3);
 });
 
-// 13. consensusTier：curation(S, 权重 3) + liquipedia(S, 权重 2) vs opendota(A, 权重 1) → S 级胜出（权重和 5 > 1）
-check('consensusTier S 级权重和 5 胜过 A 级权重 1', () => {
+// 13. consensusTier：curation(S, 权重 3) + liquipedia(S, 权重 4) vs opendota(A, 权重 1) → S 级胜出（权重和 7 > 1）
+check('consensusTier S 级权重和 7 胜过 A 级权重 1', () => {
   const candidates = [
     { grade: 'S', rank: 3, source: 'curation' },
     { grade: 'S', rank: 3, source: 'liquipedia' },
@@ -160,14 +160,14 @@ check('consensusTier S 级权重和 5 胜过 A 级权重 1', () => {
   eq(r.rank, 3);
 });
 
-// 14. consensusTier：opendota(S, 权重 1) vs liquipedia(A, 权重 2) → A 级胜出（权重 2 > 1）
-check('consensusTier liquipedia 权重 2 胜过 opendota 权重 1（即使 rank 更低）', () => {
+// 14. consensusTier：opendota(S, 权重 1) vs liquipedia(A, 权重 4) → A 级胜出（权重 4 > 1）
+check('consensusTier liquipedia 权重 4 胜过 opendota 权重 1（即使 rank 更低）', () => {
   const candidates = [
     { grade: 'S', rank: 3, source: 'opendota' },
     { grade: 'A', rank: 2, source: 'liquipedia' }
   ];
   const r = C.consensusTier(candidates);
-  // liquipedia 人工策展权重 2 > opendota 自动源权重 1，体现人工策展更可信
+  // liquipedia 人工策展权重 4 > opendota 自动源权重 1，体现人工策展更可信（对齐 Liquipedia 等级体系）
   eq(r.grade, 'A');
   eq(r.rank, 2);
 });
@@ -177,9 +177,21 @@ check('weightOf curation === 3', () => {
   eq(C.weightOf('curation'), 3);
 });
 
-// 16. weightOf('liquipedia') === 2
-check('weightOf liquipedia === 2', () => {
-  eq(C.weightOf('liquipedia'), 2);
+// 15b. consensusTier：curation(A, 权重 3) vs liquipedia(S, 权重 4) → S 级胜出（4 > 3）
+// 这是 2026-07-30「仅提高LP权重」的核心效果：Liquipedia 现可逆转 curation 的钉制。
+check('consensusTier liquipedia 权重 4 胜过 curation 权重 3', () => {
+  const candidates = [
+    { grade: 'A', rank: 2, source: 'curation' },
+    { grade: 'S', rank: 3, source: 'liquipedia' }
+  ];
+  const r = C.consensusTier(candidates);
+  eq(r.grade, 'S');
+  eq(r.rank, 3);
+});
+
+// 16. weightOf('liquipedia') === 4（2026-07-30 起提至最高，对齐 Liquipedia 等级体系）
+check('weightOf liquipedia === 4', () => {
+  eq(C.weightOf('liquipedia'), 4);
 });
 
 // 17. weightOf unknown source 默认 1

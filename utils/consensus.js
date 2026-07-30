@@ -10,14 +10,15 @@
 // 设计原则：所有来源都是「尽力而为」。任一来源缺失/异常都不影响其它来源，
 // 也绝不阻断页面渲染。单源时无法交叉验证，confidence 自然为 'low'。
 
-// ===== §9 P1-B2 加权投票权重表（2026-07-30）=====
-// 各来源的可信度权重：curation 人工策展 > Liquipedia/Steam 人工/官方 > STRATZ > OpenDota/community 自动。
-// voteName/voteTime/consensusTier 计票时用权重求和替代简单来源数计数，
-// 让人工策展源（curation）在多源冲突时一票抵消多个自动源的错误。
-// community 权重与 opendota 相同（同为本地正则兜底，非人工核实）。
+// ===== §9 P1-B2 加权投票权重表（2026-07-30 修订：对齐 Liquipedia 等级体系）=====
+// 各来源的可信度权重：Liquipedia(4) > curation(3) 人工策展 > Steam(2) 官方 > STRATZ(1.5) > OpenDota/community(1) 自动。
+// voteName/voteTime/consensusTier 计票时用权重求和替代简单来源数计数。
+// 2026-07-30：应「比赛等级划分规则与 Liquipedia 一致」需求，将 liquipedia 权重由 2 提至 4（高于 curation 的 3），
+//   使多源冲突时 Liquipedia 的权威分级（Tier 1-4 → S/A/B/C）决定最终结果。
+//   同期 curation 的 TI 条目与 community 正则均已从 SSS 降为 S，TI 与 ESL One / DreamLeague / Riyadh Masters 同为 S 级。
 const SOURCE_WEIGHT = {
-  curation: 3,      // 人工策展，最高权重（一票抵 opendota 三票）
-  liquipedia: 2,    // 人工 wiki 策展
+  curation: 3,      // 人工策展（Liquipedia 缺失时的兜底，权重低于 liquipedia）
+  liquipedia: 4,    // 人工 wiki 策展（最高权重：与 Liquipedia 等级体系对齐，冲突时 LP 胜出）
   steam: 2,         // Valve 官方
   stratz: 1.5,      // GraphQL，可能被 CF 拦截
   opendota: 1,      // 自动枚举，tier 边界模糊
@@ -60,7 +61,7 @@ const CONF_RANK = { low: 0, medium: 1, high: 2 };
 
 // ===== 赛事名 / 队名 投票（§9 P1-B2 加权版）=====
 // candidates: [{ value:string, source:string }]
-// 加权计票：curation(3) > liquipedia/steam(2) > stratz(1.5) > opendota/community(1)
+// 加权计票：liquipedia(4) > curation(3) > steam(2) > stratz(1.5) > opendota/community(1)
 // 让人工策展源在多源冲突时一票抵消多个自动源的错误。
 function voteName(candidates) {
   const valid = (candidates || []).filter((c) => c && c.value && normName(c.value));

@@ -78,14 +78,13 @@ check('sources.enrichTeamInfo exists', () => assert(typeof sources.enrichTeamInf
 // ===== 5. 分级回退链测试 =====
 section('\n--- 分级回退链（sources.getLeagueTier）---');
 
-check('TI 多源交叉验证命中 SSS 级', async () => {
+check('TI curation S + community SSS → 共识 S（Liquipedia 缺失兜底）', async () => {
   const r = await sources.getLeagueTier({ name: 'The International 2025', tier: 'professional' });
   assert(r !== null, '返回不应为 null');
   assert(r.source === 'consensus', '应为 consensus 源，实际: ' + r.source);
-  assert(r.grade === 'SSS', '应为 SSS 级，实际: ' + r.grade);
-  assert(r.label === 'TI 顶级', 'label 应为 TI 顶级');
-  assert(r.sources.indexOf('community') >= 0 || r.sources.indexOf('curation') >= 0, '本地权威源应参与');
-  assert(r.sources.indexOf('opendota') >= 0, 'opendota 应参与');
+  assert(r.grade === 'S', 'curation S 应使 TI 为 S 级，实际: ' + r.grade);
+  assert(r.label === 'S级', 'label 应为 S级');
+  assert(r.sources.indexOf('curation') >= 0, 'curation 应参与赢家组，实际 sources: ' + JSON.stringify(r.sources));
 });
 
 check('Major 多源交叉验证命中 S 级', async () => {
@@ -480,7 +479,8 @@ check('排除规则不误伤真实赛事（安全回归）', () => {
 check('communityTierFromName 真实赛事仍正常分级（排除规则不破坏现有逻辑）', () => {
   // 验证排除规则前置后，真实赛事仍能被正确分级
   const ti = tiers.communityTierFromName('The International 2024');
-  assert(ti && ti.grade === 'SSS', 'TI 仍应为 SSS');
+  assert(ti && ti.grade === 'S', 'TI 应为 S 级（对齐 Liquipedia），实际: ' + (ti && ti.grade));
+  assert(ti && ti.label === 'S级', 'label 应为 S 级，实际: ' + (ti && ti.label));
   const esl = tiers.communityTierFromName('ESL One Birmingham 2024');
   assert(esl && esl.grade === 'S', 'ESL One 仍应为 S');
   const dl = tiers.communityTierFromName('DreamLeague Season 22');

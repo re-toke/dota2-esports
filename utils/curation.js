@@ -17,24 +17,24 @@ const consensus = require('./consensus.js');
 // aliases 含规范名的小写无分隔形式，用于模糊匹配 OpenDota 返回的各种写法。
 // start/end 为 Unix 秒（UTC），用于时间交叉验证补强。
 const CURATED_EVENTS = [
-  // ── TI 系列（SSS） ──
-  { canonical: 'The International 2025', tier: { grade: 'SSS', rank: 4, label: 'TI 顶级' },
+  // ── TI 系列（S 级，对齐 Liquipedia Tier 1） ──
+  { canonical: 'The International 2025', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['theinternational2025', 'ti2025', 'international2025'], year: 2025,
     liquipediaSlug: 'The_International/2025' },
-  { canonical: 'The International 2024', tier: { grade: 'SSS', rank: 4, label: 'TI 顶级' },
+  { canonical: 'The International 2024', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['theinternational2024', 'ti2024', 'international2024'], year: 2024,
     start: Math.floor(Date.UTC(2024, 8, 4) / 1000), end: Math.floor(Date.UTC(2024, 8, 15) / 1000),
     liquipediaSlug: 'The_International/2024' },
-  { canonical: 'The International 2023', tier: { grade: 'SSS', rank: 4, label: 'TI 顶级' },
+  { canonical: 'The International 2023', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['theinternational2023', 'ti2023', 'international2023'], year: 2023,
     liquipediaSlug: 'The_International/2023' },
-  { canonical: 'The International 2022', tier: { grade: 'SSS', rank: 4, label: 'TI 顶级' },
+  { canonical: 'The International 2022', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['theinternational2022', 'ti2022', 'international2022'], year: 2022,
     liquipediaSlug: 'The_International/2022' },
   // TI15 (The International 2026)：2026-08-13 ~ 2026-08-23（含小组赛+主赛事），上海
   // 来源：Liquipedia The_International/2026 + Valve 官方公告
   // 补充字段（2026-07-25）：奖金池/地点/Valve 标记，供「赛事」tab 焦点卡与详情页 curation 兜底使用。
-  { canonical: 'The International 2026', tier: { grade: 'SSS', rank: 4, label: 'TI 顶级' },
+  { canonical: 'The International 2026', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['theinternational2026', 'ti2026', 'international2026', 'ti15'], year: 2026,
     start: Math.floor(Date.UTC(2026, 7, 13) / 1000), end: Math.floor(Date.UTC(2026, 7, 23) / 1000),
     prizePool: '$1,600,000', organizer: 'Valve', region: '中国上海', format: '小组赛+双败淘汰',

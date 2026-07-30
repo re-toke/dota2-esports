@@ -69,7 +69,10 @@ Page({
     anchorTierLabel: '',
     anchorTierClass: '',
     anchorMeta: [],
-    anchorWinSide: ''
+    anchorWinSide: '',
+    // 队伍 Logo URL（异步获取后注入 anchor-card）
+    radiantLogo: '',
+    direLogo: ''
   },
 
   onLoad(options) {
@@ -337,6 +340,10 @@ Page({
 
     // T4：直播中进行时建立实时连接（WebSocket 或降级轮询）
     this.startRealtime(isLive);
+
+    // 异步获取双方队伍 Logo：用 team_id 调 api.getTeam 拿 logo_url，
+    // 再经 sources.enrichTeamLogo 获取最终展示 URL（含缓存/STRATZ/Liquipedia 兜底）
+    this.enrichMatchLogos(m.radiant_team_id, m.dire_team_id);
   },
 
   // T4：实时比分连接（WebSocket + 断线重连 + 降级轮询）
@@ -349,6 +356,47 @@ Page({
       onStatus: (s) => { this.setData({ liveStatus: s }); }
     });
     this._realtime = session;
+  },
+
+  // 异步获取双方队伍 Logo：用 team_id 调 api.getTeam + enrichTeamLogo，
+  // 与 league-detail.enrichTeamLogos 使用相同的 logo 获取链路。
+  enrichMatchLogos(radiantId, direId) {
+    if (!radiantId && !direId) return;
+    var tasks = [];
+    if (radiantId) {
+      tasks.push(
+        api.getTeam(radiantId)
+          .then(function (info) {
+            var logoUrl = (info && info.logo_url) || '';
+            return sources.enrichTeamLogo({ id: radiantId, name: info && info.name || '', logo: logoUrl });
+          })
+          .then(function (r) { return r && r.logo || null; })
+          .catch(function () { return null; })
+      );
+    } else {
+      tasks.push(Promise.resolve(null));
+    }
+    if (direId) {
+      tasks.push(
+        api.getTeam(direId)
+          .then(function (info) {
+            var logoUrl = (info && info.logo_url) || '';
+            return sources.enrichTeamLogo({ id: direId, name: info && info.name || '', logo: logoUrl });
+          })
+          .then(function (r) { return r && r.logo || null; })
+          .catch(function () { return null; })
+      );
+    } else {
+      tasks.push(Promise.resolve(null));
+    }
+    Promise.all(tasks).then(function (results) {
+      var patch = {};
+      if (results[0]) patch.radiantLogo = results[0];
+      if (results[1]) patch.direLogo = results[1];
+      if (Object.keys(patch).length) {
+        try { this.setData(patch); } catch (e) { /* 隔离 */ }
+      }
+    }.bind(this)).catch(function () { /* 隔离 */ });
   },
 
   // 5.1 赛事详情内嵌「双方对战」：带双方 team_id 上下文跳 H2H 历史对比

@@ -45,7 +45,7 @@ function fmtMD(ts) {
 }
 // ===== 1.3 智能排序：关注置顶 + S级优先 + 时间 =====
 // 用于「全部 / 进行中 / 已结束 / 即将到来」列表的默认排序。
-// 排序键：① followed（关注置顶）→ ② grade rank（SSS>S>A>B>C）→ ③ 时间（近的在前）。
+// 排序键：① followed（关注置顶）→ ② grade rank（S>A>B>C）→ ③ 时间（近的在前）。
 // 关注态优先取 item.followed，缺失时回退本地 follow 查询，保证排序准确。
 function sortSmart(arr) {
   return (arr || []).slice().sort((a, b) => {
@@ -306,7 +306,7 @@ Page({
         const windows = res[1] || {};
         this.allLeagues = list
           .map((l) => this.normalize(l, windows[l.leagueid]))
-          .filter((x) => x && x.rank >= 1); // SSS + S + A + B 级（含次级联赛/杯赛）
+          .filter((x) => x && x.rank >= 1); // S + A + B 级（含次级联赛/杯赛；SSS 已合并入 S）
         // 预计算各等级计数，供筛选条展示
         this.updateGradeCounts();
         this.applyAndSlice(true);
@@ -871,7 +871,7 @@ Page({
     const f = this.data.filter;
     const gf = this.data.gradeFilter;
     // 等级过滤函数：gradeFilter=all 不过滤，否则只保留对应等级
-    // SSS 与 S 都属于「顶级+S级」范畴，sss 筛选只保留 SSS，s 筛选只保留 S
+    // TI 现已对齐 Liquipedia 同为 S 级，SSS 不再用于赛事分级
     const gradeMatch = (x) => {
       if (gf === 'all') return true;
       return (x.grade || '').toLowerCase() === gf;

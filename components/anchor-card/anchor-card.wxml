@@ -7,6 +7,7 @@
   <!-- 对战模式：大字号比分 -->
   <view wx:if="{{bigValue === ''}}" class="ac-score">
     <view class="ac-team {{winSide === 'A' ? 'is-win' : ''}} side-a {{!live && winSide === 'A' ? 'ac-glow' : ''}}">
+      <image wx:if="{{logoA}}" class="ac-logo" src="{{logoA}}" mode="aspectFit" />
       <text class="ac-name">{{nameA}}</text>
       <text wx:if="{{winSide === 'A'}}" class="ac-win-badge">胜</text>
       <text class="ac-num">{{live ? '—' : scoreA}}</text>
@@ -14,6 +15,7 @@
     <view class="ac-vs">{{live ? '进行中' : ':'}}</view>
     <view class="ac-team {{winSide === 'B' ? 'is-win' : ''}} side-b {{!live && winSide === 'B' ? 'ac-glow' : ''}}">
       <text class="ac-num">{{live ? '—' : scoreB}}</text>
+      <image wx:if="{{logoB}}" class="ac-logo" src="{{logoB}}" mode="aspectFit" />
       <text class="ac-name">{{nameB}}</text>
       <text wx:if="{{winSide === 'B'}}" class="ac-win-badge">胜</text>
     </view>

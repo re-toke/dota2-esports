@@ -66,7 +66,6 @@
         <text class="fp-label">等级</text>
         <view class="gc-row">
           <view class="gc {{gradeFilter==='all'?'gc--active':''}} gc--all" data-g="all" bindtap="onGradeFilter"><text class="gc__label">ALL</text></view>
-          <view class="gc {{gradeFilter==='sss'?'gc--active':''}} gc--sss" data-g="sss" bindtap="onGradeFilter"><text class="gc__label">SSS</text></view>
           <view class="gc {{gradeFilter==='s'?'gc--active':''}} gc--s" data-g="s" bindtap="onGradeFilter"><text class="gc__label">S</text></view>
           <view class="gc {{gradeFilter==='a'?'gc--active':''}} gc--a" data-g="a" bindtap="onGradeFilter"><text class="gc__label">A</text></view>
           <view class="gc {{gradeFilter==='b'?'gc--active':''}} gc--b" data-g="b" bindtap="onGradeFilter"><text class="gc__label">B</text></view>

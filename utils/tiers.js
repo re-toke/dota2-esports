@@ -13,8 +13,8 @@
 //   C   = Tier 3-4 社区赛 / 公开预选 / 青训
 
 const COMMUNITY_TIERS = [
-  // ── SSS：TI 国际邀请赛 ──
-  { test: /the\s+international/i, grade: 'SSS', rank: 4, label: 'TI 顶级' },
+  // ── S 级：TI 国际邀请赛（对齐 Liquipedia Tier 1） ──
+  { test: /the\s+international/i, grade: 'S', rank: 3, label: 'S级' },
 
   // ── S 级：顶级赛事（Riyadh/EWC + DPC Major + S-Tier 第三方巡回赛） ──
   // Riyadh Masters / 电竞世界杯 EWC（顶级第三方，奖金与关注度顶格）
@@ -165,7 +165,7 @@ function communityTierFromName(name) {
 //   因此本映射只处理「无 community 命中」或「community 命中为 S/A/B」的情况，
 //   SSS 仍由 community 规则优先识别。
 const LIQUIPEDIA_TIER_MAP = {
-  1: { grade: 'S', rank: 3, label: 'S级' },      // Tier 1 → S（TI 由 community 优先识别为 SSS）
+  1: { grade: 'S', rank: 3, label: 'S级' },      // Tier 1 → S（community 正则与 curation 均已对齐，TI 不再标 SSS）
   2: { grade: 'A', rank: 2, label: 'A级' },      // Tier 2 → A
   3: { grade: 'B', rank: 1, label: 'B级' },       // Tier 3 → B
   4: { grade: 'C', rank: 0, label: '社区赛' }      // Tier 4 → C（不收录）

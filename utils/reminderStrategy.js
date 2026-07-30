@@ -2,7 +2,7 @@
 // #20 智能提醒策略引擎（客户端侧）。
 // 解决 2.2 闭环「无差别推送所有关注战队比赛」的噪声问题：让用户自定义
 //   - 提前量（leadSec）：赛前多久推送（15min / 30min / 1h / 1d / 2d）
-//   - 分级过滤（tiers）：只对 SSS/S/A 等高级别赛事推送，社区赛静默
+//   - 分级过滤（tiers）：只对 S/A 等高级别赛事推送，社区赛静默
 // 策略持久化在本地 Storage，赛前提醒触发（index.checkPreMatchReminders）与
 // 服务端策略引擎（云函数 saveFollowProfile / sendSmartReminders）共用同一份规则。
 //
@@ -24,7 +24,6 @@ const LEAD_OPTIONS = [
 
 // 分级可选项（与 tiers.js 五档对齐）
 const TIER_OPTIONS = [
-  { grade: 'SSS', label: 'TI 顶级' },
   { grade: 'S', label: 'S 级' },
   { grade: 'A', label: 'A 级' },
   { grade: 'B', label: 'B 级' },
@@ -32,8 +31,8 @@ const TIER_OPTIONS = [
 ];
 
 function defaultStrategy() {
-  // 默认：赛前 30 分钟 + 仅 SSS/S/A 高级别
-  return { leadSec: 1800, tiers: ['SSS', 'S', 'A'] };
+  // 默认：赛前 30 分钟 + 仅 S/A 高级别
+  return { leadSec: 1800, tiers: ['S', 'A'] };
 }
 
 function getStrategy() {
@@ -42,7 +41,7 @@ function getStrategy() {
     if (d && typeof d === 'object') {
       return {
         leadSec: d.leadSec || 1800,
-        tiers: (Array.isArray(d.tiers) && d.tiers.length) ? d.tiers : ['SSS', 'S', 'A']
+        tiers: (Array.isArray(d.tiers) && d.tiers.length) ? d.tiers : ['S', 'A']
       };
     }
   } catch (e) {}
@@ -52,7 +51,7 @@ function getStrategy() {
 function setStrategy(s) {
   const safe = {
     leadSec: (s && s.leadSec) || 1800,
-    tiers: (s && Array.isArray(s.tiers)) ? s.tiers : ['SSS', 'S', 'A']
+    tiers: (s && Array.isArray(s.tiers)) ? s.tiers : ['S', 'A']
   };
   try { wx.setStorageSync(KEY, safe); } catch (e) {}
   return safe;

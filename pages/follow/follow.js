@@ -31,12 +31,12 @@ Page({
     sendHistory: [],   // 最近发送记录
     todayCount: 0,      // 今日发送次数
     // #20 智能提醒策略
-    reminder: { leadSec: 1800, tiers: ['SSS', 'S', 'A'] },
+    reminder: { leadSec: 1800, tiers: ['S', 'A'] },
     leadOptions: reminderStrategy.LEAD_OPTIONS,
     // tierOptions 在 applyReminder 中按 reminder.tiers 预计算 selected 标记（避免 WXML 内调用
     // Array.indexOf 在 setData 新 reminder 对象后不重算的坑，导致「提醒级别」无法选中）
     tierOptions: reminderStrategy.TIER_OPTIONS.map((t) => ({
-      grade: t.grade, label: t.label, selected: ['SSS', 'S', 'A'].indexOf(t.grade) >= 0
+      grade: t.grade, label: t.label, selected: ['S', 'A'].indexOf(t.grade) >= 0
     })),
     // 空态「发现」按钮文案（按当前 Tab + A/B 实验动态生成）
     exploreText: '去发现战队'

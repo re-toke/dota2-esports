@@ -13,6 +13,9 @@ Component({
     tierLabel: { type: String, value: '' },      // Tier 文案，如「S-Tier」
     tierClass: { type: String, value: '' },      // tier-sss / tier-s / tier-a / tier-b
     metaList: { type: Array, value: [] },        // [{ label, value }] 时长/开赛等
+    // 队伍 Logo URL（对战模式）：有则渲染 logo 图，无则仅显示队名
+    logoA: { type: String, value: '' },
+    logoB: { type: String, value: '' },
     // 单体档案模式（team/player 详情页）：bigValue 存在时渲染居中大数字，而非对战比分
     bigValue: { type: String, value: '' },
     bigLabel: { type: String, value: '' }
