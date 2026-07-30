@@ -456,7 +456,7 @@ Page({
                 scoreB: 0,
                 boType: m.boType,
                 boLabel: m.boType === 'BO1' ? '单局制' : (m.boType === 'BO2' ? '双局积分' : (m.boType === 'BO3' ? '三局两胜' : '五局三胜')),
-                boTagCls: m.boType === 'BO2' ? 'bo-bo2' : (m.boType === 'BO5' ? 'bo-bo5' : ''),
+                boTagCls: m.boType === 'BO2' ? 'bo-bo2' : (m.boType === 'BO3' ? 'bo-bo3' : (m.boType === 'BO5' ? 'bo-bo5' : '')),
                 isDraw: false,
                 isLive: m.phase === 'live',
                 isRecent: m.phase === 'recent',

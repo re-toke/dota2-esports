@@ -558,45 +558,28 @@ function getScheduledMatches(name) {
   if (!ENABLED) return Promise.resolve([]);
   if (!name) return Promise.resolve([]);
 
-  // §9 P1 修复（2026-07-30）：强制清空三类会话级缓存
-  // 1) liquipedia 内部 LIQ_FAILURES 计数
-  // 2) cloudBreaker 状态（dota2_cloud_cb Storage）
-  // 3) 模块级 slugmapCache（模拟器可能缓存旧 JSON）
-  // 任一缓存处于"已触发"状态都会让 getScheduledMatches 返回空数组。
-  // 一次成功响应后这些状态会自动重新初始化（Liq 内部 markSuccess / cloudBreaker markSuccess），
-  // 所以本次重置只影响本次调用，不破坏后续安全防护。
+  // 强制清空三类会话级缓存：模拟器可能缓存旧状态
   LIQ_FAILURES = 0;
   try { wx.setStorageSync('dota2_cloud_cb', { broken: false, fails: 0 }); } catch (e) {}
-  slugMapCache = null;  // 强制重新 require liquipedia-slugmap.json
+  slugMapCache = null;
 
   var slug = liquipediaSlugFor(name);
-  // 2026-07-30 修复：缓存 key 用解析后的 slug 而非原始 name，
-  //   避免 slug 映射新增/修改后旧空缓存持续命中。
   var cacheKey = 'liquipedia_schedule_' + consensus.normName(slug);
   var cached = cache.get(cacheKey, CACHE_TTL_SCHEDULE);
-  console.log('[liquipedia-diag] getScheduledMatches name=' + name + ' slug=' + slug +
-    ' cacheKey=' + cacheKey + ' cached=' + (cached ? ('len=' + cached.length) : 'null'));
   if (cached) return Promise.resolve(cached);
 
-  // 云代理优先：通过云函数（Node.js 环境，可自由设 User-Agent + gzip）代理 Liquipedia 请求，
-  // 规避 wx.request 禁止设置 User-Agent 的限制（Liquipedia 官方强制要求描述性 UA）。
   if (typeof wx !== 'undefined' && wx.cloud && cloudProxy.isAvailable()) {
-    console.log('[liquipedia-diag] 走云代理路径');
     return cloudProxy.liquipediaScheduledProxy(name).then(function (res) {
-      console.log('[liquipedia-diag] 云代理 res=' + (res ? JSON.stringify(res).slice(0, 300) : 'null'));
       var scheduled = (res && res.data) || [];
       if (scheduled.length) {
         cache.set(cacheKey, scheduled, CACHE_TTL_SCHEDULE);
         return scheduled;
       }
-      console.log('[liquipedia-diag] 云代理空数组，降级到 fetchScheduledLocal');
       return fetchScheduledLocal(slug, cacheKey);
-    }).catch(function (e) {
-      console.log('[liquipedia-diag] 云代理 catch 降级: ' + (e && e.message || e));
+    }).catch(function () {
       return fetchScheduledLocal(slug, cacheKey);
     });
   }
-  console.log('[liquipedia-diag] 无云代理，走本地 fetchScheduledLocal');
   return fetchScheduledLocal(slug, cacheKey);
 }
 

@@ -386,32 +386,37 @@ Page({
     let status = util.statusOf(mixed);
     if (cur && cur.status === '已结束') status = 'ended';
     else if (cur && cur.status === '进行中') status = 'ongoing';
+    // 展示名经 leagueDisplayName 单一出口解析（形状无关），与详情页口径一致；
+    // 提前在此声明，供下方赛期快照名称匹配复用（避免 TDZ 引用错误）。
+    const displayName = sources.leagueDisplayName(l);
     // 赛期日期计算（提前到 return 外，避免对象字面量内 let 声明语法错误）
-    // 优先级：① curation 完整周期 → ② 真实比赛窗口 → ③ upcoming-local.json 快照
+    // 优先级（2026-07-30 修正「本末倒置」：以 Liquipedia 正确时间为准）：
+    //   ① curation 完整周期（人工策展，最高权威）
+    //   ② 🆕 upcoming-local.json 官方赛期（Liquipedia 正确时间，主力）
+    //   ③ OpenDota 比赛窗口（仅当 Liquipedia 也无对应赛事时兜底）
     let _drStart = mixed.startDate, _drEnd = mixed.endDate;
     if (!(_drStart || _drEnd)) {
-      _drStart = mixed.earliest; _drEnd = mixed.lastEnd || mixed.latest;
-      // 第三优先级：upcoming-local.json 快照回退
-      // 触发条件：无比赛窗口 / 或窗口不足 1 天（同日比赛导致 formatDateRange 显示 "M/D ~ M/D" 截断）
-      if (!_drStart || !_drEnd || (_drEnd - _drStart) < 86400) {
-        try {
-          const _snap = require('../../utils/upcoming-local.json');
-          if (_snap && _snap.events) {
-            const _dn = (displayName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-            const _hit = _snap.events.find((e) => {
-              const _en = (e.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-              return _en && (_en === _dn || _dn.indexOf(_en) >= 0 || _en.indexOf(_dn) >= 0);
-            });
-            if (_hit && _hit.start && _hit.end && _hit.end > (_drEnd || 0)) {
-              _drStart = _hit.start; _drEnd = _hit.end;
-            }
-          }
-        } catch (_e) { /* local snapshot 缺失时静默跳过 */ }
+      // ② Liquipedia 快照（官方赛期，主力）— 以 Liquipedia 正确时间为准
+      let _fromSnap = null;
+      try {
+        const _snap = require('../../utils/upcoming-local.json');
+        if (_snap && _snap.events) {
+          const _dn = (displayName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const _hit = _snap.events.find((e) => {
+            const _en = (e.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            return _en && (_en === _dn || _dn.indexOf(_en) >= 0 || _en.indexOf(_dn) >= 0);
+          });
+          if (_hit && _hit.start && _hit.end) _fromSnap = { start: _hit.start, end: _hit.end };
+        }
+      } catch (_e) { /* local snapshot 缺失时静默跳过 */ }
+      if (_fromSnap) {
+        _drStart = _fromSnap.start; _drEnd = _fromSnap.end;
+      } else {
+        // ③ OpenDota 比赛窗口兜底（Liquipedia 无对应赛事时）
+        _drStart = mixed.earliest; _drEnd = mixed.lastEnd || mixed.latest;
       }
     }
     const badge = statusBadgeOf(status);
-    // 展示名经 leagueDisplayName 单一出口解析（形状无关），与详情页口径一致，避免列表/详情不一致。
-    const displayName = sources.leagueDisplayName(l);
     return {
       leagueid: l.leagueid,
       // 展示名走 curation 规范名覆盖（如 "EPL Masters 2026" → "EPL Masters I"）

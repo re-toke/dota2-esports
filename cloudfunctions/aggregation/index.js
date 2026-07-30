@@ -359,6 +359,11 @@ function liquipediaTierToGrade(t) {
   return { grade: 'B', rank: 1, label: 'B级' };
 }
 
+// 跨刷新保留赛事完整赛期：赛事从 Upcoming 过渡到 Ongoing 时，Ongoing 段日期单元格只显示开始日
+// （如 "Jul 30, 2026"）→ parseLiquipediaDate 无结束日 → end==start 截断。
+// 用内存中曾见过的完整赛期回填（实例存活期间有效；冷启动由下方 upcoming-local.json 快照兜底）。
+const LIQUID_DATE_MEMORY = new Map(); // hashId(name) -> { start, end }
+
 async function fetchLiquipediaUpcoming() {
   // 2026-07-29：改用 safeFetch 统一包装，新增 5xx+429 重试（原无重试）
   const res = await safeFetch({
@@ -370,6 +375,11 @@ async function fetchLiquipediaUpcoming() {
   });
   const html = res.body && res.body.parse && res.body.parse.text && res.body.parse.text['*'];
   if (!html) return [];
+  // 预构建快照（scripts/fetch-liquipedia-upcoming.js 生成，已镜像到云函数目录），
+  // 作为 Ongoing 段截断日期的权威回填源（与客户端 utils/upcoming-local.json 同源）。
+  // 2026-07-30 修复：根治 Ongoing 段只返回开始日的脏数据（无需客户端兜底也能拿到完整赛期）。
+  let _snap = null;
+  try { _snap = require('./upcoming-local.json'); } catch (_e) { /* 未镜像快照时静默跳过 */ }
 
   const nowSec = Math.floor(Date.now() / 1000);
   const out = [];
@@ -398,7 +408,27 @@ async function fetchLiquipediaUpcoming() {
       const dm = row.match(/<td class="" data-nowrap="">([^<]+)<\/td>/);
       const dr = dm ? parseLiquipediaDate(dm[1]) : null;
       if (!dr) continue; // 日期解析失败（非日期单元格）跳过
-      if (dr.end < nowSec) continue; // 已结束不进入赛程
+      const id = hashId(name);
+      if (secId === 'Upcoming') {
+        // Upcoming 段通常含完整日期范围 → 记入内存，供同赛事转入 Ongoing 后回填
+        if (dr.end > dr.start) LIQUID_DATE_MEMORY.set(id, { start: dr.start, end: dr.end });
+      } else {
+        // Ongoing 段（开赛后赛事从 Upcoming 移到此处）：日期单元格仅显示开始日 → end==start 截断。
+        // 用内存中曾见过的完整赛期，或预构建快照 upcoming-local.json 回填完整结束日。
+        if (dr.end <= dr.start) {
+          let full = LIQUID_DATE_MEMORY.get(id);
+          if ((!full || full.end <= full.start) && _snap && _snap.events) {
+            const _dn = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const _hit = _snap.events.find((e) => {
+              const _en = (e.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              return _en && (_en === _dn || _dn.indexOf(_en) >= 0 || _en.indexOf(_dn) >= 0);
+            });
+            if (_hit && _hit.end > _hit.start) full = { start: _hit.start, end: _hit.end };
+          }
+          if (full && full.end > full.start) { dr.start = full.start; dr.end = full.end; }
+        }
+      }
+      if (dr.end < nowSec) continue; // 已结束不进入赛程（回填后 end 为真实结束日，过期则过滤）
       const g = liquipediaTierToGrade(liqTier);
       out.push({
         id: hashId(name),

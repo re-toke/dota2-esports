@@ -356,6 +356,12 @@
   color: #5b9bff;
   border-color: rgba(91, 155, 255, 0.35);
 }
+/* BO3 三局两胜：天辉绿 */
+.series-bo-tag.bo-bo3 {
+  background: rgba(95, 211, 95, 0.12);
+  color: #5fd35f;
+  border-color: rgba(95, 211, 95, 0.35);
+}
 /* BO5 巅峰对决：橙金色 */
 .series-bo-tag.bo-bo5 {
   background: rgba(255, 165, 70, 0.12);
