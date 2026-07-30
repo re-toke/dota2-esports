@@ -21,18 +21,8 @@ function optimizeImageUrl(url, size) {
 }
 
 // 统一出口：业务侧一律调用 toLogoUrl 获取最终展示 URL。
-// - 若 config.images.proxyBase 已配置（P0 图片层落地），所有 URL 统一改写为代理地址，
-//   由图片层负责回源、按 proxyWidth 裁剪、转 WebP、长缓存（根治 LOGO 加载慢）。
-// - 若未配置，则回退 optimizeImageUrl（仅 OpenDota 直连缩放），与原行为完全一致（零回归）。
+// 调用 optimizeImageUrl 做直连 CDN 尺寸缩放（仅支持 OpenDota CDN）。
 function toLogoUrl(url, size) {
-  if (!url || typeof url !== 'string') return url;
-  const images = (config && config.images) || {};
-  const base = images.proxyBase || '';
-  if (base) {
-    const w = images.proxyWidth || 160;
-    const sep = base.indexOf('?') >= 0 ? '&' : '?';
-    return base + sep + 'u=' + encodeURIComponent(url) + '&w=' + w + '&fmt=webp';
-  }
   return optimizeImageUrl(url, size);
 }
 

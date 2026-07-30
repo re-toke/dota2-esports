@@ -8,7 +8,6 @@ const liveSources = require('../../../utils/liveSources.js');
 const remoteCuration = require('../../../utils/remoteCuration.js');
 const liquipedia = require('../../../utils/liquipedia.js');
 const heroes = require('../../../utils/heroes.js');
-const logoPreload = require('../../../utils/logoPreload.js'); // P2-E：logo 预热（门控）
 const logoCache = require('../../../utils/logoCache.js'); // Phase 1-⑦：persistNow onUnload
 
 // Steam CDN 英雄头像基址（_sb.png = 小横幅图，约 59x33，aspectFill 裁切填满方形框）
@@ -821,13 +820,6 @@ Page({
       console.info('[enrichLogos] 总计=' + total + ' 成功=' + ok + ' 失败=' + failedIds.length +
         (failedIds.length ? ' 失败ids=' + failedIds.join(',') : ''));
       if (!Object.keys(logoMap).length && !Object.keys(nameLogoMap).length) return false;
-
-      // 3.5) P2-E：解析完成后预热 logo 缓存（门控：predownloadEnabled && proxyBase 才生效）
-      try {
-        const allLogos = Object.keys(logoMap).map((k) => logoMap[k].logo)
-          .concat(Object.keys(nameLogoMap).map((k) => nameLogoMap[k].logo));
-        logoPreload.warmLogos(allLogos);
-      } catch (e) { /* 隔离 */ }
 
       // 4) 路径更新：仅更新当前可见的 series 头部 logo
       //    （不可见 series 不更新，避免无谓 setData；allSeries 内存缓存同步更新，

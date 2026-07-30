@@ -380,7 +380,7 @@ async function getLeagueMetadata(league) {
 }
 
 // 多源增强战队 logo：优先级 [本地缓存] -> [直连 existing] -> [stratz] -> [liquipedia 兜底]
-// P2-F：命中 logoCache 直接返回（秒出，跳过网络）；P1-C：最终 URL 经 toLogoUrl（代理就绪）。
+// P2-F：命中 logoCache 直接返回（秒出，跳过网络）；最终 URL 经 toLogoUrl（直连 CDN 缩放）。
 // §8.3 Liquipedia 兜底（2026-07-29）：前三源均派生自 Valve 数据（同源冗余），
 //   OpenDota logo_url 为空时 STRATZ 通常也无数据。Liquipedia 是独立人工策展源，
 //   可覆盖 OpenDota 无 logo 的队伍（如 10201538 / 10201970 / 10207521）。
