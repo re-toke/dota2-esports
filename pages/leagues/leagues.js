@@ -312,6 +312,8 @@ Page({
         this.applyAndSlice(true);
         const at = api.fetchedAtOf('leagueWindows') || api.fetchedAtOf('leagues');
         this.setData({ loading: false, updatedAt: at, updatedLabel: util.formatAgo(at) });
+        // 列表元数据增强：异步补全 curation 未覆盖赛事的奖金池/地点等
+        this.enhanceListMetadata();
         cb && cb();
       })
       .catch(() => {
@@ -408,6 +410,13 @@ Page({
         : util.formatDateRange(mixed.earliest, (mixed.lastEnd || mixed.latest)),
       startDate: mixed.startDate,
       endDate: mixed.endDate,
+      // 2026-07-30 列表元数据增强：从 curation 权威库传递奖金池/主办方/地点/赛制（零网络）
+      prizePool: (cur && cur.prizePool) || null,
+      organizer: (cur && cur.organizer) || null,
+      region: (cur && cur.region) || null,
+      format: (cur && cur.format) || null,
+      // Liquipedia 异步增强标记：curation 已覆盖的不再重复请求
+      _metaEnriched: !!(cur && (cur.prizePool || cur.organizer || cur.region)),
       _win: mixed
     };
   },
@@ -919,6 +928,7 @@ Page({
     const page = reset ? 0 : this.data.page;
     const slice = active.slice(0, (page + 1) * pageSize);
     this.setData({ list: slice, archived: archived, page: page, hasMore: active.length > slice.length });
+    this.enhanceListMetadata();
   },
 
   appendPage() {
@@ -926,6 +936,7 @@ Page({
     const pageSize = this.data.pageSize;
     const slice = this.filtered.slice(0, (page + 1) * pageSize);
     this.setData({ list: slice, page: page, hasMore: this.filtered.length > slice.length });
+    this.enhanceListMetadata();
   },
 
   // P1/RC4：列表底部「加载更多」按钮兜底，不依赖 onReachBottom 触底
@@ -1030,5 +1041,44 @@ Page({
     wx.navigateTo({
       url: '/subpackages/detail/league-detail/league-detail?leagueId=' + id + '&name=' + encodeURIComponent(name)
     });
+  },
+
+  // 2026-07-30 异步 Liquipedia 元数据增强：列表加载完成后，对可见卡片中
+  // curation 未覆盖的赛事（_metaEnriched===false）逐个调 Liquipedia 获取元数据。
+  // 串行执行（2.2s 间隔尊重 Liquipedia 限流），最多增强前 N 个可见赛事，
+  // 成功后只更新对应索引的字段（路径 setData，最小化渲染范围）。
+  enhanceListMetadata() {
+    var list = this.data.list || [];
+    if (!list.length) return;
+    var sources = require('../../utils/sources.js');
+    var MAX_ENRICH = 10;     // 最多增强前 10 个可见的未覆盖赛事
+    var count = 0;
+    var i = 0;
+
+    var next = function () {
+      // 找下一个需要增强的赛事
+      while (i < list.length && list[i]._metaEnriched) i++;
+      if (i >= list.length || count >= MAX_ENRICH) return;
+
+      var item = list[i];
+      var idx = i;
+      i++;
+      count++;
+      // 2.2s 间隔（Liquipedia 官方 ≥ 2s）
+      setTimeout(function () {
+        sources.getLeagueMetadata({ name: item.name, leagueid: item.leagueid }).then(function (meta) {
+          if (!meta) { next(); return; }
+          var patch = {};
+          if (meta.prizePool) patch['list[' + idx + '].prizePool'] = meta.prizePool;
+          if (meta.organizer) patch['list[' + idx + '].organizer'] = meta.organizer;
+          if (meta.location) patch['list[' + idx + '].region'] = meta.location;
+          if (meta.format) patch['list[' + idx + '].format'] = meta.format;
+          patch['list[' + idx + ']._metaEnriched'] = true;
+          try { this.setData(patch); } catch (e) {}
+          next();
+        }.bind(this)).catch(function () { next(); });
+      }.bind(this), 100);  // 首项立即，后续靠递归
+    }.bind(this);
+    next();
   }
 });

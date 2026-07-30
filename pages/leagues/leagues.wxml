@@ -169,6 +169,9 @@
         <view class="league-sub muted">
           <text class="date-range" wx:if="{{item.dateRange}}">{{item.dateRange}}</text>
           <text wx:if="{{item.matchCount}}"> · {{item.matchCount}} 场</text>
+          <text wx:if="{{item.prizePool}}"> · {{item.prizePool}}</text>
+          <text wx:if="{{item.organizer}}"> · {{item.organizer}}</text>
+          <text wx:if="{{item.region}}"> · {{item.region}}</text>
           <text class="src-inline src-{{item.source === 'community' ? 'curation' : (item.source === 'liquipedia' ? 'liquipedia' : (item.source === 'stratz' ? 'stratz' : 'opendota'))}}">{{item.source === 'community' ? '社区分级' : (item.source === 'liquipedia' ? 'Liquipedia' : (item.source === 'stratz' ? 'STRATZ' : 'OpenDota'))}}</text>
         </view>
         <!-- 即将到来：突出显示倒计时 -->
@@ -212,9 +215,12 @@
               <text class="status-tag defunct-tag">已停办</text>
             </view>
           </view>
-          <view class="league-sub muted" wx:if="{{item.dateRange || item.matchCount}}">
+          <view class="league-sub muted" wx:if="{{item.dateRange || item.matchCount || item.prizePool || item.organizer || item.region}}">
             <text class="date-range" wx:if="{{item.dateRange}}">{{item.dateRange}}</text>
             <text wx:if="{{item.matchCount}}"> · {{item.matchCount}} 场</text>
+            <text wx:if="{{item.prizePool}}"> · {{item.prizePool}}</text>
+            <text wx:if="{{item.organizer}}"> · {{item.organizer}}</text>
+            <text wx:if="{{item.region}}"> · {{item.region}}</text>
           </view>
         </view>
         <view class="star-btn" catchtap="toggleFollow" data-id="{{item.leagueid}}" data-name="{{item.name}}">
