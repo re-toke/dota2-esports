@@ -111,6 +111,14 @@ proxy.liquipediaListTournamentsProxy = function () {
   return call('liquipediaListTournaments', {});
 };
 
+// §9 P1（2026-07-30）Liquipedia raw wikitext 代理抓取
+// 调云函数 action=liquipediaFetchRawWikitext，返回 { wikitext: string }。
+// 用于 getTeamRoster/getPlayerProfile 等客户端本地解析的场景，
+// 云函数侧仅做合规抓取（设 UA+gzip），不解析，减少云函数负担。
+proxy.liquipediaFetchRawWikitextProxy = function (pageName) {
+  return call('liquipediaFetchRawWikitext', { pageName: pageName });
+};
+
 // 暴露给其它模块（api.js / stratz.js / leagues.js 复用）
 proxy.isAvailable = isAvailable;
 proxy.call = call;

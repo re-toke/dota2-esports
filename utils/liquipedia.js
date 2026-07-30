@@ -207,8 +207,34 @@ function attempt(params, retryCount) {
 
 // 取 revisions API 返回的页面 wikitext 源码，失败/页面不存在返回 null
 // 使用 action=query&prop=revisions&rvprop=content（2 秒限流，比 action=parse 的 30 秒宽松 15 倍）
+// ===== 底层抓取 =====
+// 从 Liquipedia 抓取页面的 raw wikitext（MediaWiki action=query & prop=revisions）。
+//
+// 2026-07-30 P1 改造：优先走云函数代理（Node.js 可设 User-Agent，规避 wx.request
+// 禁设 UA 的限制），失败回退本地 wx.request。
+// 所有基于 fetchPageWikitext 的方法（getTeamRoster / getPlayerProfile / 等）自动受益。
+
 function fetchPageWikitext(pageName) {
   if (!pageName) return Promise.resolve(null);
+
+  // 云代理优先：通过云函数（got + UA + redirects:1）代理抓取 raw wikitext，
+  // 规避 wx.request 禁设 User-Agent 的限制（Liquipedia 要求合规 UA 才返回数据）。
+  // 仅当 wx.cloud 存在且熔断器放行时才走云代理；测试/纯本地环境下回退本地。
+  if (typeof wx !== 'undefined' && wx.cloud && cloudProxy.isAvailable()) {
+    return cloudProxy.liquipediaFetchRawWikitextProxy(pageName).then(function (remote) {
+      if (remote && remote.wikitext) return remote.wikitext;
+      return fetchPageWikitextLocal(pageName);
+    }).catch(function () {
+      return fetchPageWikitextLocal(pageName);
+    });
+  }
+  return fetchPageWikitextLocal(pageName);
+}
+
+// 本地抓取（wx.request 路径，云代理不可用/失败时兜底）
+// 注意：微信 wx.request 禁设 User-Agent，Liquipedia 可能返回 CAPTCHA/拦截页，
+// 因此本地路径仅在开发/调试/无云环境时可用，真机大概率被拦截。
+function fetchPageWikitextLocal(pageName) {
   return request({
     action: 'query',
     prop: 'revisions',

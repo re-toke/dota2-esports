@@ -664,6 +664,21 @@ async function liquipediaListTournaments(params, force) {
   return { data: filtered, source: 'liquipedia' };
 }
 
+// ===== Liquipedia raw wikitext 抓取代理（§9 P1，用于名册/选手资料）=====
+// 输入 { pageName }，输出 { wikitext: string }。
+// 区别于 liquipediaLeagueMeta（抓取+解析），此处仅代理抓取 raw wikitext，
+// 由客户端自行解析（getTeamRoster/getPlayerProfile 本地解析逻辑）。
+// 复用 fetchLiquipediaWikitext（已含 UA+gzip+redirects:1 合规请求），
+// 经 liquipediaSlugFor 映射后抓取，提高页面名命中率。
+async function liquipediaFetchRawWikitext(params, force) {
+  const pageName = (params && (params.pageName || params.name)) || null;
+  if (!pageName) return { data: null, error: makeError(ERROR_CODES.BAD_REQUEST, 'pageName required') };
+  const slug = liquipediaSlugFor(pageName);
+  const wikitext = await fetchLiquipediaWikitext(slug);
+  if (!wikitext) return { data: null, source: 'liquipedia' };
+  return { data: { wikitext: wikitext }, source: 'liquipedia' };
+}
+
 // 知名 S 级赛事关键词（与客户端 leagues.js 保持一致）
 const KNOWN_KEYWORDS = /(international|major|esl\s+one|esl\s+pro|dreamleague|blast|riyadh|pgl|betboom|clavision|fissure|the\s+summit|games\s+of\s+the\s+future|heroic|resurrection|weplay|moonstorm|dpc|\btour\b|division\s+i)/i;
 
@@ -1123,6 +1138,7 @@ const HANDLERS = new Map([
   ['liquipediaScheduledMatches', (e) => liquipediaScheduledMatches(e.params, e.force)],
   ['liquipediaTeamLogo', (e) => liquipediaTeamLogo(e.params, e.force)],
   ['liquipediaListTournaments', (e) => liquipediaListTournaments(e.params, e.force)],
+  ['liquipediaFetchRawWikitext', (e) => liquipediaFetchRawWikitext(e.params, e.force)],
   ['liquipediaPrewarm', (e) => liquipediaPrewarm(e.params, e.force)],
   // 赛程
   ['getUpcomingSchedule', handleGetUpcomingSchedule],
