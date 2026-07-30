@@ -252,6 +252,9 @@
   margin-left: 4rpx;
 }
 
+/* 底部 spacer：配合 with-tab-bar 留出自定义 tabBar 区域 */
+.bottom-spacer { height: 24rpx; }
+
 /* ===== 实时联想下拉 ===== */
 .sug-list {
   background: #11161d;

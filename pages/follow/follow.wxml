@@ -127,4 +127,6 @@
     <view class="tip muted" wx:if="{{!subReady}}">关注数据仅保存在本机。需在公众平台配置订阅模板后可开启赛事临近提醒。</view>
     <view class="tip muted" wx:else>关注数据仅保存在本机。订阅消息由微信云开发推送，每日上限 {{subscribe.dailyLimit || 5}} 条。</view>
   </view>
+
+  <view class="bottom-spacer"></view>
 </view>

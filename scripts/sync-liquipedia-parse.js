@@ -57,7 +57,7 @@ function main() {
     'parseTemplate', 'splitTopLevel', 'stripWikitextMarkup', 'stripTags',
     'parsePrizePool', 'collectDates', 'findTemplateEnd', 'extractLink',
     'parseOpponentBlock', 'parseTeamCardBlock', 'parseParticipants', 'parseLeagueMetadata',
-    'parseScheduledMatches', 'parseTeamLogo'
+    'parseScheduledMatches', 'parseTeamLogo', 'parseLeagueTier'
   ];
   const missingMini = exportNames.filter((n) => typeof mini[n] !== 'function');
   const missingCloud = exportNames.filter((n) => typeof cloud[n] !== 'function');
@@ -85,6 +85,29 @@ function main() {
   }
   if (!miniLogo || miniLogo.image !== 'Team_Spirit_logo.png') {
     console.error('[sync-liquipedia-parse] 致命：parseTeamLogo 合成用例解析异常: ' + JSON.stringify(miniLogo));
+    process.exit(1);
+  }
+
+  // §9 parseLeagueTier 漂移自检（2026-07-30）：两侧对同一赛事页 wikitext 的解析结果必须一致
+  const leagueWikitext = [
+    '{{Infobox league',
+    '|name=DreamLeague Season 27',
+    '|liquipediatier=1',
+    '|sdate=2025-12-10',
+    '|edate=2025-12-21',
+    '|prizepoolusd=1,000,000',
+    '}}'
+  ].join('\n');
+  const miniTier = mini.parseLeagueTier(leagueWikitext);
+  const cloudTier = cloud.parseLeagueTier(leagueWikitext);
+  if (JSON.stringify(miniTier) !== JSON.stringify(cloudTier)) {
+    console.error('[sync-liquipedia-parse] 致命：parseLeagueTier 两侧结果不一致');
+    console.error('  mini : ' + JSON.stringify(miniTier));
+    console.error('  cloud: ' + JSON.stringify(cloudTier));
+    process.exit(1);
+  }
+  if (!miniTier || miniTier.tier !== 1) {
+    console.error('[sync-liquipedia-parse] 致命：parseLeagueTier 合成用例解析异常: ' + JSON.stringify(miniTier));
     process.exit(1);
   }
 
@@ -122,7 +145,7 @@ function main() {
 
   console.log(
     '[sync-liquipedia-parse] OK · 两侧 liquipedia-parse.js 字节一致 · 导出 ' +
-    exportNames.length + ' 个纯函数 · 合成用例解析漂移自检通过（含 parseTeamLogo）'
+    exportNames.length + ' 个纯函数 · 合成用例解析漂移自检通过（含 parseTeamLogo + parseLeagueTier）'
   );
 }
 

@@ -11,3 +11,6 @@ miniprogram_npm/
 .DS_Store
 Thumbs.db
 *.log
+
+# Generated output from scripts
+scripts/output/

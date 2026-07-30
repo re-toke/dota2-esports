@@ -396,16 +396,31 @@ Page({
         // OpenDota 只返回已结束比赛，进行中/未开赛的对阵需要从 Liquipedia {{Match}} 模板补充。
         // 转换为与 groupSeries 返回值兼容的 series 对象，去重后合并到 allSeries。
         if (liqScheduled && liqScheduled.length) {
+          // §9 P0-D2（2026-07-30）：TBD 占位隔离
+          // 痛点：TBD（待定/待公布）队伍参与队名归一化键构建，会导致多个 TBD 对阵被误判为同一对阵而合并，
+          //   如 "TBD vs Team A" 与 "TBD vs Team B" 因 TBD 相同而被误去重。
+          // 修复：TBD 队伍不参与去重键构建（包含 TBD 的对阵视为独立对阵，不做合并）。
+          //   - 构建 openDotaKeys 时跳过含 TBD 的对阵（避免污染键集）
+          //   - 过滤 Liquipedia 赛程时，含 TBD 的对阵直接保留（不查去重键）
+          const TBD_RE = /^(tbd|待定|待公布|unknown|tba|to\s+be\s+(determined|announced))$/i;
+          function isTBD(name) { return TBD_RE.test(String(name || '').trim()); }
+          // 构建去重键（仅双方均为确定队名时才生成键）
+          function dedupeKey(n1, n2) {
+            if (isTBD(n1) || isTBD(n2)) return null;  // TBD 不参与合并
+            return String(n1).toLowerCase().replace(/\s+/g, '') + '__' +
+                   String(n2).toLowerCase().replace(/\s+/g, '');
+          }
           // 构建 OpenDota 已有对阵的去重键（队名归一化：小写+去空格）
           // 用于剔除 Liquipedia 中已被 OpenDota 返回的已结束对阵
           const openDotaKeys = new Set();
           this.allSeries.forEach(function (s) {
             if (s.radiantName && s.direName) {
-              const k1 = (s.radiantName.toLowerCase().replace(/\s+/g, '')) + '__' +
-                         (s.direName.toLowerCase().replace(/\s+/g, ''));
-              openDotaKeys.add(k1);
-              // 反向也加入（Liquipedia 的 team1/team2 顺序可能与 OpenDota 相反）
-              openDotaKeys.add(k1.split('__').reverse().join('__'));
+              const k1 = dedupeKey(s.radiantName, s.direName);
+              if (k1) {
+                openDotaKeys.add(k1);
+                // 反向也加入（Liquipedia 的 team1/team2 顺序可能与 OpenDota 相反）
+                openDotaKeys.add(k1.split('__').reverse().join('__'));
+              }
             }
           });
           // 将 Liquipedia 赛程转换为 series 对象
@@ -413,8 +428,8 @@ Page({
             .filter(function (m) {
               // 去重：剔除 OpenDota 已返回的对阵（队名归一化后匹配）
               if (!m.team1Name || !m.team2Name) return false;
-              const k = (m.team1Name.toLowerCase().replace(/\s+/g, '')) + '__' +
-                        (m.team2Name.toLowerCase().replace(/\s+/g, ''));
+              const k = dedupeKey(m.team1Name, m.team2Name);
+              if (!k) return true;  // §9 P0-D2：含 TBD 的对阵直接保留，不参与去重
               const kRev = k.split('__').reverse().join('__');
               return !openDotaKeys.has(k) && !openDotaKeys.has(kRev);
             })

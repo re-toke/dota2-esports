@@ -150,4 +150,6 @@
     <view wx:elif="{{mode === 'result' && results.length > pageSize}}" class="center muted">— 已显示全部 {{results.length}} 支 —</view>
 
   </block>
+
+  <view class="bottom-spacer"></view>
 </view>

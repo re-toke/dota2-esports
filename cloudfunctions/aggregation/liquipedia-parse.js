@@ -618,6 +618,31 @@ function parseTeamLogo(wikitext) {
   return { image: image };
 }
 
+// ===== 赛事等级解析（§9 2026-07-30，方案A：对齐 Liquipedia Tier 体系）=====
+// 从赛事页 wikitext 中提取 {{Infobox league}} 模板的 liquipediatier 字段值。
+// Liquipedia 战队页结构：
+//   {{Infobox league
+//   |name=DreamLeague Season 27
+//   |liquipediatier=1
+//   |...
+//   }}
+// liquipediatier 字段是 1-4 的数字（1=最高，4=最低），是 Liquipedia 人工策展的权威分级。
+//
+// 返回 { tier: 1 } 或 null（未找到模板 / 无 liquipediatier 字段 / 值非数字）
+function parseLeagueTier(wikitext) {
+  if (!wikitext) return null;
+  var tpl = parseTemplate(wikitext, 'Infobox league') || parseTemplate(wikitext, 'Infobox tournament');
+  if (!tpl) return null;
+  // liquipediatier 是 Liquipedia 标准字段（数字 1-4）
+  var raw = tpl.liquipediatier || tpl.tier || null;
+  if (!raw) return null;
+  // 清理 wikitext 标记 + 提取数字
+  raw = stripWikitextMarkup(raw).trim();
+  var num = parseInt(raw, 10);
+  if (isNaN(num) || num < 1 || num > 4) return null;
+  return { tier: num };
+}
+
 module.exports = {
   parseTemplate: parseTemplate,
   splitTopLevel: splitTopLevel,
@@ -632,5 +657,6 @@ module.exports = {
   parseParticipants: parseParticipants,
   parseLeagueMetadata: parseLeagueMetadata,
   parseScheduledMatches: parseScheduledMatches,
-  parseTeamLogo: parseTeamLogo
+  parseTeamLogo: parseTeamLogo,
+  parseLeagueTier: parseLeagueTier
 };

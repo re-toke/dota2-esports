@@ -63,7 +63,7 @@ const V = ((cshared && cshared.dataVersion) || '0') + ':';
 
 // ===== 4. 导出结构检查 =====
 section('\n--- 模块导出结构 ---');
-check('stratz.ENABLED (目前开启)', () => assert(stratz.ENABLED === true));
+check('stratz.ENABLED (2026-07-30 起因 Cloudflare 拦截关闭)', () => assert(stratz.ENABLED === false));
 check('stratz.getLeagues exists', () => assert(typeof stratz.getLeagues === 'function'));
 check('stratz.getLeagueTier exists', () => assert(typeof stratz.getLeagueTier === 'function'));
 check('stratz.getTeamLogo exists', () => assert(typeof stratz.getTeamLogo === 'function'));
@@ -123,7 +123,7 @@ check('无可用窗口源 -> 返回 null', async () => {
 
 // ===== 7. STRATZ / Steam 禁用时返回空 =====
 section('\n--- STRATZ / Steam 禁用时行为 ---');
-check('stratz.ENABLED === true', () => assert(stratz.ENABLED === true));
+check('stratz.ENABLED === false (2026-07-30 起关闭)', () => assert(stratz.ENABLED === false));
 check('stratz.getLeagueTier 禁用时返回 null', async () => {
   const r = await stratz.getLeagueTier('Any');
   assert(r === null, '禁用时应返回 null');
@@ -242,15 +242,23 @@ check('cached() 拒绝列表端点返回非数组（错误对象）', async () =
 // ===== 12. STRATZ 精确名匹配（findLeagueByName 经 getLeagueTier）=====
 // findLeagueByName 未导出，但可通过 stratz.getLeagueTier(name) + mock wx.request 间接验证：
 // 返回包含两个名称相近的联赛，查询精确名应命中对应赛事（证明归一等值匹配优于子串匹配）。
+// ★ 2026-07-30：STRATZ 因 Cloudflare 拦截已关闭（config.stratz.enabled=false），
+//   本测试需临时启用 STRATZ 才能验证其内部模块逻辑（与生产环境配置无关）。
 section('\n--- STRATZ 精确名匹配（精确归一 > 子串）---');
 check('stratz.getLeagueTier 精确名命中 DPC_MAJOR→S（非子串误命中）', async () => {
+  // 临时启用 STRATZ 模块以测试其内部逻辑（不受生产 config.stratz.enabled=false 影响）
+  const origStratzEnabled = config.stratz.enabled;
+  const origStratzApiKey = config.stratz.apiKey;
+  config.stratz.enabled = true;
+  config.stratz.apiKey = 'test-key-for-direct-path';
+  // 重新计算 ENABLED 标志（模块加载时已固定，需通过显式判断绕过）
+  // 实际 stratz.js 的 ENABLED 是模块级常量，无法运行时改变；
+  // 但 getLeagueTier 内部会检查 config.stratz.enabled，所以这里改 config 即可生效。
   // 清除 stratz 联赛缓存，强制走 mock wx.request
   cache.remove('stratz_leagues');
   // 测试环境无 wx.cloud，stratz 默认走云代理路径会返回 null；填入 apiKey 使其进入
-  // 「云代理优先 + 直连兜底」混合模式，云代理不可用时空格回退到 wx.request 直连，
+  // 「云代理优先 + 直连兜底」混合模式，云代理不可用时回退到 wx.request 直连，
   // 从而命中下面 mock 的联赛列表。
-  const origStratzApiKey = config.stratz.apiKey;
-  config.stratz.apiKey = 'test-key-for-direct-path';
   requestHandler = function (opts) {
     opts.success({
       statusCode: 200,
@@ -272,6 +280,7 @@ check('stratz.getLeagueTier 精确名命中 DPC_MAJOR→S（非子串误命中�
     assert(r.label === 'S级', 'label 应为 S级');
   } finally {
     requestHandler = defaultRequestHandler;
+    config.stratz.enabled = origStratzEnabled;
     config.stratz.apiKey = origStratzApiKey;
     cache.remove('stratz_leagues');
   }
@@ -385,6 +394,103 @@ check('communityTierFromName 真实 DPC Major/Minor 仍正确识别', () => {
   assert(m && m.grade === 'A' && m.rank === 2, 'DPC Minor 应 A 级，实际: ' + (m && m.grade));
   const M = tiers.communityTierFromName('The Kuala Lumpur Major');
   assert(M && M.grade === 'S' && M.rank === 3, '真实 Major 应 S 级，实际: ' + (M && M.grade));
+});
+
+// ===== §9 排除规则测试（2026-07-30）=====
+// 验证 EXCLUSION_RULES / shouldExclude / communityTierFromName 前置排除逻辑
+section('\n--- §9 通用排除规则（community 正则误升防护）---');
+
+check('shouldExclude 导出可用', () => {
+  assert(typeof tiers.shouldExclude === 'function', 'shouldExclude 应为函数');
+  assert(Array.isArray(tiers.EXCLUSION_RULES), 'EXCLUSION_RULES 应为数组');
+  assert(tiers.EXCLUSION_RULES.length === 4, '应含 4 条规则，实际: ' + tiers.EXCLUSION_RULES.length);
+});
+
+check('排除①预选赛/资格赛关键词', () => {
+  assert(tiers.shouldExclude('Open Qualifier'), 'Open Qualifier 应排除');
+  assert(tiers.shouldExclude('Closed Qualifier'), 'Closed Qualifier 应排除');
+  assert(tiers.shouldExclude('Regional Qualifier'), 'Regional Qualifier 应排除');
+  assert(tiers.shouldExclude('ESL One Birmingham Qualifiers'), 'Qualifiers 应排除');
+  assert(tiers.shouldExclude('Play-In Tournament'), 'Play-In 应排除');
+  assert(tiers.shouldExclude('PlayIn Cup'), 'PlayIn 应排除');
+});
+
+check('排除②业余/社区/青训关键词', () => {
+  assert(tiers.shouldExclude('Dota 2 Amateur Series'), 'Amateur 应排除');
+  assert(tiers.shouldExclude('Community Cup'), 'Community 应排除');
+  assert(tiers.shouldExclude('Collegiate League'), 'Collegiate 应排除');
+  assert(tiers.shouldExclude('University Tournament'), 'University 应排除');
+  assert(tiers.shouldExclude('Youth Cup'), 'Youth 应排除');
+  assert(tiers.shouldExclude('Academy League'), 'Academy 应排除');
+  assert(tiers.shouldExclude('Junior Series'), 'Junior 应排除');
+});
+
+check('排除③慈善/娱乐/表演赛关键词', () => {
+  assert(tiers.shouldExclude('Charity Cup'), 'Charity 应排除');
+  assert(tiers.shouldExclude('Fun Tournament'), 'Fun 应排除');
+  assert(tiers.shouldExclude('Funny Match'), 'Funny 应排除');
+  assert(tiers.shouldExclude('Meme League'), 'Meme 应排除');
+  assert(tiers.shouldExclude('Showmatch 2024'), 'Showmatch 应排除');
+  assert(tiers.shouldExclude('All-Star Game'), 'All-Star 应排除');
+  assert(tiers.shouldExclude('AllStar Showdown'), 'AllStar 应排除');
+});
+
+check('排除④TI 预选路径专用', () => {
+  assert(tiers.shouldExclude('Road To The International 2024'), 'Road To TI 应排除');
+  assert(tiers.shouldExclude('Road to the International 2024 - Regional Qualifiers'), 'Road To TI 含 Qualifiers 应排除');
+  assert(tiers.shouldExclude('Path to TI 2025'), 'Path to TI 应排除');
+  assert(tiers.shouldExclude('Path to The International'), 'Path to The International 应排除');
+});
+
+check('communityTierFromName 排除规则前置生效（误升防护）', () => {
+  // 原 premier 正则误升 S，现应返回 null（含 amateur/community 排除关键词）
+  assert(tiers.communityTierFromName('Premier Amateur Community League') === null, 'Premier Amateur Community League 应排除');
+  // 原 the international 正则误升 SSS，现应返回 null（含 Road To TI + Qualifiers 排除关键词）
+  assert(tiers.communityTierFromName('Road To The International 2024 - Regional Qualifiers') === null, 'TI 预选路径应排除');
+  // amateur/Youth 应被前置排除
+  assert(tiers.communityTierFromName('Dota 2 Amateur Series') === null, 'Amateur 应排除');
+  assert(tiers.communityTierFromName('Youth Cup 2024') === null, 'Youth Cup 应排除');
+  assert(tiers.communityTierFromName('Community Major') === null, 'Community Major 应排除');
+  // ★ 已知限制：SAGEMASK MAJOR / PONIME MAJOR 不含排除关键词，仍会被 major 规则误判为 S
+  //   这类"未知前缀 + MAJOR"的社区赛需通过 Liquipedia Tier 字段或人工审核纠正，
+  //   不在本次排除规则范围内（需 major 前置白名单，lookbehind 不支持微信运行时）
+});
+
+check('排除规则不误伤真实赛事（安全回归）', () => {
+  // 真实赛事不应命中排除规则
+  assert(!tiers.shouldExclude('The International 2024'), 'TI 正赛不应排除');
+  assert(!tiers.shouldExclude('ESL One Birmingham 2024'), 'ESL One 不应排除');
+  assert(!tiers.shouldExclude('DreamLeague Season 22'), 'DreamLeague 不应排除');
+  assert(!tiers.shouldExclude('PGL Wallachia'), 'PGL Wallachia 不应排除');
+  assert(!tiers.shouldExclude('BLAST Slam'), 'BLAST Slam 不应排除');
+  assert(!tiers.shouldExclude('Riyadh Masters 2024'), 'Riyadh Masters 不应排除');
+  assert(!tiers.shouldExclude('DPC SEA Minor 2024'), 'DPC Minor 不应排除');
+  assert(!tiers.shouldExclude('The Kuala Lumpur Major'), 'Major 正赛不应排除');
+  // ★ FunPlus / Funcurve 等含 fun 但非完整单词，不应误匹配
+  assert(!tiers.shouldExclude('FunPlus Phoenix Tournament'), 'FunPlus 不应误匹配 fun');
+  assert(!tiers.shouldExclude('Funcurve Cup'), 'Funcurve 不应误匹配 fun');
+  // ★ CommunityBank 等含 community 但非完整单词，不应误匹配
+  assert(!tiers.shouldExclude('CommunityBank Cup'), 'CommunityBank 不应误匹配 community');
+  // ★ Academy 对抗 FunPlus 的边界：Academy 单独应排除，但含 Academy 的真实赛事名?
+  //   Dota 2 中 Academy 赛事确实多为青训赛，排除合理
+  // ★ open 单独不排除（ESL Open 是 A-Tier 真实赛事）
+  assert(!tiers.shouldExclude('Open Cup'), 'Open Cup 不应排除（无 qualifier 关键词）');
+});
+
+check('communityTierFromName 真实赛事仍正常分级（排除规则不破坏现有逻辑）', () => {
+  // 验证排除规则前置后，真实赛事仍能被正确分级
+  const ti = tiers.communityTierFromName('The International 2024');
+  assert(ti && ti.grade === 'SSS', 'TI 仍应为 SSS');
+  const esl = tiers.communityTierFromName('ESL One Birmingham 2024');
+  assert(esl && esl.grade === 'S', 'ESL One 仍应为 S');
+  const dl = tiers.communityTierFromName('DreamLeague Season 22');
+  assert(dl && dl.grade === 'S', 'DreamLeague 仍应为 S');
+  const minor = tiers.communityTierFromName('DPC SEA Minor 2024');
+  assert(minor && minor.grade === 'A', 'DPC Minor 仍应为 A');
+  const major = tiers.communityTierFromName('The Kuala Lumpur Major');
+  assert(major && major.grade === 'S', 'Major 仍应为 S');
+  const div1 = tiers.communityTierFromName('DPC Division I');
+  assert(div1 && div1.grade === 'A', 'Division I 仍应为 A');
 });
 
 check('curation 名称救援兼容 "Dota 2" 后缀（未收录回归：esportsworldcup2026dota2 应命中 EWC 2026）', () => {

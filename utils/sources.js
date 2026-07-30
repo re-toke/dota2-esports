@@ -35,6 +35,40 @@ const leagueCanon = require('./league-canon-map.js');
 // G8 运行时监控（安全降级，无 wx 时不打点）
 const monitor = require('./monitor.js');
 
+// ===== §9 P3-B3 STRATZ 健康度追踪（2026-07-30）=====
+// 痛点：STRATZ 可能被 Cloudflare 拦截，每次调用失败浪费一次网络请求 + 增加页面加载耗时。
+//      原设计每个 .catch 隔离错误，但无法避免「明知不可用仍每次重试」的开销。
+// 方案：模块级变量追踪连续失败次数，达到阈值后本会话跳过 STRATZ 调用。
+//      成功一次即复位（STRATZ 恢复后自动重新启用）。
+//      与 cloudBreaker.js 区别：cloudBreaker 针对云函数整体，此处针对 STRATZ 单源。
+const STRATZ_FAIL_THRESHOLD = 3;  // 连续失败 3 次后跳过
+let _stratzFails = 0;
+let _stratzSkippedUntil = 0;     // 跳过截止时间戳（ms），0=不跳过
+
+// STRATZ 是否可用：未启用 / 连续失败达阈值 且未过冷却期 → false
+function stratzHealthy() {
+  if (!stratz.ENABLED) return false;
+  if (_stratzFails < STRATZ_FAIL_THRESHOLD) return true;
+  // 达到阈值，检查是否过了冷却期（5 分钟后允许重试一次）
+  const now = Date.now();
+  if (now < _stratzSkippedUntil) return false;
+  return true;  // 冷却期已过，允许尝试一次
+}
+
+// STRATZ 调用结果回调：成功复位，失败累计
+function markStratzResult(ok) {
+  if (ok) {
+    if (_stratzFails !== 0) _stratzFails = 0;  // 成功一次即复位
+    _stratzSkippedUntil = 0;
+  } else {
+    _stratzFails++;
+    if (_stratzFails >= STRATZ_FAIL_THRESHOLD) {
+      _stratzSkippedUntil = Date.now() + 5 * 60 * 1000;  // 5 分钟冷却
+      console.warn('[sources] STRATZ 连续失败 ' + _stratzFails + ' 次，本会话暂停 5 分钟');
+    }
+  }
+}
+
 // 源中文名（用于 UI 标注数据来源 / 可信度）
 const SOURCE_LABEL = {
   community: '本地精选',
@@ -72,7 +106,11 @@ function liquipediaDateToUnix(text) {
 }
 
 // ===== 赛事分级：多源计票 =====
-// 候选来源：community(本地规则) -> curation(权威库) -> opendota(枚举) -> stratz(启用时)
+// 候选来源：community(本地规则) -> curation(权威库) -> opendota(枚举) -> stratz(启用时) -> liquipedia(启用时)
+// §9（2026-07-30）：新增 liquipedia 候选源（方案A：对齐 Liquipedia Tier 体系）
+//   - Liquipedia 是人工策展的权威分级，覆盖 community 正则未覆盖的新赛事系列
+//   - 复用 getLeagueMetadata 已抓取的 wikitext，零额外网络请求
+//   - 映射：Tier 1→S / Tier 2→A / Tier 3→B / Tier 4→C
 async function getLeagueTier(league) {
   const name = (league && league.name) || '';
   const leagueId = league && (league.leagueid || league.id);
@@ -89,12 +127,29 @@ async function getLeagueTier(league) {
   const u = util.unifiedTier(league || {});
   candidates.push({ grade: u.grade, rank: u.rank, label: u.label, source: 'opendota' });
 
-  if (stratz.ENABLED && name) {
-    try {
-      const s = await stratz.getLeagueTier(name);
-      if (s && s.grade) candidates.push({ grade: s.grade, rank: s.rank, label: s.label, source: 'stratz' });
-    } catch (e) { /* 隔离 */ }
+  // §9 并行采集 stratz + liquipedia（独立来源，各自隔离错误）
+  const tasks = [];
+
+  if (stratzHealthy() && name) {
+    tasks.push(
+      stratz.getLeagueTier(name)
+        .then((s) => { markStratzResult(true); if (s && s.grade) candidates.push({ grade: s.grade, rank: s.rank, label: s.label, source: 'stratz' }); })
+        .catch(() => { markStratzResult(false); /* 隔离 */ })
+    );
   }
+
+  // §9 Liquipedia Tier（2026-07-30，方案A）：复用 getLeagueMetadata 的 wikitext，
+  // 通过 parseLeagueTier 解析 liquipediatier 字段，映射为项目 grade/rank/label。
+  // 覆盖 community 正则未覆盖的新赛事系列（CCT / Pinnacle / 1win Series 等）。
+  if (liquipedia.ENABLED && name) {
+    tasks.push(
+      liquipedia.getLeagueTier(name)
+        .then((l) => { if (l && l.grade) candidates.push({ grade: l.grade, rank: l.rank, label: l.label, source: 'liquipedia' }); })
+        .catch(() => { /* 隔离 */ })
+    );
+  }
+
+  if (tasks.length) await Promise.all(tasks);
 
   const r = consensus.consensusTier(candidates);
   r.source = 'consensus';
@@ -122,11 +177,11 @@ async function voteLeagueNameForMatch(league) {
 
   // 优化：stratz 和 liquipedia 是独立来源，并行发起，各自隔离错误
   const tasks = [];
-  if (stratz.ENABLED && id) {
+  if (stratzHealthy() && id) {
     tasks.push(
       stratz.getLeagueDisplayName(id)
-        .then((s) => { if (s) candidates.push({ value: s, source: 'stratz' }); })
-        .catch(() => { /* 隔离 */ })
+        .then((s) => { markStratzResult(true); if (s) candidates.push({ value: s, source: 'stratz' }); })
+        .catch(() => { markStratzResult(false); /* 隔离 */ })
     );
   }
   // Liquipedia：独立人工策展源，提供规范名作为第四候选（与 Valve 数据链路无关）
@@ -168,10 +223,11 @@ async function getLeagueWindow(league) {
   const tasks = [];
 
   // STRATZ 当前 schema 不直接提供赛事起止时间，留接口；启用且可用时补充
-  if (stratz.ENABLED && name) {
+  if (stratzHealthy() && name) {
     tasks.push(
       stratz.getLeagueWindow(name)
         .then((s) => {
+          markStratzResult(true);
           if (s && s.start) {
             startC.push({ value: s.start, source: 'stratz' });
             diag.stratz = 'hit(' + s.start + ')';
@@ -180,10 +236,10 @@ async function getLeagueWindow(league) {
           }
           if (s && s.end) endC.push({ value: s.end, source: 'stratz' });
         })
-        .catch(() => { diag.stratz = 'error'; /* 隔离 */ })
+        .catch(() => { markStratzResult(false); diag.stratz = 'error'; /* 隔离 */ })
     );
   } else {
-    diag.stratz = stratz.ENABLED ? 'skip(no-name)' : 'disabled';
+    diag.stratz = stratz.ENABLED ? (_stratzFails >= STRATZ_FAIL_THRESHOLD ? 'unhealthy' : 'skip(no-name)') : 'disabled';
   }
 
   // Liquipedia：返回的日期为文本字符串，需经 liquipediaDateToUnix 转为 Unix 秒
@@ -345,15 +401,17 @@ async function enrichTeamLogo(team) {
     return { logo, source: 'opendota' };
   }
 
-  if (stratz.ENABLED && id) {
+  if (stratzHealthy() && id) {
     try {
       const r = await stratz.getTeamLogo(id);
+      markStratzResult(!!r);
       if (r && /^https?:\/\//i.test(r)) {
         const logo = imageUtil.toLogoUrl(r);
         logoCache.set(id, logo, 'stratz');
         return { logo, source: 'stratz' };
       }
     } catch (e) {
+      markStratzResult(false);
       // G7.4：STRATZ 源失败上报，便于发现 STRATZ 限流/不可用
       monitor.sourceCacheMiss('stratz', 'teamLogo', (e && e.message) || 'error');
     }
@@ -396,15 +454,16 @@ async function enrichPlayerAvatar(player) {
     return { avatar, source: 'opendota' };
   }
 
-  if (stratz.ENABLED && accountId) {
+  if (stratzHealthy() && accountId) {
     try {
       const r = await stratz.getPlayerAvatar(accountId);
+      markStratzResult(!!r);
       if (r && /^https?:\/\//i.test(r)) {
         const avatar = imageUtil.toLogoUrl(r);
         logoCache.set(accountId, avatar, 'stratz');
         return { avatar, source: 'stratz' };
       }
-    } catch (e) { /* 隔离 */ }
+    } catch (e) { markStratzResult(false); /* 隔离 */ }
   }
   return null;
 }
@@ -462,11 +521,11 @@ async function crossTeamMembers(teamId) {
   );
 
   // STRATZ
-  if (stratz.ENABLED && teamId) {
+  if (stratzHealthy() && teamId) {
     tasks.push(
       stratz.getTeamRoster(teamId)
-        .then((rs) => { if (rs && rs.length) lists.push({ source: 'stratz', members: rs }); })
-        .catch((e) => { monitor.sourceCacheMiss('stratz', 'teamMembers', (e && e.message) || 'error'); })
+        .then((rs) => { markStratzResult(true); if (rs && rs.length) lists.push({ source: 'stratz', members: rs }); })
+        .catch((e) => { markStratzResult(false); monitor.sourceCacheMiss('stratz', 'teamMembers', (e && e.message) || 'error'); })
     );
   }
 

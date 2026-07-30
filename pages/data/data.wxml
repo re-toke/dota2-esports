@@ -27,5 +27,9 @@
     </view>
   </view>
 
-  <view class="data-foot muted">数据来源 OpenDota（公开 API），更新于本地缓存</view>
+  <view class="data-foot muted">
+    <view>数据来源：OpenDota（公开 API） </view>
+    <view>赛事元数据与战队资料：<text user-select="{{true}}">Liquipedia</text>（CC-BY-SA 3.0）</view>
+    <view>更新于本地缓存</view>
+  </view>
 </view>

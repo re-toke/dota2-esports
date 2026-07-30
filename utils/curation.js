@@ -19,14 +19,18 @@ const consensus = require('./consensus.js');
 const CURATED_EVENTS = [
   // ── TI 系列（SSS） ──
   { canonical: 'The International 2025', tier: { grade: 'SSS', rank: 4, label: 'TI 顶级' },
-    aliases: ['theinternational2025', 'ti2025', 'international2025'], year: 2025 },
+    aliases: ['theinternational2025', 'ti2025', 'international2025'], year: 2025,
+    liquipediaSlug: 'The_International/2025' },
   { canonical: 'The International 2024', tier: { grade: 'SSS', rank: 4, label: 'TI 顶级' },
     aliases: ['theinternational2024', 'ti2024', 'international2024'], year: 2024,
-    start: Math.floor(Date.UTC(2024, 8, 4) / 1000), end: Math.floor(Date.UTC(2024, 8, 15) / 1000) },
+    start: Math.floor(Date.UTC(2024, 8, 4) / 1000), end: Math.floor(Date.UTC(2024, 8, 15) / 1000),
+    liquipediaSlug: 'The_International/2024' },
   { canonical: 'The International 2023', tier: { grade: 'SSS', rank: 4, label: 'TI 顶级' },
-    aliases: ['theinternational2023', 'ti2023', 'international2023'], year: 2023 },
+    aliases: ['theinternational2023', 'ti2023', 'international2023'], year: 2023,
+    liquipediaSlug: 'The_International/2023' },
   { canonical: 'The International 2022', tier: { grade: 'SSS', rank: 4, label: 'TI 顶级' },
-    aliases: ['theinternational2022', 'ti2022', 'international2022'], year: 2022 },
+    aliases: ['theinternational2022', 'ti2022', 'international2022'], year: 2022,
+    liquipediaSlug: 'The_International/2022' },
   // TI15 (The International 2026)：2026-08-13 ~ 2026-08-23（含小组赛+主赛事），上海
   // 来源：Liquipedia The_International/2026 + Valve 官方公告
   // 补充字段（2026-07-25）：奖金池/地点/Valve 标记，供「赛事」tab 焦点卡与详情页 curation 兜底使用。
@@ -38,40 +42,50 @@ const CURATED_EVENTS = [
 
   // ── 知名 S 级（顶级第三方 S-Tier 巡回赛）2024 ──
   // 2024 起统一 $1M 级奖金，是 Dota2 职业生态骨架
-  { canonical: 'ESL One Birmingham 2024', tier: { grade: 'S', rank: 3, label: 'S级' },
-    aliases: ['eslonebirmingham2024', 'birminghammajor2024'], year: 2024,
-    start: Math.floor(Date.UTC(2024, 3, 22) / 1000), end: Math.floor(Date.UTC(2024, 3, 28) / 1000) },
+  // ESL One Birmingham 2024 完整条目见下方「ESL One 分站」区块（含 liquipediaSlug/region/status 等）
   // Riyadh Masters：顶级第三方（史上非 TI 最高奖金 $15.12M）
   { canonical: 'Riyadh Masters 2024', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['riyadhmasters2024', 'rm2024', 'riyadh2024'], year: 2024,
-    start: Math.floor(Date.UTC(2024, 6, 4) / 1000), end: Math.floor(Date.UTC(2024, 6, 21) / 1000) },
+    start: Math.floor(Date.UTC(2024, 6, 4) / 1000), end: Math.floor(Date.UTC(2024, 6, 21) / 1000),
+    liquipediaSlug: 'Riyadh_Masters/2024' },
   // DreamLeague：ESL 线上联赛，每赛季 $1M，稳定高频
   { canonical: 'DreamLeague Season 23', tier: { grade: 'S', rank: 3, label: 'S级' },
-    aliases: ['dreamleagueseason23', 'dreamleague23', 'dl2024s23'], year: 2024 },
+    aliases: ['dreamleagueseason23', 'dreamleague23', 'dl2024s23'], year: 2024,
+    liquipediaSlug: 'DreamLeague/Season_23' },
   { canonical: 'DreamLeague Season 22', tier: { grade: 'S', rank: 3, label: 'S级' },
-    aliases: ['dreamleagueseason22', 'dreamleague22', 'dl2024s22'], year: 2024 },
+    aliases: ['dreamleagueseason22', 'dreamleague22', 'dl2024s22'], year: 2024,
+    liquipediaSlug: 'DreamLeague/Season_22' },
   { canonical: 'DreamLeague Season 24', tier: { grade: 'S', rank: 3, label: 'S级' },
-    aliases: ['dreamleagueseason24', 'dreamleague24', 'dl2024s24'], year: 2024 },
+    aliases: ['dreamleagueseason24', 'dreamleague24', 'dl2024s24'], year: 2024,
+    liquipediaSlug: 'DreamLeague/Season_24' },
   { canonical: 'DreamLeague Season 25', tier: { grade: 'S', rank: 3, label: 'S级' },
-    aliases: ['dreamleagueseason25', 'dreamleague25', 'dl2025s25'], year: 2025 },
+    aliases: ['dreamleagueseason25', 'dreamleague25', 'dl2025s25'], year: 2025,
+    liquipediaSlug: 'DreamLeague/Season_25' },
   // BetBoom Dacha：高额新秀系列
   { canonical: 'BetBoom Dacha', tier: { grade: 'S', rank: 3, label: 'S级' },
-    aliases: ['betboomdacha', 'betboomdacha2024', 'bbdacha'], year: 2024 },
+    aliases: ['betboomdacha', 'betboomdacha2024', 'bbdacha'], year: 2024,
+    liquipediaSlug: 'BetBoom_Dacha' },
   // PGL Wallachia：PGL 三年马拉松系列
   { canonical: 'PGL Wallachia', tier: { grade: 'S', rank: 3, label: 'S级' },
-    aliases: ['pglwallachia', 'pglwallachia2024', 'wallachia2024'], year: 2024 },
+    aliases: ['pglwallachia', 'pglwallachia2024', 'wallachia2024'], year: 2024,
+    liquipediaSlug: 'PGL/Wallachia/1' },
   { canonical: 'PGL Wallachia Season 2', tier: { grade: 'S', rank: 3, label: 'S级' },
-    aliases: ['pglwallachia2', 'pglwallachiaseason2', 'wallachia2025'], year: 2025 },
+    aliases: ['pglwallachia2', 'pglwallachiaseason2', 'wallachia2025'], year: 2025,
+    liquipediaSlug: 'PGL/Wallachia/2' },
   // BLAST Slam：BLAST 入局 Dota2 后的新系列
   { canonical: 'BLAST Slam', tier: { grade: 'S', rank: 3, label: 'S级' },
-    aliases: ['blastslam', 'blastslam2024'], year: 2024 },
+    aliases: ['blastslam', 'blastslam2024'], year: 2024,
+    liquipediaSlug: 'BLAST/Slam/1' },
   { canonical: 'BLAST Slam II', tier: { grade: 'S', rank: 3, label: 'S级' },
-    aliases: ['blastslam2', 'blastslamii', 'blastslam2025'], year: 2025 },
+    aliases: ['blastslam2', 'blastslamii', 'blastslam2025'], year: 2025,
+    liquipediaSlug: 'BLAST/Slam/2' },
   // FISSURE Playground / Universe：高额新秀系列
   { canonical: 'FISSURE Playground', tier: { grade: 'S', rank: 3, label: 'S级' },
-    aliases: ['fissureplayground', 'fissure', 'fissure2025'], year: 2025 },
+    aliases: ['fissureplayground', 'fissure', 'fissure2025'], year: 2025,
+    liquipediaSlug: 'FISSURE/Playground/1' },
   { canonical: 'FISSURE Universe', tier: { grade: 'S', rank: 3, label: 'S级' },
-    aliases: ['fissureuniverse', 'fissureuniverse2025'], year: 2025 },
+    aliases: ['fissureuniverse', 'fissureuniverse2025'], year: 2025,
+    liquipediaSlug: 'FISSURE/Universe/1' },
 
   // ── S 级（ESL One 统一为 S-Tier，与 tiers.js 的 esl\s+one 规则对齐）2025 ──
   { canonical: 'ESL One Raleigh 2025', tier: { grade: 'S', rank: 3, label: 'S级' },
@@ -79,14 +93,18 @@ const CURATED_EVENTS = [
     prizePool: '$1,000,000', organizer: 'ESL', region: '北美', format: '双败淘汰', participants: 16,
     status: '已结束', liquipediaSlug: 'ESL_One/2025/Raleigh', valve: false, topThirdParty: false },
   { canonical: 'Riyadh Masters 2025', tier: { grade: 'S', rank: 3, label: 'S级' },
-    aliases: ['riyadhmasters2025', 'rm2025', 'riyadh2025'], year: 2025 },
+    aliases: ['riyadhmasters2025', 'rm2025', 'riyadh2025'], year: 2025,
+    liquipediaSlug: 'Riyadh_Masters/2025' },
   { canonical: 'PGL Astana 2025', tier: { grade: 'S', rank: 3, label: 'S级' },
-    aliases: ['pglastana2025', 'astana2025', 'pglastana'], year: 2025 },
+    aliases: ['pglastana2025', 'astana2025', 'pglastana'], year: 2025,
+    liquipediaSlug: 'PGL/Astana/2025' },
   // Clavision / Elite League：A-Tier 第三方
   { canonical: 'Clavision Masters', tier: { grade: 'A', rank: 2, label: 'A级' },
-    aliases: ['clavisionmasters', 'clavision'], year: 2024 },
+    aliases: ['clavisionmasters', 'clavision'], year: 2024,
+    liquipediaSlug: 'Clavision/Masters/1' },
   { canonical: 'Elite League', tier: { grade: 'A', rank: 2, label: 'A级' },
-    aliases: ['eliteleague', 'eliteleague2024'], year: 2024 },
+    aliases: ['eliteleague', 'eliteleague2024'], year: 2024,
+    liquipediaSlug: 'Elite_League/1' },
 
   // ── 2026 ──
   // DreamLeague Season 26：2026 上半年 ESL Pro Tour 赛事（已举办）
@@ -201,17 +219,21 @@ const CURATED_EVENTS = [
 
   // ── B 级（B-Tier 区域联赛 + 次级国际赛）──
   { canonical: 'Games of the Future 2024', tier: { grade: 'B', rank: 1, label: 'B级' },
-    aliases: ['gamesofthefuture2024', 'gof2024'], year: 2024 },
+    aliases: ['gamesofthefuture2024', 'gof2024'], year: 2024,
+    liquipediaSlug: 'Games_of_the_Future/2024' },
   { canonical: 'ESL One Kuala Lumpur 2024', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['eslkualalumpur2024', 'kualalumpur2024', 'kl2024'], year: 2024,
     prizePool: '$1,000,000', organizer: 'ESL', region: '东南亚', format: '双败淘汰', participants: 16,
     status: '已结束', liquipediaSlug: 'ESL_One/2024/Kuala_Lumpur', valve: false, topThirdParty: false },
   { canonical: 'TritonLeague', tier: { grade: 'B', rank: 1, label: 'B级' },
-    aliases: ['tritonleague', 'triton'], year: 2024 },
+    aliases: ['tritonleague', 'triton'], year: 2024,
+    liquipediaSlug: 'Triton_League' },
   { canonical: 'Dota 2 World Invitational', tier: { grade: 'B', rank: 1, label: 'B级' },
-    aliases: ['dotaworldinvitational', 'd2wi'], year: 2024 },
+    aliases: ['dotaworldinvitational', 'd2wi'], year: 2024,
+    liquipediaSlug: 'Dota_2_World_Invitational' },
   { canonical: 'Mega Arena', tier: { grade: 'B', rank: 1, label: 'B级' },
-    aliases: ['megaarena', 'megaarena2025'], year: 2025 },
+    aliases: ['megaarena', 'megaarena2025'], year: 2025,
+    liquipediaSlug: 'Mega_Arena' },
 
   // =====================================================================
   // 扩展收录（依据《DOTA2赛事级别分类全景》P0/P1 优化）：
@@ -336,7 +358,9 @@ const CURATED_EVENTS = [
     status: '已结束', liquipediaSlug: 'Dota_Pro_Circuit/2021-22',
     valve: true, topThirdParty: false, defunct: true },
   { canonical: 'DPC 2022-2023 Tour', tier: { grade: 'A', rank: 2, label: 'A级' },
-    aliases: ['dpc20222023', 'dpc202223', 'dpc2023'], year: 2023,
+    // ⚠️ 2026-07-30 修复别名冲突：移除 'dpc2023'（与 DPC 2023 Tour 共用导致歧义）
+    // 'dpc2023' 现专属 DPC 2023 Tour；本赛事靠 'dpc20222023'/'dpc202223' 精确匹配
+    aliases: ['dpc20222023', 'dpc202223'], year: 2023,
     organizer: 'Valve', region: '全球', format: '区域联赛(Div I/II)+Major',
     status: '已结束', liquipediaSlug: 'Dota_Pro_Circuit/2022-23',
     valve: true, topThirdParty: false, defunct: true },
@@ -575,6 +599,52 @@ function isHighPriorityTeam(nameOrId) {
   return false;
 }
 
+// ===== §9 P3-C2 取消赛事自动检测（2026-07-30）=====
+// 检测 curation 中 status='即将到来' 但 startDate 已过 N 天的赛事，标记为疑似取消。
+// 不自动修改 curation 数据（避免误删），仅返回清单供人工确认。
+//
+// 判定规则：
+//   - status === '即将到来' 且 start 已过 overdueDays 天（默认 7 天）→ 疑似取消
+//   - status === '进行中' 且 end 已过 overdueDays 天 → 疑似延期/取消
+//   - 无 start 字段的 '即将到来' 赛事不检测（无法判定）
+//
+// 返回：[{ canonical, status, start, end, delaySec, delayDays, reason }]
+function detectCancelledEvents(now, overdueDays) {
+  now = now || Math.floor(Date.now() / 1000);
+  overdueDays = overdueDays || 7;
+  const overdueSec = overdueDays * 86400;
+  const list = [];
+  CURATED_EVENTS.forEach((ev) => {
+    if (!ev || !ev.status) return;
+    if (ev.status === '即将到来' && ev.start) {
+      if (ev.start + overdueSec < now) {
+        list.push({
+          canonical: ev.canonical,
+          status: ev.status,
+          start: ev.start,
+          end: ev.end || null,
+          delaySec: now - ev.start,
+          delayDays: Math.floor((now - ev.start) / 86400),
+          reason: '即将到来但已过开始时间 ' + Math.floor((now - ev.start) / 86400) + ' 天'
+        });
+      }
+    } else if (ev.status === '进行中' && ev.end) {
+      if (ev.end + overdueSec < now) {
+        list.push({
+          canonical: ev.canonical,
+          status: ev.status,
+          start: ev.start || null,
+          end: ev.end,
+          delaySec: now - ev.end,
+          delayDays: Math.floor((now - ev.end) / 86400),
+          reason: '进行中但已过结束时间 ' + Math.floor((now - ev.end) / 86400) + ' 天'
+        });
+      }
+    }
+  });
+  return list;
+}
+
 module.exports = {
   CURATED_EVENTS: CURATED_EVENTS,
   CURATED_TEAMS: CURATED_TEAMS,
@@ -583,5 +653,6 @@ module.exports = {
   curatedEventFor: curatedEventFor,
   curatedTeamFor: curatedTeamFor,
   isTIContestantTeam: isTIContestantTeam,
-  isHighPriorityTeam: isHighPriorityTeam
+  isHighPriorityTeam: isHighPriorityTeam,
+  detectCancelledEvents: detectCancelledEvents
 };

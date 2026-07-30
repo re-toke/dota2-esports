@@ -121,7 +121,7 @@ view, text { box-sizing: border-box; }
    160rpx 缓冲：实测自定义 tabBar 高 ~128rpx（10+56+8+22-24+12+1 边线），
    原 132rpx 仅留 4rpx 余量，渲染/字体抖动易让最后一行被 tabBar 遮盖 → 表现"滚到底还有信息看不到"。
    leagues 页曾为此单独覆写到 148rpx；此处直接抬到 160rpx 后各页通用，leagues 覆写可一并收敛。 */
-.with-tab-bar { padding-bottom: calc(160rpx + env(safe-area-inset-bottom)); }
+.container.with-tab-bar { padding-bottom: calc(160rpx + env(safe-area-inset-bottom)); }
 
 /* 搜索栏上下间距 */
 .search-wrap { margin: 8rpx 0 20rpx; }

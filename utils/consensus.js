@@ -10,6 +10,25 @@
 // 设计原则：所有来源都是「尽力而为」。任一来源缺失/异常都不影响其它来源，
 // 也绝不阻断页面渲染。单源时无法交叉验证，confidence 自然为 'low'。
 
+// ===== §9 P1-B2 加权投票权重表（2026-07-30）=====
+// 各来源的可信度权重：curation 人工策展 > Liquipedia/Steam 人工/官方 > STRATZ > OpenDota/community 自动。
+// voteName/voteTime/consensusTier 计票时用权重求和替代简单来源数计数，
+// 让人工策展源（curation）在多源冲突时一票抵消多个自动源的错误。
+// community 权重与 opendota 相同（同为本地正则兜底，非人工核实）。
+const SOURCE_WEIGHT = {
+  curation: 3,      // 人工策展，最高权重（一票抵 opendota 三票）
+  liquipedia: 2,    // 人工 wiki 策展
+  steam: 2,         // Valve 官方
+  stratz: 1.5,      // GraphQL，可能被 CF 拦截
+  opendota: 1,      // 自动枚举，tier 边界模糊
+  community: 1      // 正则兜底，非人工核实
+};
+
+// 取来源权重（未知来源默认 1）
+function weightOf(source) {
+  return SOURCE_WEIGHT[source] != null ? SOURCE_WEIGHT[source] : 1;
+}
+
 // ===== 归一化 =====
 // 赛事名 / 队名归一：转小写，仅保留 [a-z 0-9 中文]，去掉一切分隔符与标点。
 // 例：'The International 2025' -> 'theinternational2025'
@@ -39,8 +58,10 @@ function confidenceOf(agreement, total) {
 }
 const CONF_RANK = { low: 0, medium: 1, high: 2 };
 
-// ===== 赛事名 / 队名 投票 =====
+// ===== 赛事名 / 队名 投票（§9 P1-B2 加权版）=====
 // candidates: [{ value:string, source:string }]
+// 加权计票：curation(3) > liquipedia/steam(2) > stratz(1.5) > opendota/community(1)
+// 让人工策展源在多源冲突时一票抵消多个自动源的错误。
 function voteName(candidates) {
   const valid = (candidates || []).filter((c) => c && c.value && normName(c.value));
   if (valid.length === 0) {
@@ -49,15 +70,16 @@ function voteName(candidates) {
   const groups = {};
   valid.forEach((c) => {
     const k = normName(c.value);
-    if (!groups[k]) groups[k] = { sources: [], raws: [] };
+    if (!groups[k]) groups[k] = { sources: [], raws: [], weight: 0 };
     groups[k].sources.push(c.source);
     groups[k].raws.push(String(c.value));
+    groups[k].weight += weightOf(c.source);  // §9 P1-B2：加权累加
   });
   const keys = Object.keys(groups);
   keys.sort((a, b) => {
-    // 1) 命中来源数多优先；2) 原文最长(信息最完整)优先
-    if (groups[b].sources.length !== groups[a].sources.length) {
-      return groups[b].sources.length - groups[a].sources.length;
+    // 1) 权重和高优先；2) 原文最长(信息最完整)优先
+    if (groups[b].weight !== groups[a].weight) {
+      return groups[b].weight - groups[a].weight;
     }
     const la = Math.max.apply(null, groups[a].raws.map((r) => r.length));
     const lb = Math.max.apply(null, groups[b].raws.map((r) => r.length));
@@ -108,6 +130,7 @@ function rankToGrade(rank) {
   return 'C';
 }
 // candidates: [{ grade, rank, label, source }]
+// §9 P1-B2 加权版：按权重和排序（curation 一票抵 opendota 三票），平票取更高等级
 function consensusTier(candidates) {
   const valid = (candidates || []).filter((c) => c && c.grade);
   if (valid.length === 0) {
@@ -116,15 +139,17 @@ function consensusTier(candidates) {
   const groups = {};
   valid.forEach((c) => {
     const r = (c.rank != null) ? c.rank : 0;
-    if (!groups[r]) groups[r] = { rank: r, sources: [], labels: [] };
+    if (!groups[r]) groups[r] = { rank: r, sources: [], labels: [], weight: 0 };
     groups[r].sources.push(c.source);
+    groups[r].weight += weightOf(c.source);  // §9 P1-B2：加权累加
     if (c.label) groups[r].labels.push(c.label);
   });
   const ranks = Object.keys(groups).map(Number).sort((a, b) => {
-    if (groups[b].sources.length !== groups[a].sources.length) {
-      return groups[b].sources.length - groups[a].sources.length;
+    // 1) 权重和高优先；2) 平票取更高等级（更稀有、更具体）
+    if (groups[b].weight !== groups[a].weight) {
+      return groups[b].weight - groups[a].weight;
     }
-    return b - a; // 平票取更高等级（更稀有、更具体）
+    return b - a;
   });
   const best = groups[ranks[0]];
   // label 取该等级内出现最多的
@@ -221,15 +246,57 @@ function validatePlayerId(id) {
   return { valid: true, accountId: n };
 }
 
+// ===== §9 P0-B1 赛事身份指纹（2026-07-30）=====
+// 解决痛点：跨源匹配仅靠队名归一化（normName）会导致同名不同赛事误关联，
+//   如多个区域的「Division I」、不同年份的同名杯赛。
+//
+// 指纹组成（| 分隔，缺字段用空串占位）：
+//   1. 规范名归一化（normName）
+//   2. 年份（优先显式 year 字段，回退从 canonical/name 中提取 20XX）
+//   3. 主办方归一化（normName，去主办方后缀如 esports/gaming/team）
+//   4. 时间窗（start 的周桶，±7 天容差对齐到同一桶）
+//
+// 指纹相同才视为同一赛事，用于跨源关联（赛事列表去重 / curation 匹配 / Liquipedia slug 映射）。
+// 指纹不同一定不同赛事（主办方可能缺失），但指纹相同则强相关，可显著降低误关联率。
+function extractYear(s) {
+  if (!s) return '';
+  const m = String(s).match(/(20\d{2})/);
+  return m ? m[1] : '';
+}
+
+function eventFingerprint(event) {
+  if (!event) return '';
+  // 1. 规范名（canonical 优先，回退 name）
+  const name = event.canonical || event.name || '';
+  const nameKey = normName(name);
+  if (!nameKey) return '';
+  // 2. 年份（显式 year 优先，回退从 name/canonical 提取）
+  const year = String(event.year || extractYear(name) || extractYear(event.canonical) || '');
+  // 3. 主办方归一化（去常见后缀）
+  let org = normName(event.organizer || '');
+  org = org.replace(/(esports|gaming|team|inc|llc|org)$/g, '');
+  // 4. 时间窗（start 的周桶，7 天粒度，对齐到同一桶避免 ±1 天跨桶）
+  let weekBucket = '';
+  const start = normNum(event.start || event.startDate);
+  if (start != null && start > 0) {
+    weekBucket = String(Math.floor(start / (7 * 86400)));
+  }
+  return [nameKey, year, org, weekBucket].join('|');
+}
+
 module.exports = {
   normName: normName,
   normNum: normNum,
   confidenceOf: confidenceOf,
   CONF_RANK: CONF_RANK,
+  SOURCE_WEIGHT: SOURCE_WEIGHT,
+  weightOf: weightOf,
   voteName: voteName,
   voteTime: voteTime,
   consensusTier: consensusTier,
   rankToGrade: rankToGrade,
   crossMembers: crossMembers,
-  validatePlayerId: validatePlayerId
+  validatePlayerId: validatePlayerId,
+  extractYear: extractYear,
+  eventFingerprint: eventFingerprint
 };

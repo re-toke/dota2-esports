@@ -287,6 +287,37 @@ function fetchAndParseLeague(slug, cacheKey, fallbackName) {
   }).catch(function () { return null; });
 }
 
+// ===== §9 赛事等级：对齐 Liquipedia Tier 体系（2026-07-30，方案A）=====
+// 返回 { grade, rank, label, source } 或 null。
+// 调用 parseLeagueTier 解析 {{Infobox league}} 模板的 liquipediatier 字段（1-4 数字），
+// 通过 LIQUIPEDIA_TIER_MAP（来自 tiers.js）映射为项目的 grade/rank/label。
+//
+// 与 getLeagueMetadata 复用同一份 wikitext 抓取（fetchPageWikitext），但独立缓存 tier 结果。
+// 原因：getLeagueMetadata 解析完整元数据，parseLeagueTier 仅解析等级字段，两者解析逻辑独立，
+//       缓存独立避免互相影响。若 getLeagueMetadata 已缓存 wikitext，此处可复用。
+//
+// 夁用策略：先查 liquipedia_league_ 缓存（getLeagueMetadata 已写入），命中则从 meta 中无 tier 字段
+//          → 需独立解析。简化为单独 fetchPageWikitext + parseLeagueTier + 独立 cache key。
+function getLeagueTier(name) {
+  if (!ENABLED || !name) return Promise.resolve(null);
+
+  // 复用 getLeagueMetadata 已抓取的 wikitext + 云函数返回的 meta.liquipediaTier 字段
+  // （云函数 liquipediaLeagueMeta 在解析 wikitext 时同步解析 tier，零额外请求）
+  return getLeagueMetadata(name).then(function (meta) {
+    if (!meta || meta.liquipediaTier == null) return null;
+    var tiers = require('./tiers.js');
+    var mapped = tiers.mapLiquipediaTier(meta.liquipediaTier);
+    if (!mapped) return null;
+    return {
+      grade: mapped.grade,
+      rank: mapped.rank,
+      label: mapped.label,
+      tier: meta.liquipediaTier,  // 原始 Liquipedia tier（1-4），供调试
+      source: 'liquipedia'
+    };
+  }).catch(function () { return null; });
+}
+
 // 2. 战队名册
 // 返回 [{ account_id, name, position, joinDate, leaveDate }] 或 []。
 // 注意：Liquipedia wikitext 中 account_id 通常不可靠/缺失，统一设为 null。
@@ -566,13 +597,52 @@ function getTeamLogo(name) {
   return Promise.resolve(null);
 }
 
+// ===== §9 Liquipedia 赛事主动枚举（2026-07-30）=====
+// 通过云函数代理调用 MediaWiki categorymembers API，枚举 Category:Tournaments 下
+// 全量赛事页面标题。Liquipedia 是独立人工策展 wiki，覆盖 OpenDota 未收录的未举办赛事。
+//
+// ★ 合规要点 ★
+//   1. 使用标准 API（action=query&list=categorymembers），不抓 HTML，符合 Liquipedia 条款
+//   2. 仅走云函数代理路径（wx.request 禁设 User-Agent，直连必被反爬虫层拦截）
+//   3. 云端缓存 7 天 + 月度主动刷新，降频降低 Liquipedia 负载
+//   4. 客户端再叠加本地缓存（7 天），避免重复调用云函数
+//
+// 返回 [{ slug, title }] 或 []。任何失败均 resolve 空数组，不影响其它功能。
+// slug 可直接传入 fetchPageWikitext 获取具体赛事页内容；title 用于展示/匹配。
+function listAllTournaments() {
+  if (!ENABLED) return Promise.resolve([]);
+
+  // 客户端本地缓存（7 天，与云端对齐）：赛事列表变化慢，长缓存减少云函数调用
+  var cacheKey = 'liquipedia_tournament_list';
+  var LIST_CACHE_TTL = 7 * 24 * 3600;  // 7 天（秒）
+  var cached = cache.get(cacheKey, LIST_CACHE_TTL);
+  if (cached && Array.isArray(cached) && cached.length) {
+    return Promise.resolve(cached);
+  }
+
+  // 仅走云函数代理路径
+  if (typeof wx !== 'undefined' && wx.cloud && cloudProxy.isAvailable()) {
+    return cloudProxy.liquipediaListTournamentsProxy().then(function (remote) {
+      if (remote && Array.isArray(remote) && remote.length) {
+        cache.set(cacheKey, remote, LIST_CACHE_TTL);
+        return remote;
+      }
+      return [];
+    }).catch(function () { return []; });
+  }
+  // 无云代理可用 → 返回空数组（不降级本地 wx.request，因为 UA 缺失会被拦）
+  return Promise.resolve([]);
+}
+
 module.exports = {
   ENABLED: ENABLED,
   getLeagueMetadata: getLeagueMetadata,
+  getLeagueTier: getLeagueTier,
   getTeamRoster: getTeamRoster,
   getPlayerProfile: getPlayerProfile,
   getScheduledMatches: getScheduledMatches,
   getTeamLogo: getTeamLogo,
+  listAllTournaments: listAllTournaments,
   parseParticipants: LiquiParse.parseParticipants,  // 2026-07-28 导出供单元测试直接调用（单一来源：liquipedia-parse.js）
   getSlugStats: getSlugStats  // §6.2 slug 命中率统计（供调试/日志输出）
 };

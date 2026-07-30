@@ -85,7 +85,10 @@ const TTL = {
   // 赛程（未开赛/进行中的对阵）变化敏感，30min 短缓存保证时效性
   liquipediaSchedule: 30 * 60 * 1000,
   // §8.3 战队 Logo（2026-07-29）：战队 logo 几乎不变，30 天长缓存减少 Liquipedia 请求
-  liquipediaTeamLogo: 30 * 24 * 3600 * 1000
+  liquipediaTeamLogo: 30 * 24 * 3600 * 1000,
+  // §9 Liquipedia 主动枚举（2026-07-30）：赛事列表变化慢，7 天长缓存 + 每月主动刷新一次
+  // categorymembers 全量拉取（约 3000+ 条），降频到每月 1 次合规调用
+  liquipediaTournamentList: 7 * 24 * 3600 * 1000
 };
 
 // ===== 缓存操作（可选，依赖 cloud DB collection） =====
@@ -470,6 +473,12 @@ async function liquipediaLeagueMeta(params, force) {
   if (!wikitext) return { data: null, source: 'liquipedia' };
   const meta = liquipediaParse.parseLeagueMetadata(wikitext, pageName);
   if (!meta) return { data: null, source: 'liquipedia' };
+  // §9（2026-07-30）：同步解析 Liquipedia Tier 字段，供客户端 sources.getLeagueTier 使用
+  // 复用同一份 wikitext，零额外请求，不污染原 meta 结构（tier 为可选字段）
+  try {
+    const tierParsed = liquipediaParse.parseLeagueTier(wikitext);
+    if (tierParsed) meta.liquipediaTier = tierParsed.tier;
+  } catch (e) { /* 隔离 */ }
   await setCache(cacheKey, meta, TTL.liquipediaMeta).catch(() => {});
   return { data: meta, source: 'liquipedia' };
 }
@@ -566,6 +575,93 @@ async function liquipediaTeamLogo(params, force) {
   const result = { logo: logoUrl, source: 'liquipedia' };
   await setCache(cacheKey, result, TTL.liquipediaTeamLogo).catch(() => {});
   return { data: result, source: 'liquipedia' };
+}
+
+// ===== Liquipedia 赛事主动枚举（§9 2026-07-30）=====
+// 通过 MediaWiki 标准 API: list=allpages 或 list=categorymembers 枚举全量赛事页面。
+//
+// ★ 合规要点（见 https://liquipedia.net/api-terms-of-use）★
+//   1. 使用标准 API（action=query&list=...），不抓 HTML，符合条款
+//   2. 设置描述性 User-Agent + Accept-Encoding: gzip
+//   3. categorymembers 是标准查询 API，不属于"自动化访问非 API 端点"禁止范围
+//   4. 全量拉取后缓存 7 天，月度刷新一次（赛事列表变化慢，降频降低 Liquipedia 负载）
+//
+// 实现策略：
+//   1. 枚举 Category:Tournaments 下所有页面（cmtitle=Category:Tournaments）
+//   2. 用 cmtype=page 仅取页面（排除子分类）
+//   3. 分页拉取（cmlimit=500，每次间隔 2.2s 遵守限流），最多 10 页 = 5000 条
+//   4. 过滤：仅保留带年份的页面（/20\d{2}/），剔除帮助页/分类页
+//   5. 返回 [{ slug, title }] 列表，供客户端/脚本补全 curation
+async function liquipediaListTournaments(params, force) {
+  const cacheKey = 'liquipedia_tournament_list_v1';
+  if (!force) {
+    const cached = await getCache(cacheKey).catch(() => null);
+    if (cached && Array.isArray(cached) && cached.length) {
+      return { data: cached, source: 'cache' };
+    }
+  }
+
+  const allPages = [];
+  let cmcontinue = null;
+  const MAX_PAGES = 10;  // 最多拉取 10 页 × 500 = 5000 条，覆盖历史+未来全量赛事
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    if (page > 0) {
+      // 遵守 2s 限流（除第一页外，每页间隔 2.2s 留余量）
+      await new Promise((r) => setTimeout(r, 2200));
+    }
+    try {
+      const searchParams = {
+        action: 'query',
+        list: 'categorymembers',
+        cmtitle: 'Category:Tournaments',
+        cmtype: 'page',
+        cmlimit: '500',
+        cmdir: 'asc',
+        format: 'json',
+        formatversion: '2'
+      };
+      if (cmcontinue) searchParams.cmcontinue = cmcontinue;
+
+      const res = await safeFetch({
+        url: LIQUIPEDIA_BASE,
+        searchParams: searchParams,
+        headers: {
+          'User-Agent': LIQUIPEDIA_UA,
+          'Accept': 'application/json',
+          'Accept-Encoding': 'gzip'
+        },
+        responseType: 'json',
+        source: 'Liquipedia-ListTournaments'
+      });
+      const body = res && res.body;
+      if (!body || !body.query || !body.query.categorymembers) break;
+      const members = body.query.categorymembers;
+      if (!Array.isArray(members) || !members.length) break;
+
+      members.forEach((m) => {
+        if (m && m.title && m.ns === 0) {  // ns=0 为主命名空间，剔除分类/帮助页
+          allPages.push({ slug: m.title, title: m.title.replace(/^Dota 2\/|Tournaments\//i, '') });
+        }
+      });
+
+      // 检查是否还有更多
+      cmcontinue = (body.continue && body.continue.cmcontinue) || null;
+      if (!cmcontinue) break;
+    } catch (e) {
+      // 单页失败不致命，返回已拉取的部分
+      console.warn('[liquipediaListTournaments] 第 ' + (page + 1) + ' 页拉取失败:', (e && e.message) || e);
+      break;
+    }
+  }
+
+  // 过滤：仅保留带年份的页面（剔除 "Tournaments"、"Help:..." 等非赛事页）
+  const filtered = allPages.filter((p) => /20\d{2}/.test(p.title));
+
+  if (filtered.length) {
+    await setCache(cacheKey, filtered, TTL.liquipediaTournamentList).catch(() => {});
+  }
+  return { data: filtered, source: 'liquipedia' };
 }
 
 // 知名 S 级赛事关键词（与客户端 leagues.js 保持一致）
@@ -1026,6 +1122,7 @@ const HANDLERS = new Map([
   ['liquipediaLeagueMeta', (e) => liquipediaLeagueMeta(e.params, e.force)],
   ['liquipediaScheduledMatches', (e) => liquipediaScheduledMatches(e.params, e.force)],
   ['liquipediaTeamLogo', (e) => liquipediaTeamLogo(e.params, e.force)],
+  ['liquipediaListTournaments', (e) => liquipediaListTournaments(e.params, e.force)],
   ['liquipediaPrewarm', (e) => liquipediaPrewarm(e.params, e.force)],
   // 赛程
   ['getUpcomingSchedule', handleGetUpcomingSchedule],

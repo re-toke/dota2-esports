@@ -262,6 +262,9 @@
   flex-shrink: 0;
 }
 
+/* 底部 spacer：配合 with-tab-bar 留出自定义 tabBar 区域 */
+.bottom-spacer { height: 24rpx; }
+
 /* ===== #20 智能提醒设置 ===== */
 .reminder-card {
   background: var(--card-bg, #161b22);

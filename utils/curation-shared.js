@@ -5,9 +5,9 @@
 // cannot load .json directly).
 module.exports = {
   "version": 3,
-  "generatedAt": "2026-07-29T02:36:33.426Z",
+  "generatedAt": "2026-07-30T03:29:58.999Z",
   "source": "utils/curation.js#CURATED_EVENTS",
-  "eventCount": 224,
+  "eventCount": 220,
   "map": {
     "theinternational2025": "The International 2025",
     "ti2025": "The International 2025",
@@ -25,8 +25,6 @@ module.exports = {
     "ti2026": "The International 2026",
     "international2026": "The International 2026",
     "ti15": "The International 2026",
-    "eslonebirmingham2024": "ESL One Birmingham 2024",
-    "birminghammajor2024": "ESL One Birmingham 2024",
     "riyadhmasters2024": "Riyadh Masters 2024",
     "rm2024": "Riyadh Masters 2024",
     "riyadh2024": "Riyadh Masters 2024",
@@ -118,6 +116,8 @@ module.exports = {
     "esportsworldcup2025": "Esports World Cup 2025",
     "ewc2025": "Esports World Cup 2025",
     "ewcdota2025": "Esports World Cup 2025",
+    "eslonebirmingham2024": "ESL One Birmingham 2024",
+    "birminghammajor2024": "ESL One Birmingham 2024",
     "eslonebangkok2024": "ESL One Bangkok 2024",
     "bangkok2024": "ESL One Bangkok 2024",
     "eslbangkok": "ESL One Bangkok 2024",
@@ -163,8 +163,8 @@ module.exports = {
     "dpc20222023tour": "DPC 2022-2023 Tour",
     "dpc20222023": "DPC 2022-2023 Tour",
     "dpc202223": "DPC 2022-2023 Tour",
-    "dpc2023": "DPC 2023 Tour",
     "dpc2023tour": "DPC 2023 Tour",
+    "dpc2023": "DPC 2023 Tour",
     "thekualalumpurmajor": "The Kuala Lumpur Major",
     "kualalumpurmajor": "The Kuala Lumpur Major",
     "klmajor2018": "The Kuala Lumpur Major",
@@ -179,5 +179,5 @@ module.exports = {
   "leagueIdMap": {
     "19944": "EPL Masters I"
   },
-  "dataVersion": "1785292593423"
+  "dataVersion": "1785382198996"
 };

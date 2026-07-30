@@ -88,8 +88,16 @@ module.exports = {
   //   → 所有 STRATZ 请求通过云函数中转，key 从环境变量读取，客户端零明文
   //
   // 常见错误：未重新编译不生效、Key 无效 → Console 看 [stratz] HTTP 401
+  //
+  // ★★ 2026-07-30 实测结论：STRATZ 暂不可用，已关闭 ★★
+  //   实测发现 STRATZ 启用了 Cloudflare 反爬虫保护（"Just a moment..." 挑战页），
+  //   本地直连 + 云函数代理均被拦截（HTTP 403 + Cloudflare 挑战页 HTML）。
+  //   这不是 key 问题（key 未过期且 JWT 格式正确），而是 Cloudflare 屏蔽了非浏览器请求。
+  //   影响：STRATZ 不可用，系统降级为 OpenDota + Liquipedia 双源运行，功能完整不受影响。
+  //   补偿：consensus 多源投票时 STRATZ 缺席，OpenDota + Liquipedia + community 三源足够决策。
+  //   恢复：如未来 STRATZ 解除 Cloudflare 拦截，可重新设为 true 并配 STRATZ_API_KEY 环境变量。
   stratz: {
-    enabled: true,
+    enabled: false,  // 2026-07-30 暂停：STRATZ Cloudflare 拦截
     // 客户端不持有任何密钥（小程序运行时无 process 全局变量，不能读 process.env）。
     // KEY 一律由云函数服务端环境变量 STRATZ_API_KEY 注入（见 cloudfunctions/aggregation）。
     // 客户端走 cloudProxy 中转，apiKey 留空；本地调试直连时也不应在此填明文 key。

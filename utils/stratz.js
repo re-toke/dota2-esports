@@ -77,7 +77,9 @@ function isRetriable(statusCode) {
 }
 
 function gqlDirect(query, variables) {
-  if (!ENABLED) return Promise.resolve(null);
+  // ★ 2026-07-30：运行时再次检查 config.stratz.enabled，允许测试环境临时启用
+  const liveEnabled = ENABLED || (config.stratz && config.stratz.enabled && config.stratz.apiKey);
+  if (!liveEnabled) return Promise.resolve(null);
 
   function attempt(retryCount) {
     return new Promise((resolve) => {
@@ -164,8 +166,13 @@ function gqlCloud(query, variables) {
 }
 
 // GraphQL 请求入口：云代理优先（key 安全），直连兜底。
+// ★ 2026-07-30：运行时再次检查 config.stratz.enabled，允许测试环境临时启用
+//   （生产环境 ENABLED 已在模块加载时固定，此处对生产无影响；测试环境可通过
+//   改 config.stratz.enabled=true 临时启用 STRATZ 模块内部逻辑测试）
 function gql(query, variables) {
-  if (!ENABLED) return Promise.resolve(null);
+  if (!ENABLED && !(config.stratz && config.stratz.enabled && config.stratz.apiKey)) {
+    return Promise.resolve(null);
+  }
   // 纯云代理模式：无本地 key，完全依赖云函数
   if (cloudEnabled && !config.stratz.apiKey) {
     return gqlCloud(query, variables);
@@ -203,7 +210,9 @@ function fetchLeaguesRaw() {
 }
 
 function getLeagues() {
-  if (!ENABLED) return Promise.resolve([]);
+  // ★ 2026-07-30：运行时再次检查 config.stratz.enabled，允许测试环境临时启用
+  const liveEnabled = ENABLED || (config.stratz && config.stratz.enabled && config.stratz.apiKey);
+  if (!liveEnabled) return Promise.resolve([]);
   // 先取一份「不判过期」的兜底值（GraphQL 失败时回退用，避免缓存被 get 删除后无法兜底）
   const stale = cache.get(LEAGUES_CACHE_KEY, 0);
   // 新鲜命中：直接返回
@@ -221,7 +230,9 @@ function getLeagues() {
 // 按赛事名精确匹配 STRATZ 联赛（替代旧的 indexOf 子串匹配，避免 "Major" 误命中多个联赛）
 // 流程：1) 归一名等值匹配；2) 回退到精选库 curation 的 canonical/aliases 反查 STRATZ 联赛
 function findLeagueByName(name) {
-  if (!ENABLED || !name) return Promise.resolve(null);
+  // ★ 2026-07-30：运行时再次检查 config.stratz.enabled，允许测试环境临时启用
+  const liveEnabled = ENABLED || (config.stratz && config.stratz.enabled && config.stratz.apiKey);
+  if (!liveEnabled || !name) return Promise.resolve(null);
   return getLeagues().then((list) => {
     if (!list || !list.length) return null;
     // 1) 归一名精确匹配（与 consensus.js 同一归一逻辑，避免分歧）
@@ -255,7 +266,10 @@ function findLeagueByName(name) {
 
 // 按赛事名取分级（sources 调用）
 function getLeagueTier(name) {
-  if (!ENABLED || !name) return Promise.resolve(null);
+  // ★ 2026-07-30：运行时再次检查 config.stratz.enabled，允许测试环境临时启用
+  if (!name) return Promise.resolve(null);
+  const liveEnabled = ENABLED || (config.stratz && config.stratz.enabled && config.stratz.apiKey);
+  if (!liveEnabled) return Promise.resolve(null);
   return findLeagueByName(name).then((hit) => {
     if (!hit) return null;
     return mapStratzTier(hit.tier);

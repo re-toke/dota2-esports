@@ -102,6 +102,15 @@ proxy.liquipediaTeamLogoProxy = function (teamName) {
   return call('liquipediaTeamLogo', { teamName: teamName });
 };
 
+// §9 Liquipedia 赛事主动枚举云代理（2026-07-30）：
+// 调云函数 action=liquipediaListTournaments，云端用 categorymembers API 分页枚举
+// Category:Tournaments 下全量赛事页面（仅页面标题，不抓 HTML，符合 Liquipedia API 条款）。
+// 返回 [{ slug, title }] 或 reject（由调用方 catch 降级为空数组）。
+// 云端缓存 7 天 + 月度主动刷新，降频降低 Liquipedia 负载。
+proxy.liquipediaListTournamentsProxy = function () {
+  return call('liquipediaListTournaments', {});
+};
+
 // 暴露给其它模块（api.js / stratz.js / leagues.js 复用）
 proxy.isAvailable = isAvailable;
 proxy.call = call;
