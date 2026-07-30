@@ -1,6 +1,11 @@
 <view class="imgfb {{round ? 'imgfb--round' : ''}}">
-  <!-- 占位层：无图 / 加载中 / 加载失败 三种情况均展示 -->
-  <view wx:if="{{!src || !loaded || failed}}" class="imgfb-ph">
+  <!-- 占位层：仅「无图」或「加载失败」时展示。
+       2026-07-30 修复：移除 !loaded 条件。原逻辑在「有图加载中」也显示占位，
+       但小程序 list 复用 / 动态 src 场景下 bindload 可能偶发不回调 → loaded 永远 false
+       → 占位首字母永久覆盖在已加载成功的图片之上，表现为「logo 出不来」。
+       改为：有 src 且未失败即不显示占位（加载中短暂空白，图片解码后立即可见），
+       可见性不再依赖 bindload 事件。 -->
+  <view wx:if="{{!src || failed}}" class="imgfb-ph">
     <text class="imgfb-ph-text">{{placeholder}}</text>
   </view>
   <!-- 真实图片：仅当存在地址且未失败时渲染，加载完成覆盖占位 -->

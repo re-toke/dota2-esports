@@ -1,3 +1,13 @@
+/* :host 选择自定义组件本身，确保组件标签占满父容器。
+   没有这个声明时，image-fallback 作为自定义组件默认尺寸由内容决定，
+   而内部 .imgfb 的 width:100% 基于组件根节点，根节点为 0 时整个组件不显示，
+   导致对阵模块的 logo 框看起来是空的（占位/图片都渲染为 0x0）。 */
+:host {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 .imgfb {
   position: relative;
   width: 100%;
@@ -42,10 +52,21 @@
   width: 100%;
   height: 100%;
   display: block;
-  /* P1-D：真图到位淡入，掩盖加载闪烁，体感更快 */
-  opacity: 0;
-  transition: opacity 250ms ease;
+  /* 2026-07-30 修复：默认 opacity:1，淡入改为加载时的装饰性动画。
+     原逻辑 opacity:0 且依赖 bindload → .imgfb-img--loaded 才置 1。
+     小程序 list 复用 / 动态 src 变更时 bindload 可能偶发不回调，
+     图片会永久停留在 opacity:0（不可见，仅底层首字母占位），
+     这正是「对阵模块队 logo 显示失败、参赛队伍却能显示」的渲染层根因
+     （参赛队伍用原生 <image> 无此 opacity 依赖）。
+     现改为默认可见，CSS animation 在元素渲染即播放淡入，不依赖任何 JS 事件。 */
+  opacity: 1;
+  animation: imgfb-fade-in 250ms ease;
 }
+@keyframes imgfb-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+/* 兼容旧 class：loaded 时仍保持可见（opacity:1 已覆盖，保留无副作用） */
 .imgfb-img.imgfb-img--loaded {
   opacity: 1;
 }

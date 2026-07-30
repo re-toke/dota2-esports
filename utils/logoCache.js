@@ -15,6 +15,12 @@ const KEY = 'dota2_logo_cache_v1';
 const MAX = 2000;
 const TTL = 30 * 24 * 3600 * 1000; // 30 天
 const PERSIST_DEBOUNCE_MS = 500;  // 防抖间隔：500ms 内的多次 set 合并为单次写入
+// ★ 负命中缓存版本戳（2026-07-30）：
+//   修复 logo 链路 BUG（如 imageinfo missing=true 误判、云函数部署）后，
+//   bump 此版本号即可让所有旧负命中标记失效，强制重新查询 Liquipedia。
+//   旧实现：负命中 24h TTL，修复后用户仍要等 24h 才能重试。
+//   现实现：版本号不匹配 → 立即视为过期，下次 enrichTeamLogo 重新打 Liquipedia。
+const NEG_VERSION = 2;
 
 let mem = null;
 let dirty = false;       // 是否有未写入的变更
@@ -73,6 +79,12 @@ function hasNegative(id) {
   const m = load();
   const e = m[id];
   if (!e || !e.negative) return false;
+  // 版本戳检查：版本号不匹配 → 旧负命中失效（修复部署后强制重试）
+  if (e.v !== NEG_VERSION) {
+    delete m[id];
+    persist();
+    return false;
+  }
   const NEG_TTL = 24 * 3600 * 1000;
   if (Date.now() - (e.ts || 0) > NEG_TTL) {
     delete m[id];
@@ -86,7 +98,7 @@ function markNegative(id) {
   const m = load();
   // 若已有正向 logo 缓存，不覆盖
   if (m[id] && m[id].logo) return;
-  m[id] = { negative: true, ts: Date.now() };
+  m[id] = { negative: true, ts: Date.now(), v: NEG_VERSION };
   const keys = Object.keys(m);
   if (keys.length > MAX) {
     keys.sort((a, b) => (m[a].ts || 0) - (m[b].ts || 0));

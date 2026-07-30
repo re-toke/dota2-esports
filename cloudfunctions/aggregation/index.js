@@ -544,7 +544,12 @@ async function fetchImageInfoUrl(fileName) {
     }
     if (!pages.length) return null;
     const page = pages[0];
-    if (page.missing) return null;
+    // ★ 2026-07-30 修复 logo 永远为空 BUG：
+    //   Liquipedia 图片存储在 lpcommons（Liquipedia Commons）foreign file repo 中，
+    //   查询 imageinfo 时 page.missing=true（本地 wiki 无此文件页面）但 page.known=true
+    //   且 page.imageinfo 有值（API 自动从 foreign repo 获取）。
+    //   原 `if (page.missing) return null` 导致所有 logo 查询都失败。
+    //   修复：missing 时仍检查 imageinfo，有值则使用（foreign repo 命中）。
     const imageinfo = page.imageinfo;
     if (!imageinfo || !imageinfo.length) return null;
     // 优先 thumburl（缩略图），回退 url（原图，体积较大）

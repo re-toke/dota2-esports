@@ -612,16 +612,20 @@ Page({
       });
   },
 
-  // 队名补全：收集队名为空的 team_id，一次 /explorer SQL 批量查 teams.name 回填。
+  // 队名补全：收集队名为空或是 UI 占位（天辉/夜魇）的 team_id，一次 /explorer SQL 批量查 teams.name 回填。
   // 补全后用路径更新仅刷新受影响行（series[i].games[j] + series 头部队名）。
   enrichTeamNames() {
     if (!this.allSeries || !this.allSeries.length) return;
     const need = {};
     this.allSeries.forEach((s) => {
+      // 小场：队名为空或兜底占位都需要补全
       s.games.forEach((m) => {
-        if (m.radiantTeamId != null && !m.radiantName) need[m.radiantTeamId] = true;
-        if (m.direTeamId != null && !m.direName) need[m.direTeamId] = true;
+        if (m.radiantTeamId != null && (!m.radiantName || m.radiantName === '天辉')) need[m.radiantTeamId] = true;
+        if (m.direTeamId != null && (!m.direName || m.direName === '夜魇')) need[m.direTeamId] = true;
       });
+      // 系列头部同样处理（OpenDota 返回 radiant_team_name 为空时 groupSeries 会兜底成'天辉'/'夜魇'）
+      if (s.radiantTeamId != null && (!s.radiantName || s.radiantName === '天辉')) need[s.radiantTeamId] = true;
+      if (s.direTeamId != null && (!s.direName || s.direName === '夜魇')) need[s.direTeamId] = true;
     });
     // 参赛队伍（participantsList）中"Team {id}"占位名的 id 一并加入查询，避免漏网。
     // 仅占位被命中，真名（如"Team Secret"）不会被误匹配（/^Team \d+$/ 要求纯数字 id）。
@@ -636,31 +640,31 @@ Page({
         const visible = this.data.series;
         visible.forEach((s, si) => {
           s.games.forEach((m, gi) => {
-            if (!m.radiantName && m.radiantTeamId != null && nameMap[m.radiantTeamId]) {
+            if ((!m.radiantName || m.radiantName === '天辉') && m.radiantTeamId != null && nameMap[m.radiantTeamId]) {
               patch['series[' + si + '].games[' + gi + '].radiantName'] = nameMap[m.radiantTeamId];
             }
-            if (!m.direName && m.direTeamId != null && nameMap[m.direTeamId]) {
+            if ((!m.direName || m.direName === '夜魇') && m.direTeamId != null && nameMap[m.direTeamId]) {
               patch['series[' + si + '].games[' + gi + '].direName'] = nameMap[m.direTeamId];
             }
           });
-          // 系列头部队名若为占位（天辉/夜魇）则用第一场补全
+          // 系列头部队名若为占位（天辉/夜魇）则用自身 team_id 或第一场补全
           const fg = s.games[0];
-          if (s.radiantName === '天辉' && fg && nameMap[fg.radiantTeamId]) {
-            patch['series[' + si + '].radiantName'] = nameMap[fg.radiantTeamId];
+          if ((!s.radiantName || s.radiantName === '天辉') && nameMap[s.radiantTeamId || (fg && fg.radiantTeamId)]) {
+            patch['series[' + si + '].radiantName'] = nameMap[s.radiantTeamId || (fg && fg.radiantTeamId)];
           }
-          if (s.direName === '夜魇' && fg && nameMap[fg.direTeamId]) {
-            patch['series[' + si + '].direName'] = nameMap[fg.direTeamId];
+          if ((!s.direName || s.direName === '夜魇') && nameMap[s.direTeamId || (fg && fg.direTeamId)]) {
+            patch['series[' + si + '].direName'] = nameMap[s.direTeamId || (fg && fg.direTeamId)];
           }
         });
         // 同步更新 allSeries 内存缓存
         this.allSeries.forEach((s) => {
           s.games.forEach((m) => {
-            if (!m.radiantName && m.radiantTeamId != null && nameMap[m.radiantTeamId]) m.radiantName = nameMap[m.radiantTeamId];
-            if (!m.direName && m.direTeamId != null && nameMap[m.direTeamId]) m.direName = nameMap[m.direTeamId];
+            if ((!m.radiantName || m.radiantName === '天辉') && m.radiantTeamId != null && nameMap[m.radiantTeamId]) m.radiantName = nameMap[m.radiantTeamId];
+            if ((!m.direName || m.direName === '夜魇') && m.direTeamId != null && nameMap[m.direTeamId]) m.direName = nameMap[m.direTeamId];
           });
           const fg = s.games[0];
-          if (s.radiantName === '天辉' && fg && nameMap[fg.radiantTeamId]) s.radiantName = nameMap[fg.radiantTeamId];
-          if (s.direName === '夜魇' && fg && nameMap[fg.direTeamId]) s.direName = nameMap[fg.direTeamId];
+          if ((!s.radiantName || s.radiantName === '天辉') && nameMap[s.radiantTeamId || (fg && fg.radiantTeamId)]) s.radiantName = nameMap[s.radiantTeamId || (fg && fg.radiantTeamId)];
+          if ((!s.direName || s.direName === '夜魇') && nameMap[s.direTeamId || (fg && fg.direTeamId)]) s.direName = nameMap[s.direTeamId || (fg && fg.direTeamId)];
         });
         // 参赛队伍（participantsList）占位名补全：同步覆盖"Team {id}"为真实队名
         const curParticipants = this.data.participantsList || [];

@@ -389,32 +389,31 @@ async function enrichTeamLogo(team) {
   const id = (team && team.id);
   const existing = (team && team.logo) || (team && team.logo_url) || '';
 
-  // §8.4 无效队名短路（2026-07-30）：
+  // §8.4 无效队名/无效 id 处理（2026-07-30 修复）：
   //   sources.groupSeries 对 OpenDota 返回的 null team_name 兜底设 '天辉'/'夜魇'，
-  //   这些是 UI 占位而非真实战队名。直接拿它们查 Liquipedia 必返 null 且刷一串警告，
-  //   还污染监控（logoLoadFailed 全源失败）。在此短路：直接返回 null（UI 走 image-fallback 占位）。
-  //   真实缺失队名场景仍能走 logoCache 命中（如缓存过）。
-  if (logoCache && id && logoCache.hasNegative(id)) {
-    return null;  // 已缓存"无 logo"标记，避免重复打 Liquipedia
-  }
-  if (!name || name === '天辉' || name === '夜魇') {
-    if (id) logoCache.markNegative(id);  // 缓存负命中，下次直接跳过
+  //   这些是 UI 占位而非真实战队名。但 id 有效时仍应尝试缓存/STRATZ 拿 logo，
+  //   仅跳过 Liquipedia 按名兜底（占位名查 Liquipedia 无意义）。id 无效时直接返回。
+  const isPlaceholderName = !name || name === '天辉' || name === '夜魇';
+  if (!id) {
     return null;
+  }
+  if (logoCache && logoCache.hasNegative(id)) {
+    return null;  // 已缓存"无 logo"标记，避免重复打 Liquipedia
   }
 
   // ① 本地缓存优先（仅当本次无直连 existing 时才依赖缓存，避免覆盖更权威的源 URL）
-  if (!existing && id) {
+  if (!existing) {
     const cached = logoCache.get(id);
     if (cached && cached.logo) return { logo: cached.logo, source: cached.source };
   }
 
   if (existing && /^https?:\/\//i.test(existing)) {
     const logo = imageUtil.toLogoUrl(existing);
-    if (id) logoCache.set(id, logo, 'opendota');
+    logoCache.set(id, logo, 'opendota');
     return { logo, source: 'opendota' };
   }
 
-  if (stratzHealthy() && id) {
+  if (stratzHealthy()) {
     try {
       const r = await stratz.getTeamLogo(id);
       markStratzResult(!!r);
@@ -429,13 +428,13 @@ async function enrichTeamLogo(team) {
       monitor.sourceCacheMiss('stratz', 'teamLogo', (e && e.message) || 'error');
     }
   }
-  // ④ Liquipedia 兜底（仅当前三源均无 logo 时调用，独立人工策展源，覆盖 Valve 数据缺口）
-  if (liquipedia.ENABLED) {
+  // ④ Liquipedia 兜底（仅当前三源均无 logo 且队名不是 UI 占位时才调用）
+  if (liquipedia.ENABLED && !isPlaceholderName) {
     try {
       const r = await liquipedia.getTeamLogo(name);
       if (r && r.logo && /^https?:\/\//i.test(r.logo)) {
         const logo = imageUtil.toLogoUrl(r.logo);
-        if (id) logoCache.set(id, logo, 'liquipedia');
+        logoCache.set(id, logo, 'liquipedia');
         console.info('[enrichTeamLogo] liquipedia 兜底成功 id=' + id + ' name=' + name + ' logo=' + logo.substring(0, 60));
         return { logo, source: 'liquipedia' };
       }
@@ -812,11 +811,13 @@ function groupSeries(matches) {
         // 首场 team_id 缺失：无法按队归属，直接按边累加
         if (g.radiant_win) scoreA++; else if (g.radiant_win === false) scoreB++;
       }
-      // 进行中：未结算（duration=0）且 start_time 已过去（已开赛但未结束）
-      // 2026-07-28 修正：原判定 (now - start_time*1000) < 24h 对未来 start_time 也成立
-      // （负数 < 24h），会误判未开赛对阵为 LIVE。新增 start_time <= nowSec 上界守卫。
+      // 进行中：未结算（radiant_win==null）且 start_time 在过去 24h 内
+      // 2026-07-30 修复：原判定用 `(!g.duration || g.duration === 0)` 依赖 duration 值，
+      //   但 OpenDota 对正在进行的比赛会返回实际持续时间（如 1200s=20min），
+      //   非零 duration 导致 isLive 条件不成立，live 比赛被误分类为 recent。
+      //   修复：以 radiant_win==null（未结算）为核心标志，结合 start_time 上界守卫。
       const gStartSec = g.start_time || 0;
-      if ((!g.duration || g.duration === 0) && gStartSec &&
+      if (g.radiant_win == null && gStartSec &&
           gStartSec <= nowSec && (nowSec - gStartSec) < 24 * 3600) {
         isLive = true;
       }

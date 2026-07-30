@@ -202,6 +202,13 @@
   overflow: hidden;  /* ★ 新增：让 <image> 被裁剪到圆角内 */
   transition: border-color 200ms ease, background 200ms ease;
 }
+/* 保险：让内部 image-fallback 自定义组件占满 logo 容器，
+   与组件内 :host 声明形成双重保障，避免某些场景下组件尺寸塌陷。 */
+.series-team-logo image-fallback {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
 .series-team-name {
   font-size: 28rpx;
   font-weight: 600;
