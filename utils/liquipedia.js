@@ -569,12 +569,13 @@ function getScheduledMatches(name) {
   // 规避 wx.request 禁止设置 User-Agent 的限制（Liquipedia 官方强制要求描述性 UA）。
   if (typeof wx !== 'undefined' && wx.cloud && cloudProxy.isAvailable()) {
     return cloudProxy.liquipediaScheduledProxy(name).then(function (res) {
-      // 云函数返回 { data: [...], source: 'liquipedia' | 'cache' }
       var scheduled = (res && res.data) || [];
       if (scheduled.length) {
         cache.set(cacheKey, scheduled, CACHE_TTL_SCHEDULE);
+        return scheduled;
       }
-      return scheduled;
+      // 云代理返回空数组 → 降级到本地抓取（避免云 DB 缓存/旧实例返回过期空结果）
+      return fetchScheduledLocal(slug, cacheKey);
     }).catch(function () {
       // 云代理失败 → 回退本地 wx.request（兜底）
       return fetchScheduledLocal(slug, cacheKey);

@@ -131,6 +131,15 @@ function dedupeByDisplayName(arr) {
 // 保证两路数据源渲染字段完全一致；后续增删字段只需改这一处（可维护性/可扩展性）。
 // entry: { id, name, grade, rank, label, tier, start, end, source, valve?, topThirdParty? }
 // ctx:   { now, allLeagues, lid }  lid 用于回查 allLeagues 复用分级/关注等；本地快照可传 entry.id
+// 赛程卡片的真实状态：按日期窗口判定「进行中」还是「即将到来」，
+// 避免已开赛的 Liquipedia 赛事（如 1win Essence II）因 status 被硬编码为 'upcoming'
+// 而永远进不了「进行中」tab（end + 1天宽限，与 util.isOngoing 路径②口径一致）。
+function upcomingCardStatus(entry, now) {
+  const s = entry.start || 0;
+  const e = entry.end || 0;
+  if (s && e && now >= s && now <= e + 86400) return 'ongoing';
+  return 'upcoming';
+}
 function buildUpcomingCard(entry, ctx) {
   const now = ctx.now;
   const lid = ctx.lid != null ? String(ctx.lid) : String(entry.id);
@@ -140,6 +149,8 @@ function buildUpcomingCard(entry, ctx) {
   const label = entry.label || (matched && matched.label) || 'S级';
   const name = entry.name || (matched && matched.name) || '';
   const daysToStart = Math.ceil((entry.start - now) / 86400);
+  const cardStatus = upcomingCardStatus(entry, now);
+  const cardBadge = statusBadgeOf(cardStatus);
   return {
     leagueid: Number(entry.id),
     name: name,
@@ -152,12 +163,12 @@ function buildUpcomingCard(entry, ctx) {
     tagVariant: tagThemeOf(grade).variant,
     startDate: entry.start,
     endDate: entry.end,
-    status: 'upcoming',
-    statusText: '即将到来',
-    statusColor: statusBadgeOf('upcoming').color,
+    status: cardStatus,
+    statusText: cardBadge.text,
+    statusColor: cardBadge.color,
     dateRange: util.formatDateRange(entry.start, entry.end),
     daysToStart: daysToStart,
-    countdownText: daysToStart <= 0 ? '今日开赛' : (daysToStart === 1 ? '明天开赛' : daysToStart + ' 天后开赛'),
+    countdownText: cardStatus === 'ongoing' ? '进行中' : (daysToStart <= 0 ? '今日开赛' : (daysToStart === 1 ? '明天开赛' : daysToStart + ' 天后开赛')),
     source: entry.source || (matched && matched.source) || 'liquipedia',
     valve: !!(entry.valve != null ? entry.valve : tiers.flagValve(name)),
     topThirdParty: !!(entry.topThirdParty != null ? entry.topThirdParty : tiers.flagTopThirdParty(name)),
@@ -618,12 +629,19 @@ Page({
         Object.keys(schedule).forEach((lid) => {
           const s = schedule[lid];
           if (!s || !s.start) return;
-          if (s.start > now && s.start <= horizon) {
+          // 关键修复：保留「未结束」的赛事（含已开赛的进行中赛事），不再用 start > now
+          // 把已开赛的 Liquipedia 赛事（如 1win Essence II）排除掉。end 缺失时按 start 在
+          // 视野内放行（无法判定是否结束），避免误杀。
+          if (s.start <= horizon && (!s.end || s.end >= now)) {
             // 复用 buildUpcomingCard 统一构造（STRATZ 真实联赛 id 经 lid 回查 allLeagues 复用分级/关注）
             results.push(buildUpcomingCard(s, { now: now, allLeagues: this.allLeagues, lid: lid }));
           }
         });
         results.sort((a, b) => (a.startDate || 0) - (b.startDate || 0));
+        // 本地快照补充：云缓存可能未含已开赛的进行中赛事（Liquipedia 仅 Upcoming 段抓取，
+        // 赛事开赛后转到 Ongoing 段）。用 upcoming-local.json 兜底，确保进行中赛事一定能进入
+        // 赛程列表，再经 upcomingCardStatus 判定归入「进行中」tab（部署新的云函数前尤其关键）。
+        this.mergeLocalSnapshot(results, now);
         // 合并 curation 库的未来赛事（云函数缓存可能未含未举办的重大赛事）
         this.mergeCurationUpcoming(results, null);
         results.sort((a, b) => (a.startDate || 0) - (b.startDate || 0));
@@ -653,7 +671,7 @@ Page({
     const now = util.nowSec();
     const horizon = now + config.leagueWindow.upcomingRangeSec;
     const results = events
-      .filter((e) => e.start > now && e.start <= horizon)
+      .filter((e) => e.start && e.start <= horizon && (!e.end || e.end >= now))
       .map((e) => buildUpcomingCard(e, { now: now, allLeagues: this.allLeagues, lid: e.id }));
     if (!results.length) return Promise.resolve(false);
 
@@ -801,6 +819,29 @@ Page({
     next();
   },
 
+  // 本地快照补充：读取 build-time 生成的 utils/upcoming-local.json，
+  // 把云缓存可能遗漏的「进行中 / 即将到来」赛事并入 results（按归一名去重）。
+  // 用途：Liquipedia 仅抓取 Portal 的 Upcoming 段，已开赛赛事转到 Ongoing 段后云缓存会漏，
+  // 本地快照（含 1win Essence II 等）可兜底，确保进行中赛事一定能进入赛程列表。
+  mergeLocalSnapshot(results, now) {
+    let data;
+    try { data = require('../../utils/upcoming-local.json'); } catch (e) { return; }
+    const events = (data && data.events) || [];
+    if (!events.length) return;
+    const horizon = now + config.leagueWindow.upcomingRangeSec;
+    const seen = {};
+    const norm = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    results.forEach((r) => { const k = norm(r.name); if (k) seen[k] = true; });
+    events
+      .filter((e) => e.start && e.start <= horizon && (!e.end || e.end >= now))
+      .forEach((e) => {
+        const k = norm(e.name);
+        if (!k || seen[k]) return;
+        seen[k] = true;
+        results.push(buildUpcomingCard(e, { now: now, allLeagues: this.allLeagues, lid: e.id }));
+      });
+  },
+
   // 把 curation 库中「有未来日期」的赛事合并到 results。
   // 用于补充 OpenDota 尚未记录的未举办重大赛事（如 TI 2026 主赛事）。
   // 去重：只检查 results（已添加的），不检查 allLeagues。
@@ -828,6 +869,9 @@ Page({
       const ut = ev.tier || { grade: 'S', rank: 3, label: 'S级' };
       const t = tagThemeOf(ut.grade);
       const daysToStart = Math.ceil((ev.startDate - nowSec) / 86400);
+      // 真实状态：已开赛的 curation 赛事（如 TI 主赛事开打）应归入「进行中」而非「即将到来」
+      const cardStatus = (ev.startDate && ev.endDate && nowSec >= ev.startDate && nowSec <= ev.endDate + 86400) ? 'ongoing' : 'upcoming';
+      const cardBadge = statusBadgeOf(cardStatus);
       // 基于归一名生成稳定的负数 id（避免与真实 leagueid 冲突）
       let hash = 0;
       for (let j = 0; j < k.length; j++) {
@@ -851,12 +895,12 @@ Page({
         followed: follow.isFollowed('leagues', fakeId),
         startDate: ev.startDate,
         endDate: ev.endDate,
-        status: 'upcoming',
-        statusText: '即将到来',
-        statusColor: statusBadgeOf('upcoming').color,
+        status: cardStatus,
+        statusText: cardBadge.text,
+        statusColor: cardBadge.color,
         dateRange: util.formatDateRange(ev.startDate, ev.endDate),
         daysToStart: daysToStart,
-        countdownText: daysToStart <= 0 ? '今日开赛' : (daysToStart === 1 ? '明天开赛' : daysToStart + ' 天后开赛'),
+        countdownText: cardStatus === 'ongoing' ? '进行中' : (daysToStart <= 0 ? '今日开赛' : (daysToStart === 1 ? '明天开赛' : daysToStart + ' 天后开赛')),
         matchCount: 0,
         earliest: 0,
         latest: 0,
@@ -878,9 +922,20 @@ Page({
     };
     let arr;
     if (f === 'upcoming') {
-      arr = (this.upcomingList || []).filter(gradeMatch).slice();
+      // 仅显示「即将到来」状态：已开赛的进行中赛事归入「进行中」tab，不在此重复出现
+      arr = (this.upcomingList || []).filter((x) => gradeMatch(x) && x.status === 'upcoming').slice();
     } else if (f === 'ongoing') {
-      arr = dedupeByDisplayName((this.allLeagues || []).filter((x) => x.status === 'ongoing' && gradeMatch(x)));
+      // 主源：OpenDota 已收录且状态为进行中的赛事
+      const ong = (this.allLeagues || []).filter((x) => x.status === 'ongoing' && gradeMatch(x));
+      const seen = {};
+      ong.forEach((x) => { seen[String(x.leagueid)] = true; });
+      // 补充：Liquipedia/本地快照中「已开赛但 OpenDota 尚未收录」的赛事（如 1win Essence II）。
+      // 这些赛事仅存在于 upcomingList（赛程数据源），按日期窗口判定为「进行中」，应在此展示。
+      (this.upcomingList || []).forEach((u) => {
+        if (seen[String(u.leagueid)]) return;
+        if (u.status === 'ongoing' && gradeMatch(u)) ong.push(u);
+      });
+      arr = dedupeByDisplayName(ong);
     } else if (f === 'ended') {
       // 已结束：直接信任归一化时计算的 status（statusOf 已用真实结束时间 + 缓冲判定）。
       // 移除冗余的「末场开赛须早于 7 天前」cutoff：短期赛事（1–2 天赛程）打完不久时，

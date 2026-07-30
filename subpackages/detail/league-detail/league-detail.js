@@ -9,6 +9,10 @@ const remoteCuration = require('../../../utils/remoteCuration.js');
 const liquipedia = require('../../../utils/liquipedia.js');
 const heroes = require('../../../utils/heroes.js');
 const logoCache = require('../../../utils/logoCache.js'); // Phase 1-⑦：persistNow onUnload
+// 2026-07-30 修复赛期截断：详情页回退读取 upcoming-local.json 的日期窗口，
+// 覆盖不在 curation 中且无 OpenDota 比赛的赛事（如 1win Essence II，leagueId 为负数占位）。
+var _upcomingLocalSnapshot = null;
+try { _upcomingLocalSnapshot = require('../../../utils/upcoming-local.json'); } catch (e) { /* 无快照时静默降级 */ }
 
 // Steam CDN 英雄头像基址（_sb.png = 小横幅图，约 59x33，aspectFill 裁切填满方形框）
 const HERO_IMG_BASE = 'https://cdn.cloudflare.steamstatic.com/apps/dota2/images/heroes/';
@@ -318,32 +322,22 @@ Page({
   },
 
   load() {
-    // 防御：curation 补充的未举办赛事（leagueId 为负数占位 id）没有真实比赛数据，
-    // 直接显示「暂无比赛数据」提示，避免发起无效的 API 请求。
     const lid = Number(this.data.leagueId);
-    if (!lid || lid < 0 || isNaN(lid)) {
+    const hasValidId = !!(lid && lid > 0 && !isNaN(lid));
+    if (!hasValidId) {
       this.allMatches = [];
       this.allSeries = [];
-      this.setData({
-        totalSeries: 0,
-        series: [],
-        page: 0,
-        hasMore: false,
-        loading: false,
-        error: ''
-      });
-      console.log('[league-detail] leagueId 无效或为 curation 占位(' + this.data.leagueId + ')，跳过 API 请求');
-      return Promise.resolve([]);
+      console.log('[league-detail] leagueId 无效或为占位(' + this.data.leagueId + ')，跳过 OpenDota；仍尝试 Liquipedia');
     }
     this.setData({ loading: true, error: '' });
-    // ★ 并行拉取 OpenDota 比赛数据 + Liquipedia 赛程数据
-    // OpenDota 只返回已结束的比赛（duration>0, radiant_win 有值），
-    // 进行中（LIVE）和未开赛（UPCOMING）的对阵需要从 Liquipedia {{Match}} 模板补充。
-    // Liquipedia 请求失败时静默降级，仅显示 OpenDota 数据。
-    return Promise.all([
-      api.getLeagueMatches(this.data.leagueId),
+    // 并行拉取 OpenDota 比赛数据 + Liquipedia 赛程数据：
+    // - OpenDota 只返回已结束的比赛（需有效 leagueId），Liquipedia 赛程进行中/未开赛用名称为准。
+    // - Liquipedia 请求失败时静默降级，仅显示 OpenDota 数据；若两者均无，显示「暂无比赛数据」。
+    const tasks = [
+      hasValidId ? api.getLeagueMatches(this.data.leagueId) : Promise.resolve([]),
       liquipedia.getScheduledMatches(this.data.name)
-    ])
+    ];
+    return Promise.all(tasks)
       .then(([list, scheduledMatches]) => {
         const raw = list || [];
         const liqScheduled = scheduledMatches || [];
@@ -563,10 +557,30 @@ Page({
         // 赛期显示优先级（与列表页 leagues.js loadLeagueEntry 完全一致）：
         //   ① curation 完整周期（mixed.startDate/endDate）—— 覆盖嘉年华全周期
         //   ② 真实比赛窗口（mStart/mEnd）—— 非策展赛事兜底
+        //   ③ upcoming-local.json 快照（2026-07-30 新增）—— 不在 curation 中且无 OpenDota 比赛的赛事
+        //      （如 Liquipedia 即将到来/进行中赛事，leagueId 为负数占位，无真实比赛窗口）
         // 数据校验：winStart/winEnd 必须都 > 0 才构建 eventWindow，避免半空数据导致渲染异常
         // 注意：mixed 已由 validateLeagueWindow 校验归一化，startDate/endDate 为 null 表示无有效 curation 日期
-        const winStart = mixed.startDate || (hasRealWindow ? mStart : 0);
-        const winEnd = mixed.endDate || (hasRealWindow ? mEnd : 0);
+        var winStart = mixed.startDate || (hasRealWindow ? mStart : 0);
+        var winEnd = mixed.endDate || (hasRealWindow ? mEnd : 0);
+        // 2026-07-30 修复：当 curation + 真实比赛窗口均无日期时，回退到 upcoming-local.json 快照。
+        // 场景：Liquipedia 新增赛事（如 1win Essence II）仅存在于 upcoming-local.json，
+        //       不在 curation CURATED_EVENTS 中、leagueId 为负数（无 OpenDota 数据），
+        //       导致 eventWindow=null → refreshMetadataDerived 跳过日期覆盖
+        //       → KPI 赛期退化为 Liquipedia Infobox 原始 tpl.edate（可能不完整/只有开始日期）。
+        if ((!winStart || !winEnd) && _upcomingLocalSnapshot && _upcomingLocalSnapshot.events) {
+          var nameKey = this.data.name;
+          var snapEntry = null;
+          for (var si = 0; si < _upcomingLocalSnapshot.events.length; si++) {
+            if (_upcomingLocalSnapshot.events[si].name === nameKey) { snapEntry = _upcomingLocalSnapshot.events[si]; break; }
+          }
+          if (snapEntry && snapEntry.start && snapEntry.end) {
+            if (!winStart) winStart = snapEntry.start;
+            if (!winEnd) winEnd = snapEntry.end;
+            console.log('[league-detail] upcoming-local 回退日期:', nameKey,
+              util.formatTime(winStart) + ' ~ ' + util.formatTime(winEnd));
+          }
+        }
         let eventWindow = null;
         if (winStart > 0 && winEnd >= winStart) {
           eventWindow = {

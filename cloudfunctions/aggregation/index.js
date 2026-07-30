@@ -370,41 +370,49 @@ async function fetchLiquipediaUpcoming() {
   });
   const html = res.body && res.body.parse && res.body.parse.text && res.body.parse.text['*'];
   if (!html) return [];
-  // 仅取 "Upcoming" 段落（到下一个 mw-headline 为止）
-  const startIdx = html.indexOf('id="Upcoming"');
-  if (startIdx < 0) return [];
-  const nextHead = html.indexOf('class="mw-headline"', startIdx + 10);
-  const section = html.slice(startIdx, nextHead > 0 ? nextHead : html.length);
 
   const nowSec = Math.floor(Date.now() / 1000);
   const out = [];
   const rowRe = /<tr class="table2&#95;&#95;row--(body|highlighted)">(.*?)<\/tr>/gs;
-  let m;
-  while ((m = rowRe.exec(section)) !== null) {
-    const row = m[2];
-    const tm = row.match(/Tier_(\d+)_Tournaments/);
-    const liqTier = tm ? parseInt(tm[1], 10) : 0;
-    if (liqTier > 2) continue; // 仅 Tier 1 / Tier 2
-    const nm = row.match(/column&#95;&#95;tournament[^>]*><a[^>]*>([^<]+)<\/a>/);
-    const name = nm ? nm[1].trim() : null;
-    if (!name) continue;
-    const dm = row.match(/<td class="" data-nowrap="">([^<]+)<\/td>/);
-    const dr = dm ? parseLiquipediaDate(dm[1]) : null;
-    if (!dr) continue; // 日期解析失败（非日期单元格）跳过
-    if (dr.end < nowSec) continue; // 已结束不进入"即将到来"
-    const g = liquipediaTierToGrade(liqTier);
-    out.push({
-      id: hashId(name),
-      name: name,
-      grade: g.grade,
-      rank: g.rank,
-      label: g.label,
-      tier: liqTier,
-      start: dr.start,
-      end: dr.end,
-      source: 'liquipedia'
-    });
-  }
+
+  // 2026-07-30 修复：同时抓取「Upcoming」与「Ongoing」两个段落。
+  // 赛事开赛后 Liquipedia 会把它从 Upcoming 移到 Ongoing 段，若只读 Upcoming，
+  // 进行中的赛事（如 1win Essence II）会从赛程缓存中消失，导致小程序「进行中」tab 漏显。
+  // 两段落合并后，未结束赛事都被保留（hashId 同名去重，Ongoing/Upcoming 重叠不重复）。
+  const SECTIONS = ['Upcoming', 'Ongoing'];
+  SECTIONS.forEach((secId) => {
+    const startIdx = html.indexOf('id="' + secId + '"');
+    if (startIdx < 0) return; // 该段不存在则跳过
+    const nextHead = html.indexOf('class="mw-headline"', startIdx + 10);
+    const section = html.slice(startIdx, nextHead > 0 ? nextHead : html.length);
+    let m;
+    rowRe.lastIndex = 0;
+    while ((m = rowRe.exec(section)) !== null) {
+      const row = m[2];
+      const tm = row.match(/Tier_(\d+)_Tournaments/);
+      const liqTier = tm ? parseInt(tm[1], 10) : 0;
+      if (liqTier > 2) continue; // 仅 Tier 1 / Tier 2
+      const nm = row.match(/column&#95;&#95;tournament[^>]*><a[^>]*>([^<]+)<\/a>/);
+      const name = nm ? nm[1].trim() : null;
+      if (!name) continue;
+      const dm = row.match(/<td class="" data-nowrap="">([^<]+)<\/td>/);
+      const dr = dm ? parseLiquipediaDate(dm[1]) : null;
+      if (!dr) continue; // 日期解析失败（非日期单元格）跳过
+      if (dr.end < nowSec) continue; // 已结束不进入赛程
+      const g = liquipediaTierToGrade(liqTier);
+      out.push({
+        id: hashId(name),
+        name: name,
+        grade: g.grade,
+        rank: g.rank,
+        label: g.label,
+        tier: liqTier,
+        start: dr.start,
+        end: dr.end,
+        source: 'liquipedia'
+      });
+    }
+  });
   return out;
 }
 
