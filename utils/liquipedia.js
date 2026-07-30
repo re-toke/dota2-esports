@@ -569,25 +569,29 @@ function getScheduledMatches(name) {
   //   避免 slug 映射新增/修改后旧空缓存持续命中。
   var cacheKey = 'liquipedia_schedule_' + consensus.normName(slug);
   var cached = cache.get(cacheKey, CACHE_TTL_SCHEDULE);
+  console.log('[liquipedia-diag] getScheduledMatches name=' + name + ' slug=' + slug +
+    ' cacheKey=' + cacheKey + ' cached=' + (cached ? ('len=' + cached.length) : 'null'));
   if (cached) return Promise.resolve(cached);
 
   // 云代理优先：通过云函数（Node.js 环境，可自由设 User-Agent + gzip）代理 Liquipedia 请求，
   // 规避 wx.request 禁止设置 User-Agent 的限制（Liquipedia 官方强制要求描述性 UA）。
   if (typeof wx !== 'undefined' && wx.cloud && cloudProxy.isAvailable()) {
+    console.log('[liquipedia-diag] 走云代理路径');
     return cloudProxy.liquipediaScheduledProxy(name).then(function (res) {
+      console.log('[liquipedia-diag] 云代理 res=' + (res ? JSON.stringify(res).slice(0, 300) : 'null'));
       var scheduled = (res && res.data) || [];
       if (scheduled.length) {
         cache.set(cacheKey, scheduled, CACHE_TTL_SCHEDULE);
         return scheduled;
       }
-      // 云代理返回空数组 → 降级到本地抓取（避免云 DB 缓存/旧实例返回过期空结果）
+      console.log('[liquipedia-diag] 云代理空数组，降级到 fetchScheduledLocal');
       return fetchScheduledLocal(slug, cacheKey);
-    }).catch(function () {
-      // 云代理失败 → 回退本地 wx.request（兜底）
+    }).catch(function (e) {
+      console.log('[liquipedia-diag] 云代理 catch 降级: ' + (e && e.message || e));
       return fetchScheduledLocal(slug, cacheKey);
     });
   }
-  // 本地兜底（云代理不可用时）
+  console.log('[liquipedia-diag] 无云代理，走本地 fetchScheduledLocal');
   return fetchScheduledLocal(slug, cacheKey);
 }
 
