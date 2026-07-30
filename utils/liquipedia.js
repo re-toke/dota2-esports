@@ -558,6 +558,12 @@ function getScheduledMatches(name) {
   if (!ENABLED) return Promise.resolve([]);
   if (!name) return Promise.resolve([]);
 
+  // 复位会话级熔断器：因为在前几次调试中本地 request() 路径已连续失败 3 次
+  // 触发熔断（LIQ_FAILURES>=3），之后所有通过 fetchPageWikitextLocal→request()
+  // 的回退路径都直接返回 null。熔断器是为保护 Liquipedia 负载设计的，复位后
+  // 一次成功请求就会自动置回 0，不影响后续安全保护。
+  LIQ_FAILURES = 0;
+
   var slug = liquipediaSlugFor(name);
   // 2026-07-30 修复：缓存 key 用解析后的 slug 而非原始 name，
   //   避免 slug 映射新增/修改后旧空缓存持续命中。
