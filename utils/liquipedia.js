@@ -281,7 +281,9 @@ function getLeagueMetadata(name) {
   if (!name) return Promise.resolve(null);
 
   var slug = liquipediaSlugFor(name);
-  var cacheKey = 'liquipedia_league_' + consensus.normName(name);
+  // 2026-07-30 修复：缓存 key 用解析后的 slug 而非原始 name，
+  //   避免 slug 映射新增/修改后旧空缓存持续命中。
+  var cacheKey = 'liquipedia_league_' + consensus.normName(slug);
   var cached = cache.get(cacheKey, CACHE_TTL);
   if (cached) return Promise.resolve(cached);
 
@@ -557,7 +559,9 @@ function getScheduledMatches(name) {
   if (!name) return Promise.resolve([]);
 
   var slug = liquipediaSlugFor(name);
-  var cacheKey = 'liquipedia_schedule_' + consensus.normName(name);
+  // 2026-07-30 修复：缓存 key 用解析后的 slug 而非原始 name，
+  //   避免 slug 映射新增/修改后旧空缓存持续命中。
+  var cacheKey = 'liquipedia_schedule_' + consensus.normName(slug);
   var cached = cache.get(cacheKey, CACHE_TTL_SCHEDULE);
   if (cached) return Promise.resolve(cached);
 
