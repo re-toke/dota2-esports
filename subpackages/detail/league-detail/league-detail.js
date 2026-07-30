@@ -217,6 +217,14 @@ Page({
       }
       // 元数据：Liquipedia/Steam 结果 与 curation 兜底合并，确保所有赛事都有完整 KPI 结构
       const mergedMeta = mergeMetadataWithFallback(p.meta, this.data.name, this.data.leagueId);
+      // 2026-07-30 修复赛期竞态：load() 已用 eventWindow（curation > 真实比赛窗口 > upcoming-local 快照）
+      // 构建了权威赛期；finalize 的 mergedMeta 来自 Liquipedia 原始 tpl.edate（可能不完整/被截断为开始日期）。
+      // 若 eventWindow 已存在且有效，保留其日期，避免异步合并时用 Liquipedia 脏数据覆盖正确赛期。
+      const ew = this.data.eventWindow;
+      if (ew && ew.start && ew.end) {
+        mergedMeta.startDate = util.formatTime(ew.start);
+        mergedMeta.endDate = util.formatTime(ew.end);
+      }
       // 2026-07-28 修复 BUG 3：统一 KPI 名称与头部名称的取值来源。
       // 此前 meta.canonical 来自 Liquipedia（tpl.name），patch.displayName 来自 curation canonical，
       // 两者走不同路径，可能产生「头部显示 EPL Masters I 而 KPI 显示 EPL Masters 2026」的不一致。
@@ -480,6 +488,24 @@ Page({
             '其中 LIVE:', liqSeries.filter(s => s.phase === 'live').length,
             'UPCOMING:', liqSeries.filter(s => s.phase === 'upcoming').length,
             'RECENT:', liqSeries.filter(s => s.phase === 'recent').length);
+          // 时间窗口过滤：Liquipedia 覆盖了整个赛期的全部赛程（7/26-8/12），
+          // 但用户只需要看近两天的实时对阵。按时间窗口重新归类：
+          //   LIVE:   今天（当天）开始的未结束比赛
+          //   UPCOMING: 今明两天内开始的未结束比赛
+          //   RECENT:  已结束（全部保留）
+          const _todayStart = Math.floor(fmtNowSec / 86400) * 86400;
+          const _todayEnd = _todayStart + 86400;
+          const _twoDaysEnd = _todayStart + 2 * 86400;
+          const _tsize = liqSeries.length;
+          liqSeries = liqSeries.filter(function(s) {
+            var st = s.lastTime || 0;
+            if (s.phase === 'live') return st >= _todayStart && st < _todayEnd;
+            if (s.phase === 'upcoming') return st >= _todayStart && st < _twoDaysEnd;
+            return true; // RECENT 全部保留
+          });
+          console.log('[league-detail] 时间窗口过滤:',
+            '过滤前=' + _tsize, '过滤后=' + liqSeries.length,
+            '剔除=' + (_tsize - liqSeries.length));
           this.allSeries = this.allSeries.concat(liqSeries);
         }
 

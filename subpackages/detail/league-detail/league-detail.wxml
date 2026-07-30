@@ -71,7 +71,7 @@
     </view>
     <view class="kpi-cell" style="grid-column: 1 / -1;">
       <text class="kpi-label">赛期</text>
-      <text class="kpi-value">{{(metadata.startDate && metadata.endDate) ? (metadata.startDate + ' ~ ' + metadata.endDate) : (eventWindow ? eventWindow.fullRange : '? ~ ?')}}</text>
+      <text class="kpi-value">{{eventWindow ? eventWindow.fullRange : (metadata.startDate && metadata.endDate) ? (metadata.startDate + ' ~ ' + metadata.endDate) : '? ~ ?'}}</text>
     </view>
   </view>
 

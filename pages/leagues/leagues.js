@@ -386,6 +386,29 @@ Page({
     let status = util.statusOf(mixed);
     if (cur && cur.status === '已结束') status = 'ended';
     else if (cur && cur.status === '进行中') status = 'ongoing';
+    // 赛期日期计算（提前到 return 外，避免对象字面量内 let 声明语法错误）
+    // 优先级：① curation 完整周期 → ② 真实比赛窗口 → ③ upcoming-local.json 快照
+    let _drStart = mixed.startDate, _drEnd = mixed.endDate;
+    if (!(_drStart || _drEnd)) {
+      _drStart = mixed.earliest; _drEnd = mixed.lastEnd || mixed.latest;
+      // 第三优先级：upcoming-local.json 快照回退
+      // 触发条件：无比赛窗口 / 或窗口不足 1 天（同日比赛导致 formatDateRange 显示 "M/D ~ M/D" 截断）
+      if (!_drStart || !_drEnd || (_drEnd - _drStart) < 86400) {
+        try {
+          const _snap = require('../../utils/upcoming-local.json');
+          if (_snap && _snap.events) {
+            const _dn = (displayName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const _hit = _snap.events.find((e) => {
+              const _en = (e.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              return _en && (_en === _dn || _dn.indexOf(_en) >= 0 || _en.indexOf(_dn) >= 0);
+            });
+            if (_hit && _hit.start && _hit.end && _hit.end > (_drEnd || 0)) {
+              _drStart = _hit.start; _drEnd = _hit.end;
+            }
+          }
+        } catch (_e) { /* local snapshot 缺失时静默跳过 */ }
+      }
+    }
     const badge = statusBadgeOf(status);
     // 展示名经 leagueDisplayName 单一出口解析（形状无关），与详情页口径一致，避免列表/详情不一致。
     const displayName = sources.leagueDisplayName(l);
@@ -412,14 +435,16 @@ Page({
       status: status,
       statusText: badge.text,
       statusColor: badge.color,
-      // 赛期优先用 curation 完整周期（mixed.startDate/endDate），无则回退真实比赛窗口。
+      // 赛期优先级（与详情页 league-detail.js load() eventWindow 构建一致）：
+      //   ① curation 完整周期 → ② 真实比赛窗口 → ③ upcoming-local.json 快照（_drStart/_drEnd 已预计算）
       // 2026-07-28：回退分支使用 lastEnd（最晚结束时间）而非 latest（最晚开赛时间），
       //   与详情页 load() 的 mEnd = max(start_time + duration) 一致。
       //   mixed 已由 validateLeagueWindow 校验，lastEnd >= latest >= earliest 单调性保证。
-      dateRange: (mixed.startDate && mixed.endDate)
-        ? util.formatDateRange(mixed.startDate, mixed.endDate)
-        : util.formatDateRange(mixed.earliest, (mixed.lastEnd || mixed.latest)),
-      startDate: mixed.startDate,
+      // 2026-07-30 修复列表页赛期截断：OpenDota 已收录赛事的比赛窗口可能集中在同一天
+      //   （如 1win Essence II 3 场均在 7/30），导致 formatDateRange 显示 "7/30 ~ 7/30"。
+      //   _drStart/_drEnd 在 return 前已通过 upcoming-local.json 快照回退修正。
+      dateRange: (_drStart && _drEnd) ? util.formatDateRange(_drStart, _drEnd) : '',
+      startDate: mixed.startDate,  // 保留原始 curation 日期供其他逻辑使用
       endDate: mixed.endDate,
       // 2026-07-30 列表元数据增强：从 curation 权威库传递奖金池/主办方/地点/赛制（零网络）
       prizePool: (cur && cur.prizePool) || null,
@@ -836,7 +861,24 @@ Page({
       .filter((e) => e.start && e.start <= horizon && (!e.end || e.end >= now))
       .forEach((e) => {
         const k = norm(e.name);
-        if (!k || seen[k]) return;
+        if (!k) return;
+        if (seen[k]) {
+          // 2026-07-30 修复：云缓存已含同名赛事（来自 Liquipedia Ongoing 段）时，
+          // 不再直接跳过——用 local 快照更完整的日期修正它。
+          // 根源：云函数 fetchLiquipediaUpcoming 抓 Portal:Tournaments 的 Ongoing 段，
+          // 该段日期单元格仅显示开始日（如 "Jul 30, 2026"），parseLiquipediaDate
+          // 无结束月/日 → 回退 end=start，导致 endDate 截断为 startDate。
+          // local 快照（fetch-liquipedia-upcoming.js 生成）含完整 start+end，
+          // 仅当 local 的 end 比云缓存的 endDate 更晚时才覆盖，避免改错正确日期。
+          const existing = results.find((r) => norm(r.name) === k);
+          if (existing && e.end && e.end > (existing.endDate || 0)) {
+            existing.startDate = e.start;
+            existing.endDate = e.end;
+            existing.dateRange = util.formatDateRange(e.start, e.end);
+            existing._win = Object.assign({}, existing._win, { startDate: e.start, endDate: e.end });
+          }
+          return;
+        }
         seen[k] = true;
         results.push(buildUpcomingCard(e, { now: now, allLeagues: this.allLeagues, lid: e.id }));
       });
