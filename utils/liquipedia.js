@@ -558,11 +558,16 @@ function getScheduledMatches(name) {
   if (!ENABLED) return Promise.resolve([]);
   if (!name) return Promise.resolve([]);
 
-  // 复位会话级熔断器：因为在前几次调试中本地 request() 路径已连续失败 3 次
-  // 触发熔断（LIQ_FAILURES>=3），之后所有通过 fetchPageWikitextLocal→request()
-  // 的回退路径都直接返回 null。熔断器是为保护 Liquipedia 负载设计的，复位后
-  // 一次成功请求就会自动置回 0，不影响后续安全保护。
+  // §9 P1 修复（2026-07-30）：强制清空三类会话级缓存
+  // 1) liquipedia 内部 LIQ_FAILURES 计数
+  // 2) cloudBreaker 状态（dota2_cloud_cb Storage）
+  // 3) 模块级 slugmapCache（模拟器可能缓存旧 JSON）
+  // 任一缓存处于"已触发"状态都会让 getScheduledMatches 返回空数组。
+  // 一次成功响应后这些状态会自动重新初始化（Liq 内部 markSuccess / cloudBreaker markSuccess），
+  // 所以本次重置只影响本次调用，不破坏后续安全防护。
   LIQ_FAILURES = 0;
+  try { wx.setStorageSync('dota2_cloud_cb', { broken: false, fails: 0 }); } catch (e) {}
+  slugMapCache = null;  // 强制重新 require liquipedia-slugmap.json
 
   var slug = liquipediaSlugFor(name);
   // 2026-07-30 修复：缓存 key 用解析后的 slug 而非原始 name，
