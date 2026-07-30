@@ -63,6 +63,38 @@ function get(id) {
   return e;
 }
 
+// §8.4 负命中缓存（2026-07-30）：记录"该 id 已确认无 logo（多源查询失败）"的事实，
+//   短期（24h）内跳过重复打 Liquipedia。设计原则：
+//   - 与正向 logo 共享 storage KEY 但 schema 不同（无 logo 字段，有 negative=true）
+//   - TTL 单独计算（24h，远短于正向 30d），避免永久错过上线后的新 logo
+//   - get() 仍返回 null（UI 行为零变化），hasNegative() 仅给调用方做"是否值得再试"判断
+function hasNegative(id) {
+  if (id == null) return false;
+  const m = load();
+  const e = m[id];
+  if (!e || !e.negative) return false;
+  const NEG_TTL = 24 * 3600 * 1000;
+  if (Date.now() - (e.ts || 0) > NEG_TTL) {
+    delete m[id];
+    return false;
+  }
+  return true;
+}
+
+function markNegative(id) {
+  if (id == null) return;
+  const m = load();
+  // 若已有正向 logo 缓存，不覆盖
+  if (m[id] && m[id].logo) return;
+  m[id] = { negative: true, ts: Date.now() };
+  const keys = Object.keys(m);
+  if (keys.length > MAX) {
+    keys.sort((a, b) => (m[a].ts || 0) - (m[b].ts || 0));
+    keys.slice(0, keys.length - MAX).forEach((k) => { delete m[k]; });
+  }
+  persist();
+}
+
 function set(id, logo, source) {
   if (id == null || !logo) return;
   const m = load();
@@ -79,6 +111,8 @@ function set(id, logo, source) {
 module.exports = {
   get: get,
   set: set,
+  hasNegative: hasNegative,
+  markNegative: markNegative,
   // 暴露 persistNow 供页面 onUnload 时强制刷新（确保离开页面前数据落盘）
   persistNow: persistNow
 };

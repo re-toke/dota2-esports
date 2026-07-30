@@ -389,6 +389,19 @@ async function enrichTeamLogo(team) {
   const id = (team && team.id);
   const existing = (team && team.logo) || (team && team.logo_url) || '';
 
+  // §8.4 无效队名短路（2026-07-30）：
+  //   sources.groupSeries 对 OpenDota 返回的 null team_name 兜底设 '天辉'/'夜魇'，
+  //   这些是 UI 占位而非真实战队名。直接拿它们查 Liquipedia 必返 null 且刷一串警告，
+  //   还污染监控（logoLoadFailed 全源失败）。在此短路：直接返回 null（UI 走 image-fallback 占位）。
+  //   真实缺失队名场景仍能走 logoCache 命中（如缓存过）。
+  if (logoCache && id && logoCache.hasNegative(id)) {
+    return null;  // 已缓存"无 logo"标记，避免重复打 Liquipedia
+  }
+  if (!name || name === '天辉' || name === '夜魇') {
+    if (id) logoCache.markNegative(id);  // 缓存负命中，下次直接跳过
+    return null;
+  }
+
   // ① 本地缓存优先（仅当本次无直连 existing 时才依赖缓存，避免覆盖更权威的源 URL）
   if (!existing && id) {
     const cached = logoCache.get(id);
@@ -417,7 +430,7 @@ async function enrichTeamLogo(team) {
     }
   }
   // ④ Liquipedia 兜底（仅当前三源均无 logo 时调用，独立人工策展源，覆盖 Valve 数据缺口）
-  if (liquipedia.ENABLED && name) {
+  if (liquipedia.ENABLED) {
     try {
       const r = await liquipedia.getTeamLogo(name);
       if (r && r.logo && /^https?:\/\//i.test(r.logo)) {
@@ -432,8 +445,12 @@ async function enrichTeamLogo(team) {
       monitor.sourceCacheMiss('liquipedia', 'teamLogo', (e && e.message) || 'error');
     }
   }
-  // G7.4：所有源均未拿到 logo，上报失败（按 team_id 去重）
-  console.warn('[enrichTeamLogo] 全源失败 id=' + id + ' name=' + name + ' existing=' + (existing ? '有但无效' : '空'));
+  // 标记负命中：避免后续同 id 重复打 Liquipedia
+  if (id) logoCache.markNegative(id);
+  // G7.4：所有源均未拿到 logo，上报失败（按 team_id 去重）。
+  // 降级到 console.info 而非 warn：单源全失败且 Liquipedia 也无结果时属常见情况
+  // （如 EWC 缺数据系列），反复 warn 会污染 Console。监控埋点仍走 monitor.logoLoadFailed。
+  console.info('[enrichTeamLogo] 全源失败 id=' + id + ' name=' + name + ' existing=' + (existing ? '有但无效' : '空'));
   monitor.logoLoadFailed(id, name, existing ? 'existing_invalid' : 'no_source');
   return null;
 }
