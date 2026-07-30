@@ -20,7 +20,9 @@ const COMMUNITY_TIERS = [
   // Riyadh Masters / 电竞世界杯 EWC（顶级第三方，奖金与关注度顶格）
   { test: /(riyadh\s+masters|esports\s+world\s+cup|ewc)/i, grade: 'S', rank: 3, label: 'S级' },
   // DPC Major（排除 Minor）：Valve 认证的官方顶级积分赛
-  { test: /major(?!.*minor)/i, grade: 'S', rank: 3, label: 'S级' },
+  // DPC Major（排除 Minor）：阻断 "Major Meme/League/Fun..." 等社区戏称，避免社区联赛误升 S。
+  // 真实 Major（The Kuala Lumpur Major / DPC XX Major）仍以 major 收尾或接年份，正常命中。
+  { test: /major(?!.*minor)(?!\s+(meme|fun|league|cup|scrim|trial|challenge|show|march|madness|monday))/i, grade: 'S', rank: 3, label: 'S级' },
   // S-Tier 第三方巡回赛：ESL One / DreamLeague / PGL / BLAST / FISSURE / BetBoom
   // 2024 起统一 $1M 级奖金，是 Dota2 职业生态骨架
   { test: /(esl\s+one|dreamleague|pgl|blast\s+slam|fissure|betboom)/i, grade: 'S', rank: 3, label: 'S级' },
@@ -31,7 +33,9 @@ const COMMUNITY_TIERS = [
   // 常见 A-Tier 赛事：Clavision / Elite League / The Summit 等
   { test: /(clavision|elite\s+league|the\s+summit|g\s+dexter)/i, grade: 'A', rank: 2, label: 'A级' },
   // DPC Minor（2017-2020 乙级联赛，已取消但仍可能出现在历史数据中）
-  { test: /minor/i, grade: 'A', rank: 2, label: 'A级' },
+  // DPC Minor：阻断 "Minor League/Cup/Scrim/Weekly..." 等社区戏称，避免社区联赛误升 A。
+  // 真实 Minor（DPC SEA Minor / XX Minor）minor 后接年份或收尾，正常命中。
+  { test: /\bminor\b(?!(\s+(league|scrim|scrims|cup|series|weekly|daily|challenge|fun|meme|trial|show|madness)))/i, grade: 'A', rank: 2, label: 'A级' },
   // DPC Division（2021-22 起 Valve 将 DPC 拆为 Upper/Lower Division）：
   //   Division I（超级组 / 甲级组 / Upper Division）→ A 级（文档：DPC 区域联赛 S 级）
   //   Division II（乙级组 / Lower Division）→ B 级（文档：DPC 区域联赛 A 级）

@@ -134,7 +134,9 @@ const CURATED_EVENTS = [
   //   Play-In 淘汰/未晋级：Team Spirit Academy / Dandelions / Team Lynx 等
   //   participants 数组格式与 Liquipedia parseParticipants 输出一致，
   //   refreshMetadataDerived 分支② 会优先使用此数组重建 participantsList（当 Liquipedia 不可用时）。
-  { canonical: 'EPL Masters I', tier: { grade: 'A', rank: 8, label: 'A-Tier' },
+  // ⚠️ rank 必须遵循统一分级模型（SSS=4/S=3/A=2/B=1），此处原误写为 8，
+  // 会导致 sortSmart 按 rank 排序时把 A 级赛事排到 TI(rank 4) 之上（收录错误）。
+  { canonical: 'EPL Masters I', tier: { grade: 'A', rank: 2, label: 'A-Tier' },
     leagueId: 19944,
     game: 'dota2',
     aliases: ['epl masters i'], year: 2026,
@@ -511,9 +513,14 @@ function buildLookups(events, teams) {
       const idx = k.indexOf(ek);
       if (idx >= 0) {
         const before = idx > 0 ? k.charAt(idx - 1) : '';
-        const after = k.charAt(idx + ek.length);
         const okBefore = !before || !/[a-z0-9]/.test(before);
-        const okAfter = !after || !/[a-z0-9]/.test(after);
+        const remainder = k.slice(idx + ek.length);
+        // 正向边界放宽：ek 之后除「词边界」外，还允许纯数字 / "dota2?" / "s<季>" 后缀，
+        // 以兼容 OpenDota 在规范名后追加年份/赛季/「Dota 2」的写法
+        // （如 "Esports World Cup 2026 Dota 2" → esportsworldcup2026dota2 仍能命中 curation 别名）。
+        // 这样真实 S/A 赛事即便被 OpenDota 标为 excluded，也能经 curation 兜底收录，避免漏收。
+        const okAfter = !remainder || !/[a-z0-9]/.test(remainder[0])
+          || /^\d+$/.test(remainder) || /^dota2?$/.test(remainder) || /^s\d+$/.test(remainder);
         if (okBefore && okAfter) {
           const v = validGame(EVENT_INDEX[ek]);
           if (v) return v;

@@ -363,6 +363,35 @@ check('sources.getLeagueName 包含 Liquipedia 候选', async () => {
   }
 });
 
+// ===== 收录规则回归（2026-07-30 修复：未收录 + 收录错误）=====
+section('\n--- 收录规则回归（未收录 / 收录错误）---');
+
+check('EPL Masters I curation 分级 rank 必须为 2（非 8，避免智能排序误排到 TI 之上）', () => {
+  const ev = curation.curatedEventFor('EPL Masters I', { game: 'dota2' });
+  assert(ev && ev.tier, '应命中 EPL Masters I');
+  assert(ev.tier.grade === 'A', 'grade 应为 A，实际: ' + ev.tier.grade);
+  assert(ev.tier.rank === 2, 'rank 必须为 2（A-Tier），实际: ' + ev.tier.rank);
+});
+
+check('communityTierFromName 不再误升社区戏称（收录错误回归）', () => {
+  assert(tiers.communityTierFromName('Community Minor Scrims') === null, 'Minor 戏称应不命中');
+  assert(tiers.communityTierFromName('Minor League Weekly') === null, 'Minor League 应不命中');
+  assert(tiers.communityTierFromName('Major Meme Tournament') === null, 'Major 戏称应不命中');
+  assert(tiers.communityTierFromName('Youth Major League') === null, 'Major 戏称应不命中');
+});
+
+check('communityTierFromName 真实 DPC Major/Minor 仍正确识别', () => {
+  const m = tiers.communityTierFromName('DPC SEA Minor 2024');
+  assert(m && m.grade === 'A' && m.rank === 2, 'DPC Minor 应 A 级，实际: ' + (m && m.grade));
+  const M = tiers.communityTierFromName('The Kuala Lumpur Major');
+  assert(M && M.grade === 'S' && M.rank === 3, '真实 Major 应 S 级，实际: ' + (M && M.grade));
+});
+
+check('curation 名称救援兼容 "Dota 2" 后缀（未收录回归：esportsworldcup2026dota2 应命中 EWC 2026）', () => {
+  const ev = curation.curatedEventFor('Esports World Cup 2026 Dota 2', { game: 'dota2' });
+  assert(ev && /esports world cup 2026/i.test(ev.canonical), '应命中 EWC 2026，实际: ' + (ev && ev.canonical));
+});
+
 // ===== 运行全部测试（顺序执行，支持 async）=====
 async function runAll() {
   for (const t of tests) {

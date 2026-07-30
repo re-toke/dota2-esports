@@ -90,14 +90,20 @@ function groupByWeek(arr) {
 // 确保「全部」能完整展示即将到来的赛事，而不只是「已结束+正在进行」。
 function mergeAllWithUpcoming(allLeagues, upcomingList) {
   const seen = Object.create(null);
+  const nameSeen = Object.create(null);
+  const normName = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const out = [];
   (allLeagues || []).forEach((x) => {
     const k = String(x.leagueid);
-    if (!seen[k]) { seen[k] = true; out.push(x); }
+    if (!seen[k]) { seen[k] = true; out.push(x); nameSeen[normName(x.displayName || x.name)] = true; }
   });
   (upcomingList || []).forEach((u) => {
     const k = String(u.leagueid);
-    if (!seen[k]) { seen[k] = true; out.push(u); }
+    if (seen[k]) return;            // 同 leagueid 已收录
+    // 防重复卡：curation 未来赛事用负数 fakeId，若其规范名已存在于 allLeagues（真实已开赛赛事），
+    // 说明是同一赛事的两条记录，优先保留真实数据那条，跳过 curation 占位（收录错误：重复卡片）。
+    if (nameSeen[normName(u.displayName || u.name)]) return;
+    seen[k] = true; out.push(u);
   });
   return out;
 }
@@ -340,7 +346,9 @@ Page({
     let grade = curTier ? curTier.grade : ut.grade;
     // RC7 兜底：确保 grade 恒为大写（SSS/S/A/B），与 gradeMatch 的 toLowerCase 比对一致，
     // 避免 curation/外部源分级大小写异常导致静默漏筛。
-    grade = (grade || 'S').toUpperCase();
+    // 修复：原 `(grade || 'S')` 会在 curation 分级缺失时把任意赛事静默提升为 S 级；
+    // 改为回退到 unifiedTier 的 OpenDota 枚举值（恒为有效等级），杜绝误升 S（收录错误）。
+    grade = (grade || ut.grade).toUpperCase();
     const rank = curTier ? curTier.rank : ut.rank;
     const label = curTier ? curTier.label : ut.label;
     const t = tagThemeOf(grade);
