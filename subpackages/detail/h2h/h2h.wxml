@@ -22,7 +22,10 @@
       <view class="vs-team" bindtap="openTeam" data-id="{{teamA.id}}">
         <image wx:if="{{teamA.logo}}" class="vs-logo" src="{{teamA.logo}}" mode="aspectFit" lazy-load />
         <view wx:else class="vs-logo vs-logo--fallback">{{teamA.tag || '?'}}</view>
-        <text class="vs-name">{{teamA.name}}</text>
+        <view class="vs-name-row">
+          <text class="vs-name">{{teamA.name}}</text>
+          <text wx:if="{{teamA._curated}}" class="vs-verified">已核实</text>
+        </view>
       </view>
       <view class="vs-mid">
         <text class="vs-symbol">VS</text>
@@ -30,7 +33,10 @@
       <view class="vs-team vs-team--away" bindtap="openTeam" data-id="{{teamB.id}}">
         <image wx:if="{{teamB.logo}}" class="vs-logo" src="{{teamB.logo}}" mode="aspectFit" lazy-load />
         <view wx:else class="vs-logo vs-logo--fallback">{{teamB.tag || '?'}}</view>
-        <text class="vs-name">{{teamB.name}}</text>
+        <view class="vs-name-row">
+          <text class="vs-name">{{teamB.name}}</text>
+          <text wx:if="{{teamB._curated}}" class="vs-verified">已核实</text>
+        </view>
       </view>
     </view>
 

@@ -215,6 +215,10 @@ Page({
           radarSeries: radarSeries,
           loading: false
         });
+
+        // 3.4 异步增强队名展示：用 curation 规范名覆盖 OpenDota 原始队名
+        // （如 OpenDota 的 "Team liquid" 统一显示为 curation 的 "Team Liquid"）
+        this.enrichTeamDisplay(teamA, teamB);
       })
       .catch(() => {
         this.setData({ loading: false, error: '加载失败，请检查网络或域名配置' });
@@ -242,5 +246,33 @@ Page({
 
   retry() {
     this.load();
+  },
+
+  // 3.4 异步增强队名/标签展示：用 curation 规范名覆盖 OpenDota 原始名
+  // （如 "Team liquid" → "Team Liquid"、"Virtus.pro" → "Virtus.pro" 保持）
+  // 成功后路径更新 teamA/teamB 的 name/tag/_curated，wxml 展示时附加核实标记
+  enrichTeamDisplay(teamA, teamB) {
+    var sources = require('../../../utils/sources.js');
+    Promise.all([
+      sources.enrichTeamInfo(teamA).catch(function () { return null; }),
+      sources.enrichTeamInfo(teamB).catch(function () { return null; })
+    ]).then(function (results) {
+      var patch = {};
+      var rA = results[0];
+      var rB = results[1];
+      if (rA && rA.name && rA.name !== teamA.name) {
+        patch['teamA.name'] = rA.name;
+        patch['teamA._curated'] = true;
+      }
+      if (rA && rA.tag && rA.tag !== teamA.tag) patch['teamA.tag'] = rA.tag;
+      if (rB && rB.name && rB.name !== teamB.name) {
+        patch['teamB.name'] = rB.name;
+        patch['teamB._curated'] = true;
+      }
+      if (rB && rB.tag && rB.tag !== teamB.tag) patch['teamB.tag'] = rB.tag;
+      if (Object.keys(patch).length) {
+        try { this.setData(patch); } catch (e) { /* 隔离 */ }
+      }
+    }.bind(this)).catch(function () { /* 隔离 */ });
   }
 });
