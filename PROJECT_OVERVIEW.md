@@ -130,7 +130,7 @@
 
 **关注与订阅**：`follow.js`（本地关注 teams/leagues，存 `dota2_follow`，无需登录）；`subscribe.js`（微信订阅消息，模板已配，24h 冷却 + 日限 5）；`reminderStrategy.js`（提前量+分级 SSS/S/A 过滤）；`searchHistory.js`（最多 10 条）。
 
-**实时与直播**：`realtime.js`（WebSocket 骨架，断线指数退避降级轮询）；`liveSources.js`（B站/虎牙/斗鱼深链聚合，不抓流）；`eventLifecycle.js`（赛事生命周期状态机，`ongoingBufferSec=2h`）。
+**实时与直播**：`realtime.js`（WebSocket 骨架，断线指数退避降级轮询）；`liveSources.js`（B站/虎牙/斗鱼深链聚合，不抓流）；赛事生命周期状态机在 `util.js` 的 `isOngoing`（三路径：OpenDota 真实结束 / curation 日期窗 / 未结算兜底，`ongoingBufferSec=2h`；`eventLifecycle.js` 已于 08-01 删除）。
 
 **A/B 与监控**：`experiment.js`（云端分组，失败回退本地 DEFAULTS）；`monitor.js`（`wx.reportAnalytics` 仅生产环境，同会话去重）。
 
