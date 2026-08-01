@@ -2,15 +2,20 @@
 // 社区分级规则（基于赛事名的精选规则，零网络兜底）。
 //
 // 等级模型：grade 用于展示，rank 用于排序/筛选（越大越高级）
-// SSS(4) > S(3) > A(2) > B(1) > C(0)
+// S(3) > A(2) > B(1) > C(0)
+// SSS(4) 仅作展示兜底（未来 rank>=4 来源），社区规则不再产出 SSS
 //
-// 分级依据（2024+ 职业2生态）：
-//   SSS = TI 国际邀请赛（Valve 官方旗舰，年度最高奖金与关注度）
-//   S   = 顶级赛事：Riyadh Masters/EWC（顶级第三方）+ DPC Major + S-Tier 巡回赛
-//         （ESL One / DreamLeague / PGL / BLAST / FISSURE / BetBoom）
+// 分级依据（2024+ 职业生态，与 Liquipedia Tier 对齐）：
+//   S   = 顶级赛事：TI / Riyadh Masters / EWC / DPC Major / S-Tier 巡回赛
+//         （ESL One / DreamLeague / PGL / BLAST / FISSURE / BetBoom / Elite League）
+//         对应 Liquipedia Tier 1
 //   A   = A-Tier 第三方赛事 + DPC Minor + DPC 区域联赛 S 级
+//         （Games of the Future / Clavision / CCT / Pinnacle / 1win Series / EPL）
+//         对应 Liquipedia Tier 2
 //   B   = B-Tier 区域联赛 + DPC 区域联赛 A 级 + 次级国际赛
-//   C   = Tier 3-4 社区赛 / 公开预选 / 青训
+//         对应 Liquipedia Tier 3
+//   C   = Tier 4 社区赛 / 公开预选 / 青训
+//         对应 Liquipedia Tier 4（不收录）
 
 const COMMUNITY_TIERS = [
   // ── S 级：TI 国际邀请赛（对齐 Liquipedia Tier 1） ──
@@ -23,15 +28,17 @@ const COMMUNITY_TIERS = [
   // DPC Major（排除 Minor）：阻断 "Major Meme/League/Fun..." 等社区戏称，避免社区联赛误升 S。
   // 真实 Major（The Kuala Lumpur Major / DPC XX Major）仍以 major 收尾或接年份，正常命中。
   { test: /major(?!.*minor)(?!\s+(meme|fun|league|cup|scrim|trial|challenge|show|march|madness|monday))/i, grade: 'S', rank: 3, label: 'S级' },
-  // S-Tier 第三方巡回赛：ESL One / DreamLeague / PGL / BLAST / FISSURE / BetBoom
+  // S-Tier 第三方巡回赛：ESL One / DreamLeague / PGL / BLAST / FISSURE / BetBoom / Elite League
   // 2024 起统一 $1M 级奖金，是 Dota2 职业生态骨架
-  { test: /(esl\s+one|dreamleague|pgl|blast\s+slam|fissure|betboom)/i, grade: 'S', rank: 3, label: 'S级' },
+  // ★ Elite League 升 S（对齐 Liquipedia Tier 1，2026-07-31 v3 优化项 B）
+  { test: /(esl\s+one|dreamleague|pgl|blast\s+slam|fissure|betboom|elite\s+league)/i, grade: 'S', rank: 3, label: 'S级' },
   // Premier 级（OpenDota/STRATZ 枚举对应）
   { test: /premier/i, grade: 'S', rank: 3, label: 'S级' },
 
   // ── A 级：A-Tier 第三方 + DPC Minor + DPC 区域联赛 S 级 ──
-  // 常见 A-Tier 赛事：Clavision / Elite League / The Summit 等
-  { test: /(clavision|elite\s+league|the\s+summit|g\s+dexter)/i, grade: 'A', rank: 2, label: 'A级' },
+  // 常见 A-Tier 赛事：Clavision / The Summit / Games of the Future 等
+  // ★ Games of the Future 升 A（对齐 Liquipedia Tier 2，2026-07-31 v3 优化项 D）
+  { test: /(clavision|the\s+summit|g\s+dexter|games\s+of\s+the\s+future)/i, grade: 'A', rank: 2, label: 'A级' },
   // §9 P0-A3（2026-07-30）：扩充 A-Tier 第三方赛事系列（community 正则覆盖盲区）
   // 依据：Liquipedia Tier 2 赛事 + 2024-2026 赛程梳理，覆盖 OpenDota amateur 误判为 B/C 的情况
   // CCT / Pinnacle Cup / 1win Series / European Pro League / Moonstorm / Resurrection / Heroic League
@@ -51,8 +58,9 @@ const COMMUNITY_TIERS = [
   { test: /(division\s*(ii\b|2\b|two\b)|乙级组|lower\s*division)/i, grade: 'B', rank: 1, label: 'B级' },
 
   // ── B 级：B-Tier 区域联赛 + 次级国际赛 ──
-  // Games of the Future / TritonLeague / Mega Arena / Dota 2 World Invitational 等
-  { test: /(games\s+of\s+the\s+future|triton|mega\s+arena|world\s+invitational)/i,
+  // TritonLeague / Mega Arena / Dota 2 World Invitational 等
+  // （Games of the Future 已升 A，2026-07-31 v3 优化项 D）
+  { test: /(triton|mega\s+arena|world\s+invitational)/i,
     grade: 'B', rank: 1, label: 'B级' },
   // §9 P0-A3（2026-07-30）：扩充 B-Tier 赛事系列
   // DreamLeague Division 2（ESL 2025-2026 新赛制次级联赛，Liquipedia Tier 2-3）
@@ -160,12 +168,11 @@ function communityTierFromName(name) {
 //   Tier 3 → B 级（区域联赛 / 次级国际赛）
 //   Tier 4 → C 级（社区赛，不收录，rank=0）
 //
-// ★ 特殊处理：TI 在 community 规则中已单独识别为 SSS，Liquipedia 也标为 Tier 1，
-//   但项目需保留 SSS 识别（体现 Valve 官方旗舰的独特性）。
-//   因此本映射只处理「无 community 命中」或「community 命中为 S/A/B」的情况，
-//   SSS 仍由 community 规则优先识别。
+// ★ TI 已从 SSS 降为 S，与 Liquipedia Tier 1 完全一致。
+//   community 规则返回 S，curation 返回 S，Liquipedia 映射返回 S。
+//   SSS 条目仅在 DISPLAY_TIERS 中保留，用于未来其他来源可能产生 rank>=4 的兜底展示。
 const LIQUIPEDIA_TIER_MAP = {
-  1: { grade: 'S', rank: 3, label: 'S级' },      // Tier 1 → S（community 正则与 curation 均已对齐，TI 不再标 SSS）
+  1: { grade: 'S', rank: 3, label: 'S级' },      // Tier 1 → S（TI/Major/S-Tier，与 community 对齐）
   2: { grade: 'A', rank: 2, label: 'A级' },      // Tier 2 → A
   3: { grade: 'B', rank: 1, label: 'B级' },       // Tier 3 → B
   4: { grade: 'C', rank: 0, label: '社区赛' }      // Tier 4 → C（不收录）

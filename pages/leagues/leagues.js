@@ -91,7 +91,7 @@ function groupByWeek(arr) {
 function mergeAllWithUpcoming(allLeagues, upcomingList) {
   const seen = Object.create(null);
   const nameSeen = Object.create(null);
-  const normName = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const normName = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '').replace(/^the/, '');
   const out = [];
   (allLeagues || []).forEach((x) => {
     const k = String(x.leagueid);
@@ -399,7 +399,10 @@ Page({
       // ② Liquipedia 快照（官方赛期，主力）— 以 Liquipedia 正确时间为准
       let _fromSnap = null;
       try {
-        const _snap = require('../../utils/upcoming-local.json');
+        // 2026-07-30 修复：优先用 JS 包装模块（稳定可靠），回退到 JSON
+        let _snap;
+        try { _snap = require('../../utils/upcoming-local-data.js'); }
+        catch (_e) { _snap = require('../../utils/upcoming-local.json'); }
         if (_snap && _snap.events) {
           const _dn = (displayName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
           const _hit = _snap.events.find((e) => {
@@ -691,7 +694,9 @@ Page({
   tryLocalUpcoming() {
     let data;
     try {
-      data = require('../../utils/upcoming-local.json');
+      // 2026-07-30 修复：优先用 JS 包装模块（稳定可靠），回退到 JSON
+      try { data = require('../../utils/upcoming-local-data.js'); }
+      catch (_e) { data = require('../../utils/upcoming-local.json'); }
     } catch (e) {
       return Promise.resolve(false);
     }
@@ -855,12 +860,14 @@ Page({
   // 本地快照（含 1win Essence II 等）可兜底，确保进行中赛事一定能进入赛程列表。
   mergeLocalSnapshot(results, now) {
     let data;
-    try { data = require('../../utils/upcoming-local.json'); } catch (e) { return; }
+    // 2026-07-30 修复：优先用 JS 包装模块（稳定可靠），回退到 JSON
+    try { data = require('../../utils/upcoming-local-data.js'); }
+    catch (e) { try { data = require('../../utils/upcoming-local.json'); } catch (_e) { return; } }
     const events = (data && data.events) || [];
     if (!events.length) return;
     const horizon = now + config.leagueWindow.upcomingRangeSec;
     const seen = {};
-    const norm = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const norm = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '').replace(/^the/, '');
     results.forEach((r) => { const k = norm(r.name); if (k) seen[k] = true; });
     events
       .filter((e) => e.start && e.start <= horizon && (!e.end || e.end >= now))
@@ -901,7 +908,7 @@ Page({
     const nowSec = Math.floor(Date.now() / 1000);
     // 只收集 results 中已添加的归一名（allLeagues 中同名但非 upcoming 的不应阻止补充）
     const seen = {};
-    const norm = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const norm = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '').replace(/^the/, '');
     results.forEach((r) => {
       const k = norm(r.name);
       if (k) seen[k] = true;

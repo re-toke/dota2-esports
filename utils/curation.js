@@ -389,7 +389,21 @@ const CURATED_EVENTS = [
     aliases: ['epicentermajor', 'epicenter2019'], year: 2019,
     prizePool: '$1,000,000', organizer: 'Valve / EPICENTER', region: '独联体', format: '双败淘汰',
     participants: 16, status: '已结束', liquipediaSlug: 'EPICENTER_Major',
-    valve: true, topThirdParty: false, defunct: true }
+    valve: true, topThirdParty: false, defunct: true },
+
+  // ── 2026 新增赛事（2026-07-30 补入，防止赛期截断） ──
+  { canonical: '1win Essence II', tier: { grade: 'S', rank: 3, label: 'S级' },
+    aliases: ['1win Essence 2', '1win essence ii', '1win Essence'],
+    year: 2026,
+    start: Math.floor(Date.UTC(2026, 6, 30) / 1000),
+    end: Math.floor(Date.UTC(2026, 7, 5, 23, 59, 59) / 1000),
+    liquipediaSlug: '1win_Essence/2' },
+  { canonical: 'Games of the Future 2026', tier: { grade: 'A', rank: 2, label: 'A级' },
+    aliases: ['games of the future', 'future 2026', 'gotf 2026'],
+    year: 2026,
+    start: Math.floor(Date.UTC(2026, 6, 31) / 1000),
+    end: Math.floor(Date.UTC(2026, 7, 5, 23, 59, 59) / 1000),
+    liquipediaSlug: 'Games_of_the_Future/2026' }
 ];
 
 // ===== 知名战队（team_id -> 规范信息）=====

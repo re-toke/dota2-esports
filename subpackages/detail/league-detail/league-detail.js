@@ -11,8 +11,11 @@ const heroes = require('../../../utils/heroes.js');
 const logoCache = require('../../../utils/logoCache.js'); // Phase 1-⑦：persistNow onUnload
 // 2026-07-30 修复赛期截断：详情页回退读取 upcoming-local.json 的日期窗口，
 // 覆盖不在 curation 中且无 OpenDota 比赛的赛事（如 1win Essence II，leagueId 为负数占位）。
-var _upcomingLocalSnapshot = null;
-try { _upcomingLocalSnapshot = require('../../../utils/upcoming-local.json'); } catch (e) { /* 无快照时静默降级 */ }
+// ★ 通过主包 sources 模块间接获取 upcoming-local 快照，避免分包直接 require JSON 的兼容性问题。
+function getUpcomingLocalSnapshot() {
+  if (sources && sources.getUpcomingLocalSnapshot) return sources.getUpcomingLocalSnapshot();
+  return null;
+}
 
 // Steam CDN 英雄头像基址（_sb.png = 小横幅图，约 59x33，aspectFill 裁切填满方形框）
 const HERO_IMG_BASE = 'https://cdn.cloudflare.steamstatic.com/apps/dota2/images/heroes/';
@@ -352,6 +355,19 @@ Page({
         console.log('[league-detail] 原始比赛数:', raw.length, 'Liquipedia 赛程数:', liqScheduled.length,
           raw[0] ? '首场字段:' + Object.keys(raw[0]).join(',') : '无数据');
         this.allMatches = raw;  // 保留原始（供系列赛聚合用）
+        // ★ v3 优化项26：cancelled 赛事赛程过滤 — 取消的赛事不显示赛程
+        const _cur = remoteCuration.curatedEventFor(this.data.name, { leagueId: Number(this.data.leagueId), game: 'dota2' });
+        if (_cur && _cur.status === '已取消') {
+          console.log('[league-detail] 赛事已取消，跳过赛程加载');
+          this.allSeries = [];
+          this.setData({
+            loading: false,
+            series: [],
+            totalSeries: 0,
+            cancelledNotice: '该赛事已取消'
+          });
+          return;
+        }
         // 系列赛聚合：按 series_id 归组 BO3/BO5，同一系列多场聚到一张卡
         // 2026-07-28 修复小圆点颜色 BUG：传入 series 的 A/B 队 team_id 锚点给 fmt，
         // 让每场 game 计算 aWin（A 队是否赢该场），WXML 据此着色。
@@ -405,23 +421,42 @@ Page({
           //   - 过滤 Liquipedia 赛程时，含 TBD 的对阵直接保留（不查去重键）
           const TBD_RE = /^(tbd|待定|待公布|unknown|tba|to\s+be\s+(determined|announced))$/i;
           function isTBD(name) { return TBD_RE.test(String(name || '').trim()); }
+          // ★ v3 优化项25：队名归一化增强 — 去掉常见后缀（esports/gaming/team）+ 去空格标点
+          function normalizeTeamNameForDedup(name) {
+            if (!name) return '';
+            var n = String(name).toLowerCase().trim();
+            n = n.replace(/\s*(esports|e-sports|gaming|team|club)\s*$/g, '');
+            n = n.replace(/[^a-z0-9一-鿿а-яё]/g, '');
+            return n;
+          }
+          // 模糊匹配：队名 A 包含队名 B 或反之（长度 >= 3）
+          function fuzzyMatchName(a, b) {
+            var na = normalizeTeamNameForDedup(a);
+            var nb = normalizeTeamNameForDedup(b);
+            if (!na || !nb || na.length < 3 || nb.length < 3) return false;
+            if (na === nb) return true;
+            return na.indexOf(nb) >= 0 || nb.indexOf(na) >= 0;
+          }
           // 构建去重键（仅双方均为确定队名时才生成键）
           function dedupeKey(n1, n2) {
             if (isTBD(n1) || isTBD(n2)) return null;  // TBD 不参与合并
-            return String(n1).toLowerCase().replace(/\s+/g, '') + '__' +
-                   String(n2).toLowerCase().replace(/\s+/g, '');
+            return normalizeTeamNameForDedup(n1) + '__' + normalizeTeamNameForDedup(n2);
           }
-          // 构建 OpenDota 已有对阵的去重键（队名归一化：小写+去空格）
+          // 构建 OpenDota 已有对阵的去重键（队名归一化：小写+去空格+去后缀）
           // 用于剔除 Liquipedia 中已被 OpenDota 返回的已结束对阵
           const openDotaKeys = new Set();
+          const openDotaNames = [];  // ★ v3 优化项25：存储归一化名供模糊匹配
           this.allSeries.forEach(function (s) {
             if (s.radiantName && s.direName) {
               const k1 = dedupeKey(s.radiantName, s.direName);
               if (k1) {
                 openDotaKeys.add(k1);
-                // 反向也加入（Liquipedia 的 team1/team2 顺序可能与 OpenDota 相反）
                 openDotaKeys.add(k1.split('__').reverse().join('__'));
               }
+              openDotaNames.push({
+                n1: normalizeTeamNameForDedup(s.radiantName),
+                n2: normalizeTeamNameForDedup(s.direName)
+              });
             }
           });
           // 将 Liquipedia 赛程转换为 series 对象
@@ -432,7 +467,17 @@ Page({
               const k = dedupeKey(m.team1Name, m.team2Name);
               if (!k) return true;  // §9 P0-D2：含 TBD 的对阵直接保留，不参与去重
               const kRev = k.split('__').reverse().join('__');
-              return !openDotaKeys.has(k) && !openDotaKeys.has(kRev);
+              if (openDotaKeys.has(k) || openDotaKeys.has(kRev)) return false;
+              // ★ v3 优化项25：模糊匹配去重（如 "Team Falcons" vs "Falcons"）
+              var ln1 = normalizeTeamNameForDedup(m.team1Name);
+              var ln2 = normalizeTeamNameForDedup(m.team2Name);
+              for (var i = 0; i < openDotaNames.length; i++) {
+                if ((fuzzyMatchName(ln1, openDotaNames[i].n1) && fuzzyMatchName(ln2, openDotaNames[i].n2)) ||
+                    (fuzzyMatchName(ln1, openDotaNames[i].n2) && fuzzyMatchName(ln2, openDotaNames[i].n1))) {
+                  return false;
+                }
+              }
+              return true;
             })
             .map(function (m, idx) {
               // 为 upcoming series 补全展示字段
@@ -449,17 +494,40 @@ Page({
                 else if (diffSec < 86400) countdownText = Math.floor(diffSec / 3600) + '小时后';
                 else countdownText = Math.floor(diffSec / 86400) + '天后';
               }
+              // ★ v3 优化项22：从 Liquipedia 提取比分（TeamOpponent|score=N）
+              var liqScoreA = m.score1 || 0;
+              var liqScoreB = m.score2 || 0;
+              var bForfeit = m.walkover > 0;
+              var forfeitSide = m.walkover === 1 ? 'A' : (m.walkover === 2 ? 'B' : '');
+              // ★ v3 优化项19：isRecent 语义修复 — 基于 startTime + 4h 窗口估算（Liquipedia 无 duration）
+              var liqIsRecent = false;
+              if (m.phase === 'recent' && m.startTime > 0) {
+                var elapsedSec = fmtNowSec - m.startTime;
+                liqIsRecent = elapsedSec > 0 && elapsedSec < 4 * 3600;
+              }
+              // ★ v3 优化项30：Liquipedia LIVE elapsedSec 估算
+              var liqElapsedSec = m.phase === 'live' ? Math.max(0, fmtNowSec - m.startTime) : 0;
+              // ★ v3 优化项⑭：UPCOMING 确定性标识
+              var confirmed = !isTBD(m.team1Name) && !isTBD(m.team2Name);
+              // ★ v3 优化项⑭：section 阶段标签
+              var stageLabel = m.section || '';
+              // 比分样式
+              var liqIsDraw = liqScoreA === liqScoreB && m.phase === 'recent';
+              var liqScoreACls = liqIsDraw ? 'draw' : (liqScoreA > liqScoreB ? 'win' : (m.phase === 'recent' ? 'lose' : ''));
+              var liqScoreBCls = liqIsDraw ? 'draw' : (liqScoreB > liqScoreA ? 'win' : (m.phase === 'recent' ? 'lose' : ''));
+              var liqTeamACls = liqIsDraw ? 'draw' : (liqScoreA > liqScoreB ? 'win' : '');
+              var liqTeamBCls = liqIsDraw ? 'draw' : (liqScoreB > liqScoreA ? 'win' : '');
               return {
                 key: 'liq-' + idx + '-' + m.startTime,
                 games: [],               // Liquipedia 赛程无小场数据
-                scoreA: 0,
-                scoreB: 0,
+                scoreA: liqScoreA,
+                scoreB: liqScoreB,
                 boType: m.boType,
                 boLabel: m.boType === 'BO1' ? '单局制' : (m.boType === 'BO2' ? '双局积分' : (m.boType === 'BO3' ? '三局两胜' : '五局三胜')),
                 boTagCls: m.boType === 'BO2' ? 'bo-bo2' : (m.boType === 'BO3' ? 'bo-bo3' : (m.boType === 'BO5' ? 'bo-bo5' : '')),
-                isDraw: false,
+                isDraw: liqIsDraw,
                 isLive: m.phase === 'live',
-                isRecent: m.phase === 'recent',
+                isRecent: liqIsRecent,
                 isUpcoming: m.phase === 'upcoming',
                 phase: m.phase,
                 isMulti: m.boType !== 'BO1',
@@ -467,20 +535,29 @@ Page({
                 direName: m.team2Name,
                 radiantTeamId: 0,        // Liquipedia 赛程无 team_id
                 direTeamId: 0,
-                radiantWin: false,
-                direWin: false,
-                scoreACls: '',
-                scoreBCls: '',
-                teamACls: '',
-                teamBCls: '',
-                teamALogoCls: '',
-                teamBLogoCls: '',
+                radiantWin: !liqIsDraw && liqScoreA > liqScoreB,
+                direWin: !liqIsDraw && liqScoreB > liqScoreA,
+                scoreACls: liqScoreACls,
+                scoreBCls: liqScoreBCls,
+                teamACls: liqTeamACls,
+                teamBCls: liqTeamBCls,
+                teamALogoCls: !liqIsDraw && liqScoreA > liqScoreB ? 'team-win' : '',
+                teamBLogoCls: !liqIsDraw && liqScoreB > liqScoreA ? 'team-win' : '',
                 radiantLogo: '',
                 direLogo: '',
                 radiantLogoSource: '',
                 direLogoSource: '',
                 scheduledTimeText: scheduledTimeText,
                 countdownText: countdownText,
+                // ★ v3 新增字段
+                liveProgress: '',     // Liquipedia 无小场数据，不显示系列进度
+                elapsedSec: liqElapsedSec,
+                elapsedText: '',
+                confirmed: confirmed,
+                stageLabel: stageLabel,
+                bForfeit: bForfeit,
+                forfeitSide: forfeitSide,
+                section: m.section || '',
                 lastTime: m.startTime
               };
             });
@@ -488,19 +565,26 @@ Page({
             '其中 LIVE:', liqSeries.filter(s => s.phase === 'live').length,
             'UPCOMING:', liqSeries.filter(s => s.phase === 'upcoming').length,
             'RECENT:', liqSeries.filter(s => s.phase === 'recent').length);
-          // 时间窗口过滤：Liquipedia 覆盖了整个赛期的全部赛程（7/26-8/12），
-          // 但用户只需要看近两天的实时对阵。按时间窗口重新归类：
-          //   LIVE:   今天（当天）开始的未结束比赛
-          //   UPCOMING: 今明两天内开始的未结束比赛
+          // 时间窗口过滤：Liquipedia 覆盖了整个赛期的全部赛程，
+          // 但用户只需要看近3天的实时对阵。按时间窗口重新归类：
+          //   LIVE:   24h 内开赛的未结束比赛（★ v3 优化项⑯：增加 24h 上界二次校验）
+          //   UPCOMING: 3天内（北京时间）内开始的未结束比赛（★ v3 优化项⑤：从2天扩展到3天）
           //   RECENT:  已结束（全部保留）
-          const _todayStart = Math.floor(fmtNowSec / 86400) * 86400;
+          // 2026-07-31 修复：使用北京时间（UTC+8）计算当天零点
+          const _BJ_OFFSET = 8 * 3600;
+          const _bjNow = fmtNowSec + _BJ_OFFSET;
+          const _todayStart = Math.floor(_bjNow / 86400) * 86400 - _BJ_OFFSET;
           const _todayEnd = _todayStart + 86400;
-          const _twoDaysEnd = _todayStart + 2 * 86400;
+          const _threeDaysEnd = _todayStart + 3 * 86400;  // ★ v3：2天→3天
           const _tsize = liqSeries.length;
           liqSeries = liqSeries.filter(function(s) {
             var st = s.lastTime || 0;
-            if (s.phase === 'live') return st >= _todayStart && st < _todayEnd;
-            if (s.phase === 'upcoming') return st >= _todayStart && st < _twoDaysEnd;
+            // ★ v3 优化项⑯：LIVE 24h 二次校验 — 开赛时间必须在 24h 内
+            if (s.phase === 'live') {
+              return st > 0 && (fmtNowSec - st) < 24 * 3600;
+            }
+            // UPCOMING：3天内（北京时间）内开始的比赛
+            if (s.phase === 'upcoming') return st >= _todayStart && st < _threeDaysEnd;
             return true; // RECENT 全部保留
           });
           console.log('[league-detail] 时间窗口过滤:',
@@ -509,15 +593,16 @@ Page({
           this.allSeries = this.allSeries.concat(liqSeries);
         }
 
-        // ★ 三段式分段排序（2026-07-28 新增）
-        // groupSeries 末尾已 sort by lastTime desc，但未区分 phase；
-        // 这里按 phase 重新分段排序：
-        //   LIVE：进行中（isLive），按 lastTime desc —— 最近开赛的在前
-        //   UPCOMING：未开赛（isUpcoming），按 lastTime asc —— 最早开赛的在前
-        //   RECENT：已结束（其他），按 lastTime desc —— 最近结束的在前
+        // ★ 三段式分段排序（2026-07-28 新增，v3 增强）
+        //   LIVE：进行中，按 lastTime desc —— 最近开赛的在前
+        //   UPCOMING：未开赛，按 dateGroup asc → lastTime asc —— 最早开赛的在前，按日期分组
+        //   RECENT：已结束，按 lastTime desc —— 最近结束的在前
         // 合并顺序：live → upcoming → recent
-        // 注意：groupSeries 返回的 series 已含 phase/isLive/isUpcoming 字段（步骤 1 新增）
-        // ★ 2026-07-28 修复：统一用 s.phase 判定（而非 isLive/isUpcoming），避免字段语义冲突
+        // ★ v3 优化项⑬：LIVE 进度增强 — 为 OpenDota series 计算 liveProgress/elapsedSec
+        // ★ v3 优化项⑭：UPCOMING 确定性标识 + 焦点战标记
+        // ★ v3 优化项⑮：RECENT 时间分层 — 刚刚结束(2h内)/今天/更早
+        // ★ v3 优化项21：UPCOMING dateGroup 字段 + 按日期分组排序
+        // ★ v3 优化项28：懒计算 — 只对当前页可见 series 计算新字段（在 setData 前计算）
         const liveList = [], upcomingList = [], recentList = [];
         this.allSeries.forEach(function (s) {
           if (s.phase === 'live') liveList.push(s);
@@ -525,8 +610,133 @@ Page({
           else recentList.push(s);
         });
         liveList.sort(function (a, b) { return b.lastTime - a.lastTime; });
-        upcomingList.sort(function (a, b) { return a.lastTime - b.lastTime; });
+        // ★ v3 优化项21：UPCOMING 按 dateGroup 分组排序
+        // 先计算 dateGroup（北京时间日期偏移）
+        var _bjNowSec = fmtNowSec + 8 * 3600;
+        var _nowBjDay = Math.floor(_bjNowSec / 86400);
+        upcomingList.forEach(function (s) {
+          if (s.lastTime > 0) {
+            var bjTime = s.lastTime + 8 * 3600;
+            var bjDay = Math.floor(bjTime / 86400);
+            s.dateGroup = bjDay - _nowBjDay;  // 0=今天, 1=明天, 2=后天, ...
+          } else {
+            s.dateGroup = 0;
+          }
+          // ★ v3 优化项⑭：UPCOMING 确定性标识
+          if (s.confirmed === undefined) {
+            s.confirmed = !isTBD(s.radiantName) && !isTBD(s.direName);
+          }
+          // ★ v3 优化项⑭：焦点战标记（双方均为 S-Tier 战队）
+          if (s.matchupQuality === undefined) {
+            var aHigh = sources.getTeamPriority(s.radiantName) >= 2;
+            var bHigh = sources.getTeamPriority(s.direName) >= 2;
+            s.matchupQuality = (aHigh && bHigh) ? 'focus' : '';
+          }
+        });
+        upcomingList.sort(function (a, b) {
+          var dayDiff = (a.dateGroup || 0) - (b.dateGroup || 0);
+          if (dayDiff !== 0) return dayDiff;
+          return a.lastTime - b.lastTime;
+        });
         recentList.sort(function (a, b) { return b.lastTime - a.lastTime; });
+        // ★ v3 优化项⑮：RECENT 时间分层 — 刚刚结束(2h内)/今天/更早
+        // 为每个 series 设置 timeLayer + showTimeLayerHeader + timeLayerLabel，
+        // 供 WXML 渲染三层子标题（与 UPCOMING date-sep 类似）
+        var _nowSec = Math.floor(Date.now() / 1000);
+        var _prevLayer = '';
+        var TIME_LAYER_LABELS = { just_ended: '刚刚结束', today: '今天', earlier: '更早' };
+        recentList.forEach(function (s) {
+          if (s.lastTime > 0) {
+            var elapsed = _nowSec - s.lastTime;
+            if (elapsed < 2 * 3600) {
+              s.timeLayer = 'just_ended';  // 刚刚结束（2h内）
+            } else {
+              var bjTime = s.lastTime + 8 * 3600;
+              var bjDay = Math.floor(bjTime / 86400);
+              var nowBjDay = Math.floor((_nowSec + 8 * 3600) / 86400);
+              s.timeLayer = (bjDay === nowBjDay) ? 'today' : 'earlier';
+            }
+          } else {
+            s.timeLayer = 'earlier';
+          }
+          // ★ v3 优化项⑮：三层子标题 — 每个时间层首条 series 显示子标题
+          s.showTimeLayerHeader = (s.timeLayer !== _prevLayer);
+          s.timeLayerLabel = TIME_LAYER_LABELS[s.timeLayer] || '更早';
+          _prevLayer = s.timeLayer;
+        });
+        // ★ v3 优化项⑬：LIVE 进度增强 — 为 OpenDota series 计算 liveProgress/elapsedSec
+        liveList.forEach(function (s) {
+          if (s.games && s.games.length > 0) {
+            s.liveProgress = 'Game ' + s.games.length + '/' + (s.boType.replace('BO', '') || '1');
+            var firstStart = s.games[0].start_time || 0;
+            s.elapsedSec = firstStart > 0 ? Math.max(0, _nowSec - firstStart) : 0;
+          } else {
+            s.liveProgress = s.liveProgress || '';
+            s.elapsedSec = s.elapsedSec || 0;
+          }
+          // 格式化已进行时长
+          if (s.elapsedSec > 0) {
+            var es = s.elapsedSec;
+            if (es < 60) s.elapsedText = es + 's';
+            else if (es < 3600) s.elapsedText = Math.floor(es / 60) + 'm';
+            else s.elapsedText = Math.floor(es / 3600) + 'h ' + Math.floor((es % 3600) / 60) + 'm';
+          } else {
+            s.elapsedText = '';
+          }
+        });
+        // ★ v3 优化项⑬：RECENT totalDuration 计算（仅 OpenDota series 有 games 数据）
+        // ★ v3 优化项⑮：格式化为 totalDurationText（⏱ Xh Ym）供 WXML 显示
+        recentList.forEach(function (s) {
+          if (s.games && s.games.length > 0 && !s.totalDuration) {
+            var firstStart = s.games[0].start_time || 0;
+            var lastEnd = s.games[s.games.length - 1].start_time || 0;
+            if (firstStart > 0 && lastEnd > 0) {
+              s.totalDuration = lastEnd - firstStart;
+            }
+          }
+          // 格式化总耗时
+          if (s.totalDuration > 0) {
+            var dh = Math.floor(s.totalDuration / 3600);
+            var dm = Math.floor((s.totalDuration % 3600) / 60);
+            if (dh > 0) s.totalDurationText = dh + 'h ' + dm + 'm';
+            else s.totalDurationText = dm + 'm';
+          } else {
+            s.totalDurationText = '';
+          }
+        });
+        // UPCOMING 按日期分组数据（供 WXML 渲染分组分隔线）
+        // ★ v3 优化项21：为每个 upcoming series 设置 dateLabel + showDateHeader + farFuture 字段，
+        //   供 WXML 在扁平 series 列表中渲染日期子标题 + 折叠远期赛程
+        var upcomingGroups = [];
+        var currentGroup = null;
+        var farFutureCount = 0;
+        var _prevDay = -1;
+        upcomingList.forEach(function (s) {
+          var day = s.dateGroup || 0;
+          var label;
+          if (day === 0) label = '今天';
+          else if (day === 1) label = '明天';
+          else if (day === 2) label = '后天';
+          else label = (day + 1) + '天后';
+          s.dateLabel = label;
+          // 3天以内的默认展示，3天以上折叠
+          if (day <= 2) {
+            // 每个日期组的第一条 series 显示日期子标题
+            s.showDateHeader = (day !== _prevDay);
+            _prevDay = day;
+            s.farFuture = false;
+            if (!currentGroup || currentGroup.day !== day) {
+              currentGroup = { day: day, label: label, series: [] };
+              upcomingGroups.push(currentGroup);
+            }
+            currentGroup.series.push(s);
+          } else {
+            s.farFuture = true;
+            s.showDateHeader = (day !== _prevDay);
+            _prevDay = day;
+            farFutureCount++;
+          }
+        });
         this.allSeries = liveList.concat(upcomingList, recentList);
         // ★ 已结束对阵胜负标识：金色多层级强调（仅 recent），详见 decorateSeriesWinner
         this.allSeries = this.allSeries.map((s) => this.decorateSeriesWinner(s));
@@ -585,27 +795,50 @@ Page({
         //   ② 真实比赛窗口（mStart/mEnd）—— 非策展赛事兜底
         //   ③ upcoming-local.json 快照（2026-07-30 新增）—— 不在 curation 中且无 OpenDota 比赛的赛事
         //      （如 Liquipedia 即将到来/进行中赛事，leagueId 为负数占位，无真实比赛窗口）
-        // 数据校验：winStart/winEnd 必须都 > 0 才构建 eventWindow，避免半空数据导致渲染异常
-        // 注意：mixed 已由 validateLeagueWindow 校验归一化，startDate/endDate 为 null 表示无有效 curation 日期
-        var winStart = mixed.startDate || (hasRealWindow ? mStart : 0);
-        var winEnd = mixed.endDate || (hasRealWindow ? mEnd : 0);
-        // 2026-07-30 修复：当 curation + 真实比赛窗口均无日期时，回退到 upcoming-local.json 快照。
-        // 场景：Liquipedia 新增赛事（如 1win Essence II）仅存在于 upcoming-local.json，
-        //       不在 curation CURATED_EVENTS 中、leagueId 为负数（无 OpenDota 数据），
-        //       导致 eventWindow=null → refreshMetadataDerived 跳过日期覆盖
-        //       → KPI 赛期退化为 Liquipedia Infobox 原始 tpl.edate（可能不完整/只有开始日期）。
-        if ((!winStart || !winEnd) && _upcomingLocalSnapshot && _upcomingLocalSnapshot.events) {
+        // 赛期优先级（与列表页 leagues.js loadLeagueEntry 完全一致，2026-07-30 修正）：
+        //   ① curation 完整周期（人工策展，最高权威）
+        //   ② upcoming-local.json 官方赛期（Liquipedia 正确时间，主力）
+        //   ③ OpenDota 真实比赛窗口（仅当 curation/upcoming-local 均无对应赛事时兜底）
+        // ★ 修复 BUG：原优先级为 curation → OpenDota → upcoming-local，导致 OpenDota 已收录部分比赛
+        //   但比赛集中在同一天（如 1win Essence II 3 场均在 7/30）时，winStart/winEnd 均非空，
+        //   不触发 upcoming-local 回退，赛期显示 "7/30 ~ 7/30" 而非完整 "7/30 ~ 8/5"。
+        //   现修正为与列表页一致：upcoming-local 优先于 OpenDota 真实窗口，保证官方赛期不被截断。
+        var winStart = mixed.startDate || 0;
+        var winEnd = mixed.endDate || 0;
+        // 无 curation 赛期时，回退到 upcoming-local.json 官方赛期
+        if (!winStart || !winEnd) {
+          var snap = getUpcomingLocalSnapshot();
           var nameKey = this.data.name;
-          var snapEntry = null;
-          for (var si = 0; si < _upcomingLocalSnapshot.events.length; si++) {
-            if (_upcomingLocalSnapshot.events[si].name === nameKey) { snapEntry = _upcomingLocalSnapshot.events[si]; break; }
+          if (snap && snap.events && snap.events.length) {
+            // 名称归一化匹配（与列表页 leagues.js 第 404-407 行一致）：
+            //   小写 + 去非字母数字 + 包含关系，避免大小写/空格差异导致漏匹配
+            var nameNorm = (nameKey || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            var snapEntry = null;
+            for (var si = 0; si < snap.events.length; si++) {
+              var ev = snap.events[si];
+              var evNorm = (ev.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              if (evNorm && nameNorm && (evNorm === nameNorm || nameNorm.indexOf(evNorm) >= 0 || evNorm.indexOf(nameNorm) >= 0)) {
+                snapEntry = ev; break;
+              }
+            }
+            if (snapEntry && snapEntry.start && snapEntry.end) {
+              if (!winStart) winStart = snapEntry.start;
+              if (!winEnd) winEnd = snapEntry.end;
+              console.log('[league-detail] upcoming-local 匹配成功:', nameKey,
+                '→', util.formatTime(winStart) + ' ~ ' + util.formatTime(winEnd));
+            } else {
+              console.log('[league-detail] upcoming-local 匹配失败: name="' + nameKey + '" norm="' + nameNorm + '", 快照events数=' + snap.events.length);
+            }
+          } else {
+            console.log('[league-detail] upcoming-local 快照为空或加载失败, snap=', snap ? '有但无events' : 'null');
           }
-          if (snapEntry && snapEntry.start && snapEntry.end) {
-            if (!winStart) winStart = snapEntry.start;
-            if (!winEnd) winEnd = snapEntry.end;
-            console.log('[league-detail] upcoming-local 回退日期:', nameKey,
-              util.formatTime(winStart) + ' ~ ' + util.formatTime(winEnd));
-          }
+        }
+        // 仍无赛期时，回退到 OpenDota 真实比赛窗口（仅 Liquipedia 也无对应赛事时）
+        if ((!winStart || !winEnd) && hasRealWindow) {
+          if (!winStart) winStart = mStart;
+          if (!winEnd) winEnd = mEnd;
+          console.log('[league-detail] OpenDota 真实窗口兜底:', this.data.name,
+            util.formatTime(winStart) + ' ~ ' + util.formatTime(winEnd));
         }
         let eventWindow = null;
         if (winStart > 0 && winEnd >= winStart) {
@@ -638,7 +871,12 @@ Page({
           liveCount: liveList.length,
           upcomingCount: upcomingList.length,
           recentCount: recentList.length,
-          recentCollapsed: false   // 每次重新加载时重置折叠状态
+          recentCollapsed: false,   // 每次重新加载时重置折叠状态
+          // ★ v3 优化项21：UPCOMING 按日期分组 + 远期折叠
+          upcomingGroups: upcomingGroups,
+          farFutureCount: farFutureCount,
+          hasFarFuture: farFutureCount > 0,
+          showFarFuture: false   // 默认折叠远期赛程
         });
         // 步骤2：明细（series 数组体积大，独立 setData 避免阻塞骨架渲染）
         this.setData({ series: slice });
@@ -1340,6 +1578,11 @@ Page({
   // 注意：仅切换 recentCollapsed 布尔，不重建 series 数组（wxml 用 wx:if 控制可见性）
   toggleRecentCollapse() {
     this.setData({ recentCollapsed: !this.data.recentCollapsed });
+  },
+
+  // ★ v3 优化项21：远期赛程折叠/展开
+  toggleFarFuture() {
+    this.setData({ showFarFuture: !this.data.showFarFuture });
   },
 
   // ===== A 风格就地展开小场英雄阵容（双索引 seriesIdx-gameIdx） =====

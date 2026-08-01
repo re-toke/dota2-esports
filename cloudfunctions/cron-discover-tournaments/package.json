@@ -1,0 +1,10 @@
+{
+  "name": "cron-discover-tournaments",
+  "version": "1.0.0",
+  "description": "每日定时枚举 Liquipedia 赛事，自动发现新赛事入库",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3",
+    "got": "^11.8.6"
+  }
+}

@@ -1,4 +1,11 @@
-{
+// utils/upcoming-local-data.js
+// upcoming-local.json 的 JS 包装模块（由 scripts/fetch-liquipedia-upcoming.js 自动生成，请勿手动修改）
+//
+// 背景：微信小程序分包直接 require 主包 JSON 存在兼容性问题（返回 null），
+//   改为 JS 模块导出，在主包/分包中 require 均稳定可靠。
+// 数据来源：utils/upcoming-local.json（由本脚本生成）
+
+module.exports = {
   "generatedAt": 1785428167,
   "source": "liquipedia",
   "note": "build-time snapshot, refresh via scripts/fetch-liquipedia-upcoming.js",
@@ -76,4 +83,4 @@
       "source": "liquipedia"
     }
   ]
-}
+};

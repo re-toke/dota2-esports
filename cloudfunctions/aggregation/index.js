@@ -1089,6 +1089,454 @@ async function handleSetCached(event) {
   return { ok: true };
 }
 
+// ===== 阶段1-②：云端 curation 读取（2026-07-30）=====
+// 从云数据库读取 curation_events / curation_teams / curation_meta，
+// 返回与 utils/curation.js 兼容的数据结构 { events, teams, tiContestantIds, version }。
+//
+// 增量更新机制：
+//   - 客户端传 clientVersion，若与云端 version 一致 → 返回 { unchanged: true }，零数据传输
+//   - 不一致 → 返回完整数据 + version
+//   - clientVersion 为空 → 首次拉取，返回完整数据
+//
+// 缓存策略：
+//   - L1 内存缓存 10 分钟（curation 数据变化慢，无需高频读 cloud DB）
+//   - version 变化时自动失效 L1
+const CURATION_L1_KEY = 'curation_full';
+const CURATION_L1_TTL = 10 * 60 * 1000;
+let _curationL1Cache = null;
+let _curationL1Version = null;
+
+async function loadCurationFromDB() {
+  const db = cloud.database();
+  // 并行查询 events / teams / meta（三者无依赖）
+  const [eventsRes, teamsRes, metaRes] = await Promise.all([
+    db.collection('curation_events').limit(500).get(),
+    db.collection('curation_teams').limit(500).get(),
+    db.collection('curation_meta').doc('ti_contestant_ids').get().catch(() => ({ data: null }))
+  ]);
+
+  const events = (eventsRes.data || []).map((doc) => {
+    // 移除云数据库元字段，保留业务字段
+    const e = Object.assign({}, doc);
+    delete e._id;
+    delete e.updatedAt;
+    return e;
+  });
+  const teamsArr = (teamsRes.data || []);
+  const teams = {};
+  teamsArr.forEach((doc) => {
+    const tid = doc._id;
+    if (!tid) return;
+    const t = Object.assign({}, doc);
+    delete t._id;
+    delete t.updatedAt;
+    teams[Number(tid)] = t;
+  });
+  const meta = metaRes.data || {};
+  const tiContestantIds = meta.ids || [];
+  const version = meta.version || '0';
+
+  return { events, teams, tiContestantIds, version };
+}
+
+async function handleGetCuration(event) {
+  const clientVersion = (event.params && event.params.clientVersion) || '';
+  const force = !!event.force;
+
+  // L1 命中且版本一致：直接返回 unchanged
+  if (!force && _curationL1Cache && _curationL1Version) {
+    if (clientVersion && clientVersion === _curationL1Version) {
+      return { unchanged: true, version: _curationL1Version, source: 'cache' };
+    }
+    // 版本不一致或首次拉取：返回 L1 缓存数据
+    return {
+      data: _curationL1Cache,
+      version: _curationL1Version,
+      source: 'cache'
+    };
+  }
+
+  // L1 未命中：读云数据库
+  try {
+    const result = await loadCurationFromDB();
+    _curationL1Cache = result;
+    _curationL1Version = result.version;
+
+    // 版本一致：返回 unchanged
+    if (clientVersion && clientVersion === result.version) {
+      return { unchanged: true, version: result.version, source: 'fresh' };
+    }
+    return {
+      data: result,
+      version: result.version,
+      source: 'fresh'
+    };
+  } catch (e) {
+    // 云数据库读取失败：尝试 L1 过期缓存兜底
+    if (_curationL1Cache) {
+      return {
+        data: _curationL1Cache,
+        version: _curationL1Version,
+        source: 'cache_fallback',
+        warning: 'cloud DB read failed, using stale cache'
+      };
+    }
+    return { error: makeError(ERROR_CODES.UPSTREAM_ERROR, '云数据库读取 curation 失败', (e && e.message) || String(e)) };
+  }
+}
+
+// ===== 阶段2-③：云端 curation 写操作中转（2026-07-31）=====
+// Web 端无法直写云开发数据库，所有 curation 写操作走云函数中转。
+// 支持 5 种 operation：upsertEvent / upsertTeam / deleteEvent / deleteTeam / updateMeta
+// 每次写操作后统一：重读全量数据 → 重算 version → 更新 curation_meta(version/updatedAt)
+//   → 写 admin-logs → 清空 L1 缓存（下次读取会重新从 DB 加载）。
+//
+// 规范名归一化（与 admin/src/api/cloudbase.js 的 normalizeEventName 逻辑一致）：
+//   转小写，仅保留 [a-z0-9 中文一-鿿 西里尔字母а-яё]，去掉一切分隔符与标点。
+function normalizeEventName(name) {
+  if (!name) return '';
+  return String(name).toLowerCase().replace(/[^a-z0-9一-鿿а-яё]/g, '').replace(/^the/, '');
+}
+
+// 计算数据指纹（MD5 前 8 位），与 scripts/migrate-curation-to-db.js 的 computeVersion 逻辑一致。
+// teams 可能是数组（来自 DB 查询）或对象（按 team_id 索引），统一处理为对象后取 keys。
+function computeVersion(events, teams, tiIds) {
+  const crypto = require('crypto');
+  const safeEvents = events || [];
+  const safeTiIds = tiIds || [];
+  const teamsObj = Array.isArray(teams)
+    ? teams.reduce((acc, t) => {
+        const k = t._id != null ? t._id : t.team_id;
+        if (k != null) acc[k] = t;
+        return acc;
+      }, {})
+    : (teams || {});
+  const teamIds = Object.keys(teamsObj).map(Number).sort((a, b) => a - b);
+  const payload = {
+    eventsCount: safeEvents.length,
+    teamsCount: teamIds.length,
+    tiIdsCount: safeTiIds.length,
+    eventsCanonical: safeEvents.map((e) => e.canonical).filter(Boolean).sort().join(','),
+    teamsIds: teamIds.join(',')
+  };
+  return crypto.createHash('md5').update(JSON.stringify(payload)).digest('hex').slice(0, 8);
+}
+
+// 写操作后统一收尾：重算 version + 更新 meta + 写日志 + 清 L1。
+// 返回重算后的新 version。任何子步骤失败都不阻断主流程（已写入的记录不回滚）。
+async function _afterCurationWrite(operation, before, after) {
+  // 1. 重读全量数据并重算 version
+  const fresh = await loadCurationFromDB();
+  const newVersion = computeVersion(fresh.events, fresh.teams, fresh.tiContestantIds);
+
+  // 2. 更新 curation_meta 的 version + updatedAt + count（保留当前 ids）
+  //    meta 文档完整 schema 仅 {ids, count, version, updatedAt}，set 覆盖安全。
+  try {
+    const db = cloud.database();
+    await db.collection('curation_meta').doc('ti_contestant_ids').set({
+      ids: fresh.tiContestantIds,
+      count: fresh.tiContestantIds.length,
+      version: newVersion,
+      updatedAt: Date.now()
+    });
+  } catch (e) {
+    // meta 更新失败不阻断主流程
+    console.warn('[adminWriteCuration] update meta version failed:', (e && e.message) || e);
+  }
+
+  // 3. 写 admin-logs（失败静默，不影响主流程）
+  try {
+    const db = cloud.database();
+    await db.collection('admin-logs').add({
+      data: {
+        action: operation,
+        operator: 'admin',
+        before: before || null,
+        after: after || null,
+        timestamp: Date.now()
+      }
+    });
+  } catch (e) {}
+
+  // 4. 清空 curation L1 缓存（模块变量 + 通用 l1Cache Map 双保险）
+  _curationL1Cache = null;
+  _curationL1Version = null;
+  try { l1Cache.delete(_v() + CURATION_L1_KEY); } catch (e) {}
+
+  return newVersion;
+}
+
+// 读取单条文档用于日志（before/after），不存在或异常返回 null。
+async function _readDocForLog(coll, docId) {
+  try {
+    const db = cloud.database();
+    const r = await db.collection(coll).doc(docId).get();
+    return (r && r.data) || null;
+  } catch (e) { return null; }
+}
+
+async function handleAdminWriteCuration(event) {
+  const params = (event && event.params) || {};
+  const operation = params.operation;
+  const db = cloud.database();
+
+  try {
+    // ---- upsertEvent：写入/更新单条 curation_events ----
+    if (operation === 'upsertEvent') {
+      const data = params.data || {};
+      if (!data.canonical) {
+        return { error: makeError(ERROR_CODES.BAD_REQUEST, 'canonical 必填') };
+      }
+      const docId = normalizeEventName(data.canonical);
+      if (!docId) {
+        return { error: makeError(ERROR_CODES.BAD_REQUEST, 'canonical 归一化后为空') };
+      }
+      const before = await _readDocForLog('curation_events', docId);
+      const doc = Object.assign({}, data, { updatedAt: Date.now() });
+      delete doc._id; // _id 由 doc() 指定，不写入 data 体
+      await db.collection('curation_events').doc(docId).set(doc);
+      const after = await _readDocForLog('curation_events', docId);
+      const newVersion = await _afterCurationWrite(operation, before, after);
+      return { success: true, version: newVersion, source: 'fresh' };
+    }
+
+    // ---- upsertTeam：写入/更新单条 curation_teams ----
+    if (operation === 'upsertTeam') {
+      const data = params.data || {};
+      const teamId = data.team_id;
+      const tidNum = Number(teamId);
+      if (teamId == null || !Number.isInteger(tidNum) || tidNum <= 0) {
+        return { error: makeError(ERROR_CODES.BAD_REQUEST, 'team_id 必填且为正整数') };
+      }
+      const docId = String(tidNum);
+      const before = await _readDocForLog('curation_teams', docId);
+      const doc = Object.assign({}, data, { updatedAt: Date.now() });
+      delete doc._id;
+      await db.collection('curation_teams').doc(docId).set(doc);
+      const after = await _readDocForLog('curation_teams', docId);
+      const newVersion = await _afterCurationWrite(operation, before, after);
+      return { success: true, version: newVersion, source: 'fresh' };
+    }
+
+    // ---- deleteEvent：删除单条 curation_events ----
+    if (operation === 'deleteEvent') {
+      const docId = params.docId;
+      if (!docId) {
+        return { error: makeError(ERROR_CODES.BAD_REQUEST, 'docId 必填') };
+      }
+      const before = await _readDocForLog('curation_events', docId);
+      await db.collection('curation_events').doc(docId).remove();
+      const newVersion = await _afterCurationWrite(operation, before, null);
+      return { success: true, version: newVersion, source: 'fresh' };
+    }
+
+    // ---- deleteTeam：删除单条 curation_teams ----
+    if (operation === 'deleteTeam') {
+      const docId = params.docId;
+      if (!docId) {
+        return { error: makeError(ERROR_CODES.BAD_REQUEST, 'docId 必填') };
+      }
+      const before = await _readDocForLog('curation_teams', docId);
+      await db.collection('curation_teams').doc(docId).remove();
+      const newVersion = await _afterCurationWrite(operation, before, null);
+      return { success: true, version: newVersion, source: 'fresh' };
+    }
+
+    // ---- updateMeta：更新 curation_meta（主要是 tiContestantIds 数组）----
+    if (operation === 'updateMeta') {
+      const data = params.data || {};
+      const ids = Array.isArray(data.ids)
+        ? data.ids.map(Number).filter((x) => Number.isInteger(x))
+        : [];
+      const before = await _readDocForLog('curation_meta', 'ti_contestant_ids');
+      // 先写 ids（无 version），_afterCurationWrite 会重读 ids 并补写 version
+      await db.collection('curation_meta').doc('ti_contestant_ids').set({
+        ids: ids,
+        count: ids.length,
+        updatedAt: Date.now()
+      });
+      const after = await _readDocForLog('curation_meta', 'ti_contestant_ids');
+      const newVersion = await _afterCurationWrite(operation, before, after);
+      return { success: true, version: newVersion, source: 'fresh' };
+    }
+
+    return { error: makeError(ERROR_CODES.BAD_REQUEST, 'unknown operation: ' + operation) };
+  } catch (e) {
+    return { error: makeError(ERROR_CODES.UPSTREAM_ERROR, '写操作失败', (e && e.message) || String(e)) };
+  }
+}
+
+// ===== 阶段3-②：OpenDota 新赛事轮询（2026-07-31）=====
+// 调用 OpenDota /api/leagues 获取所有有比赛记录的赛事，
+// 对比云数据库 curation_events，将未收录的新赛事以 status='pending_review' 入库，
+// 等待人工审核。所有写入操作幂等（_id = 'opendota_' + leagueId 去重）。
+//
+// 设计要点：
+//   1. 复用 fetchWithRetry / normalizeEventName / makeError / ERROR_CODES
+//   2. 匹配逻辑：先按 leagueId 匹配（curation_events 有 leagueId 字段时），再按规范名匹配
+//   3. 幂等性：_id = 'opendota_' + leagueId，重复调用不会重复插入
+//   4. 错误隔离：单条插入失败不阻塞整体流程
+//   5. 写 admin-logs：action='opendota_discover' 记录本次发现结果
+//   6. 写 admin-logs：action='opendota_discover_alert' 作为告警源（newCount > 0 时）
+//
+// 返回：{ success, total, existing, new, inserted }
+async function handleDiscoverOpenDotaTournaments(event) {
+  const force = !!(event && event.force);
+  try {
+    // 步骤 1：调用 OpenDota /api/leagues 获取全量赛事
+    const leagues = await fetchWithRetry('/leagues');
+    if (!Array.isArray(leagues)) {
+      return { error: makeError(ERROR_CODES.UPSTREAM_ERROR, 'OpenDota /leagues 返回非数组') };
+    }
+    const allCount = leagues.length;
+
+    // 步骤 2：读取 curation_events 全量，构建已收录索引
+    // existingByLeagueId：按 leagueId 索引（curation_events 中有 leagueId 字段的记录）
+    // existingByNormName：按规范名索引（覆盖所有记录的 canonical/aliases）
+    const db = cloud.database();
+    const curRes = await db.collection('curation_events').limit(500).get();
+    const existingDocs = (curRes && curRes.data) || [];
+    const existingCount = existingDocs.length;
+    const existingByLeagueId = new Set();
+    const existingByNormName = new Set();
+    existingDocs.forEach((doc) => {
+      if (doc.leagueId != null) existingByLeagueId.add(Number(doc.leagueId));
+      if (doc._id) existingByNormName.add(doc._id);
+      if (doc.canonical) existingByNormName.add(normalizeEventName(doc.canonical));
+    });
+
+    // 步骤 3：对比找出未收录的新赛事
+    // 匹配优先级：先 leagueId（精确），再规范名（模糊，避免重复入库）
+    const newItems = [];
+    const seenLeagueIds = new Set(); // 本轮去重（OpenDota 偶有重复 leagueid）
+    for (const lg of leagues) {
+      if (!lg || lg.leagueid == null || !lg.name) continue;
+      const lid = Number(lg.leagueid);
+      if (seenLeagueIds.has(lid)) continue;
+      seenLeagueIds.add(lid);
+
+      // 已收录判断：leagueId 或 规范名 命中即视为已收录
+      if (existingByLeagueId.has(lid)) continue;
+      const normName = normalizeEventName(lg.name);
+      if (normName && existingByNormName.has(normName)) continue;
+
+      newItems.push(lg);
+    }
+    const newCount = newItems.length;
+
+    // 步骤 4：将新赛事插入 curation_events（2026-07-31 优化：并发批量写入，避免超时）
+    // _id = 'opendota_' + leagueId（避免与 Liquipedia 的 _id 冲突，Liquipedia 用 normalizeEventName(canonical)）
+    // 最多写入 100 条/次，每批 20 条并发，避免 DB 写入超时
+    const MAX_INSERT = 100;
+    const BATCH_SIZE = 20;
+    const itemsToInsert = newItems.slice(0, MAX_INSERT);
+    const skipped = newItems.length - itemsToInsert.length;
+    if (skipped > 0) {
+      console.log('[discoverOpenDotaTournaments] 新赛事 ' + newItems.length +
+        ' 条超过上限 ' + MAX_INSERT + '，本次只写入前 ' + MAX_INSERT + ' 条');
+    }
+    let inserted = 0;
+    const insertedDetails = [];
+    for (let i = 0; i < itemsToInsert.length; i += BATCH_SIZE) {
+      const batch = itemsToInsert.slice(i, i + BATCH_SIZE);
+      const results = await Promise.all(batch.map(async (lg) => {
+        const lid = Number(lg.leagueid);
+        const docId = 'opendota_' + lid;
+        const yearMatch = String(lg.name).match(/\b(20\d{2})\b/);
+        const year = yearMatch ? parseInt(yearMatch[1], 10) : null;
+        const doc = {
+          canonical: lg.name,
+          aliases: [normalizeEventName(lg.name)],
+          tier: { grade: 'C', rank: 0, label: 'C级' },
+          year: year,
+          liquipediaSlug: null,
+          source: 'opendota',
+          leagueId: lid,
+          status: 'pending_review',
+          updatedAt: Date.now()
+        };
+        try {
+          await db.collection('curation_events').doc(docId).set({ data: doc });
+          return { _id: docId, leagueId: lid, canonical: lg.name };
+        } catch (e) {
+          console.warn('[discoverOpenDotaTournaments] 插入失败 leagueId=' + lid +
+            ' (' + lg.name + '):', (e && e.message) || e);
+          return null;
+        }
+      }));
+      results.forEach((r) => {
+        if (r) {
+          inserted++;
+          insertedDetails.push(r);
+        }
+      });
+    }
+
+    // 步骤 5：写 admin-logs（action='opendota_discover'，失败静默）
+    try {
+      await db.collection('admin-logs').add({
+        data: {
+          action: 'opendota_discover',
+          operator: 'aggregation',
+          count: newCount,
+          details: insertedDetails,
+          summary: {
+            total: allCount,
+            existing: existingCount,
+            new: newCount,
+            inserted: inserted,
+            skipped: skipped
+          },
+          timestamp: Date.now()
+        }
+      });
+    } catch (e) {
+      console.warn('[discoverOpenDotaTournaments] 写 admin-logs (opendota_discover) 失败（静默）:',
+        (e && e.message) || e);
+    }
+
+    // 步骤 6：发现新赛事时写告警记录（action='opendota_discover_alert'，作为管理后台告警源）
+    // 仅在 newCount > 0 时写入，避免无新赛事时产生噪声告警
+    if (newCount > 0) {
+      try {
+        await db.collection('admin-logs').add({
+          data: {
+            action: 'opendota_discover_alert',
+            operator: 'aggregation',
+            alertType: 'new_tournaments',
+            count: newCount,
+            details: insertedDetails,
+            message: 'OpenDota 发现 ' + newCount + ' 个新赛事待审核' +
+              (skipped > 0 ? '（' + skipped + ' 条留到下次）' : ''),
+            timestamp: Date.now(),
+            resolved: false // 管理后台审核后可标记为 true
+          }
+        });
+      } catch (e) {
+        console.warn('[discoverOpenDotaTournaments] 写 admin-logs (opendota_discover_alert) 失败（静默）:',
+          (e && e.message) || e);
+      }
+    }
+
+    // 步骤 7：清空 curation L1 缓存（新增记录后下次读取需重新从 DB 加载）
+    _curationL1Cache = null;
+    _curationL1Version = null;
+    try { l1Cache.delete(_v() + CURATION_L1_KEY); } catch (e) {}
+
+    return {
+      success: true,
+      total: allCount,
+      existing: existingCount,
+      new: newCount,
+      inserted: inserted,
+      skipped: skipped,
+      source: 'fresh'
+    };
+  } catch (e) {
+    return { error: makeError(ERROR_CODES.UPSTREAM_ERROR, 'OpenDota 赛事发现失败', (e && e.message) || String(e)) };
+  }
+}
+
 async function handleGetSearchIndex() {
   const cached = await getCache('search_index');
   if (cached) return { data: cached, source: 'cache' };
@@ -1194,6 +1642,12 @@ const HANDLERS = new Map([
   // 通用云缓存
   ['getCached', handleGetCached],
   ['setCached', handleSetCached],
+  // 阶段1-②：云端 curation 读取
+  ['getCuration', handleGetCuration],
+  // 阶段2-③：云端 curation 写操作中转（admin 端）
+  ['adminWriteCuration', handleAdminWriteCuration],
+  // 阶段3-②：OpenDota 新赛事轮询（发现未收录赛事并入库待审核）
+  ['discoverOpenDotaTournaments', handleDiscoverOpenDotaTournaments],
   // 搜索索引
   ['getSearchIndex', handleGetSearchIndex],
   ['buildSearchIndex', handleBuildSearchIndex],

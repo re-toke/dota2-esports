@@ -992,3 +992,123 @@
   opacity: 0.9;
 }
 
+/* ===== v3 优化项26：cancelled 赛事提示 ===== */
+.cancelled-notice {
+  text-align: center;
+  padding: 32rpx 24rpx;
+  margin: 16rpx 0;
+  background: rgba(232, 68, 59, 0.08);
+  border-radius: var(--radius-lg, 16rpx);
+  border: 1rpx solid rgba(232, 68, 59, 0.2);
+  color: #e8443b;
+  font-size: 28rpx;
+  font-weight: 600;
+  letter-spacing: 1rpx;
+}
+
+/* ===== v3 优化项⑬：LIVE 系列进度与已进行时长 ===== */
+.series-live-progress {
+  font-size: 22rpx;
+  color: #1ec896;
+  font-weight: 600;
+  letter-spacing: 0.5rpx;
+}
+.series-elapsed {
+  font-size: 22rpx;
+  color: rgba(30, 200, 150, 0.75);
+  font-family: var(--font-mono, monospace);
+  letter-spacing: 0.5rpx;
+}
+
+/* ===== v3 优化项⑭：UPCOMING 确定性标识与焦点战 ===== */
+.series-confirmed-badge {
+  font-size: 22rpx;
+  color: #4cd964;
+  font-weight: 600;
+  letter-spacing: 0.5rpx;
+}
+.series-tbd-badge {
+  font-size: 22rpx;
+  color: #ff9500;
+  font-weight: 600;
+  letter-spacing: 0.5rpx;
+}
+.series-focus-badge {
+  font-size: 22rpx;
+  color: #ffcc00;
+  font-weight: 700;
+  letter-spacing: 0.5rpx;
+  text-shadow: 0 0 6rpx rgba(255, 204, 0, 0.3);
+}
+
+/* ===== v3 优化项21：UPCOMING 日期子标题 ===== */
+.date-sep {
+  display: flex;
+  align-items: center;
+  padding: 20rpx 24rpx 8rpx;
+  margin-top: 4rpx;
+}
+.date-sep::before {
+  content: '';
+  width: 8rpx;
+  height: 8rpx;
+  border-radius: 50%;
+  background: #ffcf5c;
+  margin-right: 12rpx;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+.date-sep-text {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #c0c4cc;
+  letter-spacing: 1rpx;
+}
+
+/* ===== v3 优化项21：远期赛程折叠入口 ===== */
+.far-future-toggle {
+  text-align: center;
+  padding: 20rpx 24rpx;
+  margin: 8rpx 0 16rpx;
+  color: #5b9bff;
+  font-size: 26rpx;
+  font-weight: 600;
+  background: rgba(91, 155, 255, 0.06);
+  border-radius: var(--radius-md, 12rpx);
+  border: 1rpx solid rgba(91, 155, 255, 0.15);
+  letter-spacing: 0.5rpx;
+}
+
+/* ===== v3 优化项⑮：RECENT 时间分层子标题 ===== */
+.time-layer-sep {
+  display: flex;
+  align-items: center;
+  padding: 16rpx 24rpx 6rpx;
+  margin-top: 4rpx;
+}
+.time-layer-sep::before {
+  content: '';
+  width: 8rpx;
+  height: 8rpx;
+  border-radius: 50%;
+  background: #8a8f99;
+  margin-right: 12rpx;
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+.time-layer-sep-text {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #8a8f99;
+  letter-spacing: 1rpx;
+}
+
+/* ===== v3 优化项⑮：RECENT 总耗时 ===== */
+.series-total-duration {
+  font-size: 22rpx;
+  color: #5b626d;
+  font-family: var(--font-mono, monospace);
+  letter-spacing: 0.5rpx;
+  margin-left: auto;
+}
+

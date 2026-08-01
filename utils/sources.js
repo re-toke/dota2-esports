@@ -32,6 +32,33 @@ const imageUtil = require('./image.js');
 const logoCache = require('./logoCache'); // P2-F：本地队标/头像缓存
 // G4 单一数据源：与云函数共用的精确归一映射（来自 curation-shared.js 模块，非 .json）
 const leagueCanon = require('./league-canon-map.js');
+
+// upcoming-local.json 快照（在主包中 require，避免分包直接 require JSON 的兼容性问题）
+// 分包（如 league-detail）通过 sources.getUpcomingLocalSnapshot() 间接获取，不直接 require JSON
+// ★ 2026-07-30 修复：微信小程序对 JSON 的 require 行为不稳定，
+//   改用 JS 包装模块（upcoming-local-data.js），JS 模块在主包/分包中 require 均稳定可靠
+var _upcomingLocalSnapshot = null;
+function loadUpcomingLocalSnapshot() {
+  if (_upcomingLocalSnapshot) return _upcomingLocalSnapshot;
+  // 优先用 JS 包装模块（稳定可靠），回退到 JSON（Node.js 环境兼容）
+  try {
+    _upcomingLocalSnapshot = require('./upcoming-local-data.js');
+    console.log('[sources] upcoming-local-data.js 加载成功, events:',
+      _upcomingLocalSnapshot && _upcomingLocalSnapshot.events ? _upcomingLocalSnapshot.events.length : 0);
+  } catch (e) {
+    console.error('[sources] upcoming-local-data.js require 失败:', e && e.message);
+    try {
+      _upcomingLocalSnapshot = require('./upcoming-local.json');
+      console.log('[sources] upcoming-local.json 兜底加载成功, events:',
+        _upcomingLocalSnapshot && _upcomingLocalSnapshot.events ? _upcomingLocalSnapshot.events.length : 0);
+    } catch (e2) {
+      console.error('[sources] upcoming-local.json require 也失败:', e2 && e2.message);
+      _upcomingLocalSnapshot = null;
+    }
+  }
+  return _upcomingLocalSnapshot;
+}
+function getUpcomingLocalSnapshot() { return loadUpcomingLocalSnapshot(); }
 // G8 运行时监控（安全降级，无 wx 时不打点）
 const monitor = require('./monitor.js');
 
@@ -829,6 +856,19 @@ function groupSeries(matches) {
     });
     // 统一 phase：优先级 live > upcoming > recent
     // 一场未结束的系列赛（isLive）不可能同时有未来场，二者互斥
+    // ★ v3 优化项20：精确僵死检测 — 第一层：时间阈值（适用所有 BO 类型，特别是 BO1）
+    //   最后一场开赛超 6h 且仍未结算 → 数据异常，降级为 recent
+    //   基准：last.start_time（不依赖 duration，因为 live 比赛的 duration 不稳定）
+    if (isLive) {
+      const lastStartSec = last.start_time || 0;
+      if (lastStartSec > 0 && (nowSec - lastStartSec) > 6 * 3600) {
+        // 检查倒数第二场是否在 6h 内（如 BO5 中第4场6h前开赛但第5场刚开赛）
+        var prevStartSec = games.length > 1 ? games[games.length - 2].start_time || 0 : 0;
+        if (!(prevStartSec > 0 && (nowSec - prevStartSec) <= 6 * 3600)) {
+          isLive = false;
+        }
+      }
+    }
     const phase = isLive ? 'live' : (isUpcoming ? 'upcoming' : 'recent');
     // 系列 BO 类型判定（基于胜负场数，比 series_type 更可靠）
     // 规则：
@@ -869,6 +909,16 @@ function groupSeries(matches) {
       : boType === 'BO2' ? '双局积分'
       : boType === 'BO3' ? '三局两胜'
       : '五局三胜';
+    // ★ v3 优化项20：精确僵死检测 — 第二层：BO 胜场条件（适用 BO3/BO5，BO1 已被第一层覆盖）
+    //   已结算场数已达 BO 胜场条件 → 系列赛实际已结束，降级为 recent
+    if (isLive) {
+      var BO_WIN_THRESHOLD = { 'BO3': 2, 'BO5': 3, 'BO2': 2, 'BO1': 1 };
+      var winThreshold = BO_WIN_THRESHOLD[boType] || 0;
+      // winThreshold > 1 排除 BO1（BO1 靠时间检测）
+      if (winThreshold > 1 && (scoreA >= winThreshold || scoreB >= winThreshold)) {
+        isLive = false;
+      }
+    }
     // BO2 可能平局（1-1）；其他赛制必有胜负
     const isDraw = boType === 'BO2' && scoreA === scoreB;
     // 预计算 class 名（避免 WXML 嵌套三元表达式导致渲染异常）
@@ -946,5 +996,6 @@ module.exports = {
   canonicalLeagueName: canonicalLeagueName,
   leagueDisplayName: leagueDisplayName,
   attachDisplayName: attachDisplayName,
-  enrichPlayerProfile: enrichPlayerProfile
+  enrichPlayerProfile: enrichPlayerProfile,
+  getUpcomingLocalSnapshot: getUpcomingLocalSnapshot
 };

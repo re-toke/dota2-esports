@@ -2,7 +2,8 @@ const TIER_RANK = require('./api.js').TIER_RANK;
 const tiers = require('./tiers.js');
 
 // 统一赛事分级：优先社区精选规则（tiers.js），否则回退 OpenDota 的 tier 枚举。
-// 返回 { grade:'SSS'|'S'|'A'|'B'|'C', rank:0..4, label, source:'community'|'opendota' }
+// 返回 { grade:'S'|'A'|'B'|'C', rank:0..3, label, source:'community'|'opendota' }
+// ★ v3 优化项27：修复 community 重复计权 bug — communityTierFromName 命中后 source 已正确标记为 'community'
 function unifiedTier(league) {
   const odTier = league.tier || 'excluded';
   const curated = tiers.communityTierFromName(league.name);
@@ -135,6 +136,12 @@ function isUpcoming(win, now) {
 }
 
 // 综合状态：'ongoing' | 'upcoming' | 'ended'
+// ★ 覆盖规则（优先级从高到低）：
+//   1. ongoing：比赛已开始（latest > 0）且未结束（lastEnd 为 0 或 lastEnd >= latest）
+//   2. upcoming：startDate/earliest 在未来 upcomingRangeSec 窗口内（当前 ≤ 开赛 ≤ now+窗口）
+//   3. ended：以上均不满足，视为已结束
+// 注意：ongoing 优先于 upcoming。若数据异常（既有 ongoing 特征又有未来 startDate），
+//   判定为 ongoing（已开赛的比赛不会被误判为 upcoming）。
 function statusOf(win, now) {
   now = now || nowSec();
   if (isOngoing(win, now)) return 'ongoing';

@@ -1,0 +1,1 @@
+fix(league-detail): 移除诊断日志 + Liquipedia 赛程 BO3 样式补全

@@ -32,13 +32,18 @@ function weightOf(source) {
 
 // ===== 归一化 =====
 // 赛事名 / 队名归一：转小写，仅保留 [a-z 0-9 中文]，去掉一切分隔符与标点。
-// 例：'The International 2025' -> 'theinternational2025'
+// 例：'The International 2025' -> 'theinternational2025' -> 'international2025'
+//      'Games of the Future 2026' -> 'gamesofthefuture2026'
+// 2026-08-01 修复：归一化时剥离开头的 "the" 前缀，避免 "The X" 与 "X" 无法匹配。
 function normName(s) {
   if (!s) return '';
   // §8.3 多语言支持（2026-07-29）：保留拉丁字母、数字、中日韩汉字、西里尔字母（俄语赛事名）
   // 原 [^a-z0-9一-鿿] 会把西里尔字母过滤掉，导致俄语赛事名（如 "Чемпионат" → ""）匹配失败
   // 西里尔范围 а-яё (U+0430-U+0451) + А-Я (大写，toLowerCase 后统一为小写)
-  return String(s).toLowerCase().replace(/[^a-z0-9一-鿿а-яё]/g, '');
+  var s = String(s).toLowerCase().replace(/[^a-z0-9一-鿿а-яё]/g, '');
+  // 剥离开头的 "the" 前缀（如 "The International" → "theinternational" → "international"）
+  if (s.slice(0, 3) === 'the') s = s.slice(3);
+  return s;
 }
 
 // 数字归一：非法/非有限/负数返回 null

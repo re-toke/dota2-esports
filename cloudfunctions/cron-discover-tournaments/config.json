@@ -1,0 +1,10 @@
+{
+  "timeout": 60,
+  "triggers": [
+    {
+      "name": "dailyDiscover",
+      "type": "timer",
+      "config": "0 0 3 * * * *"
+    }
+  ]
+}

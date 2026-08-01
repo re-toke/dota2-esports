@@ -570,7 +570,7 @@ function getScheduledMatches(name) {
 
   if (typeof wx !== 'undefined' && wx.cloud && cloudProxy.isAvailable()) {
     return cloudProxy.liquipediaScheduledProxy(name).then(function (res) {
-      var scheduled = (res && res.data) || [];
+      var scheduled = res || [];
       if (scheduled.length) {
         cache.set(cacheKey, scheduled, CACHE_TTL_SCHEDULE);
         return scheduled;

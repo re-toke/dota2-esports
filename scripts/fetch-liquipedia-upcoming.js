@@ -102,10 +102,44 @@ async function main() {
   out.sort((a, b) => a.start - b.start);
 
   const payload = { generatedAt: Math.floor(Date.now() / 1000), source: 'liquipedia', note: 'build-time snapshot, refresh via scripts/fetch-liquipedia-upcoming.js', events: out };
-  const outPath = path.join(__dirname, '..', 'utils', 'upcoming-local.json');
-  fs.writeFileSync(outPath, JSON.stringify(payload, null, 2), 'utf8');
-  console.log('Wrote', out.length, 'upcoming events ->', outPath);
+  const jsonPath = path.join(__dirname, '..', 'utils', 'upcoming-local.json');
+  fs.writeFileSync(jsonPath, JSON.stringify(payload, null, 2), 'utf8');
+  console.log('Wrote', out.length, 'upcoming events ->', jsonPath);
+
+  // ★ 2026-07-30 同步生成 JS 包装模块（upcoming-local-data.js）
+  //   微信小程序分包对 require JSON 存在兼容性问题，JS 模块在主包/分包中 require 均稳定可靠。
+  //   本文件与 upcoming-local.json 内容完全一致，仅格式从 JSON 改为 module.exports。
+  //   严禁手动修改本文件，数据源以 upcoming-local.json 为准，由本脚本自动同步。
+  const jsPath = path.join(__dirname, '..', 'utils', 'upcoming-local-data.js');
+  const jsContent = '// utils/upcoming-local-data.js\n' +
+    '// upcoming-local.json 的 JS 包装模块（由 scripts/fetch-liquipedia-upcoming.js 自动生成，请勿手动修改）\n' +
+    '//\n' +
+    '// 背景：微信小程序分包直接 require 主包 JSON 存在兼容性问题（返回 null），\n' +
+    '//   改为 JS 模块导出，在主包/分包中 require 均稳定可靠。\n' +
+    '// 数据来源：utils/upcoming-local.json（由本脚本生成）\n\n' +
+    'module.exports = ' + JSON.stringify(payload, null, 2) + ';\n';
+  fs.writeFileSync(jsPath, jsContent, 'utf8');
+  console.log('Synced JS wrapper ->', jsPath);
+
   out.forEach((e) => console.log(' -', e.name, '(' + e.grade + ')', new Date(e.start * 1000).toISOString().slice(0, 10) + ' ~ ' + new Date(e.end * 1000).toISOString().slice(0, 10)));
+
+  // ★ 2026-07-30 后置检查：扫描 upcoming-local 中未纳入 curation 的赛事
+  //   防止"新增赛事赛期截断"问题复发：未纳入 curation 的赛事若被 OpenDota 收录部分比赛，
+  //   详情页会优先用 OpenDota 真实窗口（可能只有1天）而非完整赛期。
+  //   提示开发者将高频赛事补入 CURATED_EVENTS。
+  try {
+    const curation = require(path.join(__dirname, '..', 'utils', 'curation.js'));
+    const consensus = require(path.join(__dirname, '..', 'utils', 'consensus.js'));
+    const uncovered = out.filter((e) => {
+      const ev = curation.curatedEventFor(e.name, { game: 'dota2' });
+      return !ev;
+    });
+    if (uncovered.length) {
+      console.log('\n⚠️  以下 ' + uncovered.length + ' 个赛事未纳入 curation（详情页赛期可能被截断）：');
+      uncovered.forEach((e) => console.log('   -', e.name, '(' + e.grade + ')'));
+      console.log('   建议：将上述赛事补入 utils/curation.js 的 CURATED_EVENTS，含 start/end 字段');
+    }
+  } catch (e) { /* curation 检查失败不影响主流程 */ }
 }
 
 main().catch((e) => { console.error('FAILED:', e.message); process.exit(1); });

@@ -118,7 +118,11 @@
 
   <!-- ===== Tab 1: 对阵（系列赛聚合 · A 紧凑卡 + B 点缀） ===== -->
   <block wx:elif="{{tab === 'matches'}}">
-    <view wx:if="{{series.length === 0}}" class="hint-card-enhanced">
+    <!-- ★ v3 优化项26：cancelled 赛事提示 -->
+    <view wx:if="{{cancelledNotice}}" class="cancelled-notice">
+      <text>{{cancelledNotice}}</text>
+    </view>
+    <view wx:elif="{{series.length === 0}}" class="hint-card-enhanced">
       <view class="hint-title">该赛事暂无比赛数据</view>
       <view class="hint-desc">下拉刷新或稍后重试</view>
     </view>
@@ -133,8 +137,7 @@
         <text class="phase-divider-text">进行中 · {{liveCount}} 场</text>
       </view>
       <!-- UPCOMING 段分隔符：si === liveCount 时显示（即 LIVE 段结束后）
-           修复 BUG：原用 s.isUpcoming 判定，但 isUpcoming 字段在 groupSeries 中已新增
-           修复：统一用 s.phase === 'upcoming' 判定，与 phase 字段语义一致 -->
+           ★ v3 优化项⑭：显示确定性标识 -->
       <view wx:if="{{s.phase === 'upcoming' && si === liveCount && upcomingCount > 0}}" class="phase-divider phase-divider-upcoming">
         <view class="phase-divider-bar"></view>
         <text class="phase-divider-text">即将开始 · {{upcomingCount}} 场</text>
@@ -151,13 +154,22 @@
         <text class="phase-divider-toggle">{{recentCollapsed ? '展开 ▾' : '折叠 ▴'}}</text>
       </view>
 
-      <!-- ===== series-card（RECENT 段在折叠时隐藏） =====
+      <!-- ★ v3 优化项21：UPCOMING 日期子标题（每个日期组首条 series 前显示） -->
+      <view wx:if="{{s.phase === 'upcoming' && s.showDateHeader && (!s.farFuture || showFarFuture)}}" class="date-sep">
+        <text class="date-sep-text">{{s.dateLabel}}</text>
+      </view>
+      <!-- ★ v3 优化项⑮：RECENT 时间分层子标题（刚刚结束/今天/更早） -->
+      <view wx:if="{{s.phase === 'recent' && s.showTimeLayerHeader && !recentCollapsed}}" class="time-layer-sep">
+        <text class="time-layer-sep-text">{{s.timeLayerLabel}}</text>
+      </view>
+      <!-- ===== series-card（RECENT 段折叠隐藏 + 远期 UPCOMING 折叠隐藏） =====
            修复 BUG：原用 !s.isRecent 判定，但 isRecent 仅表示「2h 内结束」
                   超 2h 的已结束比赛 isRecent=false → !s.isRecent=true → 折叠时仍显示（不受控）
            修复：改用 s.phase !== 'recent' 判定，phase 字段统一表示状态
-           class 同步修复：用 s.phase 替代 isLive/isUpcoming/isRecent，避免字段语义冲突 -->
+           class 同步修复：用 s.phase 替代 isLive/isUpcoming/isRecent，避免字段语义冲突
+           ★ v3 优化项21：farFuture series 在 !showFarFuture 时隐藏 -->
       <view
-        wx:if="{{s.phase !== 'recent' || !recentCollapsed}}"
+        wx:if="{{(s.phase !== 'recent' || !recentCollapsed) && (!s.farFuture || showFarFuture)}}"
         class="series-card {{s.phase === 'live' ? 'series-live' : (s.phase === 'upcoming' ? 'series-upcoming' : (s.phase === 'recent' ? 'series-recent' : ''))}}"
       >
         <!-- 系列头部：队A · 大比分/开赛时间 · 队B -->
@@ -201,8 +213,15 @@
             <text class="series-bo-label">{{s.boLabel}}</text>
           </view>
           <text wx:if="{{s.phase === 'live'}}" class="series-live-tag">● LIVE</text>
-          <!-- 未开赛：显示⏰ 倒计时标签（替代 LIVE 标签位置） -->
-          <text wx:elif="{{s.phase === 'upcoming'}}" class="series-upcoming-tag">⏰ {{s.countdownText}}</text>
+          <!-- ★ v3 优化项⑬：LIVE 系列进度（仅 OpenDota 有 games 数据时显示） -->
+          <text wx:if="{{s.phase === 'live' && s.liveProgress}}" class="series-live-progress">· {{s.liveProgress}}</text>
+          <!-- ★ v3 优化项⑬+30：LIVE 已进行时长（OpenDota 和 Liquipedia 都可显示） -->
+          <text wx:if="{{s.phase === 'live' && s.elapsedText}}" class="series-elapsed">· 已进行 {{s.elapsedText}}</text>
+          <!-- 未开赛：显示具体开赛时间（替代倒计时标签） -->
+          <text wx:elif="{{s.phase === 'upcoming'}}" class="series-upcoming-tag">{{s.scheduledTimeText}}</text>
+          <text wx:if="{{s.phase === 'upcoming' && !s.confirmed}}" class="series-tbd-badge">❓ 待定</text>
+          <!-- ★ v3 优化项⑭：焦点战标记（双方均为 S-Tier 战队） -->
+          <text wx:if="{{s.phase === 'upcoming' && s.matchupQuality === 'focus'}}" class="series-focus-badge">⭐ 焦点战</text>
           <!-- 未开赛不显示小圆点序列（无 match 数据），仅显示开赛时间兜底 -->
           <view class="series-dots" wx:if="{{s.isMulti && s.phase !== 'upcoming'}}">
             <!-- 2026-07-28 修复小圆点颜色 BUG：用 aWin/bWin 判定（按 A/B 队归属），不用 radiantWin（按天辉/夜魇边）。
@@ -210,6 +229,8 @@
             <view wx:for="{{s.games}}" wx:for-item="g" wx:key="match_id" class="series-dot {{g.aWin ? 'a-win' : (g.bWin ? 'b-win' : 'pending')}}"></view>
           </view>
           <text wx:elif="{{s.phase !== 'upcoming'}}" class="series-time">{{s.games[0].time}}</text>
+          <!-- ★ v3 优化项⑮：RECENT 总耗时（⏱ Xh Ym） -->
+          <text wx:if="{{s.phase === 'recent' && s.totalDurationText}}" class="series-total-duration">⏱ {{s.totalDurationText}}</text>
         </view>
 
         <!-- 小场列表（单场也走此结构，BO1 仅显示时间行）
@@ -277,6 +298,10 @@
       </view>
     </block>
 
+    <!-- ★ v3 优化项21：远期赛程折叠入口（3天以上的 UPCOMING） -->
+    <view wx:if="{{hasFarFuture}}" class="far-future-toggle" bindtap="toggleFarFuture">
+      <text>{{showFarFuture ? '收起远期赛程 ▴' : '查看更远赛程 (' + farFutureCount + '场) ▾'}}</text>
+    </view>
     <view class="loadmore" wx:if="{{hasMore}}">
       <t-button theme="light" size="medium" bindtap="appendPage" t-class="more-btn">加载更多</t-button>
     </view>
