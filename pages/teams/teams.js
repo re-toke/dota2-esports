@@ -212,6 +212,8 @@ Page({
     if (!list.length) return;
     this.setData({ resultEnriching: true });
     const tasks = list.map((item) => {
+      // P2-1：已增强的条目直接复用，跳过重复请求（enrichItem 已写 hasStats/sourceKey）
+      if (item.hasStats && item.sourceKey === 'opendota') return Promise.resolve(item);
       return api.getTeam(item.id)
         .then((t) => enrichItem(item, t))
         .catch(() => item);
@@ -263,6 +265,16 @@ Page({
         keyword: this.data.keyword
       });
     } catch (e) { /* 忽略存储异常 */ }
+    // P2-2：离开页面取消未触发的防抖搜索
+    this._clearSearchTimer();
+  },
+
+  onUnload() {
+    this._clearSearchTimer();
+  },
+
+  _clearSearchTimer() {
+    if (this._searchTimer) { clearTimeout(this._searchTimer); this._searchTimer = null; }
   },
 
   // I5：返回页面时还原视图状态（首次 onShow 跳过，避免覆盖 onLoad 的初始数据）

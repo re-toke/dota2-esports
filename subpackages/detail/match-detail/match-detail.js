@@ -95,6 +95,21 @@ Page({
       this._realtime.close();
       this._realtime = null;
     }
+    this._realtimeStarted = false;
+  },
+
+  // P1-2：页面被压栈/切后台时暂停实时连接，返回时按需重启（避免后台 30s 轮询空转）
+  onHide() {
+    if (this._realtime) {
+      this._realtime.close();
+      this._realtime = null;
+      this._realtimeStarted = false;
+    }
+  },
+
+  onShow() {
+    // 直播中返回页面时重启实时连接
+    if (this.data.isLive && !this._realtimeStarted) this.startRealtime(this.data.isLive);
   },
 
   retry() {
@@ -144,6 +159,13 @@ Page({
   //   - 直播中推送（已有数据 + 仍在进行 + 仅比分/时长变化）→ 仅更新标量
   applyMatch(m) {
     if (!m) return;
+    // P1-2：比赛已分胜负（任何推送路径）→ 立即关闭实时会话，停止 30s 轮询与赛后全量重渲染。
+    // 不能放在 _applyLiveUpdate 里——该函数仅在 stillLive=true（radiant_win==null）时被调用。
+    if (m.radiant_win != null && this._realtime) {
+      this._realtime.close();
+      this._realtime = null;
+      this._realtimeStarted = false;
+    }
     // 轻量更新判定：已有选手数据 + 比赛仍在进行（未分胜负）+ 之前也是直播态
     const hasData = this.data.radiant && this.data.radiant.length > 0;
     const stillLive = m.radiant_win == null && this.data.isLive;

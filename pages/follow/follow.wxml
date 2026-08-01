@@ -113,7 +113,7 @@
     <!-- 发送记录（最近 5 条） -->
     <view class="send-log" wx:if="{{sendHistory.length > 0}}">
       <view class="send-log-title">推送记录</view>
-      <view class="send-log-item" wx:for="{{sendHistory}}" wx:key="time" wx:if="{{index < 5}}">
+      <view class="send-log-item" wx:for="{{sendHistory}}" wx:key="time">
         <view class="sl-status {{item.status === 'ok' ? 'sl-ok' : 'sl-fail'}}">
           {{item.status === 'ok' ? '成功' : '失败'}}
         </view>

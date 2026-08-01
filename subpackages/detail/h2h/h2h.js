@@ -116,7 +116,7 @@ Page({
       api.getTeam(this.teamBId),
       api.getTeamMatches(this.teamAId),
       api.getTeamMatches(this.teamBId)
-    ])
+    ].map((p) => p.catch(() => null)))   // P3-4：单源失败降级 null，不拖垮整页（下游已有 ||{} / ||[] 兜底）
       .then(([ta, tb, matchesA, matchesB]) => {
         const mA = ta || {};
         const mB = tb || {};

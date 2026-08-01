@@ -3,17 +3,22 @@
 // 全部存于本地 Storage，无需登录、无需后端。订阅消息推送需配合微信订阅消息（见 config.subscribeTemplateId）。
 
 const KEY = 'dota2_follow';
+// P1-3：模块级内存缓存，避免每次查询同步读 Storage。
+// 所有写入统一走 write()，写入后同步更新 memo 即保证一致性（当前无外部绕过 follow.js 写该 key）。
+let _memo = null;
 
 function blank() {
   return { teams: {}, leagues: {} };
 }
 
 function read() {
+  if (_memo) return _memo;
   try {
     const d = wx.getStorageSync(KEY);
     if (!d || typeof d !== 'object') return blank();
     if (!d.teams) d.teams = {};
     if (!d.leagues) d.leagues = {};
+    _memo = d;
     return d;
   } catch (e) {
     return blank();
@@ -21,6 +26,7 @@ function read() {
 }
 
 function write(d) {
+  _memo = d;   // 同步更新内存缓存（与落盘对象同一引用）
   try { wx.setStorageSync(KEY, d); } catch (e) {}
 }
 

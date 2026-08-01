@@ -42,6 +42,14 @@ Page({
     this.load();
   },
 
+  // P2-2：离开页面取消未触发的防抖过滤
+  onHide() { this._clearSearchTimer(); },
+  onUnload() { this._clearSearchTimer(); },
+
+  _clearSearchTimer() {
+    if (this._searchTimer) { clearTimeout(this._searchTimer); this._searchTimer = null; }
+  },
+
   load() {
     // 重试时重置头像失败标记，允许重新尝试加载（源数据 _all / 缓存中的 avatar 始终保留，不污染）
     this._avatarFailed = new Set();
@@ -51,7 +59,7 @@ Page({
     heroes.getHeroes()
       .then((list) => {
         this._all = list;
-        this.setData({ all: list, loading: false });
+        this.setData({ loading: false });   // ★P2-A：不再下发全量 all（wxml 不渲染）
         this.applyFilter();
       })
       .catch(() => {

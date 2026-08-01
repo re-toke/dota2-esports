@@ -76,6 +76,14 @@ Page({
     }
   },
 
+  // P2-2：离开页面取消未触发的防抖搜索（避免对已卸载页面 setData + 发请求）
+  onHide() { this._clearSearchTimer(); },
+  onUnload() { this._clearSearchTimer(); },
+
+  _clearSearchTimer() {
+    if (this._timer) { clearTimeout(this._timer); this._timer = null; }
+  },
+
   onSearch(e) {
     const kw = (e.detail.value || '').trim();
     this.setData({ keyword: kw });

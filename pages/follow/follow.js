@@ -56,7 +56,7 @@ Page({
     const slice = all.slice(0, pageSize);
 
     const st = subscribe.getSubStatus();
-    const history = subscribe.getSendHistory(10);
+    const history = (subscribe.getSendHistory(10) || []).slice(0, 5);   // P3-3：JS 侧限 5 条，wxml 不再 wx:if
     const today = subscribe.getTodayCount();
     const reminder = reminderStrategy.getStrategy();
     const ctaVariant = experiment.getVariant('follow_cta_variant', 'A');
@@ -203,7 +203,7 @@ Page({
   // ===== 2.2 订阅状态展示 =====
   loadSubStatus() {
     var st = subscribe.getSubStatus();
-    var history = subscribe.getSendHistory(10);
+    var history = (subscribe.getSendHistory(10) || []).slice(0, 5);   // P3-3：JS 侧限 5 条，wxml 不再 wx:if
     var today = subscribe.getTodayCount();
     this.setData({
       subStatus: st,

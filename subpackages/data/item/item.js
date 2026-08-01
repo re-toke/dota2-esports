@@ -1,6 +1,7 @@
 // subpackages/data/item/item.js
 // 物品列表：搜索 + 分类(全部/常规/配方/中立) + 价格排序（默认/由低到高/由高到低）。
 const items = require('../../../utils/items.js');
+const config = require('../../../utils/config.js');   // P2-A：分页 pageSize（5 列表页既有惯例）
 
 const SORTS = [
   { key: 'default', label: '默认' },
@@ -23,10 +24,22 @@ Page({
     sort: 'default',
     category: 'all',
     recipeOnly: false,
-    all: [],
+    all: [],          // 保留字段声明（结构兼容），不再承载全量数据（P2-A）
     list: [],
     sortChips: SORTS,
     catChips: CATS
+    // ★P2-A：分页游标/标志用实例属性（_page/_hasMore），data 结构零变化
+  },
+
+  onReachBottom() {
+    if (this._hasMore && !this.data.loading) this.appendPage();
+  },
+
+  onHide() { this._clearSearchTimer(); },
+  onUnload() { this._clearSearchTimer(); },
+
+  _clearSearchTimer() {
+    if (this._searchTimer) { clearTimeout(this._searchTimer); this._searchTimer = null; }
   },
 
   onLoad() {
@@ -38,7 +51,7 @@ Page({
     items.getItems()
       .then((list) => {
         this._all = list;
-        this.setData({ all: list, loading: false });
+        this.setData({ loading: false });   // ★P2-A：不再下发全量 all（wxml 不渲染）
         this.applyFilter();
       })
       .catch(() => {
@@ -75,7 +88,22 @@ Page({
     if (sort === 'asc') out = out.slice().sort((a, b) => (a.cost - b.cost) || ((a.tier || 0) - (b.tier || 0)));
     else if (sort === 'desc') out = out.slice().sort((a, b) => (b.cost - a.cost) || ((b.tier || 0) - (a.tier || 0)));
 
-    this.setData({ list: out });
+    // ★P2-A 分页：全量过滤结果存内存，页面只渲染当前页（修复 500+ 条一次渲染）
+    this._page = 0;                        // 筛选/排序/搜索变化 → 回到第一页
+    this._filteredAll = out;
+    const pageSize = config.pageSize;
+    const slice = out.slice(0, pageSize);
+    this._hasMore = out.length > slice.length;
+    this.setData({ list: slice });
+  },
+
+  appendPage() {
+    const pageSize = config.pageSize;
+    const all = this._filteredAll || [];
+    this._page = (this._page || 0) + 1;
+    const slice = all.slice(0, (this._page + 1) * pageSize);
+    this._hasMore = all.length > slice.length;
+    this.setData({ list: slice });
   },
 
   onSearch(e) {

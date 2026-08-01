@@ -268,6 +268,9 @@ Page({
         teamFilter: this.data.teamFilter
       });
     } catch (e) { /* 忽略存储异常 */ }
+    // P1-1：离开页面取消所有进行中的元数据增强链（代际递增，旧链在下一个检查点放弃）
+    this._metaGen = (this._metaGen || 0) + 1;
+    this._metaEnriching = false;
   },
 
   // I5：返回页面时还原视图状态（首次 onShow 跳过，避免覆盖 onLoad 的初始数据）
@@ -1157,26 +1160,36 @@ Page({
   // 串行执行（2.2s 间隔尊重 Liquipedia 限流），最多增强前 N 个可见赛事，
   // 成功后只更新对应索引的字段（路径 setData，最小化渲染范围）。
   enhanceListMetadata() {
+    // P1-1：并发防重（检查在前、gen+1 在后——避免误杀运行中链导致 _metaEnriching 残留死锁）
+    if (this._metaEnriching) return;   // 已有链在跑，跳过本次（不递增代际，运行中链继续）
+    const gen = (this._metaGen = (this._metaGen || 0) + 1);
+    this._metaEnriching = true;
     var list = this.data.list || [];
-    if (!list.length) return;
+    if (!list.length) { this._metaEnriching = false; return; }
     var sources = require('../../utils/sources.js');
     var MAX_ENRICH = 10;     // 最多增强前 10 个可见的未覆盖赛事
     var count = 0;
     var i = 0;
 
     var next = function () {
+      if (gen !== this._metaGen) return;            // 本链已被更新的调用/离开页面取代，直接放弃
       // 找下一个需要增强的赛事
       while (i < list.length && list[i]._metaEnriched) i++;
-      if (i >= list.length || count >= MAX_ENRICH) return;
+      if (i >= list.length || count >= MAX_ENRICH) { this._metaEnriching = false; return; }
 
       var item = list[i];
       var idx = i;
       i++;
       count++;
-      // 2.2s 间隔（Liquipedia 官方 ≥ 2s）
+      // 2.2s 间隔由 liquipedia 限流器保证；此处 100ms 仅为循环节奏
       setTimeout(function () {
+        if (gen !== this._metaGen) return;          // 链已取消，不再发起请求
         sources.getLeagueMetadata({ name: item.name, leagueid: item.leagueid }).then(function (meta) {
+          if (gen !== this._metaGen) return;        // 返回时链已取消，不写 setData
           if (!meta) { next(); return; }
+          // 索引校验：当前 list[idx] 仍指向同一赛事才写入，防筛选/翻页后错位
+          var cur = this.data.list && this.data.list[idx];
+          if (!cur || cur.leagueid !== item.leagueid) { next(); return; }
           var patch = {};
           if (meta.prizePool) patch['list[' + idx + '].prizePool'] = meta.prizePool;
           if (meta.organizer) patch['list[' + idx + '].organizer'] = meta.organizer;
