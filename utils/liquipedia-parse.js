@@ -632,7 +632,7 @@ function extractTeamOpponentName(raw) {
     return linkMatch[2] ? linkMatch[2].trim() : linkMatch[1].split('/').pop().trim();
   }
   // 纯文本队名（去掉 score= 参数后）
-  var namePart = inner.replace(/\|?\s*score\s*=\s*\d+/i, '').trim();
+  var namePart = inner.replace(/\|?\s*score\s*=\s*\w+/i, '').trim();
   return stripWikitextMarkup(namePart).trim();
 }
 

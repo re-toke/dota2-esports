@@ -463,19 +463,72 @@ function parseScheduledMatches(wikitext, nowSec) {
   if (!wikitext) return [];
   nowSec = nowSec || Math.floor(Date.now() / 1000);
   var matches = [];
-  // 匹配 {{Match 后紧跟 | 或 }}（排除 {{Matchlist}}）
-  var re = /\{\{Match(?![a-zA-Z])\s*\|/g;
-  var m;
-  while ((m = re.exec(wikitext)) !== null) {
-    var startPos = m.index;
-    var endPos = findTemplateEnd(wikitext, startPos);
-    if (endPos < 0) break;  // 模板未闭合，停止扫描
-    var body = wikitext.substring(startPos + 2, endPos);  // 去掉外层 {{ }}
+  // ★ v3 优化项23：维护当前 section 上下文（标题层级解析）
+  var currentSection = '';
+  var currentSubsection = '';
+  // 逐行扫描：检测标题行（== Section == / === Subsection ===）和 {{Match}} 模板
+  var lines = wikitext.split('\n');
+  for (var li = 0; li < lines.length; li++) {
+    var line = lines[li].trim();
+    // 检测二级标题（== Section ==）
+    var h2 = line.match(/^==\s*([^=]+?)\s*==$/);
+    if (h2) {
+      currentSection = h2[1].trim();
+      currentSubsection = '';
+      continue;
+    }
+    // 检测三级标题（=== Subsection ===）
+    var h3 = line.match(/^===\s*([^=]+?)\s*===$/);
+    if (h3) {
+      currentSubsection = h3[1].trim();
+      continue;
+    }
+    // 检测 {{Match}} 模板（跳过 {{Matchlist}}）
+    if (line.indexOf('{{Match') !== 0) continue;
+    // 使用 findTemplateEnd 从行首开始查找完整模板
+    var startPos = line.indexOf('{{Match');
+    // 确保是 {{Match| 而非 {{Matchlist|
+    if (!/\{\{Match(?![a-zA-Z])\s*\|/.test(line)) continue;
+    // 从行中提取模板（处理同行模板和跨行模板）
+    var fullLine = line;
+    // 如果模板未在当前行闭合，拼接后续行
+    var braceDepth = 0;
+    var templateEnd = -1;
+    for (var ci = 0; ci < fullLine.length - 1; ci++) {
+      if (fullLine[ci] === '{' && fullLine[ci + 1] === '{') { braceDepth++; ci++; }
+      else if (fullLine[ci] === '}' && fullLine[ci + 1] === '}') {
+        braceDepth--;
+        if (braceDepth === 0) { templateEnd = ci; break; }
+        ci++;
+      }
+    }
+    // 如果当前行未闭合，继续拼接后续行
+    while (templateEnd < 0 && li + 1 < lines.length) {
+      li++;
+      fullLine += '\n' + lines[li];
+      for (var ci2 = 0; ci2 < fullLine.length - 1; ci2++) {
+        if (fullLine[ci2] === '{' && fullLine[ci2 + 1] === '{') { braceDepth++; ci2++; }
+        else if (fullLine[ci2] === '}' && fullLine[ci2 + 1] === '}') {
+          braceDepth--;
+          if (braceDepth === 0) { templateEnd = ci2; break; }
+          ci2++;
+        }
+      }
+    }
+    if (templateEnd < 0) continue;
+    // 提取模板 body
+    var bodyStart = fullLine.indexOf('{{Match') + 2;
+    // 找到 Match 后的第一个 |
+    var pipeIdx = fullLine.indexOf('|', bodyStart);
+    if (pipeIdx < 0) continue;
+    var body = fullLine.substring(bodyStart, templateEnd);
     // 解析参数
     var fields = parseMatchFields(body);
-    if (!fields) { re.lastIndex = endPos + 2; continue; }
+    if (!fields) continue;
+    // ★ v3 优化项23：注入 section 上下文
+    fields.section = currentSection;
+    fields.subsection = currentSubsection;
     matches.push(fields);
-    re.lastIndex = endPos + 2;  // 跳过已处理的模板
   }
   // 去重：同队对+同日期的对阵只保留一个（Liquipedia 可能在不同 Matchlist 中重复）
   var seen = {};
@@ -504,9 +557,11 @@ function parseMatchFields(body) {
     var val = part.substring(eqIdx + 1).trim();
     fields[key] = val;
   });
-  // 提取队名：opponent1={{TeamOpponent|队名}} 或 {{TeamOpponent|[[队名|显示名]]}}
-  var team1Name = extractTeamOpponentName(fields.opponent1 || '');
-  var team2Name = extractTeamOpponentName(fields.opponent2 || '');
+  // 提取队名和比分：opponent1={{TeamOpponent|队名|score=N}} 或 {{TeamOpponent|[[队名|显示名]]|score=N}}
+  var opp1 = extractTeamOpponent(fields.opponent1 || '');
+  var opp2 = extractTeamOpponent(fields.opponent2 || '');
+  var team1Name = opp1.name;
+  var team2Name = opp2.name;
   if (!team1Name || !team2Name) return null;  // 队名缺失，跳过
   // 解析日期
   var startTime = parseLiquipediaDate(fields.date || '');
@@ -516,24 +571,49 @@ function parseMatchFields(body) {
   var boType = 'BO' + (isNaN(bo) || bo < 1 ? 1 : bo);
   // finished
   var finished = fields.finished === 'true' || fields.finished === '1';
-  // phase 判定
+  // walkover（弃权）：0=无弃权, 1=team1弃权, 2=team2弃权
+  var walkover = fields.walkover ? parseInt(fields.walkover, 10) : 0;
+  // phase 判定（★ v3 优化项④：增加 24h 上界守卫，与 sources.js groupSeries 保持一致）
   var nowSec = Math.floor(Date.now() / 1000);
   var phase;
   if (finished) {
     phase = 'recent';
   } else if (startTime > nowSec) {
     phase = 'upcoming';
+  } else if ((nowSec - startTime) < 24 * 3600) {
+    phase = 'live';  // 已开赛但未结束，且在 24h 内
   } else {
-    phase = 'live';  // 已开赛但未结束
+    phase = 'recent';  // ★ 超 24h 未结束 → 降级为 recent（防僵死数据）
   }
   return {
     team1Name: team1Name,
     team2Name: team2Name,
+    score1: opp1.score,   // ★ v3 优化项22：从 TeamOpponent|score=N 提取
+    score2: opp2.score,
+    walkover: walkover,   // ★ v3 优化项22：弃权标记
     startTime: startTime,
     boType: boType,
     finished: finished,
     phase: phase
   };
+}
+
+// 从 {{TeamOpponent|队名|score=N}} 嵌套模板中提取队名和比分
+// ★ v3 优化项22：新增 score 提取，从 TeamOpponent 模板的 score=N 参数获取
+// 输入 '{{TeamOpponent|team falcons|score=2}}' → { name: 'team falcons', score: 2 }
+// 输入 '{{TeamOpponent|[[Team Spirit|TS]]|score=1}}' → { name: 'TS', score: 1 }
+// 输入 '{{TeamOpponent}}' → { name: '', score: 0 }
+function extractTeamOpponent(raw) {
+  if (!raw) return { name: '', score: 0 };
+  var m = raw.match(/\{\{TeamOpponent\s*\|([^}]*)\}\}/i);
+  if (!m) return { name: '', score: 0 };
+  var inner = m[1].trim();
+  // 提取 score=N 参数
+  var scoreMatch = inner.match(/\bscore\s*=\s*(\d+)/i);
+  var score = scoreMatch ? parseInt(scoreMatch[1], 10) : 0;
+  // 提取队名（复用 extractTeamOpponentName 逻辑）
+  var name = extractTeamOpponentName(raw);
+  return { name: name, score: score };
 }
 
 // 从 {{TeamOpponent|队名}} 嵌套模板中提取队名
@@ -551,20 +631,42 @@ function extractTeamOpponentName(raw) {
   if (linkMatch) {
     return linkMatch[2] ? linkMatch[2].trim() : linkMatch[1].split('/').pop().trim();
   }
-  // 纯文本队名
-  return stripWikitextMarkup(inner).trim();
+  // 纯文本队名（去掉 score= 参数后）
+  var namePart = inner.replace(/\|?\s*score\s*=\s*\w+/i, '').trim();
+  return stripWikitextMarkup(namePart).trim();
 }
 
 // 解析 Liquipedia 日期格式为 unix 秒
-// 输入 'April 22, 2024 - 13:00 {{Abbr/CEST}}' → 1713781200
-// 输入 '2024-04-22 13:00' → 1713781200
+// ★ v3 优化项24：保留时区信息并正确转换为 UTC（原代码去掉时区缩写后按 UTC 解析，偏差可达数小时）
+// 输入 'April 22, 2024 - 13:00 {{Abbr/CEST}}' → 按解析出的时区偏移转换为 UTC 秒
+// 输入 '2024-04-22 13:00' → 按 UTC 解析
 // 失败返回 0
+// 时区偏移表（常见电竞赛事时区）
+var TZ_OFFSET = {
+  'UTC': 0, 'GMT': 0,
+  'CEST': 2, 'CET': 1,    // 欧洲
+  'EST': -5, 'EDT': -4,   // 美东
+  'PST': -8, 'PDT': -7,   // 美西
+  'CST': 8,               // 中国（也可能是美中 -6，但 Dota2 赛事多用北京时间）
+  'KST': 9,               // 韩国
+  'MSK': 3,               // 莫斯科
+  'TRT': 3,               // 土耳其
+  'GST': 4,               // 海湾标准时间
+  'BRT': -3,              // 巴西
+  'ICT': 7,               // 印度支那
+  'WIB': 7                // 印尼西部
+};
 function parseLiquipediaDate(dateStr) {
   if (!dateStr) return 0;
-  // 去掉 {{Abbr/XXX}} 等模板
+  // 去掉 {{Abbr/XXX}} 等模板但保留时区名文本
   var cleaned = dateStr.replace(/\{\{[^}]*\}\}/g, '').trim();
-  // 去掉时区缩写尾部（如 CEST、UTC、CST 等）
+  // 提取时区缩写（在时间末尾）
+  var tzMatch = cleaned.match(/\s+([A-Z]{3,5})\s*$/);
+  var tzAbbr = tzMatch ? tzMatch[1] : '';
+  // 去掉时区缩写尾部
   cleaned = cleaned.replace(/\s+[A-Z]{3,5}\s*$/, '').trim();
+  // 查时区偏移表（未命中默认 0，退化为原行为）
+  var tzOffset = TZ_OFFSET[tzAbbr] != null ? TZ_OFFSET[tzAbbr] : 0;
   // 尝试解析 "April 22, 2024 - 13:00" 格式
   var m1 = cleaned.match(/(\w+)\s+(\d+),\s*(\d{4})\s*[-–]?\s*(\d{1,2}):(\d{2})/);
   if (m1) {
@@ -574,19 +676,76 @@ function parseLiquipediaDate(dateStr) {
     };
     var monthIdx = monthMap[m1[1].toLowerCase()];
     if (monthIdx == null) return 0;
-    var d = new Date(Date.UTC(parseInt(m1[3]), monthIdx, parseInt(m1[2]), parseInt(m1[4]), parseInt(m1[5])));
+    // 按时区偏移计算 UTC 时间：本地时间 - tzOffset = UTC 时间
+    var d = new Date(Date.UTC(parseInt(m1[3]), monthIdx, parseInt(m1[2]),
+      parseInt(m1[4]) - tzOffset, parseInt(m1[5])));
     return Math.floor(d.getTime() / 1000);
   }
   // 尝试解析 "2024-04-22 13:00" 格式
   var m2 = cleaned.match(/(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})/);
   if (m2) {
-    var d2 = new Date(Date.UTC(parseInt(m2[1]), parseInt(m2[2]) - 1, parseInt(m2[3]), parseInt(m2[4]), parseInt(m2[5])));
+    var d2 = new Date(Date.UTC(parseInt(m2[1]), parseInt(m2[2]) - 1, parseInt(m2[3]),
+      parseInt(m2[4]) - tzOffset, parseInt(m2[5])));
     return Math.floor(d2.getTime() / 1000);
   }
   // 尝试 Date.parse 兜底
   var t = Date.parse(cleaned);
   if (!isNaN(t)) return Math.floor(t / 1000);
   return 0;
+}
+
+// ===== 战队 Logo 解析（§8.3 2026-07-29）=====
+// 从战队页 wikitext 中提取 {{Infobox team}} 模板的 image 字段值。
+// Liquipedia 战队页结构：
+//   {{Infobox team
+//   |name=Team Spirit
+//   |image=Team_Spirit_logo.png
+//   |imagecaption=
+//   |...
+//   }}
+// image 字段是图片文件名（不含 File: 前缀），需配合 imageinfo API 获取可访问 URL。
+//
+// 返回 { image: 'Team_Spirit_logo.png' } 或 null（未找到模板 / 无 image 字段）
+function parseTeamLogo(wikitext) {
+  if (!wikitext) return null;
+  var tpl = parseTemplate(wikitext, 'Infobox team');
+  if (!tpl) return null;
+  // image 字段优先，image_dark / logo / logo_dark 兜底（部分战队页用 logo 命名）
+  var image = tpl.image || tpl.image_dark || tpl.logo || tpl.logo_dark || null;
+  if (!image) return null;
+  // parseTemplate 内部已执行 stripWikitextMarkup，但再清理一次防御 [[File:xxx|200px]] 形式
+  image = stripWikitextMarkup(image);
+  // 去掉可能的 "File:" / "Image:" 前缀（部分页面直接写带命名空间的文件名）
+  image = image.replace(/^File:/i, '').replace(/^Image:/i, '').trim();
+  // 去掉 | 后的尺寸参数（如 "Team_Spirit_logo.png|200px" → "Team_Spirit_logo.png"）
+  image = image.split('|')[0].trim();
+  if (!image) return null;
+  return { image: image };
+}
+
+// ===== 赛事等级解析（§9 2026-07-30，方案A：对齐 Liquipedia Tier 体系）=====
+// 从赛事页 wikitext 中提取 {{Infobox league}} 模板的 liquipediatier 字段值。
+// Liquipedia 战队页结构：
+//   {{Infobox league
+//   |name=DreamLeague Season 27
+//   |liquipediatier=1
+//   |...
+//   }}
+// liquipediatier 字段是 1-4 的数字（1=最高，4=最低），是 Liquipedia 人工策展的权威分级。
+//
+// 返回 { tier: 1 } 或 null（未找到模板 / 无 liquipediatier 字段 / 值非数字）
+function parseLeagueTier(wikitext) {
+  if (!wikitext) return null;
+  var tpl = parseTemplate(wikitext, 'Infobox league') || parseTemplate(wikitext, 'Infobox tournament');
+  if (!tpl) return null;
+  // liquipediatier 是 Liquipedia 标准字段（数字 1-4）
+  var raw = tpl.liquipediatier || tpl.tier || null;
+  if (!raw) return null;
+  // 清理 wikitext 标记 + 提取数字
+  raw = stripWikitextMarkup(raw).trim();
+  var num = parseInt(raw, 10);
+  if (isNaN(num) || num < 1 || num > 4) return null;
+  return { tier: num };
 }
 
 module.exports = {
@@ -602,5 +761,8 @@ module.exports = {
   parseTeamCardBlock: parseTeamCardBlock,
   parseParticipants: parseParticipants,
   parseLeagueMetadata: parseLeagueMetadata,
-  parseScheduledMatches: parseScheduledMatches
+  parseScheduledMatches: parseScheduledMatches,
+  parseTeamLogo: parseTeamLogo,
+  parseLeagueTier: parseLeagueTier,
+  extractTeamOpponent: extractTeamOpponent
 };

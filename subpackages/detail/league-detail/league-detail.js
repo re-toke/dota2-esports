@@ -23,6 +23,10 @@ const HERO_IMG_BASE = 'https://cdn.cloudflare.steamstatic.com/apps/dota2/images/
 // 可信度数值化，取两者中最保守者作为整体可信度
 const CONF_RANK = { low: 1, medium: 2, high: 3 };
 const CONF_TEXT = { low: '待核实', medium: '较可信', high: '可信' };
+
+// TBD / 待定 队名识别（模块级，供多个方法共享，避免跨方法作用域 no-undef）
+const TBD_RE = /^(tbd|待定|待公布|unknown|tba|to\s+be\s+(determined|announced))$/i;
+function isTBD(name) { return TBD_RE.test(String(name || '').trim()); }
 function worstConfidence(a, b) {
   if (!a && !b) return 'low';
   const ra = CONF_RANK[a || 'low'];
@@ -419,8 +423,6 @@ Page({
           // 修复：TBD 队伍不参与去重键构建（包含 TBD 的对阵视为独立对阵，不做合并）。
           //   - 构建 openDotaKeys 时跳过含 TBD 的对阵（避免污染键集）
           //   - 过滤 Liquipedia 赛程时，含 TBD 的对阵直接保留（不查去重键）
-          const TBD_RE = /^(tbd|待定|待公布|unknown|tba|to\s+be\s+(determined|announced))$/i;
-          function isTBD(name) { return TBD_RE.test(String(name || '').trim()); }
           // ★ v3 优化项25：队名归一化增强 — 去掉常见后缀（esports/gaming/team）+ 去空格标点
           function normalizeTeamNameForDedup(name) {
             if (!name) return '';
@@ -1021,23 +1023,33 @@ Page({
       }
     });
 
-    // ★ §8.3 名称兜底（2026-07-29）：Liquipedia 赛程补充的 upcoming/live 对阵
-    //   team_id=0（{{Match}} 模板不提供 OpenDota team_id），按队名收集，
-    //   走 enrichTeamLogo 第④源（Liquipedia 按名兜底，不依赖 team_id）。
-    //   归一化：小写 + 去空白（与上方 OpenDota 去重键一致）
+    // ★ 方案C Step A：从 teamIds 建立 队名→ID 反向映射（2026-08-01）
+    //   同一战队在 RECENT 段已有 OpenDota team_id 时，跳过 Liquipedia 查询，
+    //   直接走 ID 路径拿 OpenDota logo（cdn.opendota.com 已在微信白名单）。
     function normName(s) { return String(s || '').toLowerCase().replace(/\s+/g, ''); }
+    const teamNameToId = {};
+    Object.keys(teamIds).forEach((tid) => {
+      const t = teamIds[tid];
+      if (t && t.name) teamNameToId[normName(t.name)] = parseInt(tid, 10);
+    });
+
+    // ★ §8.3 名称兜底（2026-07-29）：Liquipedia 赛程补充的 upcoming/live 对阵
+    //   team_id=0（{{Match}} 模板不提供 OpenDota team_id），按队名收集。
+    //   方案C Step A：若该队已在 teamIds 中（来自 RECENT 段），skip=true 跳过 Liquipedia 查询。
     const nameTeams = {};  // 归一化队名 → { name, skip }
     this.allSeries.forEach((s) => {
       if ((!s.radiantTeamId || s.radiantTeamId <= 0) && s.radiantName) {
         const norm = normName(s.radiantName);
         if (norm && !nameTeams[norm]) {
-          nameTeams[norm] = { name: s.radiantName, skip: !!(s.radiantLogo && /^https?:\/\//i.test(s.radiantLogo)) };
+          const alreadyInTeamIds = !!teamNameToId[norm];
+          nameTeams[norm] = { name: s.radiantName, skip: alreadyInTeamIds || !!(s.radiantLogo && /^https?:\/\//i.test(s.radiantLogo)) };
         }
       }
       if ((!s.direTeamId || s.direTeamId <= 0) && s.direName) {
         const norm = normName(s.direName);
         if (norm && !nameTeams[norm]) {
-          nameTeams[norm] = { name: s.direName, skip: !!(s.direLogo && /^https?:\/\//i.test(s.direLogo)) };
+          const alreadyInTeamIds = !!teamNameToId[norm];
+          nameTeams[norm] = { name: s.direName, skip: alreadyInTeamIds || !!(s.direLogo && /^https?:\/\//i.test(s.direLogo)) };
         }
       }
     });
@@ -1062,19 +1074,59 @@ Page({
       return api.getTeam(team.id)
         .then((teamInfo) => {
           const logoUrl = (teamInfo && teamInfo.logo_url) || '';
-          // 再传给 enrichTeamLogo：existing 命中 → 直接返回；未命中 → 走 STRATZ 兜底
+          // 方案C：OpenDota 有 logo_url 时走 enrichTeamLogo（仅第②步 existing 命中即返回），
+          // 无 logo_url 时不降级 Liquipedia（CDN 域名不在微信白名单，无法渲染），直接返回 null。
+          if (!logoUrl) return { id: team.id, logo: null, source: '' };
           return sources.enrichTeamLogo({ id: team.id, name: team.name, logo: logoUrl });
         })
         .then((r) => ({ id: team.id, logo: r && r.logo, source: r && r.source }))
         .catch(() => ({ id: team.id, logo: null, source: '' }));
     });
-    // ★ 名称兜底任务：id=0 跳过 api.getTeam（无效 id），直接调 enrichTeamLogo。
-    //   enrichTeamLogo 内部：id=0 跳过缓存/STRATZ（均依赖 id），直接走第④源 Liquipedia 按名兜底。
-    const nameTasks = needQueryNames.map((norm) => {
-      const team = nameTeams[norm];
-      return sources.enrichTeamLogo({ id: 0, name: team.name, logo: '' })
-        .then((r) => ({ normName: norm, logo: r && r.logo, source: r && r.source }))
-        .catch(() => ({ normName: norm, logo: null, source: '' }));
+    // ★ 方案C Step B：名称兜底任务（2026-08-01 修复）
+    //   使用 api.findTeamByName（基于 /api/teams 全量列表，24h 缓存）替代已失效的 api.searchTeams，
+    //   直接获取 OpenDota team_id 和 logo_url，优先走 OpenDota CDN（cdn.opendota.com 已在微信白名单）。
+    //   不再降级 Liquipedia（CDN 域名 94.23.144.183 不在微信白名单，无法渲染）。
+    function searchThenLiquipedia(norm, team) {
+      // ★ 2026-08-01 修复：改用 api.findTeamByName（基于 /api/teams 全量列表，24h 缓存）
+      //   替代已失效的 api.searchTeams（/api/search 接口常返回空结果）。
+      //   findTeamByName 返回 { team_id, name, logo_url }，可直接使用 logo_url，
+      //   无需再调 api.getTeam。同时移除 Liquipedia 降级（CDN 域名不在微信白名单）。
+      return api.findTeamByName(team.name)
+        .then(function (found) {
+          if (found && found.team_id) {
+            // 直接使用 findTeamByName 返回的 logo_url（/api/teams 包含 logo_url 字段）
+            var logoUrl = found.logo_url || '';
+            console.warn('[searchThenLiquipedia] findTeamByName norm=' + norm + ' team_id=' + found.team_id + ' logo_url=' + (logoUrl ? logoUrl.substring(0, 60) : '空'));
+            if (logoUrl) {
+              // 有 logo_url，走 enrichTeamLogo 处理（缓存 + CDN 优化）
+              return sources.enrichTeamLogo({ id: found.team_id, name: team.name, logo: logoUrl })
+                .then(function (r) {
+                  if (r && r.logo) return { normName: norm, logo: r.logo, source: r.source };
+                  // enrichTeamLogo 返回 null（罕见），检查 logoCache 兜底
+                  var cached = logoCache.get(found.team_id);
+                  if (cached && cached.logo) return { normName: norm, logo: cached.logo, source: cached.source };
+                  return { normName: norm, logo: null, source: '' };
+                });
+            }
+            // logo_url 为空，检查 logoCache 是否有历史缓存
+            var cached = logoCache.get(found.team_id);
+            if (cached && cached.logo) {
+              console.warn('[searchThenLiquipedia] logoCache 命中 norm=' + norm + ' team_id=' + found.team_id);
+              return { normName: norm, logo: cached.logo, source: cached.source };
+            }
+            console.warn('[searchThenLiquipedia] findTeamByName 无 logo_url norm=' + norm + ' team_id=' + found.team_id);
+          } else {
+            console.warn('[searchThenLiquipedia] findTeamByName 未找到 norm=' + norm + ' team.name=' + team.name);
+          }
+          return { normName: norm, logo: null, source: '' };
+        })
+        .catch(function (err) {
+          console.warn('[searchThenLiquipedia] findTeamByName异常 norm=' + norm + ' err=' + (err && (err.message || err.errMsg || err)));
+          return { normName: norm, logo: null, source: '' };
+        });
+    }
+    const nameTasks = needQueryNames.map(function (norm) {
+      return searchThenLiquipedia(norm, nameTeams[norm]);
     });
 
     return Promise.all(tasks.concat(nameTasks)).then((results) => {

@@ -443,6 +443,41 @@ function searchTeams(name) {
     transformSearchTeams);
 }
 
+// ★ 2026-08-01 修复：OpenDota /api/search 接口不稳定（常返回空结果），
+//   改用 /api/teams 全量战队列表（24h 缓存）在本地按名匹配。
+//   返回 { team_id, name, logo_url } 或 null。
+function findTeamByName(name) {
+  if (!name) return Promise.resolve(null);
+  return cached('/teams', null, 24 * 3600).then(function (list) {
+    if (!Array.isArray(list) || !list.length) return null;
+    var q = (name || '').toLowerCase().replace(/\s+/g, '');
+    if (!q) return null;
+    var best = null;
+    var i, t, tn, tag;
+    // 第一轮：精确匹配（去除空格后完全相同）
+    for (i = 0; i < list.length; i++) {
+      t = list[i];
+      tn = (t.name || '').toLowerCase().replace(/\s+/g, '');
+      if (tn === q) return { team_id: t.team_id, name: t.name, logo_url: t.logo_url || '' };
+    }
+    // 第二轮：tag 精确匹配
+    for (i = 0; i < list.length; i++) {
+      t = list[i];
+      tag = (t.tag || '').toLowerCase().replace(/\s+/g, '');
+      if (tag === q) return { team_id: t.team_id, name: t.name, logo_url: t.logo_url || '' };
+    }
+    // 第三轮：包含匹配（较长名称包含较短名称，长度 >= 3 防误配）
+    for (i = 0; i < list.length; i++) {
+      t = list[i];
+      tn = (t.name || '').toLowerCase().replace(/\s+/g, '');
+      if (tn.length >= 3 && q.length >= 3 && (tn.indexOf(q) >= 0 || q.indexOf(tn) >= 0)) {
+        if (!best || tn.length < (best.name || '').length) best = { team_id: t.team_id, name: t.name, logo_url: t.logo_url || '' };
+      }
+    }
+    return best || null;
+  });
+}
+
 function getTeam(teamId) {
   return tryCloudOrDirect('getTeam', [teamId],
     function () { return cachedFresh('/teams/' + teamId, null, 15 * 60, config.cacheTTL.team); });
@@ -564,6 +599,7 @@ module.exports = {
   getMatch: getMatch,
   getMatchPlayers: getMatchPlayers,
   searchTeams: searchTeams,
+  findTeamByName: findTeamByName,
   getTeam: getTeam,
   getTeamPlayers: getTeamPlayers,
   getTeamMatches: getTeamMatches,
