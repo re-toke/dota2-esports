@@ -632,6 +632,14 @@ Page({
           // 用于剔除 Liquipedia 中已被 OpenDota 返回的已结束对阵
           const openDotaKeys = new Map();   // key -> 该系列首场开赛时间（D2 时间窗去重用）
           const openDotaNames = [];  // ★ v3 优化项25：存储归一化名供模糊匹配
+          // ★ v3 优化项33（2026-08-03）：OpenDota match_id 集合（P0b 硬关联去重）。
+          // Liquipedia {{Match}} 顶层的 matchid1/matchid2 与 OpenDota match_id 直接对应，
+          // 比队名归一化（受 OpenDota 队名 null → 占位"天辉/夜魇"影响而失效）可靠得多。
+          // 该对局的全部 matchid 都已被 OpenDota 收录 → Liquipedia 项剔除（OpenDota 数据更全）。
+          const openDotaMatchIds = new Set();
+          (raw || []).forEach(function (m) {
+            if (m && m.match_id) openDotaMatchIds.add(String(m.match_id));
+          });
           allSeries.forEach(function (s) {
             if (s.radiantName && s.direName) {
               const k1 = dedupeKey(s.radiantName, s.direName);
@@ -648,6 +656,14 @@ Page({
           // 将 Liquipedia 赛程转换为 series 对象
           let liqSeries = liqScheduled
             .filter(function (m) {
+              // ★ v3 优化项33（2026-08-03）：matchid 硬关联剔除（P0b，优先于队名去重）。
+              // 该对局的全部 match_id 都已被 OpenDota 收录 → OpenDota 数据更全（含局分），
+              // Liquipedia 项剔除，防 P0 Map 层判定后 RECENT 双源重复。
+              // 部分命中（如 BO3 第一局结束、后续局未收录）→ 保留（Liquipedia 仍显示 live 状态）。
+              if (m.matchIds && m.matchIds.length &&
+                  m.matchIds.every(function (id) { return openDotaMatchIds.has(String(id)); })) {
+                return false;
+              }
               // 去重：剔除 OpenDota 已返回的对阵（队名归一化后匹配）
               if (!m.team1Name || !m.team2Name) return false;
               const k = dedupeKey(m.team1Name, m.team2Name);

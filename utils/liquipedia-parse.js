@@ -587,6 +587,44 @@ function parseMatchFields(body) {
   if (!finished && (opp1.scoreAlpha || opp2.scoreAlpha)) {
     finished = true;
   }
+  // ★ v3 优化项33（2026-08-03）：Map 层结果信号判系列结束（P0）。
+  // Liquipedia 打完的比赛在 {{Map}} 嵌套模板里写 winner/length（系列赛顶层常不标
+  // finished/score，如 1win Essence II 淘汰赛）。信号：
+  //   - 任一 map finished=skip → 系列提前结束（如 BO3 2-0 横扫，第三局 skip）
+  //   - 某队 winner 局数 ≥ 阈值 → 系列结束
+  //   - 全部 map 槽都已打且无队达阈值 → 打满结束（BO2 1-1 平 / BO5 2-2 决胜后）
+  // 阈值按 map 槽数推断（页面可能不写 bestof，实测 1win 页面即缺）：1 槽→1，
+  // 2 槽→2（BO2/BO3 前两局），3 槽→2，4 槽→2，5 槽→3。
+  if (!finished) {
+    var _mapWins = { '1': 0, '2': 0 };
+    var _hasSkip = false;
+    var _played = 0;
+    var _mapCount = 0;
+    var _mapKeys = ['map1', 'map2', 'map3', 'map4', 'map5'];
+    for (var _mi = 0; _mi < _mapKeys.length; _mi++) {
+      var _mv = fields[_mapKeys[_mi]] || '';
+      if (!_mv) continue;
+      _mapCount++;
+      if (/\|finished\s*=\s*skip/i.test(_mv)) { _hasSkip = true; continue; }
+      var _wm = _mv.match(/\|winner\s*=\s*([12])/);
+      if (_wm) { _mapWins[_wm[1]]++; _played++; }
+    }
+    if (_hasSkip) {
+      finished = true;
+    } else if (_mapCount > 0) {
+      var _winTh = _mapCount <= 1 ? 1 : (_mapCount <= 2 ? 2 : Math.ceil(_mapCount / 2));
+      if (_mapWins['1'] >= _winTh || _mapWins['2'] >= _winTh) {
+        finished = true;
+      } else if (_mapCount >= 2 && _played === _mapCount && _played >= 2) {
+        finished = true;   // 打满：BO2 1-1 平 / BO5 2-2
+      }
+    }
+  }
+  // ★ v3 优化项33（2026-08-03）：提取 matchid1/matchid2（P0b 关联 OpenDota 用）。
+  // Liquipedia {{Match}} 顶层字段，OpenDota 比赛 id，详情页据此剔除已收录对局（防重复）。
+  var matchIds = [];
+  if (fields.matchid1) { var _m1 = parseInt(fields.matchid1, 10); if (_m1) matchIds.push(_m1); }
+  if (fields.matchid2) { var _m2 = parseInt(fields.matchid2, 10); if (_m2) matchIds.push(_m2); }
   // walkover（弃权）：0=无弃权, 1=team1弃权, 2=team2弃权
   var walkover = fields.walkover ? parseInt(fields.walkover, 10) : 0;
   // phase 判定（★ v3 优化项④：增加 24h 上界守卫，与 sources.js groupSeries 保持一致）
@@ -610,7 +648,8 @@ function parseMatchFields(body) {
     startTime: startTime,
     boType: boType,
     finished: finished,
-    phase: phase
+    phase: phase,
+    matchIds: matchIds    // ★ v3 优化项33（2026-08-03）：OpenDota match_id 关联（P0b 去重用）
   };
 }
 
@@ -689,7 +728,13 @@ var TZ_OFFSET = {
 function parseLiquipediaDate(dateStr) {
   if (!dateStr) return 0;
   // 去掉 {{Abbr/XXX}} 等模板但保留时区名文本
-  var cleaned = dateStr.replace(/\{\{[^}]*\}\}/g, '').trim();
+  // 2026-08-03 修复（C7 时区）：原 `\{\{[^}]*\}\}` 把 {{Abbr/CEST}} 整个连时区缩写一起
+  // 删除，导致 tzMatch 提取不到 → offset=0 → 如 14:00 CEST 被当成 14:00 UTC（偏晚 2h）。
+  // 现先将 {{Abbr/CEST}} 替换为 'CEST'（保留时区名），再剥除其余模板。
+  var cleaned = dateStr
+    .replace(/\{\{Abbr\/([^}|]+)\}\}/gi, '$1')
+    .replace(/\{\{[^}]*\}\}/g, '')
+    .trim();
   // 提取时区缩写（在时间末尾）
   var tzMatch = cleaned.match(/\s+([A-Z]{3,5})\s*$/);
   var tzAbbr = tzMatch ? tzMatch[1] : '';
