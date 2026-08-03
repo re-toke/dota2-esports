@@ -594,8 +594,8 @@ Page({
           }
           return s;
         });
-        console.log('[league-detail] 聚合后系列赛数:', this.allSeries.length,
-          'BO分布:', this.allSeries.map(function(s){return s.boType;}).join(','));
+        console.log('[league-detail] 聚合后系列赛数:', allSeries.length,
+          'BO分布:', allSeries.map(function(s){return s.boType;}).join(','));
 
         // ★ 合并 Liquipedia 赛程数据（2026-07-28 新增）
         // OpenDota 只返回已结束比赛，进行中/未开赛的对阵需要从 Liquipedia {{Match}} 模板补充。
@@ -632,7 +632,7 @@ Page({
           // 用于剔除 Liquipedia 中已被 OpenDota 返回的已结束对阵
           const openDotaKeys = new Map();   // key -> 该系列首场开赛时间（D2 时间窗去重用）
           const openDotaNames = [];  // ★ v3 优化项25：存储归一化名供模糊匹配
-          this.allSeries.forEach(function (s) {
+          allSeries.forEach(function (s) {
             if (s.radiantName && s.direName) {
               const k1 = dedupeKey(s.radiantName, s.direName);
               if (k1) {
@@ -796,7 +796,7 @@ Page({
         // ★ v3 优化项21：UPCOMING dateGroup 字段 + 按日期分组排序
         // ★ v3 优化项28：懒计算 — 只对当前页可见 series 计算新字段（在 setData 前计算）
         const liveList = [], upcomingList = [], recentList = [];
-        this.allSeries.forEach(function (s) {
+        allSeries.forEach(function (s) {
           if (s.phase === 'live') liveList.push(s);
           else if (s.phase === 'upcoming') upcomingList.push(s);
           else recentList.push(s);
@@ -1003,6 +1003,10 @@ Page({
         patch.scheduleUpdatedLabel = util.formatAgo(patch.scheduleUpdatedAt);
         self.setData(patch);
         self.allSeries = all;   // 供后续 enrichTeamNames/Logos 与下一次 diff 使用
+        // refresh 重建的 series 来自未 enrich 的 _rawMatches，队名/logo 可能回退为占位
+        //（'天辉'/'夜魇'/空 logo），且 diff 命中整项替换会覆盖首次 enrich 的结果。
+        // 重新注入（幂等、getTeamNames/logoCache 有缓存，仅补占位）。
+        try { self.enrichTeamNames(); self.enrichTeamLogos(); } catch (e) { /* 隔离 */ }
         return { live: built.liveList.length, upcoming: built.upcomingList.length };
       })
       .catch(function () { return { live: 0, upcoming: 0 }; });
