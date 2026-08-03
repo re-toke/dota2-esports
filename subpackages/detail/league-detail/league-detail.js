@@ -649,7 +649,8 @@ Page({
               }
               openDotaNames.push({
                 n1: normalizeTeamNameForDedup(s.radiantName),
-                n2: normalizeTeamNameForDedup(s.direName)
+                n2: normalizeTeamNameForDedup(s.direName),
+                startTime: s.games && s.games[0] ? (s.games[0].start_time || 0) : 0   // D2 模糊匹配时间窗基准
               });
             }
           });
@@ -682,7 +683,11 @@ Page({
               for (var i = 0; i < openDotaNames.length; i++) {
                 if ((fuzzyMatchName(ln1, openDotaNames[i].n1) && fuzzyMatchName(ln2, openDotaNames[i].n2)) ||
                     (fuzzyMatchName(ln1, openDotaNames[i].n2) && fuzzyMatchName(ln2, openDotaNames[i].n1))) {
-                  return false;
+                  // D2 时间窗（与精确匹配一致）：队名模糊匹配 + 开赛时间差 < 2h 才算同一场；
+                  // 时间差大 → 同一两队的不同场次（如小组赛双循环），保留
+                  var _tf = openDotaNames[i].startTime || 0;
+                  if (_tf && m.startTime && Math.abs(m.startTime - _tf) < 2 * 3600) return false;
+                  return true;
                 }
               }
               return true;

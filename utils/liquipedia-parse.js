@@ -756,6 +756,12 @@ function parseLiquipediaDate(dateStr) {
   cleaned = cleaned.replace(/\s+[A-Z]{3,5}\s*$/, '').trim();
   // 查时区偏移表（未命中默认 0，退化为原行为）
   var tzOffset = TZ_OFFSET[tzAbbr] != null ? TZ_OFFSET[tzAbbr] : 0;
+  // P3（2026-08-03）：时区缩写未命中表 → 按 UTC 解析可能偏时（CEST 偏 2h / ALMT 偏 6h 两次踩坑
+  // 均为静默失败）。警告便于及时补表——数据异常属非预期问题，用 warn（豁免规则：见文件头说明）。
+  // eslint-disable-next-line no-console-warn-in-production
+  if (tzAbbr && TZ_OFFSET[tzAbbr] == null) {
+    console.warn('[liquipedia-parse] 未知时区缩写 "' + tzAbbr + '"（' + dateStr + '），按 UTC 解析，可能偏时');
+  }
   // 尝试解析 "April 22, 2024 - 13:00" 格式
   var m1 = cleaned.match(/(\w+)\s+(\d+),\s*(\d{4})\s*[-–]?\s*(\d{1,2}):(\d{2})/);
   if (m1) {

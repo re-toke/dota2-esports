@@ -127,7 +127,25 @@ function liquipediaDateToUnix(text) {
       return Math.floor(Date.UTC(y, mo - 1, d) / 1000);
     }
   }
-  // 回退：原生 Date.parse（可解析 'August 15, 2025' 等英文形式）
+  // 回退：英文日期 'August 15, 2025'（2026-08-03 加固：原 Date.parse 按本地时区
+  // 解析无时间字符串，+8 时区会把日期偏移到前一天 16:00 UTC → 赛期 startDate 偏一天。
+  // 改为手工解析 + Date.UTC 固定，消除本地时区依赖）
+  const em = s.match(/^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})/);
+  if (em) {
+    const MONTHS2 = {
+      'january': 0, 'february': 1, 'march': 2, 'april': 3, 'may': 4, 'june': 5,
+      'july': 6, 'august': 7, 'september': 8, 'october': 9, 'november': 10, 'december': 11,
+      'jan': 0, 'feb': 1, 'mar': 2, 'apr': 3, 'jun': 5, 'jul': 6,
+      'aug': 7, 'sep': 8, 'oct': 9, 'nov': 10, 'dec': 11
+    };
+    const mIdx = MONTHS2[em[1].toLowerCase()];
+    const d = Number(em[2]);
+    const y = Number(em[3]);
+    if (mIdx != null && d >= 1 && d <= 31 && y >= 2000) {
+      return Math.floor(Date.UTC(y, mIdx, d) / 1000);
+    }
+  }
+  // 最后兜底：原生 Date.parse（含时分秒的复杂格式）
   const t = Date.parse(s);
   return isFinite(t) ? Math.floor(t / 1000) : null;
 }
