@@ -20,6 +20,8 @@
     <view class="source-section-head">
       <text class="source-section-title">数据溯源</text>
       <text wx:if="{{updatedLabel}}" class="fresh-label">{{updatedLabel}}</text>
+      <!-- D1 赛程更新时间（2026-08-03）：显示 Liquipedia 赛程最后刷新时刻，让用户感知数据新旧 -->
+      <text wx:if="{{scheduleUpdatedLabel}}" class="fresh-label schedule-fresh-label">{{scheduleUpdatedLabel}}</text>
     </view>
     <view class="source-section-body">
       <view wx:if="{{quality}}" class="quality-pill quality-{{quality.level}}">

@@ -134,7 +134,12 @@ module.exports = {
     base: 'https://liquipedia.net/dota2/api.php',
     userAgent: 'DOTA2-Esports-Hub/1.0 (WeChat Mini Program; contact: dev@local)',
     rateLimitMs: 2200,   // 官方要求 ≥ 2 秒，留 200ms 余量
-    cacheTTL: 6 * 3600
+    cacheTTL: 6 * 3600,
+    // 赛程缓存 TTL（对阵 LIVE/UPCOMING/RECENT 用，2026-08-03 优化）：
+    // 原 30min 双层缓存（客户端 + 云函数）叠加最坏 60min 旧数据；
+    // 缩至 5min 提升及时性，配合详情页 30-60s 定时刷新（force）达到近实时。
+    // 注意：云函数 TTL.liquipediaSchedule 必须与此同步缩短，否则上层白做。
+    cacheTtlSchedule: 5 * 60
   },
 
   // 远程 curation 配置（已启用，本地兜底 + 可选热更新）：

@@ -554,7 +554,11 @@ function getPlayerProfile(name) {
 //   被 Liquipedia 反爬拦截 → 返回空 → UI 无进行中/未开赛对阵。
 //   修复：与 getLeagueMetadata 一致，优先走云代理路径（云函数可设 UA + gzip），
 //   云代理不可用/失败时回退本地 wx.request（兜底，一般走不到）。
-function getScheduledMatches(name) {
+// 2026-08-03 优化（A3 force 链路）：新增 opts.force 支持。
+//   - force=true：跳过客户端缓存，并透传给云代理（云函数 force 也有 30s 最小间隔节流），
+//     用于详情页对阵定时刷新（30-60s 一次），保证 LIVE/UPCOMING 近实时。
+//   - 对外调用形态不变：getScheduledMatches(name) / getScheduledMatches(name, { force: true })
+function getScheduledMatches(name, opts) {
   if (!ENABLED) return Promise.resolve([]);
   if (!name) return Promise.resolve([]);
 
@@ -565,11 +569,12 @@ function getScheduledMatches(name) {
 
   var slug = liquipediaSlugFor(name);
   var cacheKey = 'liquipedia_schedule_' + consensus.normName(slug);
+  var force = !!(opts && opts.force);
   var cached = cache.get(cacheKey, CACHE_TTL_SCHEDULE);
-  if (cached) return Promise.resolve(cached);
+  if (cached && !force) return Promise.resolve(cached);
 
   if (typeof wx !== 'undefined' && wx.cloud && cloudProxy.isAvailable()) {
-    return cloudProxy.liquipediaScheduledProxy(name).then(function (res) {
+    return cloudProxy.liquipediaScheduledProxy(name, force).then(function (res) {
       var scheduled = res || [];
       if (scheduled.length) {
         cache.set(cacheKey, scheduled, CACHE_TTL_SCHEDULE);

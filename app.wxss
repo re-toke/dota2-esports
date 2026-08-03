@@ -413,6 +413,15 @@ page {
   content: '⟳';
   font-size: 22rpx;
 }
+/* D1 赛程更新时间（2026-08-03）：与 OpenDota 数据新鲜度标签并排时留间距 + 更淡色区分 */
+.schedule-fresh-label {
+  margin-left: 16rpx;
+  color: #9ca3af;
+}
+.schedule-fresh-label::before {
+  content: '🕒';
+  font-size: 22rpx;
+}
 
 /* ===================================================================
    共享组件 4：Match VS Card（B 风格 · 左右对阵紧凑式）

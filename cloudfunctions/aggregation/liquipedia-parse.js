@@ -580,6 +580,13 @@ function parseMatchFields(body) {
   var boType = 'BO' + (isNaN(bo) || bo < 1 ? 1 : bo);
   // finished
   var finished = fields.finished === 'true' || fields.finished === '1';
+  // ★ v3 优化项32（2026-08-03）：字母 score 辅助 finished 判定。
+  // TeamOpponent|score=w/l/ff 只在比赛结束后才写入（比分标记），
+  // 而数字 score（当前小局分）在 live 比赛中也存在 —— 因此仅字母值判结束。
+  // 场景：Liquipedia 打完比赛但未标 finished=true 时，靠此提前进入 recent。
+  if (!finished && (opp1.scoreAlpha || opp2.scoreAlpha)) {
+    finished = true;
+  }
   // walkover（弃权）：0=无弃权, 1=team1弃权, 2=team2弃权
   var walkover = fields.walkover ? parseInt(fields.walkover, 10) : 0;
   // phase 判定（★ v3 优化项④：增加 24h 上界守卫，与 sources.js groupSeries 保持一致）
@@ -612,17 +619,31 @@ function parseMatchFields(body) {
 // 输入 '{{TeamOpponent|team falcons|score=2}}' → { name: 'team falcons', score: 2 }
 // 输入 '{{TeamOpponent|[[Team Spirit|TS]]|score=1}}' → { name: 'TS', score: 1 }
 // 输入 '{{TeamOpponent}}' → { name: '', score: 0 }
+// ★ v3 优化项32（2026-08-03）：score 支持字母值（w/l/ff/forfeit），
+//   用于 parseMatchFields 判 finished。scoreAlpha 非空 = 该场已结束（比分标记）。
+//   数字值（score=2）在 live 比赛中是当前小局分，不代表结束 —— 因此
+//   scoreAlpha 与 score（数字）严格分离，避免把 live 误判成 recent。
+// 输入 '{{TeamOpponent|team1|score=w}}' → { name: 'team1', score: 0, scoreAlpha: 'w' }
 function extractTeamOpponent(raw) {
-  if (!raw) return { name: '', score: 0 };
+  if (!raw) return { name: '', score: 0, scoreAlpha: '' };
   var m = raw.match(/\{\{TeamOpponent\s*\|([^}]*)\}\}/i);
-  if (!m) return { name: '', score: 0 };
+  if (!m) return { name: '', score: 0, scoreAlpha: '' };
   var inner = m[1].trim();
-  // 提取 score=N 参数
-  var scoreMatch = inner.match(/\bscore\s*=\s*(\d+)/i);
-  var score = scoreMatch ? parseInt(scoreMatch[1], 10) : 0;
+  // 提取 score=N 参数（字母或数字）
+  var scoreMatch = inner.match(/\bscore\s*=\s*([a-zA-Z]+\d*|\d+)/i);
+  var score = 0;
+  var scoreAlpha = '';
+  if (scoreMatch) {
+    var sv = scoreMatch[1].toLowerCase();
+    if (/^\d+$/.test(sv)) {
+      score = parseInt(sv, 10);
+    } else {
+      scoreAlpha = sv;
+    }
+  }
   // 提取队名（复用 extractTeamOpponentName 逻辑）
   var name = extractTeamOpponentName(raw);
-  return { name: name, score: score };
+  return { name: name, score: score, scoreAlpha: scoreAlpha };
 }
 
 // 从 {{TeamOpponent|队名}} 嵌套模板中提取队名

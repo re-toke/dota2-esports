@@ -20,13 +20,20 @@ function isAvailable() {
 }
 
 // 通用云函数调用：返回 Promise<data>；失败（含熔断）reject，由调用方决定回退。
-function call(action, params) {
+// 2026-08-03 优化（A3 force 链路）：call 增加可选 extra 参数，
+// 透传云函数顶层字段（如 { force: true }，云函数入口读 e.force）。
+// 现有调用不传 extra，行为完全不变（向后兼容）。
+function call(action, params, extra) {
   if (!isAvailable()) {
     return Promise.reject(new Error('cloud proxy unavailable'));
   }
+  var payload = { action: action, params: params || {} };
+  if (extra && typeof extra === 'object') {
+    Object.keys(extra).forEach(function (k) { payload[k] = extra[k]; });
+  }
   return wx.cloud.callFunction({
     name: 'aggregation',
-    data: { action: action, params: params || {} }
+    data: payload
   }).then((res) => {
     const r = res && res.result;
     if (r && !r.error && r.data !== undefined) {
@@ -91,8 +98,9 @@ proxy.liquipediaProxy = function (pageName) {
 // Liquipedia 赛程数据云代理：调云函数 action=liquipediaScheduledMatches，
 // 云端抓取 wikitext + parseScheduledMatches 解析，返回 [{ team1Name, team2Name, startTime, boType, finished, phase }]。
 // 与 liquipediaProxy 同样规避 wx.request 禁设 User-Agent 的限制。
-proxy.liquipediaScheduledProxy = function (pageName) {
-  return call('liquipediaScheduledMatches', { pageName: pageName });
+proxy.liquipediaScheduledProxy = function (pageName, force) {
+  // force=true → 透传云函数顶层 force（跳过云函数缓存现抓，云函数内部有 30s 最小间隔节流）
+  return call('liquipediaScheduledMatches', { pageName: pageName }, force ? { force: true } : null);
 };
 
 // §8.3 Liquipedia 战队 Logo 云代理（2026-07-29）：OpenDota 无 logo 的兜底源。

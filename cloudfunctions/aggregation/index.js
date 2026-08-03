@@ -83,7 +83,9 @@ const TTL = {
   // 元数据（奖金池/地点/赛制/参赛队等）变化极慢，24h 长缓存减少重复请求
   liquipediaMeta: 24 * 3600 * 1000,
   // 赛程（未开赛/进行中的对阵）变化敏感，30min 短缓存保证时效性
-  liquipediaSchedule: 30 * 60 * 1000,
+  // 2026-08-03 优化：缩至 5min（与客户端 config.liquipedia.cacheTtlSchedule 同步），
+  // 配合客户端 30-60s force 定时刷新达到近实时；否则双层缓存叠加最坏 60min 旧数据。
+  liquipediaSchedule: 5 * 60 * 1000,
   // §8.3 战队 Logo（2026-07-29）：战队 logo 几乎不变，30 天长缓存减少 Liquipedia 请求
   liquipediaTeamLogo: 30 * 24 * 3600 * 1000,
   // §9 Liquipedia 主动枚举（2026-07-30）：赛事列表变化慢，7 天长缓存 + 每月主动刷新一次
@@ -524,7 +526,12 @@ async function liquipediaLeagueMeta(params, force) {
 // ===== Liquipedia 赛程数据（未开赛/进行中的对阵）=====
 // 与 liquipediaLeagueMeta 同样的「云函数抓取 wikitext + 纯解析」模式，
 // 但用 parseScheduledMatches 解析 {{Match}} 模板，返回赛程数组而非元数据。
-// 缓存 TTL 30 分钟（与 match data 一致，比元数据更短，赛程变更敏感）。
+// 缓存 TTL 5 分钟（2026-08-03 由 30min 缩短，配合客户端 force 定时刷新近实时）。
+// force 节流（2026-08-03）：客户端详情页 30-60s force 刷新，若多个用户同时 force 同一赛事
+// 会导致高频现抓 Liquipedia。加云函数实例内存最小间隔 30s：force 且 30s 内已现抓过 →
+// 直接返回最近缓存（尽力而为，多实例下节流效果减弱但客户端定时器已是主节流）。
+const FORCE_MIN_GAP_MS = 30 * 1000;
+const _lastForceFetch = {};   // slug -> 最近一次 force 现抓时间戳（实例内存）
 async function liquipediaScheduledMatches(params, force) {
   const pageName = (params && (params.pageName || params.name)) || null;
   if (!pageName) return { data: null, error: makeError(ERROR_CODES.BAD_REQUEST, 'pageName required') };
@@ -533,6 +540,14 @@ async function liquipediaScheduledMatches(params, force) {
   if (!force) {
     const cached = await getCache(cacheKey);
     if (cached) return { data: cached, source: 'cache' };
+  } else {
+    // force 最小间隔：30s 内已现抓过 → 返回最近缓存（若有）
+    const last = _lastForceFetch[slug] || 0;
+    if (Date.now() - last < FORCE_MIN_GAP_MS) {
+      const cached = await getCache(cacheKey);
+      if (cached) return { data: cached, source: 'cache-recent' };
+    }
+    _lastForceFetch[slug] = Date.now();
   }
   const wikitext = await fetchLiquipediaWikitext(slug);
   if (!wikitext) return { data: null, source: 'liquipedia' };
