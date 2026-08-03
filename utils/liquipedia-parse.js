@@ -483,12 +483,16 @@ function parseScheduledMatches(wikitext, nowSec) {
       currentSubsection = h3[1].trim();
       continue;
     }
-    // 检测 {{Match}} 模板（跳过 {{Matchlist}}）
-    if (line.indexOf('{{Match') !== 0) continue;
-    // 使用 findTemplateEnd 从行首开始查找完整模板
-    var startPos = line.indexOf('{{Match');
-    // 确保是 {{Match| 而非 {{Matchlist|
-    if (!/\{\{Match(?![a-zA-Z])\s*\|/.test(line)) continue;
+    // 检测 {{Match}} 模板（跳过 {{Matchlist}} 定义行；
+    // ★ 2026-08-03 修复：兼容 {{Matchlist}} 嵌套写法 "|M#={{Match"（Match 不在行首，
+    //   如 1win Essence II 页面结构），此前 line.indexOf('{{Match') !== 0 会把
+    //   所有 Matchlist 嵌套的比赛整场跳过 → 详情页对阵 LIVE/UPCOMING 恒为 0。
+    var mPos = line.indexOf('{{Match');
+    if (mPos < 0) continue;
+    if (/^\{\{Matchlist(?![a-zA-Z])/.test(line)) continue;
+    var startPos = mPos;
+    // （空占位 {{Match}} 无参数 → parseMatchFields 返回 null 自动过滤；
+    //  跨行模板 "{{Match\n|opponent1=..." 由下方拼接逻辑闭合后整体解析）
     // 从行中提取模板（处理同行模板和跨行模板）
     var fullLine = line;
     // 如果模板未在当前行闭合，拼接后续行
@@ -506,6 +510,11 @@ function parseScheduledMatches(wikitext, nowSec) {
     while (templateEnd < 0 && li + 1 < lines.length) {
       li++;
       fullLine += '\n' + lines[li];
+      // ★ 2026-08-03 修复：每轮重扫前重置 braceDepth（此前跨轮累计，
+      //   含 map1/map2/map3 深层嵌套的模板（如 1win Essence II 淘汰赛 R#M#）
+      //   累计值永不归零 → templateEnd 永远 -1 → 整场丢弃 → 对阵 UPCOMING 恒为 0；
+      //   短模板则"带病成功"（吞掉后续行后才偶然闭合，body 混入多余行）。
+      braceDepth = 0;
       for (var ci2 = 0; ci2 < fullLine.length - 1; ci2++) {
         if (fullLine[ci2] === '{' && fullLine[ci2 + 1] === '{') { braceDepth++; ci2++; }
         else if (fullLine[ci2] === '}' && fullLine[ci2 + 1] === '}') {
