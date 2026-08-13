@@ -3,12 +3,16 @@ const util = require('../../../utils/util.js');
 const sources = require('../../../utils/sources.js');
 const follow = require('../../../utils/follow.js');
 const subscribe = require('../../../utils/subscribe.js');
+// ★ 2026-08-07（审核 R2）：账号登录态（订阅授权手势红线——缓存命中才同步弹授权）
+const auth = require('../../../utils/auth.js');
 const config = require('../../../utils/config.js');
 const liveSources = require('../../../utils/liveSources.js');
 const remoteCuration = require('../../../utils/remoteCuration.js');
 const liquipedia = require('../../../utils/liquipedia.js');
 const heroes = require('../../../utils/heroes.js');
 const logoCache = require('../../../utils/logoCache.js'); // Phase 1-⑦：persistNow onUnload
+// ★ 2026-08-11 长期架构改进落地：数据源健康检查（数据为空时区分「数据源暂不可用」与「确实无数据」）
+const dataHealth = require('../../../utils/dataHealth.js');
 // 2026-07-30 修复赛期截断：详情页回退读取 upcoming-local.json 的日期窗口，
 // 覆盖不在 curation 中且无 OpenDota 比赛的赛事（如 1win Essence II，leagueId 为负数占位）。
 // ★ 通过主包 sources 模块间接获取 upcoming-local 快照，避免分包直接 require JSON 的兼容性问题。
@@ -26,7 +30,12 @@ const CONF_TEXT = { low: '待核实', medium: '较可信', high: '可信' };
 
 // TBD / 待定 队名识别（模块级，供多个方法共享，避免跨方法作用域 no-undef）
 const TBD_RE = /^(tbd|待定|待公布|unknown|tba|to\s+be\s+(determined|announced))$/i;
-function isTBD(name) { return TBD_RE.test(String(name || '').trim()); }
+// ★ 2026-08-05（v1.1，审核 R1）：空字符串（LP 未确认方占位 {{TeamOpponent|}} 归一为 'TBD' 前/后的兜底）也视为 TBD
+function isTBD(name) {
+  var s = String(name || '').trim();
+  if (!s) return true;
+  return TBD_RE.test(s);
+}
 
 // B4 定时刷新（2026-08-03）：series 指纹 —— 稳定 key + 关键状态字段。
 // refreshSchedule 用它做逐项 diff，仅路径 setData 变化的项，保留用户翻页/折叠态。
@@ -120,10 +129,20 @@ function buildCurationFallback(cur) {
 // 合并已有网络元数据与 curation 兜底，确保返回完整骨架。
 // 2026-07-27：传入 leagueId + game 上下文，让 curation 引擎走精确 pin + 跨游戏隔离，
 // 防止 CS2 同名联赛（如「ESL Pro League S24」）的元数据污染 DOTA2 详情页。
+// 2026-08-11 方案 B/L2 修复：participants 字段特殊处理（数组优先于非数组）。
+//   背景：Object.assign({}, fb, meta) 让 meta（Liquipedia 返回）覆盖 fb（curation 兜底）。
+//   一旦 meta.participants 是非数组（数字或空数组），会覆盖 fb.participants 数组，
+//   导致 curation 人工策展的参赛队伍列表丢失，详情页退回「待定队伍 1..N」占位。
 function mergeMetadataWithFallback(meta, name, leagueId) {
   const cur = remoteCuration.curatedEventFor(name, { leagueId: leagueId, game: 'dota2' });
   const fb = cur ? buildCurationFallback(cur) : buildMetadataSkeleton();
-  return Object.assign({}, fb, meta || {});
+  const merged = Object.assign({}, fb, meta || {});
+  // L2 修复：fb.participants 是数组（高可信度人工策展）+ merged.participants 不是数组（被 meta 数字/空覆盖）
+  //   → 恢复 fb.participants。两个都是数组时仍让 meta 覆盖（Liquipedia 数组可能更实时）。
+  if (Array.isArray(fb && fb.participants) && !Array.isArray(merged.participants)) {
+    merged.participants = fb.participants;
+  }
+  return merged;
 }
 
 Page({
@@ -135,6 +154,8 @@ Page({
     totalSeries: 0,
     loading: true,
     error: '',
+    // ★ 2026-08-11：数据源健康提示（Liquipedia/OpenDota 链路异常时显示，非「暂无数据」）
+    sourceDownHint: '',
     page: 0,
     pageSize: config.pageSize,
     hasMore: false,
@@ -186,12 +207,21 @@ Page({
       return;
     }
     const lid = String(effectiveId);
+    // ★ 2026-08-11 方案 A+R1 修复：兼容查 legacyFakeId。
+    //   场景：用户在方案 A 实施前用 fakeId（如 -1653808）关注过 TI 2026，重定向到真实 id（19719）后
+    //   查 isFollowed('leagues', '19719') 返回 false，导致老用户关注状态丢失。
+    //   兼容查法：同时查真实 id 和 curation 提供的 legacyFakeId，任一命中都视为已关注。
+    //   注意：此处的 cur 是 L186 已查到的 curation 条目（含 legacyFakeId 字段），无需重新查询。
+    const legacyFake = (cur && cur.legacyFakeId != null) ? cur.legacyFakeId : null;
+    const followedNow = follow.isFollowed('leagues', lid) ||
+      (legacyFake != null && follow.isFollowed('leagues', String(legacyFake)));
     // F1 修复：合并为单次 setData（减少 1 次 Virtual DOM diff，约省 5ms）
     this.setData({
       leagueId: lid,
       name: name,
       displayName: name,
-      followed: follow.isFollowed('leagues', lid),
+      followed: followedNow,
+      _legacyFakeId: legacyFake,  // 缓存供 toggleFollow 使用
       liveSources: liveSources.buildSources(name)
     });
     wx.setNavigationBarTitle({ title: name || '赛事详情' });
@@ -378,13 +408,36 @@ Page({
       liquipedia.getScheduledMatches(this.data.name)
     ];
     return Promise.all(tasks)
-      .then(([list, scheduledMatches]) => {
+      .then(([list, scheduled]) => {
         const raw = list || [];
-        const liqScheduled = scheduledMatches || [];
+        // ★ 2026-08-04（v3.1，R1/R2）：串行预取 team_id→名（explorer teams 表，6h 缓存）——
+        //   吸收方向解析的可靠源（curation 覆盖不全 + OpenDota 比赛端点队名恒空）。
+        //   不能与 raw 并行（team_id 集合来自 raw）；失败 catch 降级不阻塞 load（R2）。
+        const _idSet = new Set();
+        (raw || []).forEach(function (m) {
+          if (m && m.radiant_team_id && m.radiant_team_id > 0) _idSet.add(Number(m.radiant_team_id));
+          if (m && m.dire_team_id && m.dire_team_id > 0) _idSet.add(Number(m.dire_team_id));
+        });
+        return api.getTeamNames(Array.from(_idSet))
+          .catch(function () { return {}; })   // explorer 失败 → map 空 → resolver 回退 curation（现状行为）
+          .then((nameMap) => {
+            this._teamIdNameMap = nameMap || {};
+            return [raw, scheduled];
+          });
+      })
+      .then(([list, scheduled]) => {
+        const raw = list || [];
+        // ★ 2026-08-04：getScheduledMatches 统一返回 { matches, boFormat }（BO 判定引擎 S2 信号）。
+        //   兼容旧形状（数组）归一化，保证旧云函数/旧缓存下不崩。
+        const scheduledObj = (scheduled && !Array.isArray(scheduled)) ? scheduled : { matches: scheduled || [], boFormat: null };
+        const liqScheduled = scheduledObj.matches || [];
+        const liqBoFormat = scheduledObj.boFormat || null;
         console.log('[league-detail] 原始比赛数:', raw.length, 'Liquipedia 赛程数:', liqScheduled.length,
           raw[0] ? '首场字段:' + Object.keys(raw[0]).join(',') : '无数据');
         this.allMatches = raw;  // 保留原始（供系列赛聚合用）
         this._rawMatches = raw;  // B4 定时刷新（2026-08-03）：供 refreshSchedule 复用 OpenDota 侧数据
+        // ★ 2026-08-04（v1.1，R4）：load 成功拉到 OpenDota → 记重拉时间戳（首轮轮询不立即触发低频重拉）
+        this._lastOdRefresh = Math.floor(Date.now() / 1000);
         // ★ v3 优化项26：cancelled 赛事赛程过滤 — 取消的赛事不显示赛程
         const _cur = remoteCuration.curatedEventFor(this.data.name, { leagueId: Number(this.data.leagueId), game: 'dota2' });
         if (_cur && _cur.status === '已取消') {
@@ -403,7 +456,7 @@ Page({
         // 让每场 game 计算 aWin（A 队是否赢该场），WXML 据此着色。
         // 此前 fmt 只赋值 radiantWin（=radiant_win 原始值），WXML 用 g.radiantWin 判定颜色，
         // 但 radiant_win 只代表「天辉是否赢」，不等于「A 队（首场 radiant 方）是否赢」。
-        const built = this.buildSeriesFromSources(raw, liqScheduled);
+        const built = this.buildSeriesFromSources(raw, liqScheduled, liqBoFormat);
         this.allSeries = built.allSeries;
         const liveList = built.liveList, upcomingList = built.upcomingList, recentList = built.recentList;
         const upcomingGroups = built.upcomingGroups, farFutureCount = built.farFutureCount;
@@ -542,6 +595,22 @@ Page({
         // 步骤2：明细（series 数组体积大，独立 setData 避免阻塞骨架渲染）
         this.setData({ series: slice });
         this.refreshMetadataDerived();
+        // ★ 2026-08-11 长期架构改进落地：数据源健康检查。
+        //   对阵为空时异步探测 Liquipedia / OpenDota 可达性——若链路异常，将「暂无数据」
+        //   空态替换为「数据源暂不可用」显式提示（避免静默降级让用户误以为赛事真没数据）。
+        if (!built.allSeries.length && !this._healthCheckedOnce) {
+          this._healthCheckedOnce = true;
+          dataHealth.check().then((status) => {
+            const st = status && status.sources;
+            if (!st) return;  // unknown：不打扰用户
+            const down = [];
+            if (st.liquipedia && st.liquipedia.status === 'down') down.push('Liquipedia');
+            if (st.opendota && st.opendota.status === 'down') down.push('OpenDota');
+            if (down.length) {
+              this.setData({ sourceDownHint: down.join('/') + ' 数据源暂不可用，请稍后重试' });
+            }
+          }).catch(function () { /* 健康探测失败静默 */ });
+        }
         // F2 修复：enrichTeamNames 与 enrichTeamLogos 并行执行，省去串行等待（慢网平均省 300-800ms）
         Promise.all([this.enrichTeamNames(), this.enrichTeamLogos()]);
         // B4 定时刷新（2026-08-03）：load 完成（骨架+明细已渲染）后启动轮询。
@@ -560,7 +629,8 @@ Page({
   // ★ 2026-08-03 抽取：series 构建全链路（OpenDota groupSeries → Liquipedia 合并去重 →
   // 时间窗口过滤 → 分段排序 → 字段计算 → decorate）。
   // load() 与 refreshSchedule()（B4 定时刷新）共用，防止双份逻辑漂移。
-  buildSeriesFromSources(raw, liqScheduled) {
+  buildSeriesFromSources(raw, liqScheduled, liqBoFormat) {
+    // ★ 2026-08-04：liqBoFormat = 云函数 parseBoFormat 的 Format 段赛制映射（S2 信号），可为 null
         // BO3/BO5 中双方会换边，第 2/3 场 radiant 可能是首场的 dire（B 队），
         // 此时 radiant_win=true 反而代表 B 队赢，小圆点会显示错误颜色。
         // 此外 radiant_win=null（未结束）会走 else 分支显示红色，未结束比赛不应着色。
@@ -640,29 +710,54 @@ Page({
           (raw || []).forEach(function (m) {
             if (m && m.match_id) openDotaMatchIds.add(String(m.match_id));
           });
+          // ★ 2026-08-05（RECENT 同对局双卡修复，R1）：解名兜底【上移】至 openDotaKeys 构造前（原定义在吸收块，
+          //   时序上够不到此处；同一作用域重复 const 声明会 SyntaxError，故上移单一定义供两处共用）。
+          //   OpenDota 比赛端点队名恒 null → groupSeries 兜底 '天辉'/'夜魇' → 队名去重键恒失效；
+          //   用 explorer 预取 _teamIdNameMap 解真实名 → 精确去重路径恢复（R5：去后缀 + k/kRev 顺序无关）。
+          const _curTeamTable = (function () {
+            try { const _c = require('../../utils/curation.js'); return (_c && _c.CURATED_TEAMS) || null; }
+            catch (e) { return null; }
+          })();
+          const _rawIdMap = {};
+          (raw || []).forEach(function (m) {
+            if (m && m.radiant_team_id && m.radiant_team_name) _rawIdMap[m.radiant_team_id] = m.radiant_team_name;
+            if (m && m.dire_team_id && m.dire_team_name) _rawIdMap[m.dire_team_id] = m.dire_team_name;
+          });
+          // ⚠️ 必须为箭头函数（捕获外层 this = Page）；allSeries.forEach 内只调用它，不直接碰 this
+          const _resolveName = (id) => sources.resolveTeamIdName(id, this._teamIdNameMap, _curTeamTable, _rawIdMap);
           allSeries.forEach(function (s) {
-            if (s.radiantName && s.direName) {
-              const k1 = dedupeKey(s.radiantName, s.direName);
+            const _g0 = s.games && s.games[0];
+            const _rn = (s.radiantName === '天辉' && _g0) ? (_resolveName(_g0.radiantTeamId || _g0.radiant_team_id) || s.radiantName) : s.radiantName;
+            const _dn = (s.direName === '夜魇' && _g0) ? (_resolveName(_g0.direTeamId || _g0.dire_team_id) || s.direName) : s.direName;
+            if (_rn && _dn) {
+              const k1 = dedupeKey(_rn, _dn);
               if (k1) {
-                openDotaKeys.set(k1, s.games && s.games[0] ? (s.games[0].start_time || 0) : 0);
-                openDotaKeys.set(k1.split('__').reverse().join('__'), s.games && s.games[0] ? (s.games[0].start_time || 0) : 0);
+                openDotaKeys.set(k1, _g0 ? (_g0.start_time || 0) : 0);
+                openDotaKeys.set(k1.split('__').reverse().join('__'), _g0 ? (_g0.start_time || 0) : 0);
               }
               openDotaNames.push({
-                n1: normalizeTeamNameForDedup(s.radiantName),
-                n2: normalizeTeamNameForDedup(s.direName),
-                startTime: s.games && s.games[0] ? (s.games[0].start_time || 0) : 0   // D2 模糊匹配时间窗基准
+                n1: normalizeTeamNameForDedup(_rn),
+                n2: normalizeTeamNameForDedup(_dn),
+                startTime: _g0 ? (_g0.start_time || 0) : 0   // D2 模糊匹配时间窗基准
               });
             }
           });
           // 将 Liquipedia 赛程转换为 series 对象
           let liqSeries = liqScheduled
             .filter(function (m) {
-              // ★ v3 优化项33（2026-08-03）：matchid 硬关联剔除（P0b，优先于队名去重）。
-              // 该对局的全部 match_id 都已被 OpenDota 收录 → OpenDota 数据更全（含局分），
-              // Liquipedia 项剔除，防 P0 Map 层判定后 RECENT 双源重复。
-              // 部分命中（如 BO3 第一局结束、后续局未收录）→ 保留（Liquipedia 仍显示 live 状态）。
-              if (m.matchIds && m.matchIds.length &&
-                  m.matchIds.every(function (id) { return openDotaMatchIds.has(String(id)); })) {
+              // ★ 2026-08-04（v1.1 实施，审核 R1）：LP live/upcoming 永不剔除 —— 它是 OpenDota 进行中系列唯一的 live 状态来源。
+              //   原实现（v3 优化项33）matchIds.every 全命中即剔，把「仅第一局被 OpenDota 收录」的 live BO3 剔掉 →
+              //   OpenDota 单局已结算被误判 recent/BO1。
+              //   ⚠️ 必须【替换】原 matchIds 分支（filter 回调最前端）而非追加：追加在其后 live 卡先被 every() 剔除、
+              //      早退行永远执行不到；本行位于最前端 → live/upcoming 卡在下方队名精确/模糊去重之前提前返回，
+              //      完整跳过两条路径（OpenDota 该场队名正常 + 时间窗<2h 的赛事仍被队名去重剔除的隐患一并消除）。
+              //   仅对 LP recent 场次保留 matchIds/队名去重（防双源重复）。
+              if (m.phase !== 'recent') return true;
+              // ★ 2026-08-05（RECENT 同对局双卡修复，审核 R2）：恢复 v3 优化项33 matchIds 硬关联去重
+              //   （v1.1 R1 实施时误删）。判定抽纯函数 sources.allMatchIdsInSet。
+              //   recent 卡的全部 match_id 都被 OpenDota 收录 → LP 项剔除（OpenDota 数据更全，含比分）。
+              //   ⚠️ 必须放在早退行【之后】：仅 recent 卡走此分支，live/upcoming 不受影响（R1 零回归）。
+              if (m.matchIds && m.matchIds.length && sources.allMatchIdsInSet(m.matchIds, openDotaMatchIds)) {
                 return false;
               }
               // 去重：剔除 OpenDota 已返回的对阵（队名归一化后匹配）
@@ -738,12 +833,26 @@ Page({
                 boType: m.boType,
                 boLabel: m.boType === 'BO1' ? '单局制' : (m.boType === 'BO2' ? '双局积分' : (m.boType === 'BO3' ? '三局两胜' : '五局三胜')),
                 boTagCls: m.boType === 'BO2' ? 'bo-bo2' : (m.boType === 'BO3' ? 'bo-bo3' : (m.boType === 'BO5' ? 'bo-bo5' : '')),
+                // ★ 2026-08-04：BO 判定引擎信号 —— declaredBo=S1 每场声明（仅 bestof 显式时）；
+                //   seriesType=null（LP 无 OpenDota series_type）；section 用于 S6 阶段先验。
+                //   最终 boType 由 buildSeriesFromSources 末尾的 sources.applyBo 统一覆盖。
+                declaredBo: m.boDeclared ? m.boType : null,
+                seriesType: null,
+                // ★ 2026-08-12 方案 A：map 槽数（字段存在计数，含空壳）从 LP parseMatchFields 透传，
+                //   供 resolveBoType S4.5 信号推断 BO（如 3 槽→BO3、5 槽→BO5）。
+                //   LP upcoming/recent 场次无 OpenDota 比分反推路径，mapSlots 是关键 BO 信号。
+                mapSlots: m.mapSlots || 0,
                 isDraw: liqIsDraw,
                 isLive: m.phase === 'live',
                 isRecent: liqIsRecent,
                 isUpcoming: m.phase === 'upcoming',
                 phase: m.phase,
                 isMulti: m.boType !== 'BO1',
+                // ★ 2026-08-04（v1.1 二次修复）：透传吸收所需字段 —— 此前缺失导致 absorbSettledGames 恒跳过、
+                //   LIVE 比分永远显示 LP score 0:0（模拟脚本手工补了字段掩盖了此断点，真机 0:0 实证）
+                matchIds: m.matchIds || [],
+                team1Name: m.team1Name,
+                team2Name: m.team2Name,
                 radiantName: m.team1Name,
                 direName: m.team2Name,
                 radiantTeamId: 0,        // Liquipedia 赛程无 team_id
@@ -803,8 +912,62 @@ Page({
           console.log('[league-detail] 时间窗口过滤:',
             '过滤前=' + _tsize, '过滤后=' + liqSeries.length,
             '剔除=' + (_tsize - liqSeries.length));
+          // ★ 2026-08-04（v1.1 实施，审核 R3/R4/R5/R6）：LP live/upcoming 卡吸收 OpenDota 已结算局（matchIds 硬关联）
+          //   - 方向映射优先级链：curation team_id→名 → league 内 idMap（raw 收集）→ null；单点命中即定方向（补集原理）
+          //   - 方向失败：不注入 games（跨 tab 双卡为已文档化边界，R6）
+          //   - 被吸收的 OpenDota 单局卡从 allSeries 移除（防 RECENT 重复）
+          // ★ 2026-08-05：_curTeamTable/_rawIdMap 已上移至 openDotaKeys 构造处（单一定义，防重复 const 声明）
+          const _teamIdName = (id) => {
+            if (!id) return null;
+            // ★ 2026-08-04（v3.1，R1）：load 预取 explorer 队名（可靠源）优先 → curation → raw idMap 兜底
+            if (this._teamIdNameMap && this._teamIdNameMap[id]) return this._teamIdNameMap[id];
+            if (_curTeamTable && _curTeamTable[id] && _curTeamTable[id].name) return _curTeamTable[id].name;
+            return _rawIdMap[id] || null;
+          };
+          const _absorb = sources.absorbSettledGames(allSeries, liqSeries, _teamIdName);
+          liqSeries = _absorb.liqSeries;
+          if (_absorb.absorbedKeys && _absorb.absorbedKeys.length) {
+            const _removed = new Set(_absorb.absorbedKeys);
+            allSeries = allSeries.filter(function (s) { return !(s.key && _removed.has(s.key)); });
+          }
           allSeries = allSeries.concat(liqSeries);
         }
+
+        // ★ BO 判定引擎后处理（2026-08-04，审核 R1-R6 落地）
+        // 统一对 OpenDota + Liquipedia 合并后的全部系列执行多信号 BO 判定：
+        //   S1 每场声明（LP bestof）→ S2 赛制文本（云 Format 段 liqBoFormat + infobox meta.format 关键词）
+        //   → S3 series_type 映射（3=BO2）→ S4 同赛事自证（阶段内 1:1→BO2）→ S5 约束 → S6 默认
+        // 修复：① 进行中/即将开始不再因 0:0 比分被反推为 BO1；
+        //       ② 已结束 BO2 2:0 不再被误判 BO3（series_type=3 与段内自证双保险）；
+        //       ③ BO1/BO2/BO3/BO5 由阶段+局数+声明综合推导，与权威赛制一致。
+        // buildBoContext 内部预计算阶段自证表（R3）并给系列打 stageKey（R4 时间簇/LP section）。
+        var _boCtx = sources.buildBoContext(allSeries, {
+          leagueId: this.data.leagueId,
+          leagueName: this.data.name,
+          boFormat: liqBoFormat || null,
+          metaFormat: (this.data.metadata && this.data.metadata.format) || null,
+          // v2.1：LP section 锚点（liqScheduled 带 section 场次 → 阶段识别优先级 1，R2 时间窗守卫在引擎内）
+          liqStages: (liqScheduled || []).map(function (m) {
+            return { section: m.section || '', startTime: m.startTime || 0 };
+          })
+        });
+        allSeries = allSeries.map(function (s) {
+          var _r = sources.applyBo(s, _boCtx);
+          // R2（2026-08-04 v1.1）：liveProgress 统一在 applyBo 后计算 —— 依赖最终 boType（吸收发生在 concat 前，当时 BO 未定）
+          _r.liveProgress = sources.liveProgressOf(_r);
+          return _r;
+        });
+
+        // ★ 2026-08-05（v1.1，审核 R1）：UPCOMING 显示门槛 = 至少一方队伍确定。
+        //   落点：allSeries 合并（OpenDota 系列 concat liqSeries）之后、三段分派之前 ——
+        //   单点过滤覆盖双源（OpenDota 侧 radiantName/direName 占位 + LP 侧 TBD 归一）。
+        //   双方均 TBD（含空串归一）→ 不显示，等至少一方确定且符合时间窗后再显示。
+        allSeries = allSeries.filter(function (s) {
+          if (s.phase === 'upcoming') {
+            if (isTBD(s.radiantName) && isTBD(s.direName)) return false;
+          }
+          return true;
+        });
 
         // ★ 三段式分段排序（2026-07-28 新增，v3 增强）
         //   LIVE：进行中，按 lastTime desc —— 最近开赛的在前
@@ -839,6 +1002,9 @@ Page({
           if (s.confirmed === undefined) {
             s.confirmed = !isTBD(s.radiantName) && !isTBD(s.direName);
           }
+          // ★ 2026-08-05（v1.1，审核 R3）：队名位 TBD 标记（供 WXML 斜体样式判定，预计算避免 WXML 依赖函数）
+          if (s.radiantTbd === undefined) s.radiantTbd = isTBD(s.radiantName);
+          if (s.direTbd === undefined) s.direTbd = isTBD(s.direName);
           // ★ v3 优化项⑭：焦点战标记（双方均为 S-Tier 战队）
           if (s.matchupQuality === undefined) {
             var aHigh = sources.getTeamPriority(s.radiantName) >= 2;
@@ -983,12 +1149,71 @@ Page({
   // 返回 { live, upcoming } 供轮询自适应间隔（live→30s / 仅 upcoming→60s / 纯 recent→停）。
   refreshSchedule() {
     if (!this.data.name || !this._rawMatches) return Promise.resolve({ live: 0, upcoming: 0 });
+    // ★ 2026-08-05：并发锁 —— 弱网下 refreshSchedule 单次执行可能超过轮询间隔（30s），
+    // setInterval 到点不等待完成 → 叠加并发（表现：build 链日志 3-5 次/分钟）。
+    // 叠加时短路返回当前已知状态（live/upcoming 计数不变 → 调用方保持原间隔，不误停轮询）。
+    if (this._refreshing) {
+      return Promise.resolve({ live: this.data.liveCount || 0, upcoming: this.data.upcomingCount || 0 });
+    }
+    this._refreshing = true;
     var self = this;
     return liquipedia.getScheduledMatches(this.data.name, { force: true })
-      .then(function (liqScheduled) {
-        if (!Array.isArray(liqScheduled)) return { live: 0, upcoming: 0 };
-        var built = self.buildSeriesFromSources(self._rawMatches, liqScheduled);
-        var all = built.allSeries;
+      .then(function (scheduled) {
+        // ★ 2026-08-04：新契约 { matches, boFormat }（兼容旧数组）
+        if (!scheduled || !Array.isArray(scheduled.matches)) return { live: 0, upcoming: 0 };
+        // ★ 2026-08-04（v1.1，R2/R3/R4）：有 live 卡时低频（≥5min）重拉 OpenDota，更新 _rawMatches 后 rebuild。
+        //   修复：进行中 BO3 的新局在 load 后被 OpenDota 收录（滞后 5-30min）时，轮询也能吸收到新局 →
+        //   LIVE 比分随局更新（fingerprint 已含 scoreA:scoreB，diff 自动 patch）。
+        //   - R2：负 leagueId（Liquipedia 新增赛事）无 OpenDota 数据，跳过重拉
+        //   - R3：force 走云函数路径（云函数 leagueMatches TTL 已降 5min）；直连兜底不 force（防 NAT 429）
+        //   - R4：仅第二次 rebuild 的 built 用于 setData；失败静默降级不阻塞 LP 刷新
+        var hasValidLid = !!(Number(self.data.leagueId) > 0);
+        var nowSec = Math.floor(Date.now() / 1000);
+        var built = self.buildSeriesFromSources(self._rawMatches, scheduled.matches, scheduled.boFormat || null);
+        var needOd = hasValidLid && sources.shouldRefreshOpenDota(built.liveList.length, self._lastOdRefresh || 0, nowSec);
+        // P2（2026-08-05）：_lastOdRefresh 置位从"完成后"改"发起时" ——
+        // 原在 odTask.then 里置位，弱网时 OD 请求慢（5-15s）期间每 30s 轮询 needOd 仍 true，
+        // 会重复发起 force OD 请求（每个都绕过缓存现抓）→ 请求风暴 + OpenDota 限流风险。
+        // 发起时置位保留 R4"无论成败"语义（成功/失败均 5min 内不重发）。
+        if (needOd) self._lastOdRefresh = nowSec;
+        var odTask = needOd
+          ? api.getLeagueMatches(self.data.leagueId, true).catch(function () { return null; })
+          : Promise.resolve(null);
+        return odTask.then(function (fresh) {
+          if (fresh && Array.isArray(fresh) && fresh.length) {
+            self._rawMatches = fresh;
+            // ★ 2026-08-04（v3.1，R4）：增量补查新 team_id → 合并 map（下一轮 build 自然生效）
+            var _newIds = [];
+            fresh.forEach(function (m) {
+              if (m && m.radiant_team_id && m.radiant_team_id > 0 && !(self._teamIdNameMap && self._teamIdNameMap[m.radiant_team_id])) _newIds.push(m.radiant_team_id);
+              if (m && m.dire_team_id && m.dire_team_id > 0 && !(self._teamIdNameMap && self._teamIdNameMap[m.dire_team_id])) _newIds.push(m.dire_team_id);
+            });
+            if (_newIds.length) {
+              api.getTeamNames(Array.from(new Set(_newIds.map(Number))))
+                .catch(function () { return {}; })
+                .then(function (extra) {
+                  if (extra && Object.keys(extra).length) self._teamIdNameMap = Object.assign({}, self._teamIdNameMap, extra);
+                });
+            }
+            built = self.buildSeriesFromSources(fresh, scheduled.matches, scheduled.boFormat || null);  // 仅第二次 built 用于 setData（R4）
+          }
+          var all = built.allSeries;
+        // ★ 2026-08-04 优化：refresh 重建的 series 来自 _rawMatches（logo 全空、队名可能占位），
+        // 直接替换会让 enrichTeamLogos 每次轮询（30-60s）全量重查 logo + 队名回退占位。
+        // 按稳定 key 回填旧 series 已 enrich 的 logo/队名 → enrichTeamLogos 的 skip 生效，
+        // 只处理新增/变化的 series；队名也不再回退占位。
+        var oldByKey = {};
+        (self.allSeries || []).forEach(function (o) { if (o && o.key) oldByKey[o.key] = o; });
+        all.forEach(function (s) {
+          var old = oldByKey[s.key];
+          if (!old) return;
+          if (!s.radiantLogo && old.radiantLogo) s.radiantLogo = old.radiantLogo;
+          if (!s.direLogo && old.direLogo) s.direLogo = old.direLogo;
+          if (!s.radiantLogoSource && old.radiantLogoSource) s.radiantLogoSource = old.radiantLogoSource;
+          if (!s.direLogoSource && old.direLogoSource) s.direLogoSource = old.direLogoSource;
+          if ((!s.radiantName || s.radiantName === '天辉') && old.radiantName && old.radiantName !== '天辉') s.radiantName = old.radiantName;
+          if ((!s.direName || s.direName === '夜魇') && old.direName && old.direName !== '夜魇') s.direName = old.direName;
+        });
         var pageSize = self.data.pageSize;
         var slice = all.slice(0, pageSize);
         var oldSeries = self.data.series || [];
@@ -1029,8 +1254,10 @@ Page({
         // 重新注入（幂等、getTeamNames/logoCache 有缓存，仅补占位）。
         try { self.enrichTeamNames(); self.enrichTeamLogos(); } catch (e) { /* 隔离 */ }
         return { live: built.liveList.length, upcoming: built.upcomingList.length };
+        });
       })
-      .catch(function () { return { live: 0, upcoming: 0 }; });
+      .catch(function () { return { live: 0, upcoming: 0 }; })
+      .then(function (result) { self._refreshing = false; return result; });   // 释放并发锁（成败均释放）
   },
 
   // B4 轮询三态：onShow 启动 / onHide 停止 / onUnload 清理。
@@ -1207,6 +1434,7 @@ Page({
     // ★ 方案C Step A：从 teamIds 建立 队名→ID 反向映射（2026-08-01）
     //   同一战队在 RECENT 段已有 OpenDota team_id 时，跳过 Liquipedia 查询，
     //   直接走 ID 路径拿 OpenDota logo（cdn.opendota.com 已在微信白名单）。
+    //   ⚠️ 必须在「负 id 占位队伍收集」之前声明，否则 TDZ 报错（nameTeams 未初始化）。
     function normName(s) { return String(s || '').toLowerCase().replace(/\s+/g, ''); }
     const teamNameToId = {};
     Object.keys(teamIds).forEach((tid) => {
@@ -1235,9 +1463,39 @@ Page({
       }
     });
 
+    // ★ 2026-08-11 修复：参赛队伍 Tab 的 logo（TI 2026 BUG）
+    //   根因：未开赛赛事走 refreshMetadataDerived 分支④重建 participantsList 时，
+    //        队伍 id 为负数占位（-1-i，无 OpenDota team_id）。enrichTeamLogos 的
+    //        participantsList 收集分支（上方）只收 id>0，负数 id 被全部跳过，
+    //        导致参赛队伍 Tab 16 支队伍 logo 永远不查询、永不显示。
+    //   修复：负数 id 队伍按队名走 nameTeams 路径（findTeamByName → OpenDota CDN logo），
+    //        与 allSeries 中 team_id=0 的 Liquipedia 对阵共用同一名称兜底链路。
+    //   守卫：跳过占位名（"待定队伍 N"/"待公布"）、已有 logo 的、已在 allSeries 收集过的、
+    //        30min 内失败的（复用 _logoFailNames 负缓存，避免轮询空跑）。
+    (this.data.participantsList || []).forEach((t) => {
+      if (!t || t.id > 0) return;                // 仅处理负数占位 id
+      if (t.logo && /^https?:\/\//i.test(t.logo)) return; // 已有 logo 跳过
+      const nm = t.name || '';
+      if (!nm || /^待(定|公布)/.test(nm) || /^Team \d+$/.test(nm)) return; // 占位名跳过
+      const norm = normName(nm);
+      if (!norm) return;
+      if (nameTeams[norm]) return;               // allSeries 已收集 → 不覆盖
+      if (teamNameToId[norm]) return;            // 已在 teamIds → skip 已生效
+      if (this._logoFailNames && this._logoFailNames[norm] &&
+          (Date.now() - this._logoFailNames[norm]) < 30 * 60 * 1000) return; // 30min 负缓存
+      nameTeams[norm] = { name: nm, skip: false };
+    });
+
     // 过滤出需要查询的 team_id（skip=true 的跳过）
     const needQueryIds = Object.keys(teamIds).filter((tid) => !teamIds[tid].skip);
-    const needQueryNames = Object.keys(nameTeams).filter((norm) => !nameTeams[norm].skip);
+    // ★ 2026-08-04 优化：name 路径失败负缓存（页面级，30min）—— findTeamByName 未找到/
+    // 无 logo 的队伍在轮询中反复重查，缓存后 30min 内跳过（Liquipedia 新增队伍概率低）。
+    const needQueryNames = Object.keys(nameTeams).filter((norm) => {
+      if (nameTeams[norm].skip) return false;
+      if (this._logoFailNames && this._logoFailNames[norm] &&
+          (Date.now() - this._logoFailNames[norm]) < 30 * 60 * 1000) return false;
+      return true;
+    });
     if (!needQueryIds.length && !needQueryNames.length) return Promise.resolve(false);
 
     // 2) 并行批量查询（每个 .catch 隔离，任一失败不影响其他）
@@ -1257,11 +1515,22 @@ Page({
           const logoUrl = (teamInfo && teamInfo.logo_url) || '';
           // 方案C：OpenDota 有 logo_url 时走 enrichTeamLogo（仅第②步 existing 命中即返回），
           // 无 logo_url 时不降级 Liquipedia（CDN 域名不在微信白名单，无法渲染），直接返回 null。
-          if (!logoUrl) return { id: team.id, logo: null, source: '' };
+          if (!logoUrl) {
+            // ★ 2026-08-04 优化：OpenDota 无 logo_url → 写负缓存（24h），
+            // 否则每次 refresh 轮询都重查该 id（api.getTeam 缓存命中但逻辑仍跑，
+            // 日志反复出现"失败ids=10207961"）。logoCache.markNegative 后
+            // sources.enrichTeamLogo 的 hasNegative 短路，不再重复查询。
+            try { logoCache.markNegative(team.id); } catch (e) { /* 隔离 */ }
+            return { id: team.id, logo: null, source: '' };
+          }
           return sources.enrichTeamLogo({ id: team.id, name: team.name, logo: logoUrl });
         })
         .then((r) => ({ id: team.id, logo: r && r.logo, source: r && r.source }))
-        .catch(() => ({ id: team.id, logo: null, source: '' }));
+        .catch(() => {
+          // ★ 2026-08-04 优化：查询异常也写负缓存（防轮询反复重试同一失败 id）
+          try { logoCache.markNegative(team.id); } catch (e) { /* 隔离 */ }
+          return { id: team.id, logo: null, source: '' };
+        });
     });
     // ★ 方案C Step B：名称兜底任务（2026-08-01 修复）
     //   使用 api.findTeamByName（基于 /api/teams 全量列表，24h 缓存）替代已失效的 api.searchTeams，
@@ -1315,16 +1584,27 @@ Page({
       const logoMap = {};
       const nameLogoMap = {};  // 归一化队名 → { logo, source }（team_id=0 的 Liquipedia 赛程专用）
       const failedIds = [];
+      // ★ 2026-08-11 关键修复：把查询结果缓存到页面级 _logoQueryCache，
+      //   供 refreshMetadataDerived 重建 participantsList 时回填 logo（解决时序竞态）。
+      //   根因：enrichTeamLogos 异步查询完成前，finalize 会触发 refreshMetadataDerived
+      //   重建 participantsList（无 logo），之后 enrichTeamLogos 回填的 logo 会被下一次
+      //   refresh 覆盖。把查询结果缓存后，无论 refresh 何时触发都能从缓存回填。
+      if (!this._logoQueryCache) this._logoQueryCache = { byId: {}, byNormName: {} };
       results.forEach((r) => {
         if (r.normName) {
           // 名称兜底结果
           if (r.logo && /^https?:\/\//i.test(r.logo)) {
             nameLogoMap[r.normName] = { logo: r.logo, source: r.source };
+            this._logoQueryCache.byNormName[r.normName] = { logo: r.logo, source: r.source };
           } else {
             failedIds.push('name:' + r.normName);
+            // ★ 2026-08-04 优化：name 路径失败负缓存（30min），轮询不再反复 findTeamByName
+            if (!this._logoFailNames) this._logoFailNames = {};
+            this._logoFailNames[r.normName] = Date.now();
           }
         } else if (r.logo && /^https?:\/\//i.test(r.logo)) {
           logoMap[r.id] = { logo: r.logo, source: r.source };
+          this._logoQueryCache.byId[r.id] = { logo: r.logo, source: r.source };
         } else {
           failedIds.push(r.id);
         }
@@ -1394,15 +1674,67 @@ Page({
       });
 
       // 6) 参赛队伍 Tab 的 participantsList logo 同步更新
+      //    ★ 2026-08-11 修复：负 id 占位队伍按队名匹配 nameLogoMap（与 allSeries 的
+      //    team_id=0 对阵共用同一名称兜底链路），正 id 走 logoMap。
+      //    ★ 2026-08-11 二次修复：curation 队名与 Liquipedia 对阵队名可能不完全一致
+      //    （如 "Aurora Gaming" vs "Aurora"），精确 normName 匹配会漏。加模糊匹配：
+      //    去 esports/gaming/team 后缀 + 非字母数字后比较（和分支②的 normalize 一致）。
       const curParticipants = this.data.participantsList || [];
+      // 预构建 nameLogoMap 的模糊索引（一次构建，多次匹配）
+      let fuzzyNameKeys = null;
+      if (Object.keys(nameLogoMap).length) {
+        fuzzyNameKeys = Object.keys(nameLogoMap).map((k) => ({
+          raw: k,
+          fuzzy: k.replace(/(?:esports|eports?|gaming|team|dota)/gi, '').replace(/[^a-z0-9]/g, '')
+        })).filter((it) => it.fuzzy.length >= 3);
+      }
+      const fuzzyMatch = function (name) {
+        if (!fuzzyNameKeys) return null;
+        const fuzzy = name.replace(/(?:esports|eports?|gaming|team|dota)/gi, '').replace(/[^a-z0-9]/g, '');
+        if (!fuzzy || fuzzy.length < 3) return null;
+        for (let i = 0; i < fuzzyNameKeys.length; i++) {
+          const it = fuzzyNameKeys[i];
+          if (it.fuzzy === fuzzy ||
+              (it.fuzzy.length >= 3 && (it.fuzzy.indexOf(fuzzy) >= 0 || fuzzy.indexOf(it.fuzzy) >= 0))) {
+            return nameLogoMap[it.raw];
+          }
+        }
+        return null;
+      };
+      // ★ 2026-08-11 诊断：确认 curParticipants / nameLogoMap 状态
+      console.info('[enrichLogos] 参赛Tab回填: curParticipants=' + curParticipants.length +
+        ' nameLogoMap=' + Object.keys(nameLogoMap).length +
+        ' nameLogoMap.keys=' + Object.keys(nameLogoMap).slice(0, 3).join(','));
       if (curParticipants.length) {
+        let _matched = 0, _fuzzyHit = 0, _missed = 0;
         const patched = curParticipants.map((t) => {
-          if (t && t.id && logoMap[t.id] && (!t.logo || !/^https?:\/\//i.test(t.logo))) {
+          if (!t) return t;
+          if (t.id > 0 && logoMap[t.id] && (!t.logo || !/^https?:\/\//i.test(t.logo))) {
+            _matched++;
             return Object.assign({}, t, { logo: logoMap[t.id].logo });
+          }
+          // 负 id 或 id 缺失：按归一化队名匹配 nameLogoMap
+          if ((!t.logo || !/^https?:\/\//i.test(t.logo)) && t.name) {
+            const lcName = t.name.toLowerCase();
+            const norm = normName(t.name);
+            // ① 精确匹配
+            if (norm && nameLogoMap[norm]) {
+              _matched++;
+              return Object.assign({}, t, { logo: nameLogoMap[norm].logo });
+            }
+            // ② 模糊匹配（去后缀 + 包含关系）
+            const fuzzy = fuzzyMatch(lcName);
+            if (fuzzy) {
+              _fuzzyHit++;
+              return Object.assign({}, t, { logo: fuzzy.logo });
+            }
+            _missed++;
+            console.info('[enrichLogos] 参赛Tab未匹配: name=' + t.name + ' norm=' + norm);
           }
           return t;
         });
         const changed = patched.some((t, i) => t.logo !== curParticipants[i].logo);
+        console.info('[enrichLogos] 参赛Tab回填结果: 精确=' + _matched + ' 模糊=' + _fuzzyHit + ' 未匹配=' + _missed + ' changed=' + changed);
         if (changed) patch.participantsList = patched;
       }
 
@@ -1534,7 +1866,21 @@ Page({
     //   Liquipedia 数组优先于 curation 数字（mergeMetadataWithFallback 中 Object.assign 已覆盖）。
     //   2026-07-28 增强：curation 的 participants 也可为数组（含 name/region/group），
     //   当 Liquipedia 被 CAPTCHA 拦截时，curation 数组作为同等数据源参与重建。
-    const liqParticipantsArr = Array.isArray(meta.participants) ? meta.participants : null;
+    //   ★ 2026-08-11 修复回归：本函数末尾 L1946 会把数组 participants 转为数字写回
+    //     this.data.metadata（KPI Strip 需要数字显示）。第二次 refresh 进入时读到的
+    //     meta.participants 已是数字 → Array.isArray 失效 → 分支④走 else "待定队伍 N"。
+    //     修复：每次 refresh 都重新从 curation 取一份原始数组作为兜底源，
+    //     不依赖 this.data.metadata.participants 的类型保持。
+    var curParticipantsArr = Array.isArray(meta.participants) ? meta.participants : null;
+    if (!curParticipantsArr) {
+      try {
+        const cur = remoteCuration.curatedEventFor(this.data.name, { leagueId: this.data.leagueId, game: 'dota2' });
+        if (cur && Array.isArray(cur.participants) && cur.participants.length) {
+          curParticipantsArr = cur.participants;
+        }
+      } catch (e) { /* 隔离 */ }
+    }
+    const liqParticipantsArr = curParticipantsArr;
     const metaParticipants = liqParticipantsArr ? liqParticipantsArr.length : (Number(meta.participants) || 0);
     const actualCount = participantsList.length;
 
@@ -1644,13 +1990,18 @@ Page({
       //   - 已公布的队伍（name !== 'TBD'）显示真实队名，id 用负数占位（无 OpenDota team_id）
       //   - 未公布的队伍（name === 'TBD'）仍显示「待公布」，区分已公布与未公布
       //   - 若 Liquipedia 无 participants 数据，回退到原纯占位逻辑
-      const liqParticipants = Array.isArray(meta.participants) ? meta.participants : null;
+      // ★ 2026-08-11 修复回归：分支④必须用 liqParticipantsArr（从 curation 重新取的原始数组），
+      //   而非 meta.participants（已被前次 refresh 转成数字）。否则第二次 refresh 会走 else 分支
+      //   生成"待定队伍 N"，丢失真实队名。
+      const liqParticipants = liqParticipantsArr;
       if (liqParticipants && liqParticipants.length) {
         participantsList = liqParticipants.map((t, i) => ({
           id: -1 - i,
           name: (t.name && t.name !== 'TBD') ? t.name : '待公布',
           status: t.status || 'TBD',
-          liquipediaSlug: t.liquipediaSlug || null
+          liquipediaSlug: t.liquipediaSlug || null,
+          region: t.region || null,
+          group: t.group || null
         }));
         // 更新 meta.participants 为实际解析到的队伍数
         meta.participants = participantsList.length;
@@ -1694,20 +2045,81 @@ Page({
     // 丢失了 enrichTeamLogos 已填充的 logo 字段（竞态：finalize 后重建覆盖 logo）。
     // 修复：从 this.data.participantsList 构建 id→logo 映射，重建后统一回填。
     // 覆盖所有重建分支（①实际>meta / ②Liquipedia重建 / ②占位补齐 / ④无比赛数据）。
+    // ★ 2026-08-11 关键修复：叠加从 _logoQueryCache（enrichTeamLogos 查询结果缓存）
+    //   兜底回填，解决 enrichTeamLogos 异步查询未完成时 finalize 触发 refresh 导致
+    //   logo 丢失的时序竞态。
     const oldLogoMap = {};
     (this.data.participantsList || []).forEach((t) => {
       if (t && t.id != null && t.logo && /^https?:\/\//i.test(t.logo)) {
         oldLogoMap[t.id] = t.logo;
       }
     });
-    if (Object.keys(oldLogoMap).length) {
-      participantsList = participantsList.map((t) => {
-        if (t && t.id != null && oldLogoMap[t.id] && (!t.logo || !/^https?:\/\//i.test(t.logo))) {
-          return Object.assign({}, t, { logo: oldLogoMap[t.id] });
+    // ★ 2026-08-11 新增：从查询结果缓存补充 oldLogoMap（按 id 和 归一化队名两路）
+    const queryCache = this._logoQueryCache || { byId: {}, byNormName: {} };
+    const normForCache = function (s) { return String(s || '').toLowerCase().replace(/\s+/g, ''); };
+    participantsList.forEach((t) => {
+      if (!t || t.logo) return;
+      // 按 id 查缓存
+      if (t.id != null && queryCache.byId[t.id]) {
+        oldLogoMap[t.id] = queryCache.byId[t.id].logo;
+        return;
+      }
+      // 按归一化队名查缓存（精确）
+      if (t.name) {
+        const norm = normForCache(t.name);
+        if (norm && queryCache.byNormName[norm]) {
+          oldLogoMap['$name:' + norm] = queryCache.byNormName[norm].logo;
         }
-        return t;
-      });
+      }
+    });
+    // ★ 2026-08-11 诊断日志（定位 logo 不显示根因）
+    const _beforeCount = Object.keys(oldLogoMap).length;
+    const _newIds = participantsList.map((t) => t && t.id).filter((x) => x != null);
+    const _newIdsStr = _newIds.slice(0, 5).join(',');
+    console.info('[refreshMeta] logo保护: oldLogoMap=' + _beforeCount +
+      ' queryCache.id=' + Object.keys(queryCache.byId).length +
+      ' queryCache.name=' + Object.keys(queryCache.byNormName).length +
+      ' 新list长度=' + participantsList.length + ' 新id前5=' + _newIdsStr +
+      ' 首元素logo=' + (participantsList[0] && participantsList[0].logo ? '有' : '无'));
+    // 回填：优先按 id 匹配，id 未命中时按归一化队名匹配（含模糊匹配）
+    let fuzzyNameKeysRefresh = null;
+    if (Object.keys(queryCache.byNormName).length) {
+      fuzzyNameKeysRefresh = Object.keys(queryCache.byNormName).map((k) => ({
+        raw: k,
+        fuzzy: k.replace(/(?:esports|eports?|gaming|team|dota)/gi, '').replace(/[^a-z0-9]/g, '')
+      })).filter((it) => it.fuzzy.length >= 3);
     }
+    participantsList = participantsList.map((t) => {
+      if (!t || (t.logo && /^https?:\/\//i.test(t.logo))) return t;
+      // ① 按 id
+      if (t.id != null && oldLogoMap[t.id]) {
+        return Object.assign({}, t, { logo: oldLogoMap[t.id] });
+      }
+      // ② 按归一化队名（精确）
+      if (t.name) {
+        const norm = normForCache(t.name);
+        if (norm && oldLogoMap['$name:' + norm]) {
+          return Object.assign({}, t, { logo: oldLogoMap['$name:' + norm] });
+        }
+        // ③ 按归一化队名（模糊）
+        if (norm && fuzzyNameKeysRefresh) {
+          const fuzzy = norm.replace(/(?:esports|eports?|gaming|team|dota)/gi, '').replace(/[^a-z0-9]/g, '');
+          if (fuzzy && fuzzy.length >= 3) {
+            for (let i = 0; i < fuzzyNameKeysRefresh.length; i++) {
+              const it = fuzzyNameKeysRefresh[i];
+              if (it.fuzzy === fuzzy ||
+                  (it.fuzzy.length >= 3 && (it.fuzzy.indexOf(fuzzy) >= 0 || fuzzy.indexOf(it.fuzzy) >= 0))) {
+                return Object.assign({}, t, { logo: queryCache.byNormName[it.raw].logo });
+              }
+            }
+          }
+        }
+      }
+      return t;
+    });
+    // 诊断：回填后 logo 数量
+    const _afterCount = participantsList.filter((t) => t && t.logo && /^https?:\/\//i.test(t.logo)).length;
+    console.info('[refreshMeta] logo保护结果: 回填后=' + _afterCount + '/' + participantsList.length);
 
     this.setData({ metadata: meta, participantsList: participantsList });
   },
@@ -1738,10 +2150,35 @@ Page({
   },
 
   toggleFollow() {
-    const followed = follow.toggle('leagues', { id: this.data.leagueId, name: this.data.name });
-    this.setData({ followed: followed });
-    wx.showToast({ title: followed ? '已关注' : '已取消关注', icon: 'none' });
-    if (followed) subscribe.requestSubscribe();
+    // ★ 2026-08-11 方案 A+R1：兼容 legacyFakeId 的关注切换。
+    //   场景：老用户用 fakeId 关注过，重定向到真实 id 后真实 id 无记录但 fakeId 有。
+    //   取消关注时必须同时清除两个 key，否则关注列表会出现两条记录或无法取消。
+    const lid = this.data.leagueId;
+    const legacyFake = this.data._legacyFakeId;
+    const wasFollowed = this.data.followed;
+    let nowFollowed;
+    if (wasFollowed) {
+      // 用户意图：取消关注。清除真实 id 记录（若存在）+ legacyFake 记录（若存在）
+      follow.unfollow('leagues', lid);
+      if (legacyFake != null) follow.unfollow('leagues', String(legacyFake));
+      nowFollowed = false;
+    } else {
+      // 用户意图：关注。写入真实 id 记录
+      follow.follow('leagues', { id: lid, name: this.data.name });
+      nowFollowed = true;
+    }
+    this.setData({ followed: nowFollowed });
+    wx.showToast({ title: nowFollowed ? '已关注' : '已取消关注', icon: 'none' });
+    // ★ 2026-08-07（R2 预登录前置，手势红线）：关注联赛触发订阅授权——缓存命中才同步弹，
+    //   未命中 toast 引导 + 后台补登录（绝不在网络回调后弹授权，会被微信手势校验拒绝）
+    if (nowFollowed) {
+      if (auth.isLoggedIn()) {
+        subscribe.requestSubscribe();
+      } else {
+        wx.showToast({ title: '正在登录…请稍后重试', icon: 'none' });
+        auth.ensureLogin().catch(() => {});
+      }
+    }
   },
 
   openTeam(e) {

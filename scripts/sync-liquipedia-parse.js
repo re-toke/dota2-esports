@@ -57,7 +57,7 @@ function main() {
     'parseTemplate', 'splitTopLevel', 'stripWikitextMarkup', 'stripTags',
     'parsePrizePool', 'collectDates', 'findTemplateEnd', 'extractLink',
     'parseOpponentBlock', 'parseTeamCardBlock', 'parseParticipants', 'parseLeagueMetadata',
-    'parseScheduledMatches', 'parseTeamLogo', 'parseLeagueTier'
+    'parseScheduledMatches', 'parseTeamLogo', 'parseLeagueTier', 'parseBoFormat'
   ];
   const missingMini = exportNames.filter((n) => typeof mini[n] !== 'function');
   const missingCloud = exportNames.filter((n) => typeof cloud[n] !== 'function');

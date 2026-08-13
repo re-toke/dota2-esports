@@ -22,11 +22,11 @@ function tagThemeOf(grade) {
   return { theme: 'default', variant: 'light' };
 }
 
-// 状态 -> 中文标签 + 颜色
+// 状态 -> 中文标签 + 颜色（v11 品牌声音 §2.6：竞技场风格文案）
 function statusBadgeOf(status) {
-  if (status === 'ongoing') return { text: '进行中', color: '#1ec896' };
+  if (status === 'ongoing') return { text: '正在交锋', color: '#1ec896' };
   if (status === 'upcoming') return { text: '即将到来', color: '#ffcf5c' };
-  return { text: '已结束', color: '#6b7280' };
+  return { text: '战局已定', color: '#6b7280' };
 }
 
 // ===== 1.2 周轴视图工具：按「周一为界」的周聚合赛事 =====
@@ -168,7 +168,7 @@ function buildUpcomingCard(entry, ctx) {
     statusColor: cardBadge.color,
     dateRange: util.formatDateRange(entry.start, entry.end),
     daysToStart: daysToStart,
-    countdownText: cardStatus === 'ongoing' ? '进行中' : (daysToStart <= 0 ? '今日开赛' : (daysToStart === 1 ? '明天开赛' : daysToStart + ' 天后开赛')),
+    countdownText: cardStatus === 'ongoing' ? '正在交锋' : (daysToStart <= 0 ? '今日开赛' : (daysToStart === 1 ? '明天开赛' : daysToStart + ' 天后开赛')),
     source: entry.source || (matched && matched.source) || 'liquipedia',
     valve: !!(entry.valve != null ? entry.valve : tiers.flagValve(name)),
     topThirdParty: !!(entry.topThirdParty != null ? entry.topThirdParty : tiers.flagTopThirdParty(name)),
@@ -203,6 +203,8 @@ Page({
     page: 0,
     pageSize: config.pageSize,
     hasMore: false,
+    loadingMore: false,    // 2026-08-07（v1.3）：下一页加载态，驱动底部提示条三态切换
+    armedMore: false,      // 2026-08-07（v1.4）：触底确认态（ARMED）——提示条高亮，点击才真正加载
     upcomingLoading: false,
     upcomingProgress: '',
     // STRATZ 是否启用（赛程数据主要来源）：未启用且即将到来为空时，据此提示用户
@@ -230,6 +232,17 @@ Page({
     this.filtered = [];       // 当前 tab 筛选结果
     this.upcomingList = null;  // 即将到来列表（null=未加载，[]=已加载无结果）
     this.teamLeagueIds = null;
+    // 2026-08-07（v1.4）：缓存屏幕高度，供 onPageScroll 检测「上滚超一屏」解除 ARMED 态
+    try {
+      const sysInfo = wx.getSystemInfoSync();
+      this._winH = sysInfo.windowHeight || sysInfo.screenHeight || 667;
+    } catch (e) { this._winH = 667; }
+    // 2026-08-07（v1.1，B 层渲染分阶段优化）：
+    //   _normalizeGen 代际标记——onHide / onPullDownRefresh / retry 时递增，
+    //   让阶段 2 后台补全的 setTimeout 链在下一个检查点自动放弃（防竞态 + 防死锁）。
+    //   _normalizeDone 表示全量 normalize 是否已完成（阶段 2 跑完置 true）。
+    this._normalizeGen = 0;
+    this._normalizeDone = true;   // 首次 loadLeagues 调用前先设 true，避免守卫拦截
     this.loadLeagues();
     this.buildFocusNode();
     // Phase 1-④：refreshTeamOptions 延迟到首次点击战队筛选按钮（openTeamFilter）
@@ -249,13 +262,47 @@ Page({
     this.loadLeagues(() => wx.stopPullDownRefresh());
   },
 
+  // 2026-08-07（v1.2→v1.3→v1.4→v1.4.2）：
+  //   第一次触底 → 进入 ARMED 确认态（提示条高亮「上拉或点击加载」），不加载。
+  //   ARMED 态下用户上滑一段再下滑回来（微下拉手势）→ onPageScroll 检测到即触发加载。
+  //   上滚超过一屏 → 解除 ARMED（视为放弃意图）。
+  //   点击提示条 → 直接加载（零等待路径，不经 ARMED）。
   onReachBottom() {
-    if (this.data.hasMore && !this.data.loading && !this.data.upcomingLoading) this.appendPage();
+    if (!this.data.hasMore || this.data.loading || this.data.upcomingLoading) return;
+    if (this.data.loadingMore || this.data.armedMore) return;
+    this._armedScrollTop = this._scrollTop || 0;
+    this._armedMinScroll = this._armedScrollTop;  // 追踪 ARMED 后用户上滑的最低点
+    this.setData({ armedMore: true });
   },
 
   // I5：记录页面滚动位置（不写 setData，避免滚动时频繁刷新）
+  // v1.4.2：ARMED 态下检测「微下拉手势」——用户上滑一小段后回滑，
+  //   只要回滑到接近底部（距底 < 屏幕高度的 25%）就触发加载，无需完全滑回底部。
+  //   同时检测「上滚超一屏」解除 ARMED（用户放弃加载意图）。
   onPageScroll(e) {
     this._scrollTop = e.scrollTop;
+    if (!this.data.armedMore || !this._armedScrollTop) return;
+
+    const winH = this._winH || 667;
+    // 追踪用户上滑的最低点（scrollTop 最小值）
+    if (e.scrollTop < this._armedMinScroll) this._armedMinScroll = e.scrollTop;
+
+    // ① 检测「上滚超一屏」→ 解除 ARMED（用户放弃加载意图）
+    const base = Math.min(winH, this._armedScrollTop);
+    if (e.scrollTop < this._armedScrollTop - base) {
+      this.setData({ armedMore: false });
+      this._armedScrollTop = 0;
+      this._armedMinScroll = 0;
+      return;
+    }
+
+    // ② 检测「微下拉手势」→ 触发加载
+    // 条件：用户上滑过（最低点比触底位置小至少 20px），且当前回滑到接近底部（距底 < 25% 屏高）。
+    // 20px 的上滑门槛防手指微抖误触；25% 屏高的接近阈值让回滑动作不需精确对准底部。
+    if (this._armedMinScroll < this._armedScrollTop - 20 &&
+        e.scrollTop > this._armedScrollTop - winH * 0.25) {
+      this.appendPageSafe();
+    }
   },
 
   // I5：离开页面时持久化视图状态
@@ -271,6 +318,15 @@ Page({
     // P1-1：离开页面取消所有进行中的元数据增强链（代际递增，旧链在下一个检查点放弃）
     this._metaGen = (this._metaGen || 0) + 1;
     this._metaEnriching = false;
+    // 2026-08-07（v1.1）：同时取消阶段 2 后台 normalize 链，防 setTimeout 泄漏
+    this._normalizeGen = (this._normalizeGen || 0) + 1;
+    // 2026-08-07（v1.3）：清理加载更多的节流锁和 loadingMore 态
+    this._lastAppendAt = 0;
+    if (this.data.loadingMore) this.setData({ loadingMore: false });
+    // 2026-08-07（v1.4）：离开页面清理 ARMED 确认态
+    this._armedScrollTop = 0;
+    this._armedMinScroll = 0;
+    if (this.data.armedMore) this.setData({ armedMore: false });
   },
 
   // I5：返回页面时还原视图状态（首次 onShow 跳过，避免覆盖 onLoad 的初始数据）
@@ -311,27 +367,137 @@ Page({
     this.loadLeagues();
   },
 
+  // 2026-08-07（v1.1，B 层渲染分阶段优化）：
+  //   阶段 1 · normalizeLite —— 只算排序/筛选必需的「轻」字段（followed/rank/grade/latest/status/
+  //   name/displayName/leagueid），跳过最重的 remoteCuration.curatedEventFor() 和 upcoming-local
+  //   赛期查找。排序键与最终 sortSmart/时间排序完全对齐，零跳变。立即 setData 首屏可见。
+  //   阶段 2 · normalizeFull —— setTimeout(0) 让出主线程后，对每条赛事跑完整 normalize 补齐
+  //   奖金池/赛期/标签等剩余字段，完成后自动触发 applyAndSlice(true) 刷新视图。
+  //   _normalizeGen 代际标记防竞态：onHide / 重拉 时递增，让阶段 2 旧链自动放弃。
+  normalizeLite(l, win) {
+    // 轻量 normalize：只用 util.unifiedTier（OpenDota tier 映射，无网络/无 curation），
+    // 不调 remoteCuration.curatedEventFor()（最重的遍历，单条 1-3ms × 150-300 条 = 150-900ms）。
+    if (!l || !l.leagueid) return null;
+    const ut = util.unifiedTier(l);
+    const grade = (ut.grade || 'S').toUpperCase();
+    const rank = ut.rank || 0;
+    const w = win || {};
+    const latest = w.latest || 0;
+    const earliest = w.earliest || 0;
+    const lastEnd = w.lastEnd || 0;
+    // 状态判定：阶段 1 不查 curation 显式覆盖（最简路径），只用 OpenDota 时间窗。
+    // 阶段 2 完成后会用 curation 状态硬覆盖修正，短暂的不精确可接受（< 300ms）。
+    const status = util.statusOf({ earliest: earliest, latest: latest, lastEnd: lastEnd, startDate: null, endDate: null });
+    const displayName = sources.leagueDisplayName(l);
+    return {
+      leagueid: l.leagueid,
+      name: displayName || ('赛事 ' + l.leagueid),
+      displayName: displayName,
+      grade: grade,
+      rank: rank,
+      tierClass: 'tier-' + grade.toLowerCase(),
+      label: ut.label,
+      displayLabel: tiers.displayOf(grade),
+      source: ut.source,
+      tagTheme: tagThemeOf(grade).theme,
+      tagVariant: tagThemeOf(grade).variant,
+      followed: follow.isFollowed('leagues', l.leagueid),
+      earliest: earliest,
+      latest: latest,
+      matchCount: w.count || 0,
+      status: status,
+      statusText: statusBadgeOf(status).text,
+      statusColor: statusBadgeOf(status).color,
+      // 阶段 1 标记：表示此条尚未跑完整 normalize（阶段 2 会重写整个对象）。
+      // 卡片渲染依赖的字段（name/grade/status/dateRange）阶段 1 已基本齐全，
+      // 唯一缺失的是精确赛期 dateRange——先用混合窗口粗略日期兜底，阶段 2 修正。
+      startDate: null,
+      endDate: null,
+      dateRange: (earliest && lastEnd) ? util.formatDateRange(earliest, lastEnd) : '',
+      prizePool: null,
+      organizer: null,
+      region: null,
+      format: null,
+      valve: false,
+      topThirdParty: false,
+      defunct: false,
+      _metaEnriched: true,    // 阶段 1 期间不触发 enhanceListMetadata（字段不全，请求无意义）
+      _lite: true             // 标记：阶段 2 检查此字段决定是否需要补全
+    };
+  },
+
   loadLeagues(cb) {
     this.setData({ loading: true, error: '' });
+    // 2026-08-07（v1.1，B 层渲染分阶段优化）：
+    //   新一轮拉取前递增代际，让上一轮阶段 2 的 setTimeout 链自动放弃。
+    //   _normalizeDone 置 false 表示阶段 2 还未完成（守卫用）。
+    this._normalizeGen = (this._normalizeGen || 0) + 1;
+    const gen = this._normalizeGen;
+    this._normalizeDone = false;
+
     // 并行拉赛事元数据 + 时间窗口（explorer 一条 SQL 拿全部）
     Promise.all([api.getLeagues(), api.getLeagueWindows()])
       .then((res) => {
+        if (gen !== this._normalizeGen) return;   // 已被新一轮拉取取代，放弃
         const list = res[0] || [];
         const windows = res[1] || {};
+
+        // ===== 阶段 1 · 快速路径（normalizeLite 全量）=====
+        // 对全量赛事跑轻量 normalize（只用 util.unifiedTier + follow.isFollowed，
+        // 跳过最重的 remoteCuration.curatedEventFor 和赛期查找）。
+        // 单条约 0.1-0.3ms，全量 300 条 ~30-90ms，可在阶段 1 同步完成，
+        // 切 tab 也有全量数据可用，零竞态。
+        // 排序键 followed/rank/latest 已全部算出，与最终 sortSmart/时间排序完全对齐，零跳变。
+        this._leagueMap = {};
         this.allLeagues = list
-          .map((l) => this.normalize(l, windows[l.leagueid]))
-          .filter((x) => x && x.rank >= 1); // S + A + B 级（含次级联赛/杯赛；SSS 已合并入 S）
-        // 预计算各等级计数，供筛选条展示
+          .map((l) => this.normalizeLite(l, windows[l.leagueid]))
+          .filter((x) => x && x.rank >= 1);
+        this.allLeagues.forEach((x) => { this._leagueMap[x.leagueid] = x; });
         this.updateGradeCounts();
         this.applyAndSlice(true);
         const at = api.fetchedAtOf('leagueWindows') || api.fetchedAtOf('leagues');
         this.setData({ loading: false, updatedAt: at, updatedLabel: util.formatAgo(at) });
-        // 列表元数据增强：异步补全 curation 未覆盖赛事的奖金池/地点等
-        this.enhanceListMetadata();
         cb && cb();
+
+        // ===== 阶段 2 · 后台补全（setTimeout 让出主线程，分批 normalizeFull）=====
+        // 对每条赛事跑完整 normalize（包含 curation、赛期查找等重逻辑），
+        // 覆盖 _leagueMap 中对应的 lite 结果（_lite: false）。
+        const allItems = list;     // 全量，不切片
+        const BATCH = 50;          // 每批最多处理条数（让出主线程节奏）
+        let i = 0;
+        const next = () => {
+          if (gen !== this._normalizeGen) return;   // 已被取代，放弃
+          const end = Math.min(i + BATCH, allItems.length);
+          for (; i < end; i++) {
+            const l = allItems[i];
+            const full = this.normalize(l, windows[l.leagueid]);
+            if (full && full.rank >= 1) {
+              this._leagueMap[full.leagueid] = full;
+            }
+          }
+          if (i < allItems.length) {
+            setTimeout(next, 0);   // 让出主线程，继续下一批
+          } else {
+            // 全量完成：组装 allLeagues 并触发一次刷新
+            this.allLeagues = Object.keys(this._leagueMap)
+              .map((k) => this._leagueMap[k])
+              .filter((x) => x && x.rank >= 1);
+            this._normalizeDone = true;
+            this.updateGradeCounts();
+            // 当前 tab 不是 upcoming 时才刷新（upcoming 走独立数据源 upcomingList）
+            if (this.data.filter !== 'upcoming') {
+              this.applyAndSlice(true);
+            }
+            // 阶段 2 完成后启动元数据增强（此时字段齐全，enhanceListMetadata 才有意义）
+            this.enhanceListMetadata();
+          }
+        };
+        // 用 setTimeout(0) 启动阶段 2，确保阶段 1 的 setData 先渲染到屏幕
+        setTimeout(next, 0);
       })
       .catch(() => {
         this.setData({ loading: false, error: '加载失败，请检查网络或域名配置（开发阶段可勾选「不校验合法域名」）' });
+        this._normalizeDone = true;   // 出错也算「完成」，避免守卫永久拦截
         cb && cb();
       });
   },
@@ -929,14 +1095,17 @@ Page({
       // 真实状态：已开赛的 curation 赛事（如 TI 主赛事开打）应归入「进行中」而非「即将到来」
       const cardStatus = (ev.startDate && ev.endDate && nowSec >= ev.startDate && nowSec <= ev.endDate + 86400) ? 'ongoing' : 'upcoming';
       const cardBadge = statusBadgeOf(cardStatus);
-      // 基于归一名生成稳定的负数 id（避免与真实 leagueid 冲突）
+      // 基于 id 生成稳定的负数 id（避免与真实 leagueid 冲突）
+      // 方案 E：curation 有真实 leagueId 时直接用，无则回退哈希 fakeId
       let hash = 0;
       for (let j = 0; j < k.length; j++) {
         hash = ((hash << 5) - hash + k.charCodeAt(j)) | 0;
       }
-      const fakeId = -(Math.abs(hash) % 1000000 + 1000000);  // 负数区间 -1999999..-1000000
+      const fallbackFakeId = -(Math.abs(hash) % 1000000 + 1000000);  // 负数区间 -1999999..-1000000
+      const cardId = (ev.leagueId != null) ? ev.leagueId : fallbackFakeId;
       results.push({
-        leagueid: fakeId,
+        leagueid: cardId,
+        legacyFakeId: (ev.leagueId != null) ? fallbackFakeId : null,  // 详情页兼容层用
         name: ev.name,
         grade: ut.grade,
         rank: ut.rank,
@@ -949,7 +1118,7 @@ Page({
         source: 'community',  // 标注为本地精选（curation）
         tagTheme: t.theme,
         tagVariant: t.variant,
-        followed: follow.isFollowed('leagues', fakeId),
+        followed: follow.isFollowed('leagues', cardId),
         startDate: ev.startDate,
         endDate: ev.endDate,
         status: cardStatus,
@@ -957,7 +1126,7 @@ Page({
         statusColor: cardBadge.color,
         dateRange: util.formatDateRange(ev.startDate, ev.endDate),
         daysToStart: daysToStart,
-        countdownText: cardStatus === 'ongoing' ? '进行中' : (daysToStart <= 0 ? '今日开赛' : (daysToStart === 1 ? '明天开赛' : daysToStart + ' 天后开赛')),
+        countdownText: cardStatus === 'ongoing' ? '正在交锋' : (daysToStart <= 0 ? '今日开赛' : (daysToStart === 1 ? '明天开赛' : daysToStart + ' 天后开赛')),
         matchCount: 0,
         earliest: 0,
         latest: 0,
@@ -1032,31 +1201,60 @@ Page({
     }
 
     this.filtered = arr;
-    // defunct 归档：已停办赛事下沉到独立归档区，不计入主列表分页/计数
-    const archived = arr.filter((x) => x.defunct).sort((a, b) => (b.latest || 0) - (a.latest || 0));
+    // 2026-08-07（v1.2）：已停办赛事（defunct）不再展示归档区，直接从列表中剔除。
+    // 原因：归档区占位过大且用户关注度低，移除后主列表更聚焦有效赛事。
     const active = arr.filter((x) => !x.defunct);
     this.filtered = active;
     const pageSize = this.data.pageSize;
     const page = reset ? 0 : this.data.page;
     const slice = active.slice(0, (page + 1) * pageSize);
-    this.setData({ list: slice, archived: archived, page: page, hasMore: active.length > slice.length });
+    // 2026-08-07（v1.3）：重置 loadingMore——切 tab/筛选后，挂起的 appendPageSafe setTimeout
+    // 回调会在检查 `if (!this.data.loadingMore) return;` 时自动跳过，避免用旧 page 切出两页。
+    // v1.4：同时重置 armedMore——切 tab/筛选后 ARMED 确认态不再有意义。
+    this.setData({ list: slice, archived: [], page: page, hasMore: active.length > slice.length, loadingMore: false, armedMore: false });
+    this._armedScrollTop = 0;
+    this._armedMinScroll = 0;
     this.enhanceListMetadata();
   },
 
-  appendPage() {
-    const page = this.data.page + 1;
-    const pageSize = this.data.pageSize;
-    const slice = this.filtered.slice(0, (page + 1) * pageSize);
-    this.setData({ list: slice, page: page, hasMore: this.filtered.length > slice.length });
-    this.enhanceListMetadata();
+  // 2026-08-07（v1.3/v1.4）：统一的「安全加载下一页」入口——v1.4 起**只有点击提示条触发**（onLoadMore），
+  //   触底只进入 ARMED 确认态（onReachBottom），不再直接调这里。
+  //   三层防护：
+  //   ① 基本守卫：无更多数据 / 首次加载中 / 即将到来懒加载中 → 跳过
+  //   ② loadingMore 态：已在加载下一页 → 跳过（防重复触发）
+  //   ③ 节流锁：上次点击后 5 秒内 → 跳过（防弱网下重复叠加）
+  appendPageSafe() {
+    if (!this.data.hasMore || this.data.loading || this.data.upcomingLoading) return;
+    if (this.data.loadingMore) return;
+    const now = Date.now();
+    if (this._lastAppendAt && now - this._lastAppendAt < 5000) return;
+    this._lastAppendAt = now;
+    // 进入加载态：同步解除 ARMED 确认（点击/微下拉即确认，无需再保持高亮）
+    this._armedScrollTop = 0;
+    this._armedMinScroll = 0;
+    this.setData({ loadingMore: true, armedMore: false });
+    // 用 setTimeout(0) 让 loadingMore 态渲染一帧（三态提示条切「正在加载...」），
+    // 再执行同步切片。切片纯内存操作，通常极快，但渲染慢的设备上用户能看到反馈。
+    // 注意：不能在同一同步栈内连续两次 setData（渲染层会合并，loadingMore 态不可见）。
+    setTimeout(() => {
+      if (!this.data.loadingMore) return;   // 已被 onHide 重置，跳过
+      const page = this.data.page + 1;
+      const pageSize = this.data.pageSize;
+      const slice = this.filtered.slice(0, (page + 1) * pageSize);
+      this.setData({
+        list: slice,
+        page: page,
+        hasMore: this.filtered.length > slice.length,
+        loadingMore: false
+      });
+      this.enhanceListMetadata();
+    }, 0);
   },
 
-  // P1/RC4：列表底部「加载更多」按钮兜底，不依赖 onReachBottom 触底
-  // （吸顶条/自定义滚动容器遮挡时，触底永不触发，第 31 条以后不加载）。
+  // 2026-08-07（v1.4）：底部提示条点击入口——IDLE / ARMED 态点击都直接加载。
+  // 点击即最明确的意图，无需再经过 ARMED 确认（复核 P1-2：两态点击行为统一）。
   onLoadMore() {
-    if (this.data.hasMore && !this.data.loading && !this.data.upcomingLoading) {
-      this.appendPage();
-    }
+    this.appendPageSafe();
   },
 
   toggleFollow(e) {
@@ -1117,12 +1315,14 @@ Page({
     }
     const isLive = nowSec >= start && nowSec <= end;
     const daysToStart = Math.ceil((start - nowSec) / 86400);
-    // 稳定的负数 id（与 mergeCurationUpcoming 命名归一逻辑一致）
+    // 稳定的 id：优先 curation 真实 leagueId（方案 E），无则回退哈希 fakeId（与 mergeCurationUpcoming 一致）
+    // ⚠️ 哈希须剥离 'the' 前缀，与 mergeCurationUpcoming 的 norm() 对齐，否则焦点卡与列表 tab 关注态割裂
     let hash = 0;
-    const k = (cur.canonical || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const k = (cur.canonical || '').toLowerCase().replace(/[^a-z0-9]/g, '').replace(/^the/, '');
     for (let j = 0; j < k.length; j++) { hash = ((hash << 5) - hash + k.charCodeAt(j)) | 0; }
-    const fakeId = -(Math.abs(hash) % 1000000 + 1000000);
-    const followed = follow.isFollowed('leagues', fakeId);
+    const fallbackFakeId = -(Math.abs(hash) % 1000000 + 1000000);
+    const focusId = (cur.leagueId != null) ? cur.leagueId : fallbackFakeId;
+    const followed = follow.isFollowed('leagues', focusId);
     // 签名：只有「是否直播 + 距开赛天数 + 关注态」变化时才 setData
     // 这三个是用户可感知的状态，其余字段（name/dateRange 等）恒定不变
     const sig = isLive + '|' + daysToStart + '|' + followed;
@@ -1130,7 +1330,8 @@ Page({
     this._lastFocusSig = sig;
     this.setData({
       focusNode: {
-        leagueid: fakeId,
+        leagueid: focusId,
+        legacyFakeId: (cur.leagueId != null) ? fallbackFakeId : null,  // 详情页兼容层用
         name: cur.canonical,
         canonical: cur.canonical,
         start: start,

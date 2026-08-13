@@ -58,15 +58,15 @@ page {
   --td-error-color-light-active: rgba(232, 68, 59, 0.22);
   --td-text-color-error: #e8443b;
 
-  /* 背景（深色） */
-  --td-bg-color-page: #0e1116;
-  --td-bg-color-container: #161b22;
-  --td-bg-color-container-active: #1c232c;
-  --td-bg-color-secondarycontainer: #161b22;
-  --td-bg-color-component: #1c232c;
-  --td-bg-color-component-active: #232a33;
-  --td-bg-color-component-disabled: #161b22;
-  --td-bg-color-specialcomponent: #161b22;
+  /* 背景（聚光灯：近黑舞台 + 冷炭灰卡片） */
+  --td-bg-color-page: #0d0d0d;
+  --td-bg-color-container: #1a1a1e;
+  --td-bg-color-container-active: #222226;
+  --td-bg-color-secondarycontainer: #1a1a1e;
+  --td-bg-color-component: #222226;
+  --td-bg-color-component-active: #26262a;
+  --td-bg-color-component-disabled: #1a1a1e;
+  --td-bg-color-specialcomponent: #1a1a1e;
 
   /* 文字 */
   --td-text-color-primary: #f0f3f6;
@@ -75,31 +75,95 @@ page {
   --td-text-color-disabled: #5b626d;
   --td-text-color-anti: #f0f3f6;
 
-  /* 边框/分割线 */
-  --td-border-level-1-color: #232a33;
-  --td-component-stroke: #232a33;
-  --td-border-level-2-color: #2b333d;
-  --td-component-border: #2b333d;
+  /* 边框/分割线（聚光灯：冷炭灰） */
+  --td-border-level-1-color: #262628;
+  --td-component-stroke: #262628;
+  --td-border-level-2-color: #2e2e30;
+  --td-component-border: #2e2e30;
 
   /* 遮罩 */
   --td-mask-active: rgba(0, 0, 0, 0.6);
   --td-mask-background: rgba(14, 17, 22, 0.96);
 
-  /* 全局背景与文字 */
-  background: #0e1116;
+  /* 全局背景与文字（聚光灯方案：近黑舞台底）
+     注1：微信小程序 WXSS 的 background-image 不支持本地资源路径（仅网络图/base64），
+          战场图由页面级 <image class="bg-page"> 渲染（fixed 相对视口，滚动不跟随）。
+     注2：background-attachment: fixed 也不被支持，此处省略 */
+  background: #0d0d0d;
   color: #f0f3f6;
   font-family: -apple-system, "PingFang SC", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  font-size: 28rpx;
+  font-size: var(--fs-subhead);
 }
 
-/* ===== 全局 Tier 用色 Token 工具类（暗色设计系统，S金/A紫/B蓝 规范） =====
-   仅定义颜色，几何尺寸（彩条宽度/定位）由各卡片 .tier-* 容器自身的 ::before 提供。
+/* ===== 聚光灯方案：页面级战场图背景层 =====
+   用法：每个页面根容器内放置（放在最前）：
+     <image class="bg-page" src="/assets/bg-battlefield-dark.webp" mode="aspectFill" />
+     <view class="bg-page-dim"></view>
+   - 页面级元素 fixed 相对视口（自定义组件内 fixed 不可靠，会随滚动露出缺口）
+   - .bg-page 在 page 背景之上、内容之下；.bg-page-dim 暗化层在其上 */
+.bg-page {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  pointer-events: none;
+}
+/* 暗化层：整体压暗背景图至"似有似无、仅见模糊轮廓"程度
+   rgba(13,13,13,0.84) ≈ 28% 图片亮度再压至 ~4%，近乎只剩隐约轮廓。
+   如需微调亮度，修改此 alpha 值即可（值越大越暗）。 */
+.bg-page-dim {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  background: rgba(13, 13, 13, 0.84);
+  pointer-events: none;
+}
+
+/* ===== 聚光灯方案：上下渐变遮罩层（真实 view，兼容所有基础库版本） =====
+   用法：每个页面的根容器内放置 <view class="bg-mask-top"></view> + <view class="bg-mask-bottom"></view>
+   z-index: -1 → 在 page 背景之上、页面内容之下，只暗化背景不遮挡内容；pointer-events: none 不拦截交互 */
+.bg-mask-top {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 30vh;
+  background: linear-gradient(180deg,
+    rgba(13, 13, 13, 0.9) 0%,
+    rgba(13, 13, 13, 0.5) 50%,
+    rgba(13, 13, 13, 0) 100%
+  );
+  z-index: -1;
+  pointer-events: none;
+}
+.bg-mask-bottom {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 20vh;
+  background: linear-gradient(0deg,
+    rgba(13, 13, 13, 0.9) 0%,
+    rgba(13, 13, 13, 0.5) 50%,
+    rgba(13, 13, 13, 0) 100%
+  );
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* ===== 全局 Tier 用色 Token 工具类（B+D 混合：Tier 彩条改双色渐变） =====
+   仅定义渐变，几何尺寸（彩条宽度/定位）由各卡片 .tier-* 容器自身的 ::before 提供。
    各页面/组件统一引用此处 Token，禁止散落字面量（见 #14）。 */
-.tier-sss::before { background: var(--tier-sss); }
-.tier-s::before   { background: var(--tier-s); }
-.tier-a::before   { background: var(--tier-a); }
-.tier-b::before   { background: var(--tier-b); }
-.tier-c::before   { background: var(--tier-c); }
+.tier-sss::before { background: linear-gradient(180deg, #FFD15C, #C8A951); }
+.tier-s::before   { background: linear-gradient(180deg, #C8A951, #b08a3e); }
+.tier-a::before   { background: linear-gradient(180deg, #A777E3, #7B5BC9); }
+.tier-b::before   { background: linear-gradient(180deg, #5B9BD5, #3D7BBF); }
+.tier-c::before   { background: linear-gradient(180deg, #7A8696, #5A6676); }
 /* 等级文本色工具类（供 t-tag / 文字直接引用） */
 .tier-text-sss { color: var(--tier-sss); }
 .tier-text-s   { color: var(--tier-s); }
@@ -126,12 +190,13 @@ view, text { box-sizing: border-box; }
 /* 搜索栏上下间距 */
 .search-wrap { margin: 8rpx 0 20rpx; }
 
-/* 卡片（暗色底无边框，极简） */
+/* 卡片（聚光灯：冷炭灰渐变底 + 内阴影质感，无边框） */
 .card {
-  background: #161b22;
-  border-radius: 16rpx;
+  background: var(--card-grad);
+  border-radius: 14rpx;
   padding: 24rpx;
   margin-bottom: 16rpx;
+  box-shadow: var(--card-inner-shadow);
 }
 
 /* 行布局 */
@@ -139,24 +204,24 @@ view, text { box-sizing: border-box; }
 .row-between { display: flex; align-items: center; justify-content: space-between; }
 
 /* 文字 */
-.title { font-size: 32rpx; font-weight: 600; color: #f0f3f6; }
-.sub { font-size: 24rpx; color: #8a8f99; }
+.title { font-size: var(--fs-heading); font-weight: 600; color: #f0f3f6; }
+.sub { font-size: var(--fs-body); color: #8a8f99; }
 .muted { color: #8a8f99; }
 .bold { font-weight: 600; }
 
-/* 等级标签（暗底上用半透明亮色） */
+/* 等级标签（B+D 混合：背景改 Tier 渐变半透） */
 .tag {
   display: inline-block;
-  font-size: 22rpx;
+  font-size: var(--fs-caption);
   padding: 2rpx 12rpx;
   border-radius: 8rpx;
-  line-height: 1.6;
+  line-height: var(--lh-relaxed);
 }
-.tag-sss { background: rgba(240,170,40,.22); color: #ffcf5c; }
-.tag-s { background: rgba(95,211,95,.18); color: #5fd35f; }
-.tag-a { background: rgba(240,170,40,.18); color: #f0aa28; }
-.tag-b { background: rgba(120,140,160,.18); color: #9bb0c9; }
-.tag-c { background: rgba(120,140,160,.12); color: #7a8696; }
+.tag-sss { background: rgba(255,209,92,.15); color: #FFD15C; }
+.tag-s { background: rgba(200,169,81,.15); color: #C8A951; }
+.tag-a { background: rgba(167,119,227,.15); color: #A777E3; }
+.tag-b { background: rgba(91,155,213,.15); color: #5B9BD5; }
+.tag-c { background: rgba(122,134,150,.12); color: #7A8696; }
 
 /* 胜负色：天辉绿=胜 / 夜魇红=负 */
 .win { color: #5fd35f; }
@@ -165,19 +230,38 @@ view, text { box-sizing: border-box; }
 /* 加载 / 空态 */
 .center { text-align: center; color: #8a8f99; padding: 80rpx 0; }
 
-/* 搜索框（TDesign 之外的兜底） */
+/* ===== v11 聚光灯 Phase 7：Error 错误态 =====
+   用法：<view class="error-strip"><t-icon name="error-circle" color="#e8443b"/> <text>信号中断，正在重连…</text><t-button size="small" theme="primary" bindtap="retry">重试</t-button></view> */
+.error-strip {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 16rpx 20rpx;
+  margin-bottom: 16rpx;
+  border-radius: 12rpx;
+  background: rgba(232, 68, 59, 0.08);
+  border: 1rpx solid rgba(232, 68, 59, 0.2);
+}
+.error-strip text {
+  flex: 1;
+  font-size: var(--fs-body);
+  color: #e8443b;
+}
+
+/* 搜索框（TDesign 之外的兜底 · B+D：暖灰渐变底） */
 .search-bar {
   display: flex;
   align-items: center;
-  background: #161b22;
-  border: 1rpx solid #232a33;
+  background: var(--card-grad);
+  border: 1rpx solid #242028;
   border-radius: 12rpx;
   padding: 12rpx 20rpx;
   margin-bottom: 20rpx;
+  box-shadow: var(--card-inner-shadow);
 }
 .search-bar input { flex: 1; margin-left: 12rpx; color: #f0f3f6; }
 
-/* 分段选择（筛选条）—— 暗色运动风：选中=天辉绿 */
+/* 分段选择（筛选条）—— 暗色运动风：选中=品牌金 */
 .filter-bar {
   display: flex;
   gap: 16rpx;
@@ -187,32 +271,32 @@ view, text { box-sizing: border-box; }
   flex: 1;
   text-align: center;
   padding: 14rpx 0;
-  font-size: 26rpx;
+  font-size: var(--fs-label);
   color: #8a8f99;
-  background: #161b22;
-  border: 1rpx solid #232a33;
+  background: #181520;
+  border: 1rpx solid #242028;
   border-radius: 12rpx;
 }
 .filter-bar .chip.active {
-  color: #0e1116;
-  background: var(--dota-gold);
-  border-color: var(--dota-gold);
+  color: #0e0c10;
+  background: linear-gradient(135deg, #FFD15C, #C8A951);
+  border-color: transparent;
 }
 
 /* 新鲜度标签（更新于 X 前）推到最右 */
 .filter-bar .fresh {
   margin-left: auto;
   align-self: center;
-  font-size: 22rpx;
+  font-size: var(--fs-caption);
   white-space: nowrap;
   padding-left: 8rpx;
 }
 
-/* 分段选择（通用，用于 现役/历史、关注分类等） */
+/* 分段选择（通用，用于 现役/历史、关注分类等 · B+D：暖灰底） */
 .seg {
   display: flex;
-  background: #0e1116;
-  border: 1rpx solid #232a33;
+  background: #0d0d0d;
+  border: 1rpx solid #242028;
   border-radius: 14rpx;
   padding: 6rpx;
   margin-bottom: 20rpx;
@@ -220,27 +304,28 @@ view, text { box-sizing: border-box; }
 .seg-item {
   flex: 1;
   text-align: center;
-  font-size: 28rpx;
+  font-size: var(--fs-subhead);
   color: #8a8f99;
   padding: 14rpx 0;
   border-radius: 10rpx;
 }
 .seg-item.active {
-  background: var(--dota-gold);
-  color: #0e1116;
+  background: linear-gradient(135deg, #FFD15C, #C8A951);
+  color: #0e0c10;
   font-weight: 600;
 }
 
 /* 加载更多按钮容器 */
 .loadmore { text-align: center; padding: 24rpx 0; }
 
-/* 天辉→夜魇 渐变签名条（页面可选使用） */
+/* 天辉→夜魇 渐变签名条（页面可选使用 · B+D：增强渐变质感） */
 .radiant-dire-bar {
   height: 6rpx;
   border-radius: 6rpx;
   background: linear-gradient(90deg, #5fd35f 0%, #8a7d3b 50%, #e8443b 100%);
   margin-bottom: 20rpx;
 }
+
 
 /* ===================================================================
    B+C 混合设计系统 · 共享 token 与组件类
@@ -258,19 +343,24 @@ page {
   /* 显示字体：标题（仅详情页头部与决赛 hero 使用，列表页仍用系统字体保持性能） */
   --font-display: "SF Pro Display", -apple-system, "PingFang SC", sans-serif;
 
-  /* ===== 间距 token ===== */
-  --space-1: 8rpx;
-  --space-2: 16rpx;
-  --space-3: 24rpx;
-  --space-4: 32rpx;
-  --space-5: 40rpx;
-  --space-6: 48rpx;
+  /* ===== 间距 token（4rpx 递进全阶梯；v18 扩充半阶 4/12/20/28rpx） ===== */
+  --space-0-5: 4rpx;    /* 半阶 1 */
+  --space-1:   8rpx;
+  --space-1-5: 12rpx;   /* 半阶 1.5 */
+  --space-2:   16rpx;
+  --space-2-5: 20rpx;   /* 半阶 2.5 */
+  --space-3:   24rpx;
+  --space-3-5: 28rpx;   /* 半阶 3.5 */
+  --space-4:   32rpx;
+  --space-5:   40rpx;
+  --space-6:   48rpx;
 
-  /* ===== 圆角 token ===== */
-  --radius-sm: 8rpx;
-  --radius-md: 12rpx;
-  --radius-lg: 16rpx;
-  --radius-xl: 24rpx;
+  /* ===== 圆角 token（v18 新增 --radius-xs: 4rpx） ===== */
+  --radius-xs:  4rpx;
+  --radius-sm:  8rpx;
+  --radius-md:  12rpx;
+  --radius-lg:  16rpx;
+  --radius-xl:  24rpx;
   --radius-pill: 999rpx;
 
   /* ===== 状态色 token（统一全站语义） ===== */
@@ -293,15 +383,54 @@ page {
   --source-liquipedia: #ffcf5c;
   --source-curation: #9bb0c9;
 
-  /* ===== 卡片层级（增加深度感，不再全平 #161b22） ===== */
-  --card-bg: #161b22;
-  --card-bg-elevated: #1c232c;     /* 浮起卡片：直播卡/KPI strip */
-  --card-bg-inset: #0f141b;         /* 内嵌区：表格行/cell */
+  /* ===== 卡片层级（聚光灯：极淡渐变基色 + 冷炭灰 + 顶部微亮内阴影） ===== */
+  --card-bg: #1a1a1e;
+  --card-bg-elevated: #222226;     /* 浮起卡片：直播卡/KPI strip */
+  --card-bg-inset: #131316;         /* 内嵌区：表格行/cell */
+  /* 卡片对角线渐变基底（聚光灯风格） */
+  --card-grad: linear-gradient(135deg, #1c1c20 0%, #18181c 100%);
+  /* 卡片内阴影叠层（顶部微亮 + 底部微暗：物理质感） */
+  --card-inner-shadow: inset 0 1rpx 0 rgba(255,255,255,0.04), inset 0 -1rpx 0 rgba(0,0,0,0.15);
+
+  /* ===== Tier 色浸染渐变（聚光灯核心特征：左侧色带 → 向右浸染衰减） =====
+     色标单位使用 rpx 与项目 Token 体系一致（1rpx ≈ 0.5px @2x） */
+  --card-glow-sss: linear-gradient(90deg, var(--tier-sss) 0%, var(--tier-sss) 10rpx, rgba(255,209,92,0.08) 160rpx, transparent 280rpx);
+  --card-glow-s:   linear-gradient(90deg, var(--tier-s) 0%, var(--tier-s) 10rpx, rgba(200,169,81,0.08) 160rpx, transparent 280rpx);
+  --card-glow-a:   linear-gradient(90deg, var(--tier-a) 0%, var(--tier-a) 10rpx, rgba(167,119,227,0.08) 160rpx, transparent 280rpx);
+  --card-glow-b:   linear-gradient(90deg, var(--tier-b) 0%, var(--tier-b) 10rpx, rgba(91,155,213,0.08) 160rpx, transparent 280rpx);
+  --card-glow-c:   linear-gradient(90deg, var(--tier-c) 0%, var(--tier-c) 10rpx, rgba(122,134,150,0.06) 160rpx, transparent 280rpx);
+  /* LIVE 特殊：绿色光晕替代 Tier 色（直播永远最抢眼） */
+  --card-glow-live: linear-gradient(90deg, var(--radiant) 0%, var(--radiant) 10rpx, rgba(95,211,95,0.10) 200rpx, transparent 320rpx);
 
   /* ===== 数据指挥台 KPI 色（C 风格专用，仅用于强调单个 KPI） ===== */
   --kpi-primary: #5fd35f;
   --kpi-warning: #f0aa28;
   --kpi-info: #6054f1;
+
+  /* ===== 字体排版 Token（v11 聚光灯 §1.4.1 · 九级字号阶梯，v17 扩充） ===== */
+  --fs-hero:     52rpx;   /* 英雄首字母大字、详情页大数字 */
+  --fs-mega:     40rpx;   /* VS 比分、英雄标题、大图标 */
+  --fs-display:  36rpx;   /* 页面主标题、品牌栏大标题 */
+  --fs-heading:  32rpx;   /* 卡片标题（赛事名称、战队名） */
+  --fs-emphasis: 30rpx;   /* KPI 数值、分区强调标题 */
+  --fs-subhead:  28rpx;   /* 分段标签、对话框标题 */
+  --fs-label:    26rpx;   /* 分区标签、tab 文字、快捷入口名 */
+  --fs-body:     24rpx;   /* 正文（比赛信息、详情描述） */
+  --fs-caption:  22rpx;   /* 辅助文字（日期、来源、状态标签） */
+  --fs-micro:    20rpx;   /* 极小标注（角标、版本号、KPI 单位） */
+  --fs-badge:    18rpx;   /* 徽章、胜负标识、极小辅助 */
+
+  /* 字重 */
+  --fw-bold:     700;
+  --fw-semibold: 600;
+  --fw-medium:   500;
+  --fw-regular:  400;
+
+  /* 行高（无单位比值，跟随字号自动缩放） */
+  --lh-tight:    1.3;     /* Display / 大标题紧凑排版 */
+  --lh-normal:   1.4;     /* Heading / Subhead */
+  --lh-relaxed:  1.6;     /* Body（长文本阅读舒适） */
+  --lh-loose:    1.7;     /* 多行长文本（协议/隐私/帮助） */
 
   /* 字体特性：tabular-nums 让数字对齐 */
   font-variant-numeric: tabular-nums;
@@ -328,18 +457,18 @@ page {
   overflow: hidden;
 }
 .kpi-label {
-  font-size: 22rpx;
+  font-size: var(--fs-caption);
   color: #8a8f99;
   text-transform: uppercase;
   letter-spacing: 1rpx;
-  line-height: 1.4;
+  line-height: var(--lh-normal);
 }
 .kpi-value {
-  font-size: 30rpx;
+  font-size: var(--fs-emphasis);
   font-weight: 600;
   color: #f0f3f6;
   font-family: var(--font-numeric);
-  line-height: 1.35;
+  line-height: var(--lh-normal);
   word-break: break-word;
   white-space: normal;
 }
@@ -351,7 +480,7 @@ page {
 .kpi-value.warning { color: var(--kpi-warning); }
 .kpi-value.info { color: var(--kpi-info); }
 .kpi-unit {
-  font-size: 22rpx;
+  font-size: var(--fs-caption);
   color: #8a8f99;
   font-weight: 400;
   margin-left: 4rpx;
@@ -365,12 +494,12 @@ page {
   display: inline-flex;
   align-items: center;
   gap: 6rpx;
-  font-size: 20rpx;
+  font-size: var(--fs-micro);
   padding: 2rpx 10rpx;
   border-radius: var(--radius-pill);
   background: rgba(120, 140, 160, 0.12);
   color: #9bb0c9;
-  line-height: 1.6;
+  line-height: var(--lh-relaxed);
   border: 1rpx solid transparent;
 }
 .src-badge::before {
@@ -404,14 +533,14 @@ page {
   display: inline-flex;
   align-items: center;
   gap: 6rpx;
-  font-size: 20rpx;
+  font-size: var(--fs-micro);
   color: #6b7280;
   font-family: var(--font-mono);
-  line-height: 1.4;
+  line-height: var(--lh-normal);
 }
 .fresh-label::before {
   content: '⟳';
-  font-size: 22rpx;
+  font-size: var(--fs-caption);
 }
 /* D1 赛程更新时间（2026-08-03）：与 OpenDota 数据新鲜度标签并排时留间距 + 更淡色区分 */
 .schedule-fresh-label {
@@ -420,7 +549,7 @@ page {
 }
 .schedule-fresh-label::before {
   content: '🕒';
-  font-size: 22rpx;
+  font-size: var(--fs-caption);
 }
 
 /* ===================================================================
@@ -472,7 +601,7 @@ page {
   flex-shrink: 0;
 }
 .vs-team-name {
-  font-size: 28rpx;
+  font-size: var(--fs-subhead);
   font-weight: 500;
   color: #f0f3f6;
   overflow: hidden;
@@ -481,7 +610,7 @@ page {
   max-width: 200rpx;
 }
 .vs-score {
-  font-size: 40rpx;
+  font-size: var(--fs-mega);
   font-weight: 700;
   font-family: var(--font-numeric);
   line-height: 1;
@@ -491,13 +620,13 @@ page {
 /* 胜方「胜」徽章（金色强调，区别于 faction 绿/红比分） */
 .vs-win-badge {
   margin-left: 8rpx;
-  font-size: 18rpx;
+  font-size: var(--fs-badge);
   font-weight: 700;
   color: #1a1205;
   background: linear-gradient(135deg, #ffcf5c, #C8A951);
   border-radius: 999rpx;
   padding: 2rpx 12rpx;
-  line-height: 1.4;
+  line-height: var(--lh-normal);
   letter-spacing: 1rpx;
   flex-shrink: 0;
 }
@@ -509,13 +638,13 @@ page {
   min-width: 80rpx;
 }
 .vs-vs {
-  font-size: 22rpx;
+  font-size: var(--fs-caption);
   color: #6b7280;
   font-weight: 600;
   letter-spacing: 1rpx;
 }
 .vs-meta {
-  font-size: 20rpx;
+  font-size: var(--fs-micro);
   color: #6b7280;
   font-family: var(--font-mono);
   white-space: nowrap;
@@ -535,7 +664,7 @@ page {
   padding: var(--space-1) 0;
 }
 .stat-label {
-  font-size: 24rpx;
+  font-size: var(--fs-body);
   color: #8a8f99;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -556,7 +685,7 @@ page {
 .stat-bar-fill.warning { background: var(--status-upcoming); }
 .stat-bar-fill.danger { background: var(--dire); }
 .stat-value {
-  font-size: 24rpx;
+  font-size: var(--fs-body);
   font-weight: 600;
   color: #f0f3f6;
   font-family: var(--font-numeric);
@@ -594,18 +723,18 @@ page {
   gap: var(--space-1);
 }
 .hero-title {
-  font-size: 40rpx;
+  font-size: var(--fs-mega);
   font-weight: 700;
   color: #f0f3f6;
   font-family: var(--font-display);
   text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.6);
-  line-height: 1.2;
+  line-height: var(--lh-tight);
 }
 .hero-meta {
   display: flex;
   gap: var(--space-2);
   align-items: center;
-  font-size: 24rpx;
+  font-size: var(--fs-body);
   color: #c9d1d9;
 }
 
@@ -621,22 +750,26 @@ page {
   border-left: 6rpx solid var(--status-upcoming);
 }
 .hint-card-enhanced .hint-title {
-  font-size: 30rpx;
+  font-size: var(--fs-emphasis);
   font-weight: 600;
   color: var(--status-upcoming);
   margin-bottom: var(--space-2);
 }
 .hint-card-enhanced .hint-desc {
-  font-size: 26rpx;
+  font-size: var(--fs-label);
   color: #9aa4b2;
-  line-height: 1.6;
+  line-height: var(--lh-relaxed);
   margin-bottom: var(--space-3);
 }
 .hint-card-enhanced .hint-step {
-  font-size: 24rpx;
+  font-size: var(--fs-body);
   color: #7d8794;
-  line-height: 1.7;
+  line-height: var(--lh-loose);
   margin-top: var(--space-1);
+}
+/* 数据源健康提示（2026-08-11 长期架构改进落地）：链路异常时警告色而非「暂无数据」蓝 */
+.hint-card-enhanced .hint-title.hint-warn {
+  color: #d97757;
 }
 
 /* ===================================================================
@@ -652,49 +785,35 @@ page {
   margin-top: var(--space-3);
 }
 .section-title {
-  font-size: 28rpx;
+  font-size: var(--fs-subhead);
   font-weight: 600;
   color: #f0f3f6;
   letter-spacing: 1rpx;
 }
 .section-action {
-  font-size: 22rpx;
+  font-size: var(--fs-caption);
   color: #6b7280;
   font-family: var(--font-mono);
 }
 
 /* ===================================================================
-   共享组件 10：Brand Logo（DOTA2 风格纯 CSS 标识，无外部资源）
-   用法：<view class="brand-logo" /> 或 <view class="brand-logo brand-logo--sm" />
-   红盾 + 暗金描边 + “D2” 字样，用于关于页 / 启动页 / 列表页品牌栏
+   共享组件 10：Brand Logo（Dire 阵营符号 · 暗色聚光灯设计语言）
+   用法：<image class="brand-logo" src="/assets/brand-logo.png" mode="aspectFill" />
+   或 <image class="brand-logo brand-logo--sm" src="/assets/brand-logo.png" mode="aspectFill" />
+   图片 LOGO：保留 DOTA2 Dire 符号原形 + 深炭底/聚光灯微光/天辉绿-夜魇红阵营色点缀。
+   版权安全：Dire 符号为 Valve 游戏内阵营标记，非商标 logo，已添加原创设计修饰层。
    =================================================================== */
 .brand-logo {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 88rpx;
-  height: 88rpx;
-  border-radius: 18rpx;
-  background: linear-gradient(155deg, var(--dota-red) 0%, var(--dota-red-strong) 100%);
-  border: 3rpx solid var(--dota-gold);
-  box-shadow: 0 4rpx 14rpx rgba(164, 30, 30, 0.35);
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: 8rpx;
   flex-shrink: 0;
 }
-.brand-logo::after {
-  content: 'D2';
-  font-family: var(--font-display, sans-serif);
-  font-size: 44rpx;
-  font-weight: 800;
-  color: var(--dota-gold);
-  letter-spacing: 1rpx;
-}
 .brand-logo--sm {
-  width: 56rpx;
-  height: 56rpx;
-  border-radius: 12rpx;
-  border-width: 2rpx;
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 6rpx;
 }
-.brand-logo--sm::after { font-size: 28rpx; }
 
 /* 品牌栏（列表页顶部：Logo + 名称 + 副标题） */
 .brand-header {
@@ -705,14 +824,14 @@ page {
 }
 .brand-text { display: flex; flex-direction: column; gap: 2rpx; min-width: 0; }
 .brand-title {
-  font-size: 34rpx;
+  font-size: var(--fs-display);
   font-weight: 700;
   color: #f0f3f6;
   font-family: var(--font-display, sans-serif);
-  line-height: 1.2;
+  line-height: var(--lh-tight);
 }
 .brand-sub {
-  font-size: 22rpx;
+  font-size: var(--fs-caption);
   color: #8a8f99;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -726,7 +845,7 @@ page {
   width: 64rpx;
   height: 64rpx;
   border-radius: 16rpx;
-  background: #161b22;
+  background: #181520;
   border: 1rpx solid rgba(255,255,255,0.08);
 }
 
@@ -755,4 +874,98 @@ page {
 .tap-scale {
   transform: scale(0.98);
   transition: transform 0.12s ease;
+}
+
+/* ===================================================================
+   共享组件 12：无障碍工具类（v17 落地）
+   - .touchable：保证可点击元素最小触控目标 88rpx（44px WCAG AA 标准）
+   - @media (prefers-reduced-motion: reduce)：尊重用户减少动画偏好
+   =================================================================== */
+.touchable {
+  min-width: 88rpx;
+  min-height: 88rpx;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+/* 无障碍：用户启用「减少动态效果」时关闭所有装饰性循环动画 */
+@media (prefers-reduced-motion: reduce) {
+  .live-pulse,
+  .signal-active,
+  .league-item--ongoing,
+  .anim-fade-up,
+  .anim-fade {
+    animation: none !important;
+  }
+  .tap-scale {
+    transition: none !important;
+  }
+}
+
+/* ===================================================================
+   动效 Token（v11 聚光灯 §1.4.2）：缓动曲线 + 时长 + 关键动画
+   所有动画统一引用 Token；infinite 循环仅用于环境氛围动画（呼吸/光晕）
+   =================================================================== */
+page {
+  /* 缓动曲线 */
+  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);       /* 元素入场/展开 */
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);      /* 持续循环动画 */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);   /* 弹性反馈（tabBar 选中） */
+  --ease-back:   cubic-bezier(0.68, -0.3, 0.27, 1.3); /* 弹出（toast/徽章） */
+
+  /* 时长 Token */
+  --dur-fast:   150ms;   /* 微交互（hover/点击反馈） */
+  --dur-normal: 300ms;   /* 过渡（卡片淡入/页面切换/浸染展开） */
+  --dur-slow:   600ms;   /* 叙事动画（光晕呼吸/LIVE 脉冲） */
+  --dur-breath: 2400ms;  /* 呼吸循环（LIVE 脉冲/信号点）：参照平静呼吸 12-20 次/分，落在 ~25 次/分 区间，平缓不急促 */
+  --dur-sway:   1600ms;  /* 中等节奏装饰动画（加载更多待命光晕/箭头浮动/标签脉冲）：介于过渡与平静呼吸之间，约 37 次/分 */
+}
+
+/* ① LIVE 脉冲呼吸（赛事列表/详情页进行中卡片）
+   节奏：吸气(0→35%) → 峰值保持(35→55%) → 呼气(55→90%) → 静息(90→100%)，模拟真实呼吸而非急促闪烁。 */
+@keyframes pulse-glow {
+  0%       { box-shadow: 0 0 4rpx  rgba(95, 211, 95, 0.2); }
+  35%, 55% { box-shadow: 0 0 14rpx rgba(95, 211, 95, 0.5); }
+  90%      { box-shadow: 0 0 4rpx  rgba(95, 211, 95, 0.2); }
+  100%     { box-shadow: 0 0 4rpx  rgba(95, 211, 95, 0.2); }
+}
+.live-pulse {
+  animation: pulse-glow var(--dur-breath) var(--ease-in-out) infinite;
+}
+
+/* ② 信号激活脉冲（我的页面·赛事提醒已开启徽章）—— 同呼吸节奏 */
+@keyframes signal-dot {
+  0%       { opacity: 0.4; transform: scale(0.8); }
+  35%, 55% { opacity: 1.0; transform: scale(1.2); }
+  90%      { opacity: 0.4; transform: scale(0.8); }
+  100%     { opacity: 0.4; transform: scale(0.8); }
+}
+.signal-active {
+  animation: signal-dot var(--dur-breath) var(--ease-in-out) infinite;
+}
+
+/* ③ 卡片入场（列表页首次渲染 + 分页加载）——与既有 fadeUp 兼容，规范名 fade-up */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(12rpx); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.anim-fade-up-spec {
+  animation: fade-up var(--dur-normal) var(--ease-out) both;
+}
+
+/* ④ 触控按压反馈（规范 §1.4.2 标准版，区别于上面 .tap-scale 静态 scale） */
+.tap-scale:active {
+  transform: scale(0.96);
+  transition: transform var(--dur-fast) var(--ease-spring);
+}
+
+/* ⑤ 关注星标填充动画（从空心→实心） */
+@keyframes star-fill {
+  from { transform: scale(0.6); opacity: 0.3; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+.star-fill {
+  animation: star-fill var(--dur-normal) var(--ease-out) both;
 }

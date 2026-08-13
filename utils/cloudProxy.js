@@ -127,6 +127,15 @@ proxy.liquipediaFetchRawWikitextProxy = function (pageName) {
   return call('liquipediaFetchRawWikitext', { pageName: pageName });
 };
 
+// 数据源健康检查（2026-08-11 长期架构改进落地）：
+// 调云函数 action=health，云端轻量探测 Liquipedia / OpenDota 可达性，
+// 返回 { ts, sources: { liquipedia: {status,latencyMs}, opendota: {...} }, ok }。
+// 客户端在「数据为空」时据此区分「数据源暂不可用」与「赛事确实无数据」。
+// 失败 reject → 调用方 catch 静默降级（视为 unknown，不阻断业务）。
+proxy.health = function () {
+  return call('health', {});
+};
+
 // 暴露给其它模块（api.js / stratz.js / leagues.js 复用）
 proxy.isAvailable = isAvailable;
 proxy.call = call;

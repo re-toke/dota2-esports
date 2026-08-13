@@ -4,7 +4,7 @@
   flex-direction: column;
   align-items: center;
   text-align: center;
-  padding: 64rpx 48rpx;
+  padding: 64rpx var(--space-6);
 }
 .es-icon {
   width: 140rpx;
@@ -15,21 +15,26 @@
   justify-content: center;
   background: rgba(200, 169, 81, 0.12);
   border: 2rpx solid rgba(200, 169, 81, 0.32);
-  margin-bottom: 28rpx;
+  margin-bottom: var(--space-3-5);
+}
+/* v11 聚光灯 Phase 7：error 态红色调（区别于常规金色空态） */
+.es--error .es-icon {
+  background: rgba(232, 68, 59, 0.10);
+  border-color: rgba(232, 68, 59, 0.28);
 }
 .es-title {
-  font-size: 30rpx;
+  font-size: var(--fs-emphasis);
   font-weight: 600;
   color: #f0f3f6;
-  margin-bottom: 12rpx;
+  margin-bottom: var(--space-1-5);
   font-family: var(--font-display, -apple-system, sans-serif);
 }
 .es-desc {
-  font-size: 24rpx;
-  line-height: 1.6;
+  font-size: var(--fs-body);
+  line-height: var(--lh-relaxed);
   color: #6b7280;
   max-width: 520rpx;
 }
 .es-action {
-  margin-top: 32rpx;
+  margin-top: var(--space-4);
 }

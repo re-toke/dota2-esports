@@ -34,11 +34,52 @@ const CURATED_EVENTS = [
   // TI15 (The International 2026)：2026-08-13 ~ 2026-08-23（含小组赛+主赛事），上海
   // 来源：Liquipedia The_International/2026 + Valve 官方公告
   // 补充字段（2026-07-25）：奖金池/地点/Valve 标记，供「赛事」tab 焦点卡与详情页 curation 兜底使用。
+  // 2026-08-11 方案 A+R1：加 leagueId=19719（OpenDota 主赛事 leagueid，触发详情页 redirectTo 真实 id）
+  //   + legacyFakeId=-1653808（leagues.js L1080-1103 对 "international2026" 的哈希值，用于老用户关注状态迁移）
+  // 2026-08-11 方案 B：participants 由数字 16 改为数组形式（数组触发详情页渲染真实队名+赛区+分组，
+  //   参赛队伍已通过 GosuGamers/fragster/17173/百度百科/16score 五源交叉验证，2026-06-29 全部锁定）
   { canonical: 'The International 2026', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['theinternational2026', 'ti2026', 'international2026', 'ti15'], year: 2026,
+    leagueId: 19719, legacyFakeId: -1653808,
     start: Math.floor(Date.UTC(2026, 7, 13) / 1000), end: Math.floor(Date.UTC(2026, 7, 23) / 1000),
     prizePool: '$1,600,000', organizer: 'Valve', region: '中国上海', format: '小组赛+双败淘汰',
-    participants: 16, status: '即将到来', liquipediaSlug: 'The_International/2026', valve: true, topThirdParty: false },
+    participants: [
+      // 直接受邀 7 支（Valve 基于 2025-26 赛季成绩邀请）
+      { name: 'Aurora Gaming', region: 'EU', group: 'direct' },
+      { name: 'BoomBoys', region: 'EU', group: 'direct' },
+      { name: 'Team Falcons', region: 'EU', group: 'direct' },
+      { name: 'Team Liquid', region: 'EU', group: 'direct' },
+      { name: 'Tundra Esports', region: 'EU', group: 'direct' },
+      { name: 'Xtreme Gaming', region: 'CN', group: 'direct' },
+      { name: 'Team Yandex', region: 'EU', group: 'direct' },
+      // 欧洲赛区预选 4 支（2026-06-29 锁定）
+      { name: 'Team Spirit', region: 'EU', group: 'qualifier' },
+      { name: 'TEAM VISION', region: 'EU', group: 'qualifier' },
+      { name: 'HULIGANI', region: 'EU', group: 'qualifier' },
+      { name: 'Nigma Galaxy', region: 'EU', group: 'qualifier' },
+      // 中国赛区预选 2 支（2026-06-18 锁定）
+      { name: 'Team Resilience', region: 'CN', group: 'qualifier' },
+      { name: 'Vici Gaming', region: 'CN', group: 'qualifier' },
+      // 东南亚赛区预选 1 支
+      { name: 'OG', region: 'SEA', group: 'qualifier' },
+      // 北美赛区预选 1 支
+      { name: 'GamerLegion', region: 'NA', group: 'qualifier' },
+      // 南美赛区预选 1 支
+      { name: 'LGD Gaming', region: 'SA', group: 'qualifier' }
+    ],
+    // ★ 2026-08-11：TI 主页 wikitext 不含 {{Match}} 模板（对阵在子页面 Group_Stage 里，
+    //   主页仅含 {{Opponent}} 列表 + Infobox）。scheduledMatchesSlug 指向对阵所在子页面，
+    //   让详情页对阵 tab 能拉到小组赛 44 场 {{Match}}（2026-08-13 首日 8 场已公布）。
+    //   多阶段赛事后续可改为数组（如 ['The_International/2026/Group_Stage', '.../Playoff']）。
+    status: '即将到来', liquipediaSlug: 'The_International/2026',
+    scheduledMatchesSlug: 'The_International/2026/Group_Stage',
+    // ★ 2026-08-12 方案 B（BO 判定引擎 S2 权威信号）：TI 2026 实为 16 队 Swiss BO3（5 源交叉验证：
+    //   sportsbrackets/winio/umggaming/bo3.gg/Liquipedia Format 段），Grand Final BO5。
+    //   供 resolveBoType S2 按 stageKey 取值（group/playoff/grandFinal），早于比分反推生效。
+    //   子页面 wikitext 的 Format 段若解析成功（parseBoFormat），会与本地字段合并增强；
+    //   若解析失败或缺失，本字段兜底（TI 2026 子页面 Format 段格式不稳定，本字段为权威源）。
+    boFormat: { group: 'BO3', playoff: 'BO3', grandFinal: 'BO5' },
+    valve: true, topThirdParty: false },
 
   // ── 知名 S 级（顶级第三方 S-Tier 巡回赛）2024 ──
   // 2024 起统一 $1M 级奖金，是 Dota2 职业生态骨架
@@ -447,8 +488,10 @@ const CURATED_TEAMS = {
               aliases: ['alliance'] },
   10136357: { name: 'Nigma Galaxy', tag: 'NGX', country: 'EU', tier: { grade: 'SSS', label: 'TI 参赛' },
               aliases: ['nigma', 'nigmagalaxy', 'nigmagx'] },  // 合并原 350190 + 8124688
-  7262280:  { name: 'BetBoom Team', tag: 'BB', country: 'RU', tier: { grade: 'S', label: 'S-Tier' },
-              aliases: ['betboom', 'betboomteam'] },   // ⚠️待复核：id 待替换正确值
+  8255888:  { name: 'BetBoom Team', tag: 'BB', country: 'RU', tier: { grade: 'S', label: 'S-Tier' },
+              aliases: ['betboom', 'betboomteam', 'boomboys'] },  // ★ 2026-08-05（审核 R3）：修正原 7262280（实测不存在），真 BetBoom=8255888（OpenDota 名 BoomBoys/tag=BB）
+  10182357: { name: '1w Team', tag: '1W', country: 'RU', tier: { grade: 'A', label: 'A-Tier' },
+              aliases: ['1w', '1wteam'] },  // ★ 2026-08-05（审核 R3）：OpenDota 名 '1w'
   8261500:  { name: 'Xtreme Gaming', tag: 'XG', country: 'CN', tier: { grade: 'SSS', label: 'TI 参赛' },
               aliases: ['xtremegaming', 'xg', 'extremegaming'] },
   8574561:  { name: 'Azure Ray', tag: 'AR', country: 'CN', tier: { grade: 'S', label: 'S-Tier' },
@@ -479,7 +522,7 @@ const TI_CONTESTANT_TEAM_IDS = [
   10150538, 7119388, 2586976, 1838315, 8291895, 8599101, 2163, 10136357, 8252383, 3925770,
   8444661, 8252383, 9247354, 8572539, 8609307, 8655479, 8210156, 39,
   // TI 2024 (Copenhagen)
-  10150538, 7119388, 2586976, 8291895, 8599101, 2163, 111474, 10136357, 7262280,
+  10150538, 7119388, 2586976, 8291895, 8599101, 2163, 111474, 10136357, 8255888,
   8261500, 9247354, 8260824, 8377730, 8210156, 8609307,
   // TI 2026 (Shanghai, 已确认参赛队)
   10150538, 7119388, 8291895, 8599101, 2163, 8261500, 9247354, 7260824
@@ -525,18 +568,26 @@ function buildLookups(events, teams) {
     (t.aliases || []).forEach((a) => { NAME_INDEX[consensus.normName(a)] = Number(id); });
   });
   function eventFor(name, ctx) {
-    if (!name) return null;
+    // ★ 2026-08-11 BUG 修复：leagueId 显式 pin 匹配提到 name 判空之前。
+    //   关注页 follow.js 跳转详情页只传 leagueId 不传 name → 原实现 `if (!name) return null`
+    //   先短路，即使 leagueId 在 LEAGUE_ID_INDEX 中命中也返回 null →
+    //   详情页 onLoad 不重定向（保留 fakeId）+ refreshMetadataDerived 拿不到 participants 数组
+    //   （参赛队伍全部变「待定队伍 N」）。
+    //   修复：有 ctx.leagueId 且命中索引时，name 为空也能返回（名称匹配仍需 name 非空）。
+    //   注意：此修复同时解决「fakeId 负数也能按名称匹配」——负数 id 不在 LEAGUE_ID_INDEX，
+    //   继续走名称匹配（若 name 非空）。
     // game 校验助手：entry.game 与 ctx.game 同时声明才校验；任一缺失则放行
     const validGame = (entry) => {
       if (!entry) return null;
       if (ctx && ctx.game && entry.game && entry.game !== ctx.game) return null;
       return entry;
     };
-    // 1. 显式 leagueId 匹配（最高优先级，绕过别名漂移）
+    // 1. 显式 leagueId 匹配（最高优先级，绕过别名漂移；name 为空也可命中——关注页只传 id）
     //    仅当调用方提供了 leagueId 且确实有对应 pin 时返回；其余情况走名称匹配。
     if (ctx && ctx.leagueId != null && LEAGUE_ID_INDEX[ctx.leagueId]) {
       return validGame(LEAGUE_ID_INDEX[ctx.leagueId]);
     }
+    if (!name) return null;
     // 2. 名称匹配（精确 + 模糊）
     const k = consensus.normName(name);
     if (!k) return null;

@@ -5,5 +5,5 @@
     "t-icon": "tdesign-miniprogram/icon/icon",
     "empty-state": "../../components/empty-state/empty-state"
   },
-  "navigationBarTitleText": "关注"
+  "navigationBarTitleText": "我的"
 }

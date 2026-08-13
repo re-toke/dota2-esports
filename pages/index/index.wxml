@@ -1,7 +1,10 @@
 <view class="container with-tab-bar">
+  <!-- 聚光灯背景图（v12）：页面级 image（fixed 相对视口，滚动不跟随） -->
+  <image class="bg-page" src="/assets/bg-battlefield-dark.webp" mode="aspectFill" />
+  <view class="bg-page-dim"></view>
   <!-- 品牌标识栏 + 常驻搜索入口（5.2） -->
   <view class="brand-header">
-    <view class="brand-logo brand-logo--sm" />
+    <image class="brand-logo brand-logo--sm" src="/assets/brand-logo.png" mode="aspectFill" />
     <view class="brand-text">
       <text class="brand-title">DOTA2赛事</text>
       <text class="brand-sub">赛事 · 战队 · 对战</text>
@@ -100,8 +103,12 @@
       <text class="qc-name">战队</text>
     </view>
     <view class="quick-cell" data-path="/pages/data/data" bindtap="goTab" hover-class="tap-scale">
-      <view class="qc-icon"><t-icon name="app" size="40rpx" color="#3FB950" /></view>
+      <view class="qc-icon"><t-icon name="book-open" size="40rpx" color="#3FB950" /></view>
       <text class="qc-name">资料库</text>
     </view>
   </view>
+
+  <!-- 聚光灯背景遮罩（v11）：顶部/底部渐变暗化，只作用于背景不遮挡内容 -->
+  <view class="bg-mask-top"></view>
+  <view class="bg-mask-bottom"></view>
 </view>

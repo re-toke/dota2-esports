@@ -1,7 +1,10 @@
 <view class="container with-tab-bar">
+  <!-- 聚光灯背景图（v12）：页面级 image（fixed 相对视口，滚动不跟随） -->
+  <image class="bg-page" src="/assets/bg-battlefield-dark.webp" mode="aspectFill" />
+  <view class="bg-page-dim"></view>
   <!-- 品牌标识栏 -->
   <view class="brand-header">
-    <view class="brand-logo brand-logo--sm" />
+    <image class="brand-logo brand-logo--sm" src="/assets/brand-logo.png" mode="aspectFill" />
     <view class="brand-text">
       <text class="brand-title">DOTA2赛事</text>
       <text class="brand-sub">赛事 · 战队 · 对战</text>
@@ -109,7 +112,12 @@
     <skeleton type="card" count="5" />
   </block>
 
-  <empty-state wx:elif="{{error}}" type="error" title="加载失败" desc="{{error}}" actionText="重试" bind:action="retry" />
+  <!-- v11 聚光灯 Phase 7：Error 错误态——顶部夜魇红微光条（品牌声音 §2.6） -->
+  <view wx:elif="{{error}}" class="error-strip">
+    <t-icon name="error-circle" size="32rpx" color="#e8443b" />
+    <text>信号中断，正在重连…</text>
+    <t-button size="small" theme="primary" bind:tap="retry">重试</t-button>
+  </view>
 
   <!-- 即将到来懒加载进度 -->
   <block wx:elif="{{filter==='upcoming' && upcomingLoading}}">
@@ -144,7 +152,7 @@
     <!-- 列表视图（默认） -->
     <block wx:if="{{viewMode === 'list'}}">
     <view
-      class="league-item {{item.tierClass}} anim-fade-up"
+      class="league-item {{item.tierClass}} {{item.status === 'ongoing' ? 'league-item--ongoing' : (item.status === 'ended' ? 'league-item--ended' : '')}} anim-fade-up"
       wx:for="{{list}}"
       wx:key="leagueid"
       bindtap="openLeague"
@@ -184,49 +192,28 @@
       </view>
     </view>
 
-    <view class="loadmore" wx:if="{{hasMore}}">
-      <t-button theme="light" size="medium" bindtap="onLoadMore" t-class="more-btn">加载更多</t-button>
+    <!-- 2026-08-07（v1.4）：底部提示条四态——IDLE 待加载 / ARMED 已就绪 / LOADING 加载中 / 隐藏 -->
+    <!-- IDLE 态：默认展示，提示「继续滑动或点击加载」+ 金色向下箭头 -->
+    <view class="loadmore-bar anim-fade" wx:if="{{hasMore && !armedMore && !loadingMore}}" bindtap="onLoadMore" hover-class="tap-scale">
+      <text class="lm-text">继续滑动或点击加载</text>
+      <view class="lm-arrow">
+        <t-icon name="chevron-down" size="32rpx" color="#FFD15C" />
+      </view>
+    </view>
+    <!-- ARMED 态：触底后高亮，提示「上拉或点击加载」——点击即加载（明确意图） -->
+    <view class="loadmore-bar loadmore-bar--armed anim-fade" wx:elif="{{hasMore && armedMore && !loadingMore}}" bindtap="onLoadMore" hover-class="tap-scale">
+      <text class="lm-text lm-text--armed">上拉或点击加载</text>
+      <view class="lm-arrow">
+        <t-icon name="chevron-down" size="32rpx" color="#FFD15C" />
+      </view>
+    </view>
+    <!-- 加载中态：旋转圈 + 文字 -->
+    <view class="loadmore-bar loadmore-bar--loading" wx:elif="{{hasMore && loadingMore}}">
+      <view class="lm-spinner" />
+      <text class="lm-text lm-text--loading">正在加载更多赛事...</text>
     </view>
 
-    <!-- 已停办赛事归档区（defunct）：与主列表分离，置底展示 -->
-    <view class="archive-block" wx:if="{{archived.length}}">
-      <view class="archive-head">
-        <text class="archive-title">已停办赛事（归档）</text>
-        <text class="archive-count">{{archived.length}}</text>
-      </view>
-      <view
-        class="league-item {{item.tierClass}} is-defunct anim-fade-up"
-        wx:for="{{archived}}"
-        wx:key="leagueid"
-        bindtap="openLeague"
-        data-id="{{item.leagueid}}"
-        data-name="{{item.name}}"
-        style="animation-delay: {{ (index % 12) * 50 }}ms"
-        hover-class="tap-scale"
-      >
-        <view class="league-main">
-          <view class="league-name-row">
-            <text class="league-name">{{item.displayName || item.name}}</text>
-            <view class="league-badges">
-              <t-tag theme="{{item.tagTheme}}" variant="{{item.tagVariant}}" size="small">{{item.displayLabel}}</t-tag>
-              <text wx:if="{{item.valve}}" class="hl-badge hl-valve">Valve官方</text>
-              <text wx:if="{{item.topThirdParty}}" class="hl-badge hl-tp">顶级第三方</text>
-              <text class="status-tag defunct-tag">已停办</text>
-            </view>
-          </view>
-          <view class="league-sub muted" wx:if="{{item.dateRange || item.matchCount || item.prizePool || item.organizer || item.region}}">
-            <text class="date-range" wx:if="{{item.dateRange}}">{{item.dateRange}}</text>
-            <text wx:if="{{item.matchCount}}"> · {{item.matchCount}} 场</text>
-            <text wx:if="{{item.prizePool}}"> · {{item.prizePool}}</text>
-            <text wx:if="{{item.organizer}}"> · {{item.organizer}}</text>
-            <text wx:if="{{item.region}}"> · {{item.region}}</text>
-          </view>
-        </view>
-        <view class="star-btn" catchtap="toggleFollow" data-id="{{item.leagueid}}" data-name="{{item.name}}">
-          <t-icon name="star" size="44rpx" color="{{item.followed ? '#ffcf5c' : '#5b626d'}}" />
-        </view>
-      </view>
-    </view>
+    <!-- 2026-08-07（v1.2）：已停办赛事归档区移除，defunct 赛事直接从列表过滤 -->
     </block><!-- /viewMode=list -->
 
     <!-- 1.2 周轴视图：横向日期轴（按周分列）+ 同周赛事聚合 -->
@@ -315,4 +302,8 @@
       </view>
     </view>
   </view>
+
+  <!-- 聚光灯背景遮罩（v11）：顶部/底部渐变暗化，只作用于背景不遮挡内容 -->
+  <view class="bg-mask-top"></view>
+  <view class="bg-mask-bottom"></view>
 </view>

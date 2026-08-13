@@ -1,4 +1,7 @@
 <view class="container">
+  <!-- 聚光灯背景图（v12）：页面级 image（fixed 相对视口，滚动不跟随） -->
+  <image class="bg-page" src="/assets/bg-battlefield-dark.webp" mode="aspectFill" />
+  <view class="bg-page-dim"></view>
   <!-- 常驻搜索框（5.2） -->
   <view class="search-bar">
     <t-search
@@ -82,4 +85,8 @@
       </view>
     </view>
   </block>
+
+  <!-- 聚光灯背景遮罩（v11）：顶部/底部渐变暗化，只作用于背景不遮挡内容 -->
+  <view class="bg-mask-top"></view>
+  <view class="bg-mask-bottom"></view>
 </view>

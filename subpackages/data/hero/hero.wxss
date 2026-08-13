@@ -1,20 +1,20 @@
-.container { padding: 24rpx; padding-bottom: calc(24rpx + env(safe-area-inset-bottom)); }
+.container { padding: var(--space-3); padding-bottom: calc(24rpx + env(safe-area-inset-bottom)); }
 
-.search { margin-bottom: 16rpx; }
+.search { margin-bottom: var(--space-2); }
 
-.filter-bar { display: flex; flex-wrap: wrap; gap: 12rpx; margin-bottom: 12rpx; }
+.filter-bar { display: flex; flex-wrap: wrap; gap: var(--space-1-5); margin-bottom: var(--space-1-5); }
 .filter-spacer { flex: 1; }
 .chip {
-  font-size: 24rpx;
+  font-size: var(--fs-body);
   color: #9aa4b2;
-  background: #161b22;
-  border: 1rpx solid #232a33;
-  border-radius: 999rpx;
-  padding: 8rpx 22rpx;
+  background: #1a1a1e;
+  border: 1rpx solid #262628;
+  border-radius: var(--radius-pill);
+  padding: var(--space-1) 22rpx;
   transition: all 0.15s ease;
 }
 .chip.active {
-  color: #0e1116;
+  color: #121015;
   background: #C8A951;
   border-color: #C8A951;
   font-weight: 600;
@@ -23,24 +23,24 @@
 .hero-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 16rpx;
-  margin-top: 8rpx;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
 }
 
 .hero-card {
   display: flex;
   align-items: center;
-  gap: 16rpx;
+  gap: var(--space-2);
   min-width: 0;
   overflow: hidden;
-  background: var(--card-bg, #161b22);
+  background: var(--card-bg, #1a1a1e);
   border: 1rpx solid #1f262f;
   border-radius: var(--radius-lg, 16rpx);
-  padding: 18rpx 20rpx;
+  padding: 18rpx var(--space-2-5);
   transition: transform 0.12s ease, background 0.12s ease;
 }
-.hero-card.skel { padding: 24rpx; }
-.hero-card--hover { background: var(--card-bg-elevated, #1c232c); transform: scale(0.99); }
+.hero-card.skel { padding: var(--space-3); }
+.hero-card--hover { background: var(--card-bg-elevated, #222226); transform: scale(0.99); }
 
 .hero-badge {
   width: 72rpx;
@@ -52,24 +52,24 @@
   border: 2rpx solid;
   flex-shrink: 0;
 }
-.hero-initial { font-size: 34rpx; font-weight: 800; font-family: var(--font-mono, monospace); }
-.hero-avatar { width: 68rpx; height: 68rpx; border-radius: 50%; display: block; background: #0f141b; }
+.hero-initial { font-size: var(--fs-display); font-weight: 800; font-family: var(--font-mono, monospace); }
+.hero-avatar { width: 68rpx; height: 68rpx; border-radius: 50%; display: block; background: #131316; }
 
-.hero-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4rpx; }
+.hero-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-0-5); }
 .hero-name {
-  font-size: 28rpx;
+  font-size: var(--fs-subhead);
   font-weight: 600;
   color: #f0f3f6;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.hero-tags { display: flex; align-items: center; gap: 6rpx; font-size: 22rpx; }
+.hero-tags { display: flex; align-items: center; gap: 6rpx; font-size: var(--fs-caption); }
 .hero-attr { font-weight: 600; }
 .hero-attr2 { color: #8a8f99; }
 .hero-dot { color: #4b5563; }
 .hero-role {
-  font-size: 20rpx;
+  font-size: var(--fs-micro);
   color: #6b7280;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -77,5 +77,5 @@
 }
 
 .hero-win { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; min-width: 0; overflow: hidden; }
-.hero-win-num { font-size: 28rpx; font-weight: 700; color: var(--dota-gold, #C8A951); font-family: var(--font-mono, monospace); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 110rpx; }
-.hero-win-label { font-size: 18rpx; color: #6b7280; }
+.hero-win-num { font-size: var(--fs-subhead); font-weight: 700; color: var(--dota-gold, #C8A951); font-family: var(--font-mono, monospace); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 110rpx; }
+.hero-win-label { font-size: var(--fs-badge); color: #6b7280; }

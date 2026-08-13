@@ -5,6 +5,34 @@
       {
         "value": "node_modules",
         "type": "folder"
+      },
+      {
+        "type": "folder",
+        "value": "/minitest"
+      },
+      {
+        "type": "folder",
+        "value": "/rollback"
+      },
+      {
+        "type": "folder",
+        "value": "/deliverables"
+      },
+      {
+        "type": "folder",
+        "value": "/mockup"
+      },
+      {
+        "type": "folder",
+        "value": "/archive"
+      },
+      {
+        "type": "folder",
+        "value": "/admin"
+      },
+      {
+        "type": "file",
+        "value": "/assets/Abstract_dark_esports_arena_ba_2026-08-08T12-13-04.png"
       }
     ],
     "include": []
@@ -46,5 +74,6 @@
   "projectname": "DOTA2赛事",
   "condition": {},
   "simulatorPluginLibVersion": {},
-  "editorSetting": {}
+  "editorSetting": {},
+  "testRoot": "minitest/"
 }

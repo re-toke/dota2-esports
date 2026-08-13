@@ -1,18 +1,18 @@
-.container { padding: 24rpx; }
+.container { padding: var(--space-3); }
 
-.entry-grid { display: flex; flex-direction: column; gap: 20rpx; margin-top: 16rpx; }
+.entry-grid { display: flex; flex-direction: column; gap: var(--space-2-5); margin-top: var(--space-2); }
 
 .entry-card {
   display: flex;
   align-items: center;
-  gap: 20rpx;
-  padding: 32rpx 28rpx;
-  background: var(--card-bg, #161b22);
+  gap: var(--space-2-5);
+  padding: var(--space-4) var(--space-3-5);
+  background: var(--card-bg, #1a1a1e);
   border: 1rpx solid #1f262f;
   border-radius: var(--radius-lg, 16rpx);
   transition: transform 0.12s ease, background 0.12s ease;
 }
-.entry-card--hover { background: var(--card-bg-elevated, #1c232c); transform: scale(0.99); }
+.entry-card--hover { background: var(--card-bg-elevated, #222226); transform: scale(0.99); }
 
 .entry-icon {
   width: 96rpx;
@@ -27,9 +27,9 @@
 }
 
 .entry-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6rpx; }
-.entry-title { font-size: 32rpx; font-weight: 700; color: #f0f3f6; }
+.entry-title { font-size: var(--fs-heading); font-weight: 700; color: #f0f3f6; }
 .entry-desc {
-  font-size: 24rpx;
+  font-size: var(--fs-body);
   color: #8a8f99;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -38,7 +38,7 @@
 
 .data-foot {
   text-align: center;
-  font-size: 22rpx;
+  font-size: var(--fs-caption);
   color: #6b7280;
-  padding: 28rpx 0 8rpx;
+  padding: var(--space-3-5) 0 var(--space-1);
 }

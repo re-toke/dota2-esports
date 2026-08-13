@@ -60,7 +60,8 @@ module.exports = {
   },
 
   // 列表分页每页条数
-  pageSize: 30,
+  // 2026-08-07：30 → 20，配合渲染分阶段快速路径减少首屏 setData 条数（B 层优化）。
+  pageSize: 20,
 
   // OpenDota 限流（约 60 次/分钟）。采用滑动窗口并发模式：窗口内最多 maxPerMin 次请求，
   // 允许并发，仅在窗口满时排队等待（替代原串行 minGapMs 策略，让 Promise.all 真正并行）。

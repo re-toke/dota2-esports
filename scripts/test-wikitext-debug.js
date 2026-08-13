@@ -15,8 +15,9 @@ const events = [
 events.reduce((p, name) => {
   return p.then(() => {
     console.log('\n=== 赛事: ' + name + ' ===');
-    return liquipedia.getScheduledMatches(name).then((matches) => {
-      console.log('  对阵数:', matches.length);
+    return liquipedia.getScheduledMatches(name).then((scheduled) => {
+      const matches = (scheduled && scheduled.matches) || [];
+      console.log('  对阵数:', matches.length, 'boFormat:', JSON.stringify(scheduled && scheduled.boFormat));
       if (matches.length > 0) {
         console.log('  首场:', JSON.stringify(matches[0]));
       }

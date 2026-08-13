@@ -189,7 +189,7 @@ Page({
   // 自绘倒计时文本（TDesign 小程序版无原生 CountDown，前端每秒校准）
   fmtCountdown(start, now) {
     let diff = start - now;
-    if (diff <= 0) return '进行中';
+    if (diff <= 0) return '正在交锋';
     const d = Math.floor(diff / 86400);
     const h = Math.floor((diff % 86400) / 3600);
     const m = Math.floor((diff % 3600) / 60);

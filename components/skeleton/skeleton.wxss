@@ -1,14 +1,14 @@
 /* components/skeleton/skeleton.wxss */
 /* §8.3 自定义骨架屏（2026-07-29）
    - shimmer 动画：渐变高光从左到右扫过，循环 1.4s
-   - 暗色主题：base #1c232c → highlight #2a323d
+   - 暗色主题：base #222226 → highlight #2a323d
    - 匹配项目设计 token（--card-bg / --card-bg-elevated）
 */
 
 /* ===== 基础骨架块 + shimmer 动画 ===== */
 .sk-block {
-  background: var(--card-bg-elevated, #1c232c);
-  border-radius: 8rpx;
+  background: var(--card-bg-elevated, #222226);
+  border-radius: var(--radius-sm);
   position: relative;
   overflow: hidden;
 }
@@ -41,39 +41,39 @@
 
 /* ===== card：卡片列表骨架 ===== */
 .sk-card {
-  background: var(--card-bg, #161b22);
+  background: var(--card-bg, #1a1a1e);
   border: 1rpx solid #1f262f;
-  border-radius: 16rpx;
-  padding: 24rpx;
-  margin-bottom: 16rpx;
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  margin-bottom: var(--space-2);
 }
 .sk-card-head {
   display: flex;
   align-items: center;
-  gap: 16rpx;
-  margin-bottom: 20rpx;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2-5);
 }
 .sk-badge {
   width: 60rpx;
   height: 36rpx;
-  border-radius: 8rpx;
+  border-radius: var(--radius-sm);
   flex-shrink: 0;
 }
 .sk-title {
   flex: 1;
   height: 36rpx;
-  border-radius: 8rpx;
+  border-radius: var(--radius-sm);
 }
 .sk-tier {
   width: 48rpx;
   height: 36rpx;
-  border-radius: 8rpx;
+  border-radius: var(--radius-sm);
   flex-shrink: 0;
 }
 .sk-card-body {
   display: flex;
   flex-direction: column;
-  gap: 12rpx;
+  gap: var(--space-1-5);
 }
 .sk-line {
   height: 24rpx;
@@ -89,12 +89,12 @@
 .sk-detail-head {
   display: flex;
   align-items: center;
-  gap: 20rpx;
-  padding: 24rpx;
-  background: var(--card-bg, #161b22);
+  gap: var(--space-2-5);
+  padding: var(--space-3);
+  background: var(--card-bg, #1a1a1e);
   border: 1rpx solid #1f262f;
-  border-radius: 16rpx;
-  margin-bottom: 16rpx;
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-2);
 }
 .sk-head-icon {
   width: 110rpx;
@@ -106,12 +106,12 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 12rpx;
+  gap: var(--space-1-5);
 }
 .sk-head-title {
   height: 40rpx;
   width: 60%;
-  border-radius: 8rpx;
+  border-radius: var(--radius-sm);
 }
 .sk-head-sub {
   height: 26rpx;
@@ -121,16 +121,16 @@
 .sk-kpi-strip {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 16rpx;
-  background: var(--card-bg-elevated, #1c232c);
-  border-radius: 16rpx;
-  padding: 24rpx;
-  margin-bottom: 16rpx;
+  gap: var(--space-2);
+  background: var(--card-bg-elevated, #222226);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  margin-bottom: var(--space-2);
 }
 .sk-kpi-cell {
   display: flex;
   flex-direction: column;
-  gap: 8rpx;
+  gap: var(--space-1);
 }
 .sk-kpi-label {
   height: 22rpx;
@@ -140,45 +140,45 @@
 .sk-kpi-value {
   height: 32rpx;
   width: 70%;
-  border-radius: 8rpx;
+  border-radius: var(--radius-sm);
 }
 .sk-tabs {
   display: flex;
-  gap: 12rpx;
-  margin-bottom: 16rpx;
-  padding: 0 4rpx;
+  gap: var(--space-1-5);
+  margin-bottom: var(--space-2);
+  padding: 0 var(--space-0-5);
 }
 .sk-tab {
   flex: 1;
   height: 64rpx;
-  border-radius: 12rpx;
+  border-radius: var(--radius-md);
 }
 .sk-detail-card {
-  background: var(--card-bg, #161b22);
+  background: var(--card-bg, #1a1a1e);
   border: 1rpx solid #1f262f;
-  border-radius: 16rpx;
-  padding: 24rpx;
-  margin-bottom: 16rpx;
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  margin-bottom: var(--space-2);
 }
 .sk-card-title {
   height: 32rpx;
   width: 30%;
-  border-radius: 8rpx;
-  margin-bottom: 20rpx;
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--space-2-5);
 }
 
 /* ===== follow：关注卡片横向流骨架 ===== */
 .sk-follow-row {
   display: flex;
   gap: 18rpx;
-  padding: 4rpx 8rpx 12rpx;
+  padding: var(--space-0-5) var(--space-1) var(--space-1-5);
 }
 .sk-follow-card {
   width: 300rpx;
   height: 168rpx;
   border-radius: 18rpx;
-  background: var(--card-bg-elevated, #1c232c);
-  padding: 20rpx;
+  background: var(--card-bg-elevated, #222226);
+  padding: var(--space-2-5);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -210,7 +210,7 @@
 .sk-follow-vs {
   height: 32rpx;
   width: 60%;
-  border-radius: 8rpx;
+  border-radius: var(--radius-sm);
   align-self: center;
 }
 .sk-follow-meta {
@@ -223,12 +223,12 @@
 .sk-row {
   display: flex;
   align-items: center;
-  gap: 20rpx;
-  padding: 24rpx;
-  background: var(--card-bg, #161b22);
+  gap: var(--space-2-5);
+  padding: var(--space-3);
+  background: var(--card-bg, #1a1a1e);
   border: 1rpx solid #1f262f;
-  border-radius: 16rpx;
-  margin-bottom: 12rpx;
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-1-5);
 }
 .sk-row-icon {
   width: 72rpx;
@@ -245,7 +245,7 @@
 .sk-row-title {
   height: 30rpx;
   width: 50%;
-  border-radius: 8rpx;
+  border-radius: var(--radius-sm);
 }
 .sk-row-sub {
   height: 22rpx;
@@ -255,6 +255,6 @@
 .sk-row-tail {
   width: 48rpx;
   height: 48rpx;
-  border-radius: 8rpx;
+  border-radius: var(--radius-sm);
   flex-shrink: 0;
 }

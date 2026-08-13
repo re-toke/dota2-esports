@@ -4,6 +4,8 @@ const config = require('../../utils/config.js');
 const experiment = require('../../utils/experiment.js');
 const reminderStrategy = require('../../utils/reminderStrategy.js');
 const sources = require('../../utils/sources.js');
+// ★ 2026-08-07（审核 R1/R2）：账号登录态（ensureOpenId 上移单点实现 + 预登录前置）
+const auth = require('../../utils/auth.js');
 
 const TABS = [
   { key: 'teams', label: '战队' },
@@ -38,8 +40,14 @@ Page({
     tierOptions: reminderStrategy.TIER_OPTIONS.map((t) => ({
       grade: t.grade, label: t.label, selected: ['S', 'A'].indexOf(t.grade) >= 0
     })),
+    // 用户登录态展示（R2：不放 letter 字段——openid 恒以 "o" 开头，首字母无区分度）
+    userInfo: { loggedIn: false, name: '' },
+    // 每日推送上限（O2/V1：subscribe.js DAILY_LIMIT 未导出，WXML 无法访问模块对象，故硬编码）
+    dailyLimit: 5,
     // 空态「发现」按钮文案（按当前 Tab + A/B 实验动态生成）
-    exploreText: '去发现战队'
+    exploreText: '去发现战队',
+    // v11 系统配置：关于我们版本号
+    appVersion: '1.1.0'
   },
 
   onShow() {
@@ -60,6 +68,9 @@ Page({
     const today = subscribe.getTodayCount();
     const reminder = reminderStrategy.getStrategy();
     const ctaVariant = experiment.getVariant('follow_cta_variant', 'A');
+    // ★ 2026-08-07（R2）：预登录预热 + 云端订阅态恢复（fire-and-forget，缓存命中零请求）
+    auth.ensureLogin().catch(() => {});
+    subscribe.restoreSubFromCloud().catch(() => {});
 
     const patch = {
       ctaVariant: ctaVariant,
@@ -84,6 +95,54 @@ Page({
     };
     this.setData(patch);
     this.syncProfile();
+    this.refreshUserInfo();
+  },
+
+  // ★ 用户卡片点击：未登录时触发登录流程（R7：不调 restoreSubFromCloud，留给 onShow fire-and-forget）
+  onUserCardTap() {
+    if (this.data.userInfo.loggedIn) return;
+    wx.showLoading({ title: '登录中...', mask: true });
+    auth.ensureLogin().then(() => {
+      wx.hideLoading();
+      this.refreshUserInfo();
+    }).catch(() => {
+      wx.hideLoading();
+      wx.showToast({ title: '登录失败，请稍后重试', icon: 'none' });
+    });
+  },
+
+  // ★ v11 系统配置：隐私与协议入口
+  openPrivacy() {
+    wx.navigateTo({ url: '/subpackages/detail/privacy/privacy' });
+  },
+
+  // ★ v11 系统配置：清除本地缓存
+  clearCache() {
+    wx.showModal({
+      title: '确认清空本地数据？',
+      content: '此操作不可撤销，将清除关注列表、缓存数据与登录态。',
+      confirmText: '清空',
+      confirmColor: '#e8443b',
+      success: (res) => {
+        if (!res.confirm) return;
+        try {
+          wx.clearStorageSync();
+          this.refreshUserInfo();
+          this.onShow();
+          wx.showToast({ title: '已清空', icon: 'success' });
+        } catch (e) {
+          wx.showToast({ title: '清空失败', icon: 'none' });
+        }
+      }
+    });
+  },
+
+  // ★ 刷新用户信息（登录态 + 显示名）
+  refreshUserInfo() {
+    const loggedIn = auth.isLoggedIn();
+    this.setData({
+      userInfo: { loggedIn: loggedIn, name: loggedIn ? '微信用户' : '' }
+    });
   },
 
   // refresh 保留给显式调用（如取消关注后），onShow 不再调用
@@ -140,7 +199,12 @@ Page({
       out.name = sources.leagueDisplayName(it);
       out.displayName = sources.leagueDisplayName(it);
       out.sub = '点击查看赛事详情';
-      out.target = '/subpackages/detail/league-detail/league-detail?leagueId=' + it.id;
+      // ★ 2026-08-11：跳转补传 name（encodeURIComponent）——详情页 onLoad 需要 name 做
+      //   curation 名称匹配（重定向 + participants 数组取数）。此前只传 leagueId：
+      //   关注记录若是老 fakeId（-1653808）时，name 缺失 → eventFor 无法按名匹配 →
+      //   详情页不重定向 + 参赛队伍全「待定队伍 N」。
+      out.target = '/subpackages/detail/league-detail/league-detail?leagueId=' + it.id +
+        '&name=' + encodeURIComponent(out.displayName || out.name || '');
     }
     return out;
   },
@@ -185,6 +249,14 @@ Page({
   },
 
   onSubscribe() {
+    // ★ 2026-08-07（R2 预登录前置，手势红线）：订阅授权必须用户点击手势内同步调用。
+    //   openid 缓存命中（onShow/app onLaunch 已预热）→ 直接弹（手势内）；
+    //   未命中（首次弱网）→ toast 引导 + 后台补登录，绝不在网络回调后弹授权（会被微信手势校验拒绝）。
+    if (!auth.isLoggedIn()) {
+      wx.showToast({ title: '正在登录…请稍后重试', icon: 'none' });
+      auth.ensureLogin().catch(() => {});
+      return;
+    }
     subscribe.requestSubscribe({ force: true }).then((r) => {
       if (r === 'skipped') {
         wx.showToast({ title: '未配置订阅模板', icon: 'none' });

@@ -571,13 +571,23 @@ function parseMatchFields(body) {
   var opp2 = extractTeamOpponent(fields.opponent2 || '');
   var team1Name = opp1.name;
   var team2Name = opp2.name;
-  if (!team1Name || !team2Name) return null;  // 队名缺失，跳过
+  // ★ 2026-08-05（v1.1，审核 R1-R5）：一方已确认、一方未确认（{{TeamOpponent|}} 空串）的对局必须保留。
+  //   LP 用空字符串表示未确认方（非 TBD 字样）→ 归一为 TBD 占位，交给显示层按「至少一方确定」规则处理；
+  //   双方均空（空壳模板，无任何对手信息）→ 仍丢弃（原行为，无展示价值）。
+  var missing1 = !team1Name, missing2 = !team2Name;
+  if (missing1 && missing2) return null;   // 空壳模板（无任何对手信息）→ 丢弃（原行为）
+  if (missing1) team1Name = 'TBD';
+  if (missing2) team2Name = 'TBD';
   // 解析日期
   var startTime = parseLiquipediaDate(fields.date || '');
   if (!startTime) return null;  // 日期解析失败，跳过
   // bestof
   var bo = fields.bestof ? parseInt(fields.bestof, 10) : 1;
   var boType = 'BO' + (isNaN(bo) || bo < 1 ? 1 : bo);
+  // ★ 2026-08-04：区分「显式声明 bestof」与「缺失默认 BO1」。
+  // 缺失时 boType=BO1 只是占位，BO 判定引擎（sources.resolveBoType）会用
+  // S2 赛制文本 / S3 series_type / S4 同赛事自证等信号重新决策，避免全判 BO1。
+  var boDeclared = !!(fields.bestof && String(fields.bestof).trim());
   // finished
   var finished = fields.finished === 'true' || fields.finished === '1';
   // ★ v3 优化项32（2026-08-03）：字母 score 辅助 finished 判定。
@@ -595,6 +605,15 @@ function parseMatchFields(body) {
   //   - 全部 map 槽都已打且无队达阈值 → 打满结束（BO2 1-1 平 / BO5 2-2 决胜后）
   // 阈值按 map 槽数推断（页面可能不写 bestof，实测 1win 页面即缺）：1 槽→1，
   // 2 槽→2（BO2/BO3 前两局），3 槽→2，4 槽→2，5 槽→3。
+  // ★ 2026-08-12 方案 A：mapSlots 计算提到 finished 守卫外（finished 已为 true 时也要输出）。
+  //   mapSlots = {{Match}} 模板显式声明的 map 槽数（字段存在，含空壳 |map1=），
+  //   用于 resolveBoType S4.5 信号推断 BO 结构（如 3 槽 → BO3，5 槽 → BO5）。
+  //   注意：原 _mapCount（值非空）仍在 finished 块内统计，二者职责分离。
+  var mapSlots = 0;
+  var _mapKeysAll = ['map1', 'map2', 'map3', 'map4', 'map5'];
+  for (var _si = 0; _si < _mapKeysAll.length; _si++) {
+    if (_mapKeysAll[_si] in fields) mapSlots++;
+  }
   if (!finished) {
     var _mapWins = { '1': 0, '2': 0 };
     var _hasSkip = false;
@@ -647,9 +666,11 @@ function parseMatchFields(body) {
     walkover: walkover,   // ★ v3 优化项22：弃权标记
     startTime: startTime,
     boType: boType,
+    boDeclared: boDeclared,   // ★ 2026-08-04：bestof 显式声明标记（缺失→false，供 resolveBoType 决策）
     finished: finished,
     phase: phase,
-    matchIds: matchIds    // ★ v3 优化项33（2026-08-03）：OpenDota match_id 关联（P0b 去重用）
+    matchIds: matchIds,   // ★ v3 优化项33（2026-08-03）：OpenDota match_id 关联（P0b 去重用）
+    mapSlots: mapSlots    // ★ 2026-08-12 方案 A：map 槽数（字段存在计数，含空壳），供 S4.5 BO 推断
   };
 }
 
@@ -846,6 +867,44 @@ function parseLeagueTier(wikitext) {
   return { tier: num };
 }
 
+// ===== 赛制 BO 声明解析（2026-08-04，BO 判定引擎 S2 信号）=====
+// 从赛事页 wikitext 的 ==Format== 段提取阶段→BO 映射。
+// 实测 1win_Essence/2（页面无任何 bestof 字段，赛制只在 Format 段）：
+//   **All matches are {{Abbr/Bo2}}
+//   **Grand Final is {{Abbr/Bo5}}, all other matches are {{Abbr/Bo3}}
+// 返回 { group, playoff, grandFinal, default }，均为 'BO1'|'BO2'|'BO3'|'BO5' 或 null。
+// 变体覆盖（审核 R7）：Abbr/Bo2 / Bo 2 / BO2 / best of 2 / Group Stage: Bo2 / Round robin (Bo2)
+function parseBoFormat(wikitext) {
+  var out = { group: null, playoff: null, grandFinal: null, default: null };
+  if (!wikitext || typeof wikitext !== 'string') return out;
+  function extract(txt) {
+    if (!txt) return null;
+    var m = String(txt).match(/(?:Abbr\/)?Bo\s*(\d)|best\s*of\s*(\d)/i);
+    return m ? ('BO' + (m[1] || m[2])) : null;
+  }
+  // 取某短语后的首个 BO 数字（解决 "Grand Final is Bo5, all other matches are Bo3" 同行双阶段）
+  function boAfter(line, pattern) {
+    var m = String(line).match(pattern);
+    if (!m) return null;
+    return extract(String(line).slice(m.index + m[0].length));
+  }
+  // 取 ==Format== 段（标题层级 2-4 级均可）；无该段则扫全文本兜底
+  var seg = wikitext.split(/\n=+\s*Format\s*=+\n/i)[1] || wikitext;
+  String(seg).split('\n').forEach(function (line) {
+    if (!extract(line)) return;
+    var bo = extract(line);
+    if (!out.default) out.default = bo;
+    var l = line.toLowerCase();
+    var gf = boAfter(l, /grand\s*final|决赛/);
+    if (gf) out.grandFinal = gf;
+    var grp = boAfter(l, /all matches|group|round\s*[- ]?robin|小组/);
+    if (grp) out.group = grp;
+    var pl = boAfter(l, /all other matches|playoff|淘汰|round\s*of|semi|quarter|upper|lower/);
+    if (pl) out.playoff = pl;
+  });
+  return out;
+}
+
 module.exports = {
   parseTemplate: parseTemplate,
   splitTopLevel: splitTopLevel,
@@ -860,6 +919,7 @@ module.exports = {
   parseParticipants: parseParticipants,
   parseLeagueMetadata: parseLeagueMetadata,
   parseScheduledMatches: parseScheduledMatches,
+  parseBoFormat: parseBoFormat,   // ★ 2026-08-04：Format 段 BO 声明解析（BO 判定引擎 S2）
   parseTeamLogo: parseTeamLogo,
   parseLeagueTier: parseLeagueTier,
   extractTeamOpponent: extractTeamOpponent

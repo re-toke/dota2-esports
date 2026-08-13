@@ -294,16 +294,21 @@ function cachedFreshIncremental(resPath, resource, id, freshSec, ttlSec) {
 // 失败时自动回退到直连逻辑（cached/cachedFresh），不产生循环依赖。
 // 注意：cloudProxy.js 顶部 require('./api.js') 用于回退，故 api.js 顶部不可
 // 反向 require('./cloudProxy.js')，否则循环依赖。cloudFetch 内联了相同逻辑。
-function cloudFetch(action, params) {
+// 2026-08-04（LIVE 比分刷新 v1.1，R3）：新增 force 透传 —— 云函数入口解构 event.force，
+// 通用 OpenDota handler `if (!force)` 跳过缓存（云函数已支持，缺客户端通道）。
+// 仅透传 truthy，未传时保持原形状（向后兼容）。
+function cloudFetch(action, params, force) {
   const threshold = (config.cloudProxy && config.cloudProxy.circuitBreakerThreshold) || 0;
   // 防御：wx.cloud 未初始化（测试环境 / 未开通云开发 / 用户拒绝授权）时直接 reject，
   // 交由 tryCloudOrDirect 回退到直连，避免 `wx.cloud.callFunction` 同步抛 TypeError 击穿调用链。
   if (!wx.cloud || !wx.cloud.callFunction) {
     return Promise.reject(new Error('cloud proxy unavailable'));
   }
+  const data = { action: action, params: params || {} };
+  if (force) data.force = true;
   return wx.cloud.callFunction({
     name: 'aggregation',
-    data: { action: action, params: params || {} }
+    data: data
   }).then((res) => {
     const r = res && res.result;
     if (r && !r.error && r.data) {
@@ -341,11 +346,13 @@ const ACTION_MAP = {
 // 修复：提取为 tryCloudOrDirect(methodName, args, directFn, transform?)，
 // 消除重复代码，集中管理熔断/回退逻辑。
 // transform 可选：对云代理返回的数据做转换（与直连路径一致）。
-function tryCloudOrDirect(methodName, args, directFn, transform) {
+// 2026-08-04（v1.1，R3）：第 5 参 force 透传给 cloudFetch（仅云函数路径；直连兜底不经 force，
+// 本地缓存照常命中，防多用户 NAT 共享 IP 打爆 OpenDota 429）
+function tryCloudOrDirect(methodName, args, directFn, transform, force) {
   const direct = directFn;
   if (!cloudEnabled()) return direct();
   const m = ACTION_MAP[methodName].apply(null, args || []);
-  const cloud = cloudFetch(m.action, m.params);
+  const cloud = cloudFetch(m.action, m.params, force);
   const chain = transform ? cloud.then(transform) : cloud;
   return chain.catch(function () { return direct(); });
 }
@@ -382,12 +389,13 @@ function getLeagueWindows() {
     transformLeagueWindows);
 }
 
-function getLeagueMatches(leagueId) {
+function getLeagueMatches(leagueId, force) {
   // 比赛结果频繁变动：较短新鲜窗口 + 较长硬 TTL；陈旧时后台按游标增量合并
+  // 2026-08-04（v1.1，R3）：force 透传云函数跳过缓存（进行中 BO3 低频刷新用）
   return tryCloudOrDirect('getLeagueMatches', [leagueId],
     function () {
       return cachedFreshIncremental('/leagues/' + leagueId + '/matches', 'league', leagueId, 10 * 60, config.cacheTTL.leagueMatches);
-    });
+    }, null, force);
 }
 
 // 单场比赛详情（含 players 数组：英雄/KDA/GPM/XPM）。

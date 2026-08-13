@@ -64,9 +64,12 @@
   </view>
 
   <view class="section">
-    <view class="section-title">六、数据安全</view>
+    <view class="section-title">六、数据安全与登录信息</view>
     <view class="section-body">
       本小程序的所有网络请求均使用 HTTPS 加密传输。第三方 API Key 由开发者保管，不随小程序代码分发给终端用户。本地存储数据保存在微信小程序沙箱内，其他应用无法访问。
+    </view>
+    <view class="section-body">
+      登录信息说明：开启「赛前通知」时，小程序会通过微信云开发获取您的微信 OpenID（用户身份标识），仅用于绑定您的关注与提醒订阅状态、跨设备同步、并向您本人推送赛前提醒。OpenID 不包含您的昵称、头像、手机号等个人信息，不会向任何第三方提供。
     </view>
   </view>
 
@@ -94,5 +97,14 @@
   <view class="footer">
     <t-icon name="info-circle" size="32rpx" color="#5b626d" />
     <text class="footer-text">本小程序为个人开发者作品，数据来源于公开 API，与 Valve / OpenDota / STRATZ / Liquipedia 无官方 affiliation 关系。</text>
+  </view>
+
+  <!-- v11 合规声明（§D 方案 D 必需）：Valve Fan Art 非商业声明 -->
+  <view class="section">
+    <view class="section-title">十、版权与商标声明</view>
+    <view class="section-body">
+      <view class="para">DOTA2 及相关角色、图片、商标均为 Valve Corporation 的财产。</view>
+      <view class="para">本小程序为第三方非官方粉丝工具，依据 Steam 订户协议 §3.D 提供的粉丝内容创作权利，以非商业目的展示 Valve 游戏相关内容。</view>
+    </view>
   </view>
 </view>

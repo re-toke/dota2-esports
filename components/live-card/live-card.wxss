@@ -1,9 +1,9 @@
 .live-card {
-  margin: 16rpx 24rpx;
-  padding: 20rpx 24rpx;
-  background: #161b22;
-  border: 1rpx solid #232a33;
-  border-radius: 16rpx;
+  margin: var(--space-2) var(--space-3);
+  padding: var(--space-2-5) var(--space-3);
+  background: #1a1a1e;
+  border: 1rpx solid #262628;
+  border-radius: var(--radius-lg);
 }
 
 .live-card.is-live {
@@ -14,7 +14,7 @@
 .live-head {
   display: flex;
   align-items: center;
-  margin-bottom: 16rpx;
+  margin-bottom: var(--space-2);
 }
 
 .live-dot {
@@ -22,8 +22,8 @@
   height: 16rpx;
   border-radius: 50%;
   background: #ff4d4f;
-  margin-right: 12rpx;
-  animation: live-pulse 1.2s infinite;
+  margin-right: var(--space-1-5);
+  animation: live-pulse var(--dur-sway) var(--ease-in-out) infinite;
 }
 
 @keyframes live-pulse {
@@ -33,28 +33,28 @@
 }
 
 .live-title {
-  font-size: 28rpx;
+  font-size: var(--fs-subhead);
   font-weight: 600;
   color: #e6edf3;
-  margin-right: 16rpx;
+  margin-right: var(--space-2);
 }
 
 .live-sub {
-  font-size: 22rpx;
+  font-size: var(--fs-caption);
   color: #8a8f99;
 }
 
 .live-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 16rpx;
+  gap: var(--space-2);
 }
 
 .live-item {
   flex: 1 1 30%;
   min-width: 180rpx;
   height: 72rpx;
-  border-radius: 12rpx;
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -66,7 +66,7 @@
 }
 
 .live-name {
-  font-size: 26rpx;
+  font-size: var(--fs-label);
   font-weight: 600;
   color: #ffffff;
 }

@@ -558,27 +558,45 @@ function getPlayerProfile(name) {
 //   - force=true：跳过客户端缓存，并透传给云代理（云函数 force 也有 30s 最小间隔节流），
 //     用于详情页对阵定时刷新（30-60s 一次），保证 LIVE/UPCOMING 近实时。
 //   - 对外调用形态不变：getScheduledMatches(name) / getScheduledMatches(name, { force: true })
+//   - ★ 2026-08-04 返回契约升级：resolve { matches: [...], boFormat: {...} }（BO 判定引擎 S2 信号）
+//     （兼容旧形状：旧云函数/旧缓存返回数组 → 归一化为 { matches: arr, boFormat: null }）
 function getScheduledMatches(name, opts) {
-  if (!ENABLED) return Promise.resolve([]);
-  if (!name) return Promise.resolve([]);
+  if (!ENABLED) return Promise.resolve({ matches: [], boFormat: null });
+  if (!name) return Promise.resolve({ matches: [], boFormat: null });
 
   // 强制清空三类会话级缓存：模拟器可能缓存旧状态
   LIQ_FAILURES = 0;
   try { wx.setStorageSync('dota2_cloud_cb', { broken: false, fails: 0 }); } catch (e) {}
   slugMapCache = null;
 
-  var slug = liquipediaSlugFor(name);
+  // ★ 2026-08-11：多页面赛事（如 TI）的主页面可能不含 {{Match}} 模板（对阵在 Group_Stage 子页面）。
+  //   优先使用 curation 提供的 scheduledMatchesSlug（精确指向对阵子页面），回退到 slugMap 映射的主 slug。
+  //   这两个 slug 可能不同：TI 的 liquipediaSlug=The_International/2026（仅参赛队），
+  //   scheduledMatchesSlug=The_International/2026/Group_Stage（44 场对阵）。
+  var curationEvent = null;
+  try { curationEvent = require('./curation').curatedEventFor(name, { game: 'dota2' }); } catch (e) {}
+  var slug = (curationEvent && curationEvent.scheduledMatchesSlug) || liquipediaSlugFor(name);
   var cacheKey = 'liquipedia_schedule_' + consensus.normName(slug);
   var force = !!(opts && opts.force);
   var cached = cache.get(cacheKey, CACHE_TTL_SCHEDULE);
   if (cached && !force) return Promise.resolve(cached);
 
+  // ★ 2026-08-04：统一返回 { matches, boFormat }（BO 判定引擎 S2 信号）。
+  //   boFormat = parseBoFormat 的 Format 段赛制映射（云函数端解析，或本地兜底解析）。
+  //   兼容旧形状：旧云函数/旧缓存返回数组 → 归一化为 { matches: arr, boFormat: null }。
+  function normalizeScheduled(res) {
+    if (!res) return { matches: [], boFormat: null };
+    if (Array.isArray(res)) return { matches: res, boFormat: null };
+    if (Array.isArray(res.matches)) return { matches: res.matches, boFormat: res.boFormat || null };
+    return { matches: [], boFormat: null };
+  }
+
   if (typeof wx !== 'undefined' && wx.cloud && cloudProxy.isAvailable()) {
     return cloudProxy.liquipediaScheduledProxy(name, force).then(function (res) {
-      var scheduled = res || [];
-      if (scheduled.length) {
-        cache.set(cacheKey, scheduled, CACHE_TTL_SCHEDULE);
-        return scheduled;
+      var norm = normalizeScheduled(res);
+      if (norm.matches.length) {
+        cache.set(cacheKey, norm, CACHE_TTL_SCHEDULE);
+        return norm;
       }
       return fetchScheduledLocal(slug, cacheKey);
     }).catch(function () {
@@ -592,12 +610,15 @@ function getScheduledMatches(name, opts) {
 function fetchScheduledLocal(slug, cacheKey) {
   return fetchPageWikitext(slug)
     .then(function (wikitext) {
-      if (!wikitext) return [];
+      if (!wikitext) return { matches: [], boFormat: null };
       var scheduled = LiquiParse.parseScheduledMatches(wikitext);
-      cache.set(cacheKey, scheduled, CACHE_TTL_SCHEDULE);
-      return scheduled;
+      // ★ 2026-08-04：本地兜底路径同样解析 Format 段赛制（S2 信号）
+      var boFormat = LiquiParse.parseBoFormat(wikitext);
+      var norm = { matches: scheduled, boFormat: boFormat };
+      cache.set(cacheKey, norm, CACHE_TTL_SCHEDULE);
+      return norm;
     })
-    .catch(function () { return []; });
+    .catch(function () { return { matches: [], boFormat: null }; });
 }
 
 // §8.3 战队 Logo（2026-07-29）：OpenDota logo_url 为空 + STRATZ 无数据时的兜底源。

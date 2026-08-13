@@ -6,15 +6,15 @@
   align-items: center;
   justify-content: center;
   background: var(--td-mask-background, rgba(14, 17, 22, 0.96));
-  padding: 48rpx;
+  padding: var(--space-6);
 }
 .ob-card {
   width: 100%;
   max-width: 560rpx;
-  background: var(--card-bg-elevated, #1c232c);
-  border: 1rpx solid #2b333d;
+  background: var(--card-bg-elevated, #222226);
+  border: 1rpx solid #2e2e30;
   border-radius: var(--radius-lg, 16rpx);
-  padding: 48rpx 40rpx 40rpx;
+  padding: var(--space-6) var(--space-5) var(--space-5);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -22,57 +22,57 @@
 }
 .ob-dots {
   display: flex;
-  gap: 12rpx;
+  gap: var(--space-1-5);
   margin-bottom: 36rpx;
 }
 .ob-dot {
   width: 16rpx;
   height: 16rpx;
   border-radius: 50%;
-  background: #2b333d;
+  background: #2e2e30;
   transition: all 0.2s;
 }
 .ob-dot--on {
   background: var(--dota-gold, #C8A951);
   width: 32rpx;
-  border-radius: 8rpx;
+  border-radius: var(--radius-sm);
 }
 .ob-icon {
   font-size: 88rpx;
   line-height: 1;
-  margin-bottom: 24rpx;
+  margin-bottom: var(--space-3);
 }
 .ob-title {
-  font-size: 38rpx;
+  font-size: var(--fs-display);
   font-weight: 700;
   color: #f0f3f6;
-  margin-bottom: 16rpx;
+  margin-bottom: var(--space-2);
 }
 .ob-desc {
-  font-size: 26rpx;
+  font-size: var(--fs-label);
   color: #9aa4b2;
-  line-height: 1.7;
-  margin-bottom: 48rpx;
+  line-height: var(--lh-loose);
+  margin-bottom: var(--space-6);
 }
 .ob-actions {
   display: flex;
   align-items: center;
-  gap: 24rpx;
+  gap: var(--space-3);
   width: 100%;
 }
 .ob-skip {
   flex: 0 0 auto;
-  padding: 20rpx 28rpx;
-  font-size: 26rpx;
+  padding: var(--space-2-5) var(--space-3-5);
+  font-size: var(--fs-label);
   color: #8a8f99;
 }
 .ob-next {
   flex: 1;
-  padding: 20rpx 0;
+  padding: var(--space-2-5) 0;
   text-align: center;
-  font-size: 28rpx;
+  font-size: var(--fs-subhead);
   font-weight: 600;
-  color: #0e1116;
+  color: #121015;
   background: var(--dota-gold, #C8A951);
   border-radius: var(--radius-md, 12rpx);
 }

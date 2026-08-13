@@ -42,12 +42,13 @@
   <!-- F1 直播聚合入口（isLive 时高亮置顶） -->
   <live-card wx:if="{{liveSources.length}}" sources="{{liveSources}}" live="{{isLive}}" event-name="{{name}}" />
 
-  <!-- 赛事元数据 KPI Strip：所有字段常驻，缺失时显示 '--'，确保各赛事信息结构统一 -->
+  <!-- 赛事元数据 KPI Strip：所有字段常驻，缺失时显示 '--'，确保各赛事信息结构统一
+       v11 聚光灯映射：奖金池=金色 / 参赛队=天辉绿 / 赛制=灰色（三色语义区分） -->
   <view class="kpi-strip">
     <view class="kpi-cell">
       <text class="kpi-label">奖金池</text>
       <view class="kpi-value-row">
-        <text class="kpi-value accent {{metadata.prizePool ? '' : 'is-empty'}}">{{metadata.prizePool || '--'}}</text>
+        <text class="kpi-value kpi-gold {{metadata.prizePool ? '' : 'is-empty'}}">{{metadata.prizePool || '--'}}</text>
         <text wx:if="{{metadata.prizePool}}" class="kpi-unit">{{metadata.prizePoolCurrency || 'USD'}}</text>
       </view>
     </view>
@@ -57,7 +58,7 @@
     </view>
     <view class="kpi-cell">
       <text class="kpi-label">赛制</text>
-      <text class="kpi-value {{metadata.format ? '' : 'is-empty'}}">{{metadata.format || '--'}}</text>
+      <text class="kpi-value kpi-format {{metadata.format ? '' : 'is-empty'}}">{{metadata.format || '--'}}</text>
     </view>
     <view class="kpi-cell">
       <text class="kpi-label">主办方</text>
@@ -65,7 +66,7 @@
     </view>
     <view class="kpi-cell">
       <text class="kpi-label">参赛队</text>
-      <text class="kpi-value {{metadata.participants ? '' : 'is-empty'}}">{{metadata.participants || '--'}}</text>
+      <text class="kpi-value kpi-teams {{metadata.participants ? '' : 'is-empty'}}">{{metadata.participants || '--'}}</text>
     </view>
     <view class="kpi-cell">
       <text class="kpi-label">状态</text>
@@ -125,7 +126,8 @@
       <text>{{cancelledNotice}}</text>
     </view>
     <view wx:elif="{{series.length === 0}}" class="hint-card-enhanced">
-      <view class="hint-title">该赛事暂无比赛数据</view>
+      <!-- ★ 2026-08-11 数据源健康检查：链路异常时显式提示「数据源暂不可用」而非「暂无比赛数据」 -->
+      <view class="hint-title {{sourceDownHint ? 'hint-warn' : ''}}">{{sourceDownHint || '该赛事暂无比赛数据'}}</view>
       <view class="hint-desc">下拉刷新或稍后重试</view>
     </view>
 
@@ -180,7 +182,7 @@
             <view class="series-team-logo {{s.teamALogoCls}}">
               <image-fallback src="{{s.radiantLogo}}" placeholder="{{s.radiantName ? s.radiantName[0] : '?'}}" />
             </view>
-            <text class="series-team-name">{{s.radiantName || '天辉'}}</text>
+            <text class="series-team-name {{s.radiantTbd ? 'tbd' : ''}}">{{s.radiantName || '天辉'}}</text>
             <text wx:if="{{s.seriesWinner === 'A'}}" class="series-win-badge">{{s.aForfeit ? '胜（判胜）' : '胜'}}</text>
           </view>
           <view class="series-score">
@@ -193,14 +195,14 @@
               <text class="series-score-missing">已结束</text>
             </block>
             <block wx:else>
-              <text class="series-score-num {{s.scoreACls}}">{{s.scoreA}}</text>
+              <text class="series-score-num {{s.scoreACls}} {{s.phase === 'live' ? 'score-radiant' : ''}}">{{s.scoreA}}</text>
               <text class="series-score-sep">:</text>
-              <text class="series-score-num {{s.scoreBCls}}">{{s.scoreB}}</text>
+              <text class="series-score-num {{s.scoreBCls}} {{s.phase === 'live' ? 'score-dire' : ''}}">{{s.scoreB}}</text>
               <text wx:if="{{s.isDraw}}" class="series-draw-badge">平</text>
             </block>
           </view>
           <view class="series-team right {{s.teamBCls}}" catchtap="openTeam" data-id="{{s.direTeamId}}">
-            <text class="series-team-name">{{s.direName || '夜魇'}}</text>
+            <text class="series-team-name {{s.direTbd ? 'tbd' : ''}}">{{s.direName || '夜魇'}}</text>
             <text wx:if="{{s.seriesWinner === 'B'}}" class="series-win-badge">{{s.bForfeit ? '胜（判胜）' : '胜'}}</text>
             <view class="series-team-logo {{s.teamBLogoCls}}">
               <image-fallback src="{{s.direLogo}}" placeholder="{{s.direName ? s.direName[0] : '?'}}" />
@@ -221,7 +223,6 @@
           <text wx:if="{{s.phase === 'live' && s.elapsedText}}" class="series-elapsed">· 已进行 {{s.elapsedText}}</text>
           <!-- 未开赛：显示具体开赛时间（替代倒计时标签） -->
           <text wx:elif="{{s.phase === 'upcoming'}}" class="series-upcoming-tag">{{s.scheduledTimeText}}</text>
-          <text wx:if="{{s.phase === 'upcoming' && !s.confirmed}}" class="series-tbd-badge">❓ 待定</text>
           <!-- ★ v3 优化项⑭：焦点战标记（双方均为 S-Tier 战队） -->
           <text wx:if="{{s.phase === 'upcoming' && s.matchupQuality === 'focus'}}" class="series-focus-badge">⭐ 焦点战</text>
           <!-- 未开赛不显示小圆点序列（无 match 数据），仅显示开赛时间兜底 -->

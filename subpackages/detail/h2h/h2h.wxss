@@ -1,12 +1,12 @@
-.container { padding: 24rpx; }
+.container { padding: var(--space-3); }
 
 /* ===== VS 头部 ===== */
 .vs-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16rpx;
-  margin-bottom: 32rpx;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
 }
 .vs-team {
   flex: 1;
@@ -14,7 +14,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12rpx;
+  gap: var(--space-1-5);
 }
 .vs-team--away { /* 客队与主队对称 */ }
 .vs-logo {
@@ -22,18 +22,18 @@
   height: 96rpx;
   border-radius: 20rpx;
   background: var(--card-bg-inset);
-  border: 1rpx solid var(--td-border-level-1-color, #232a33);
+  border: 1rpx solid var(--td-border-level-1-color, #262628);
 }
 .vs-logo--fallback {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 32rpx;
+  font-size: var(--fs-heading);
   font-weight: 800;
   color: var(--dota-gold, #C8A951);
 }
 .vs-name {
-  font-size: 26rpx;
+  font-size: var(--fs-label);
   font-weight: 600;
   color: #f0f3f6;
   text-align: center;
@@ -47,7 +47,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8rpx;
+  gap: var(--space-1);
   max-width: 100%;
 }
 .vs-name-row .vs-name {
@@ -57,13 +57,13 @@
 }
 .vs-verified {
   flex-shrink: 0;
-  font-size: 18rpx;
+  font-size: var(--fs-badge);
   font-weight: 600;
   color: #2DD4A7;
   background: rgba(45, 212, 167, 0.14);
   padding: 2rpx 10rpx;
-  border-radius: 999rpx;
-  line-height: 1.6;
+  border-radius: var(--radius-pill);
+  line-height: var(--lh-relaxed);
   border: 1rpx solid rgba(45, 212, 167, 0.35);
 }
 .vs-mid {
@@ -72,7 +72,7 @@
   text-align: center;
 }
 .vs-symbol {
-  font-size: 30rpx;
+  font-size: var(--fs-emphasis);
   font-weight: 800;
   letter-spacing: 1rpx;
   color: #6b7280;
@@ -80,10 +80,10 @@
 
 /* ===== 胜负条形区 ===== */
 .h2h-bar-block {
-  background: var(--card-bg, #161b22);
+  background: var(--card-bg, #1a1a1e);
   border-radius: var(--radius-lg, 16rpx);
-  padding: 28rpx 24rpx;
-  margin-bottom: 24rpx;
+  padding: var(--space-3-5) var(--space-3);
+  margin-bottom: var(--space-3);
 }
 .h2h-bar-row {
   display: flex;
@@ -93,7 +93,7 @@
 }
 .h2h-bar-row:last-of-type { margin-bottom: 0; margin-top: 10rpx; }
 .h2h-side {
-  font-size: 24rpx;
+  font-size: var(--fs-body);
   color: #9aa4b2;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -101,7 +101,7 @@
   max-width: 60%;
 }
 .h2h-num {
-  font-size: 24rpx;
+  font-size: var(--fs-body);
   font-weight: 700;
   font-family: var(--font-numeric, sans-serif);
 }
@@ -115,7 +115,7 @@
   height: 28rpx;
   border-radius: var(--radius-pill, 999rpx);
   overflow: hidden;
-  background: var(--card-bg-inset, #0f141b);
+  background: var(--card-bg-inset, #131316);
 }
 .h2h-bar-fill {
   height: 100%;
@@ -134,15 +134,15 @@
 .h2h-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 12rpx;
-  margin-top: 20rpx;
+  gap: var(--space-1-5);
+  margin-top: var(--space-2-5);
 }
 .h2h-tag {
-  font-size: 22rpx;
+  font-size: var(--fs-caption);
   font-weight: 600;
-  padding: 4rpx 16rpx;
+  padding: var(--space-0-5) var(--space-2);
   border-radius: var(--radius-pill, 999rpx);
-  line-height: 1.6;
+  line-height: var(--lh-relaxed);
 }
 .h2h-tag--dominate {
   color: var(--h2h-b, #F25C54);
@@ -164,9 +164,9 @@
 .h2h-match {
   position: relative;
   overflow: hidden;
-  background: var(--card-bg, #161b22);
+  background: var(--card-bg, #1a1a1e);
   border-radius: var(--radius-md, 12rpx);
-  padding: 20rpx 24rpx 20rpx 32rpx;
+  padding: var(--space-2-5) var(--space-3) var(--space-2-5) var(--space-4);
   margin-bottom: 14rpx;
 }
 .h2h-match::before {
@@ -174,7 +174,7 @@
   position: absolute;
   left: 0; top: 0; bottom: 0;
   width: 6rpx;
-  background: var(--td-border-level-1-color, #232a33);
+  background: var(--td-border-level-1-color, #262628);
 }
 .h2h-match.tier-sss::before { background: var(--tier-sss); }
 .h2h-match.tier-s::before { background: var(--tier-s); }
@@ -186,22 +186,22 @@
   box-shadow: 0 0 0 1rpx rgba(200, 169, 81, 0.15), 0 4rpx 14rpx rgba(200, 169, 81, 0.12);
 }
 .h2h-key-flag {
-  font-size: 20rpx;
+  font-size: var(--fs-micro);
   font-weight: 700;
   color: #1a1a1a;
   background: #C8A951;
   padding: 2rpx 10rpx;
-  border-radius: 999rpx;
+  border-radius: var(--radius-pill);
   flex-shrink: 0;
 }
 .h2h-match-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12rpx;
+  gap: var(--space-1-5);
 }
 .h2h-league {
-  font-size: 26rpx;
+  font-size: var(--fs-label);
   font-weight: 600;
   color: #f0f3f6;
   overflow: hidden;
@@ -212,7 +212,7 @@
 }
 .h2h-league--plain { color: #c3ccd9; }
 .h2h-date {
-  font-size: 22rpx;
+  font-size: var(--fs-caption);
   color: #6b7280;
   font-family: var(--font-mono, monospace);
   flex-shrink: 0;
@@ -224,13 +224,13 @@
   margin-top: 10rpx;
 }
 .h2h-score {
-  font-size: 32rpx;
+  font-size: var(--fs-heading);
   font-weight: 800;
   font-family: var(--font-numeric, sans-serif);
   letter-spacing: 1rpx;
 }
 .h2h-result {
-  font-size: 24rpx;
+  font-size: var(--fs-body);
   font-weight: 700;
 }
 .h2h-score.win, .h2h-result.win { color: var(--h2h-a, #2DD4A7); }
@@ -241,10 +241,10 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 100rpx 40rpx;
+  padding: 100rpx var(--space-5);
 }
 .h2h-skeleton {
-  padding: 40rpx 0;
+  padding: var(--space-5) 0;
 }
 /* §8.3 骨架屏 shimmer 动画（2026-07-29）：与 components/skeleton 保持一致 */
 .sk-logo, .sk-bar {
@@ -270,34 +270,34 @@
   width: 96rpx;
   height: 96rpx;
   border-radius: 20rpx;
-  background: var(--card-bg-elevated, #1c232c);
-  margin: 0 auto 24rpx;
+  background: var(--card-bg-elevated, #222226);
+  margin: 0 auto var(--space-3);
 }
 .sk-bar {
   height: 28rpx;
-  border-radius: 999rpx;
-  background: var(--card-bg-elevated, #1c232c);
-  margin-bottom: 16rpx;
+  border-radius: var(--radius-pill);
+  background: var(--card-bg-elevated, #222226);
+  margin-bottom: var(--space-2);
 }
 
 /* ===== 3.3 近期状态雷达卡 ===== */
 .radar-card {
-  background: var(--card-bg, #161b22);
+  background: var(--card-bg, #1a1a1e);
   border: 1rpx solid var(--border, rgba(255, 255, 255, 0.08));
   border-radius: 18rpx;
-  padding: 16rpx 8rpx 12rpx;
-  margin-bottom: 16rpx;
+  padding: var(--space-2) var(--space-1) var(--space-1-5);
+  margin-bottom: var(--space-2);
 }
 .radar-legend {
   display: flex;
   justify-content: center;
-  gap: 40rpx;
-  margin-top: 4rpx;
+  gap: var(--space-5);
+  margin-top: var(--space-0-5);
 }
 .rl-item {
   display: flex;
   align-items: center;
-  font-size: 22rpx;
+  font-size: var(--fs-caption);
   color: #c9d1d9;
 }
 .rl-dot {

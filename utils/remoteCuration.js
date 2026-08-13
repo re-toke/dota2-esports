@@ -21,7 +21,9 @@ const cache = require('./cache.js');
 const config = require('./config.js');
 const cloudProxy = require('./cloudProxy.js');
 
-const CACHE_KEY = 'remote_curation_v2';
+const CACHE_KEY = 'remote_curation_v3';   // ★ 2026-08-11 bump v2→v3：buildEffective 改字段级合并，
+                                          //   旧 v2 缓存可能已含「云端整条覆盖后的坏数据」（TI 2026 无
+                                          //   leagueId/participants 数组），bump key 强制全量客户端重拉。
 const VERSION_KEY = 'remote_curation_version';
 
 let lookups = null;          // 当前生效的查找器（null = 尚未初始化）
@@ -51,10 +53,39 @@ function ensure() {
 //   - events 以归一规范名为键，远程覆盖本地同键条目并追加新条目；
 //   - teams 以 id 为键，远程覆盖本地同 id 并追加新 id；
 //   - tiContestantIds 直接替换（远程为权威源）
+//
+// ★ 2026-08-11 BUG 修复：字段级合并替代整条覆盖。
+//   根因：云数据库 curation_events 里 TI 2026 是旧数据（无 leagueId/legacyFakeId，
+//         participants 是数字 16），原 buildEffective 用远程事件 Object.assign 整条覆盖
+//         本地同 canonical 条目 → 本地新增的 leagueId=19719、participants 数组被云端旧数据
+//         盖掉 → 详情页 curatedEventFor 拿不到 leagueId（不重定向，保留 fakeId -1653808）
+//         + participants 数组缺失（数字兜底 → 16 个「待定队伍 N」）。
+//   修复策略：
+//     1) 逐字段合并：远程有值（非 null/undefined）的字段覆盖本地；远程缺失的字段保留本地。
+//     2) participants 特判：本地是数组（含队名详情）而远程是数字（仅数量）时保留本地数组，
+//        防止云端旧数据把「真实队名列表」退化成「数量」。（远程若也是数组则正常覆盖 = 云端热更可用）
+function mergeEventFields(local, remote) {
+  if (!remote) return local;
+  const merged = Object.assign({}, local);
+  Object.keys(remote).forEach((k) => {
+    const v = remote[k];
+    if (v === undefined || v === null) return;             // 远程缺失 → 保留本地
+    if (k === 'participants' && Array.isArray(merged.participants) && !Array.isArray(v)) {
+      return;                                              // 本地数组 > 远程数字（防退化覆盖）
+    }
+    merged[k] = v;
+  });
+  return merged;
+}
+
 function buildEffective(remote) {
   const evMap = {};
   curation.CURATED_EVENTS.forEach((e) => { if (e && e.canonical) evMap[consensus.normName(e.canonical)] = e; });
-  (remote.events || []).forEach((e) => { if (e && e.canonical) evMap[consensus.normName(e.canonical)] = e; });
+  (remote.events || []).forEach((e) => {
+    if (!e || !e.canonical) return;
+    const key = consensus.normName(e.canonical);
+    evMap[key] = evMap[key] ? mergeEventFields(evMap[key], e) : e;  // 同键字段级合并；新键直接采用
+  });
   const events = Object.keys(evMap).map((k) => evMap[k]);
 
   const tmMap = {};

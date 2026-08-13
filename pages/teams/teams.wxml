@@ -1,4 +1,7 @@
 <view class="container with-tab-bar">
+  <!-- 聚光灯背景图（v12）：页面级 image（fixed 相对视口，滚动不跟随） -->
+  <image class="bg-page" src="/assets/bg-battlefield-dark.webp" mode="aspectFill" />
+  <view class="bg-page-dim"></view>
   <view class="search-wrap">
     <t-search value="{{keyword}}" placeholder="搜索战队名称 / 缩写" bind:change="onSearch" bind:clear="onClear" />
   </view>
@@ -152,4 +155,8 @@
   </block>
 
   <view class="bottom-spacer"></view>
+
+  <!-- 聚光灯背景遮罩（v11）：顶部/底部渐变暗化，只作用于背景不遮挡内容 -->
+  <view class="bg-mask-top"></view>
+  <view class="bg-mask-bottom"></view>
 </view>

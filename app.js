@@ -3,6 +3,44 @@ const remoteCuration = require('./utils/remoteCuration.js');
 const config = require('./utils/config.js');
 const experiment = require('./utils/experiment.js');
 const cache = require('./utils/cache.js');
+// ★ 2026-08-07（审核 R2）：账号预登录（openid 预热）——赛前通知订阅授权须在点击手势内同步弹窗，
+//   onLaunch 预热保证用户点「开启提醒」时缓存命中（缓存命中后零请求），规避手势校验红线。
+const auth = require('./utils/auth.js');
+// ★ 2026-08-11 方案 E：迁移老用户 fakeId 关注记录到真实 leagueId
+const follow = require('./utils/follow.js');
+const curation = require('./utils/curation.js');
+
+// 方案 E 一次性幂等迁移：将 follow.leagues 中的负数 fakeId 关注记录迁移到真实 leagueId。
+// 幂等：已迁移过的真实 id 不会被重复处理；无 curation 真实 id 对应的 fakeId 原样保留。
+// 安全：失败静默，不影响启动；通过 _migratedLeagues 标记位避免重复执行。
+function migrateFakeIdFollows() {
+  try {
+    const flag = wx.getStorageSync('dota2_follow_fakeid_migrated');
+    if (flag) return;  // 已执行过
+    const list = follow.list('leagues') || [];
+    if (!list.length) { wx.setStorageSync('dota2_follow_fakeid_migrated', 1); return; }
+    let migrated = 0;
+    list.forEach((item) => {
+      const fid = Number(item.id);
+      // 只处理负数 fakeId（真实 id 直接跳过）
+      if (!isNaN(fid) && fid < 0) {
+        // 按 curation 规范名/别名反查真实 leagueId
+        const ev = curation.curatedEventFor(item.name || '');
+        if (ev && ev.leagueId != null) {
+          follow.unfollow('leagues', fid);
+          follow.follow('leagues', { id: ev.leagueId, name: item.name });
+          migrated++;
+        }
+      }
+    });
+    wx.setStorageSync('dota2_follow_fakeid_migrated', 1);
+    if (migrated > 0) {
+      console.log('[migrateFakeId] 迁移完成：', migrated, '条关注记录已更新到真实 leagueId');
+    }
+  } catch (e) {
+    // 失败静默，下次启动重试
+  }
+}
 
 App({
   globalData: {
@@ -56,6 +94,10 @@ App({
         .catch(() => {});
       // T6 A/B 实验分组拉取（best-effort，失败回退本地 DEFAULTS，不阻塞启动）
       experiment.refresh().catch(() => {});
+      // ★ 2026-08-07（R2）：账号预登录预热（fire-and-forget，失败静默；缓存命中后零请求）
+      auth.ensureLogin().catch(() => {});
+      // ★ 2026-08-11 方案 E：迁移老用户 fakeId 关注记录到真实 leagueId（一次性幂等）
+      migrateFakeIdFollows();
     }, 0);
   }
 });

@@ -1,20 +1,39 @@
 <view class="container with-tab-bar">
-  <!-- 头部 + 计数 KPI -->
-  <view class="head">
-    <view class="head-info">
-      <view class="title">我的关注</view>
+  <!-- 聚光灯背景图（v12）：页面级 image（fixed 相对视口，滚动不跟随） -->
+  <image class="bg-page" src="/assets/bg-battlefield-dark.webp" mode="aspectFill" />
+  <view class="bg-page-dim"></view>
+  <!-- 用户卡片：登录入口 -->
+  <view class="user-card" bindtap="onUserCardTap">
+    <view class="user-avatar">
+      <t-icon name="{{userInfo.loggedIn ? 'user' : 'user'}}" size="64rpx" color="#C8A951" />
+    </view>
+    <view class="user-info">
+      <text class="user-name">{{userInfo.loggedIn ? userInfo.name : '点击登录'}}</text>
+      <text class="user-status">{{userInfo.loggedIn ? '已登录 · 数据云端同步' : '登录后可开启赛前提醒'}}</text>
+    </view>
+    <t-icon wx:if="{{!userInfo.loggedIn}}" name="chevron-right" size="40rpx" color="#6b7280" />
+  </view>
+
+  <!-- 数据统计行 -->
+  <view class="stat-row">
+    <view class="stat-cell" bindtap="switchTab" data-key="teams">
+      <text class="stat-value">{{counts.teams}}</text>
+      <text class="stat-label">关注战队</text>
+    </view>
+    <view class="stat-divider"></view>
+    <view class="stat-cell" bindtap="switchTab" data-key="leagues">
+      <text class="stat-value">{{counts.leagues}}</text>
+      <text class="stat-label">关注赛事</text>
+    </view>
+    <view class="stat-divider"></view>
+    <view class="stat-cell">
+      <text class="stat-value">{{subStatus && subStatus.subscribed ? '已开启' : '未开启'}}</text>
+      <text class="stat-label">赛事提醒</text>
     </view>
   </view>
-  <view class="kpi-strip">
-    <view class="kpi-cell" bindtap="switchTab" data-key="teams">
-      <text class="kpi-label">战队</text>
-      <text class="kpi-value {{activeTab === 'teams' ? 'accent' : ''}}">{{counts.teams}}</text>
-    </view>
-    <view class="kpi-cell" bindtap="switchTab" data-key="leagues">
-      <text class="kpi-label">赛事</text>
-      <text class="kpi-value {{activeTab === 'leagues' ? 'accent' : ''}}">{{counts.leagues}}</text>
-    </view>
-  </view>
+
+  <!-- 分区标签：关注阵容（v11 电竞化包装） -->
+  <view class="section-label">关注阵容</view>
 
   <!-- 分段控件 -->
   <view class="seg">
@@ -56,6 +75,9 @@
     <view wx:elif="{{items.length > pageSize}}" class="center muted">— 已显示全部 {{items.length}} 项 —</view>
   </view>
 
+  <!-- 分区标签：赛前信号（v11 电竞化包装） -->
+  <view class="section-label">赛前信号</view>
+
   <view class="footer">
     <!-- 2.2 订阅状态卡片 -->
     <view class="sub-card" wx:if="{{subReady}}">
@@ -67,13 +89,13 @@
       </view>
       <view class="sub-card-body" wx:if="{{subStatus.subscribed}}">
         <text class="sub-info">授权时间：{{subStatus.time ? '已授权' : '未知'}}</text>
-        <text class="sub-info">今日推送：{{todayCount}} / 5 条</text>
+        <text class="sub-info">今日推送：{{todayCount}} / {{dailyLimit}} 条</text>
       </view>
       <view class="sub-card-body" wx:else>
         <text class="sub-info sub-muted">开启后，关注的战队赛前将收到微信提醒</text>
       </view>
       <t-button theme="{{subStatus.subscribed ? 'light' : 'primary'}}" size="medium" block bindtap="onSubscribe">
-        {{subStatus.subscribed ? '重新授权' : '开启赛事提醒'}}
+        {{subStatus.subscribed ? '重新授权' : (userInfo.loggedIn ? '开启赛事提醒' : '登录并开启赛事提醒')}}
       </t-button>
     </view>
 
@@ -125,8 +147,32 @@
     </view>
 
     <view class="tip muted" wx:if="{{!subReady}}">关注数据仅保存在本机。需在公众平台配置订阅模板后可开启赛事临近提醒。</view>
-    <view class="tip muted" wx:else>关注数据仅保存在本机。订阅消息由微信云开发推送，每日上限 {{subscribe.dailyLimit || 5}} 条。</view>
+    <view class="tip muted" wx:else>关注数据仅保存在本机。订阅消息由微信云开发推送，每日上限 {{dailyLimit}} 条。</view>
+  </view>
+
+  <!-- 分区标签：系统配置（v11 新增） -->
+  <view class="section-label">系统配置</view>
+  <view class="settings-card">
+    <view class="settings-item" bindtap="openPrivacy" hover-class="follow-card-hover">
+      <view class="settings-icon"><t-icon name="lock-on" size="40rpx" color="#6b6b73" /></view>
+      <text class="settings-title">隐私与协议</text>
+      <t-icon name="chevron-right" size="32rpx" color="#6b7280" />
+    </view>
+    <view class="settings-item" bindtap="clearCache" hover-class="follow-card-hover">
+      <view class="settings-icon"><t-icon name="refresh" size="40rpx" color="#6b6b73" /></view>
+      <text class="settings-title">清除本地缓存</text>
+      <t-icon name="chevron-right" size="32rpx" color="#6b7280" />
+    </view>
+    <view class="settings-item" hover-class="follow-card-hover">
+      <view class="settings-icon"><t-icon name="info-circle" size="40rpx" color="#6b6b73" /></view>
+      <text class="settings-title">关于我们</text>
+      <text class="settings-value">v{{appVersion}}</text>
+    </view>
   </view>
 
   <view class="bottom-spacer"></view>
+
+  <!-- 聚光灯背景遮罩（v11）：顶部/底部渐变暗化，只作用于背景不遮挡内容 -->
+  <view class="bg-mask-top"></view>
+  <view class="bg-mask-bottom"></view>
 </view>

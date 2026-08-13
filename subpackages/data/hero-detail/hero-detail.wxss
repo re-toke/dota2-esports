@@ -1,55 +1,55 @@
-.container { padding: 24rpx; }
+.container { padding: var(--space-3); }
 
 /* ===== 头部 ===== */
-.head { display: flex; align-items: center; gap: 20rpx; margin-bottom: 24rpx; }
+.head { display: flex; align-items: center; gap: var(--space-2-5); margin-bottom: var(--space-3); }
 .head-badge {
   width: 110rpx;
   height: 110rpx;
-  border-radius: 24rpx;
+  border-radius: var(--radius-xl);
   display: flex;
   align-items: center;
   justify-content: center;
   border: 2rpx solid;
   flex-shrink: 0;
 }
-.head-initial { font-size: 52rpx; font-weight: 800; font-family: var(--font-mono, monospace); }
-.head-avatar { width: 106rpx; height: 106rpx; border-radius: 20rpx; display: block; background: #0f141b; }
+.head-initial { font-size: var(--fs-hero); font-weight: 800; font-family: var(--font-mono, monospace); }
+.head-avatar { width: 106rpx; height: 106rpx; border-radius: 20rpx; display: block; background: #131316; }
 .head-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6rpx; }
-.head-name { font-size: 38rpx; font-weight: 800; color: #f0f3f6; }
-.head-meta { display: flex; align-items: center; gap: 8rpx; font-size: 24rpx; }
+.head-name { font-size: var(--fs-display); font-weight: 800; color: #f0f3f6; }
+.head-meta { display: flex; align-items: center; gap: var(--space-1); font-size: var(--fs-body); }
 .head-attr { font-weight: 700; }
 .head-attr2 { color: #8a8f99; }
 .head-dot { color: #4b5563; }
-.head-roles { display: flex; flex-wrap: wrap; gap: 8rpx; margin-top: 4rpx; }
+.head-roles { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-top: var(--space-0-5); }
 .role-tag {
-  font-size: 20rpx;
+  font-size: var(--fs-micro);
   color: #9aa4b2;
-  background: #161b22;
-  border: 1rpx solid #232a33;
-  border-radius: 8rpx;
+  background: #1a1a1e;
+  border: 1rpx solid #262628;
+  border-radius: var(--radius-sm);
   padding: 2rpx 10rpx;
 }
 
 /* ===== 区块 ===== */
-.block { background: var(--card-bg, #161b22); border: 1rpx solid #1f262f; border-radius: var(--radius-lg, 16rpx); padding: 20rpx 24rpx; margin-bottom: 16rpx; }
-.block-title { font-size: 26rpx; font-weight: 700; color: #f0f3f6; margin-bottom: 16rpx; }
+.block { background: var(--card-bg, #1a1a1e); border: 1rpx solid #1f262f; border-radius: var(--radius-lg, 16rpx); padding: var(--space-2-5) var(--space-3); margin-bottom: var(--space-2); }
+.block-title { font-size: var(--fs-label); font-weight: 700; color: #f0f3f6; margin-bottom: var(--space-2); }
 
 /* 职业赛场 */
 .meta-row { display: flex; }
-.meta-cell { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4rpx; }
-.meta-num { font-size: 36rpx; font-weight: 800; color: var(--dota-gold, #C8A951); font-family: var(--font-mono, monospace); }
-.meta-label { font-size: 22rpx; color: #8a8f99; }
+.meta-cell { flex: 1; display: flex; flex-direction: column; align-items: center; gap: var(--space-0-5); }
+.meta-num { font-size: var(--fs-display); font-weight: 800; color: var(--dota-gold, #C8A951); font-family: var(--font-mono, monospace); }
+.meta-label { font-size: var(--fs-caption); color: #8a8f99; }
 
 /* 属性网格 */
-.stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12rpx; }
-.stat-cell { display: flex; flex-direction: column; gap: 4rpx; background: #0f141b; border-radius: 12rpx; padding: 14rpx 16rpx; }
-.stat-label { font-size: 20rpx; color: #8a8f99; }
-.stat-value { font-size: 26rpx; font-weight: 700; color: #f0f3f6; font-family: var(--font-mono, monospace); }
-.stat-gain { font-size: 20rpx; color: var(--dota-gold, #C8A951); font-weight: 600; }
+.stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-1-5); }
+.stat-cell { display: flex; flex-direction: column; gap: var(--space-0-5); background: #131316; border-radius: var(--radius-md); padding: 14rpx var(--space-2); }
+.stat-label { font-size: var(--fs-micro); color: #8a8f99; }
+.stat-value { font-size: var(--fs-label); font-weight: 700; color: #f0f3f6; font-family: var(--font-mono, monospace); }
+.stat-gain { font-size: var(--fs-micro); color: var(--dota-gold, #C8A951); font-weight: 600; }
 
 /* 对位 */
-.matchup-group { margin-bottom: 16rpx; }
-.matchup-head { display: block; font-size: 22rpx; font-weight: 700; margin-bottom: 8rpx; }
+.matchup-group { margin-bottom: var(--space-2); }
+.matchup-head { display: block; font-size: var(--fs-caption); font-weight: 700; margin-bottom: var(--space-1); }
 .matchup-head.best { color: #5fd35f; }
 .matchup-head.worst { color: #e0533d; }
 .matchup-item {
@@ -60,16 +60,16 @@
   transition: opacity 0.12s ease;
 }
 .matchup-item--hover { opacity: 0.7; }
-.matchup-name { width: 150rpx; font-size: 24rpx; color: #d6dbe2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.matchup-bar-wrap { flex: 1; height: 14rpx; background: #0f141b; border-radius: 8rpx; overflow: hidden; }
-.matchup-bar { height: 100%; border-radius: 8rpx; }
+.matchup-name { width: 150rpx; font-size: var(--fs-body); color: #d6dbe2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.matchup-bar-wrap { flex: 1; height: 14rpx; background: #131316; border-radius: var(--radius-sm); overflow: hidden; }
+.matchup-bar { height: 100%; border-radius: var(--radius-sm); }
 .matchup-bar.best { background: #5fd35f; }
 .matchup-bar.worst { background: #e0533d; }
-.matchup-rate { width: 80rpx; text-align: right; font-size: 24rpx; font-weight: 700; color: #f0f3f6; font-family: var(--font-mono, monospace); }
+.matchup-rate { width: 80rpx; text-align: right; font-size: var(--fs-body); font-weight: 700; color: #f0f3f6; font-family: var(--font-mono, monospace); }
 
 .detail-foot {
-  font-size: 22rpx;
+  font-size: var(--fs-caption);
   color: #6b7280;
-  padding: 12rpx 0 8rpx;
-  line-height: 1.5;
+  padding: var(--space-1-5) 0 var(--space-1);
+  line-height: var(--lh-relaxed);
 }

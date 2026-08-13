@@ -1,67 +1,67 @@
-.container { padding: 24rpx; }
+.container { padding: var(--space-3); }
 
-.search { margin-bottom: 16rpx; }
+.search { margin-bottom: var(--space-2); }
 
 /* 分类筛选（横向滚动） */
-.cat-bar { white-space: nowrap; margin-bottom: 12rpx; }
+.cat-bar { white-space: nowrap; margin-bottom: var(--space-1-5); }
 .cat {
   display: inline-block;
-  font-size: 24rpx;
+  font-size: var(--fs-body);
   color: #9aa4b2;
-  background: #161b22;
-  border: 1rpx solid #232a33;
-  border-radius: 999rpx;
-  padding: 8rpx 24rpx;
-  margin-right: 12rpx;
+  background: #1a1a1e;
+  border: 1rpx solid #262628;
+  border-radius: var(--radius-pill);
+  padding: var(--space-1) var(--space-3);
+  margin-right: var(--space-1-5);
   transition: all 0.15s ease;
 }
 .cat.active {
-  color: #0e1116;
+  color: #121015;
   background: #C8A951;
   border-color: #C8A951;
   font-weight: 600;
 }
 
 /* 排序 + 仅看配方 */
-.filter-bar { display: flex; flex-wrap: wrap; gap: 12rpx; margin-bottom: 12rpx; }
+.filter-bar { display: flex; flex-wrap: wrap; gap: var(--space-1-5); margin-bottom: var(--space-1-5); }
 .filter-spacer { flex: 1; }
 .chip {
-  font-size: 24rpx;
+  font-size: var(--fs-body);
   color: #9aa4b2;
-  background: #161b22;
-  border: 1rpx solid #232a33;
-  border-radius: 999rpx;
-  padding: 8rpx 22rpx;
+  background: #1a1a1e;
+  border: 1rpx solid #262628;
+  border-radius: var(--radius-pill);
+  padding: var(--space-1) 22rpx;
   transition: all 0.15s ease;
 }
 .chip.active {
-  color: #0e1116;
+  color: #121015;
   background: #C8A951;
   border-color: #C8A951;
   font-weight: 600;
 }
 
-.item-list { margin-top: 8rpx; }
+.item-list { margin-top: var(--space-1); }
 
 .item-row {
   display: flex;
   align-items: center;
   gap: 18rpx;
-  background: var(--card-bg, #161b22);
+  background: var(--card-bg, #1a1a1e);
   border: 1rpx solid #1f262f;
   border-radius: var(--radius-lg, 16rpx);
-  padding: 16rpx 20rpx;
-  margin-bottom: 12rpx;
+  padding: var(--space-2) var(--space-2-5);
+  margin-bottom: var(--space-1-5);
   transition: transform 0.12s ease, background 0.12s ease;
 }
-.item-row.skel { padding: 24rpx; }
-.item-row--hover { background: var(--card-bg-elevated, #1c232c); transform: scale(0.99); }
+.item-row.skel { padding: var(--space-3); }
+.item-row--hover { background: var(--card-bg-elevated, #222226); transform: scale(0.99); }
 
 /* 图标区 */
 .item-icon {
   width: 80rpx;
   height: 80rpx;
-  border-radius: 16rpx;
+  border-radius: var(--radius-lg);
   overflow: hidden;
   flex-shrink: 0;
   background: rgba(200, 169, 81, 0.10);
@@ -70,7 +70,7 @@
 
 .item-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6rpx; }
 .item-name {
-  font-size: 28rpx;
+  font-size: var(--fs-subhead);
   font-weight: 600;
   color: #f0f3f6;
   overflow: hidden;
@@ -78,20 +78,20 @@
   white-space: nowrap;
 }
 .item-sub {
-  font-size: 20rpx;
+  font-size: var(--fs-micro);
   color: #6b7280;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.item-tags { display: flex; flex-wrap: wrap; gap: 8rpx; }
+.item-tags { display: flex; flex-wrap: wrap; gap: var(--space-1); }
 .item-tag {
-  font-size: 20rpx;
+  font-size: var(--fs-micro);
   color: #9aa4b2;
-  background: #0f141b;
-  border: 1rpx solid #232a33;
-  border-radius: 8rpx;
+  background: #131316;
+  border: 1rpx solid #262628;
+  border-radius: var(--radius-sm);
   padding: 2rpx 10rpx;
 }
 .item-tag.recipe { color: #C8A951; border-color: rgba(200, 169, 81, 0.4); }
@@ -99,5 +99,5 @@
 .item-tag.neutral { color: #b98bff; border-color: rgba(185, 139, 255, 0.4); }
 
 .item-cost { flex-shrink: 0; }
-.item-cost-num { font-size: 30rpx; font-weight: 800; color: var(--dota-gold, #C8A951); font-family: var(--font-mono, monospace); }
-.item-cost-num.free { font-size: 24rpx; color: #8a8f99; }
+.item-cost-num { font-size: var(--fs-emphasis); font-weight: 800; color: var(--dota-gold, #C8A951); font-family: var(--font-mono, monospace); }
+.item-cost-num.free { font-size: var(--fs-body); color: #8a8f99; }

@@ -1,6 +1,9 @@
 <view class="container with-tab-bar">
+  <!-- 聚光灯背景图（v12）：页面级 image（fixed 相对视口，滚动不跟随） -->
+  <image class="bg-page" src="/assets/bg-battlefield-dark.webp" mode="aspectFill" />
+  <view class="bg-page-dim"></view>
   <view class="brand-header">
-    <view class="brand-logo"></view>
+    <image class="brand-logo" src="/assets/brand-logo.png" mode="aspectFill" />
     <view class="brand-text">
       <text class="brand-title">DOTA2赛事 · 资料库</text>
       <text class="brand-sub">英雄属性 / 职业胜率 / 对位 · 物品价格 / 配方</text>
@@ -32,4 +35,8 @@
     <view>赛事元数据与战队资料：<text user-select="{{true}}">Liquipedia</text>（CC-BY-SA 3.0）</view>
     <view>更新于本地缓存</view>
   </view>
+
+  <!-- 聚光灯背景遮罩（v11）：顶部/底部渐变暗化，只作用于背景不遮挡内容 -->
+  <view class="bg-mask-top"></view>
+  <view class="bg-mask-bottom"></view>
 </view>

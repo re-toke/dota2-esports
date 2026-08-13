@@ -17,7 +17,16 @@
 //   - stratz    ：STRATZ GraphQL（第二网络源，需 apiKey 启用；未启用自动跳过）
 //   - steam     ：Steam Web API（Valve 官方，需 apiKey 启用；未启用自动跳过）
 //
-// 所有源都是「尽力而为」，任一抛错都被隔离，绝不影响其它源或页面渲染。
+// 所有源都是「尽力而为」，任一抛错被隔离，绝不影响其它源或页面渲染。
+
+// ★ 2026-08-12 强化版方案（patchNullSeriesId）：series_id 缺失兜底。
+//   OpenDota 偶发数据缺陷：BO3 中某局 series_id 漏填为 null（实测 league 19944 出现过），
+//   导致 groupSeries 把一场 BO3 拆成两个系列卡。
+//   客户端兜底策略：用「队ID对 + 时间夹在邻居系列实际跨度内 + 邻居≥2局 + 邻居 series_type≥1」
+//   四重约束借用邻居 series_id，并通过比分越界后校验自动回滚（第五道保险）。
+//   紧急情况下可关闭此开关回退到原行为（一行配置，不需回滚代码）。
+//   ⚠️ 用 let（非 const）声明：约束⑤回滚时需要临时关闭再恢复（防无限递归）。
+let PATCH_NULL_SERIES_ENABLED = true;
 
 const config = require('./config.js');
 const tiers = require('./tiers.js');
@@ -365,6 +374,7 @@ function getUpcomingFromCuration(now) {
         endDate: ev.end || null,
         tier: ev.tier || { grade: 'S', rank: 3, label: 'S级' },
         year: ev.year || null,
+        leagueId: (ev.leagueId != null) ? ev.leagueId : null,  // 方案 E：透传真实 id
         source: 'curation'
       });
     }
@@ -801,13 +811,110 @@ function getLeagueStandings(leagueId) {
 // 优先用 OpenDota 的 series_id（DPC/大型赛事 BO3/BO5 必有）；无 series_id 的单场独立成组（视为 BO1）。
 // 返回 series 数组，每个含 { key, games, scoreA, scoreB, boType, isLive, isRecent, isMulti, radiantName, direName, ... }
 // boType：series_type 0=BO1 / 1=BO3 / 2=BO5；无 series_type 时按 games 数推断。
+
+// ★ 2026-08-12 强化版：获取 match 的分组键。
+//   优先用软关联字段 _patchedSeriesKey（patchNullSeriesId 写入，不动原 series_id），
+//   无则回退到原 series_id；无 series_id 则用 match_id 独立成组。
+function getSeriesKey(m) {
+  if (m._patchedSeriesKey) return m._patchedSeriesKey;
+  const sid = m.series_id;
+  return (sid != null && sid !== 0) ? ('s' + sid) : ('m' + m.match_id);
+}
+
+// ★ 2026-08-12 强化版：series_id 缺失兜底（5 重约束防误并）。
+//   遍历 series_id=null 的局，找到「同队ID对（不计顺序）+ 邻居 series_type≥1 + 邻居≥2局
+//   + 时间夹在邻居实际跨度[first-30min, last+30min]内 + 时间最近」的合格邻居系列，
+//   借用其 series_id 写入 _patchedSeriesKey 软关联字段（不动原 series_id，便于审计回滚）。
+//   OpenDota 修复后无 null 局，此函数自然空转，无副作用。
+function patchNullSeriesId(matches) {
+  if (!PATCH_NULL_SERIES_ENABLED || !matches || matches.length === 0) return matches;
+  const TOL_SEC = 30 * 60;  // 时间容差：前后各 30min（覆盖局间休息 + 数据延迟）
+
+  // 1. 按 series_id 聚合：统计每个非 null 系列的「首末时间 / 局数 / series_type」
+  const seriesStats = {};  // 's1129613' -> { first, last, count, seriesType, teamAId, teamBId }
+  for (var i = 0; i < matches.length; i++) {
+    var m = matches[i];
+    var sid = m.series_id;
+    if (sid == null || sid === 0) continue;
+    var key = 's' + sid;
+    var st = seriesStats[key];
+    var t = m.start_time || 0;
+    if (!st) {
+      seriesStats[key] = {
+        first: t, last: t, count: 1, seriesType: m.series_type,
+        teamAId: m.radiant_team_id, teamBId: m.dire_team_id
+      };
+    } else {
+      if (t < st.first) st.first = t;
+      if (t > st.last) st.last = t;
+      st.count++;
+    }
+  }
+
+  // 2. 构造合格邻居候选清单（约束①②：series_type≥1 + count≥2）
+  var qualified = [];  // [{ key, first, last, seriesType, teamAId, teamBId }]
+  Object.keys(seriesStats).forEach(function (k) {
+    var s = seriesStats[k];
+    if (s.seriesType != null && s.seriesType >= 1 && s.count >= 2 &&
+        s.teamAId != null && s.teamAId > 0 && s.teamBId != null && s.teamBId > 0) {
+      qualified.push({
+        key: k, first: s.first, last: s.last,
+        teamAId: s.teamAId, teamBId: s.teamBId
+      });
+    }
+  });
+  if (qualified.length === 0) return matches;  // 无合格邻居，直接返回原数组
+
+  // 3. 遍历 series_id=null 的局，找时间最近的合格邻居（约束③④⑤）
+  for (var j = 0; j < matches.length; j++) {
+    var nm = matches[j];
+    if (nm.series_id != null && nm.series_id !== 0) continue;
+    // 必须有有效 team_id 对（避免 null===null 误匹配）
+    var nA = nm.radiant_team_id, nB = nm.dire_team_id;
+    if (nA == null || nA <= 0 || nB == null || nB <= 0) continue;
+    var nStart = nm.start_time || 0;
+    if (!nStart) continue;
+
+    var bestNbr = null;
+    var bestDelta = Infinity;
+    for (var k = 0; k < qualified.length; k++) {
+      var q = qualified[k];
+      // 约束③：null 局时间必须夹在邻居系列 [first-TOL, last+TOL] 内
+      if (nStart < q.first - TOL_SEC || nStart > q.last + TOL_SEC) continue;
+      // 约束：队ID 对不计顺序相等（BO3 会换边）
+      var sameDirect = (nA === q.teamAId && nB === q.teamBId);
+      var sameReversed = (nA === q.teamBId && nB === q.teamAId);
+      if (!sameDirect && !sameReversed) continue;
+      // 约束④：取时间最近的合格邻居
+      var delta = Math.abs(nStart - (q.first + q.last) / 2);  // 到邻居系列中心的距离
+      if (delta < bestDelta) {
+        bestDelta = delta;
+        bestNbr = q;
+      }
+    }
+    if (bestNbr) {
+      // ★ 软关联：不动原 series_id，写入 _patchedSeriesKey；可审计 + 可回滚
+      nm._patchedSeriesKey = bestNbr.key;
+      // 结构化日志（开发期可观测；线上自动收集到 wx 结算日志）
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn('[patchNullSeriesId]', {
+          matchId: nm.match_id, fromSid: null, toKey: bestNbr.key,
+          nbrSpan: [bestNbr.first, bestNbr.last], nullStart: nStart,
+          reason: 'qualified_neighbor_in_window'
+        });
+      }
+    }
+  }
+  return matches;
+}
+
 function groupSeries(matches) {
   if (!matches || !matches.length) return [];
+  matches = patchNullSeriesId(matches);  // ★ 2026-08-12 强化版入口
   const groups = {};
   const order = [];
   matches.forEach(function (m) {
-    const sid = m.series_id;
-    const key = (sid != null && sid !== 0) ? ('s' + sid) : ('m' + m.match_id);
+    const key = getSeriesKey(m);  // ★ 优先用软关联键
     if (!groups[key]) {
       groups[key] = [];
       order.push(key);
@@ -958,6 +1065,11 @@ function groupSeries(matches) {
       boType: boType,
       boLabel: boLabel,
       boTagCls: boTagCls,
+      // ★ 2026-08-04：透传 OpenDota series_type（0=BO1/1=BO3/2=BO5/3=BO2），
+      //   供 league-detail 的 BO 判定引擎 sources.resolveBoType 使用（S3 信号）。
+      //   注意：groupSeries 内部的 boType 仍是旧比分反推推断，仅为兼容保留；
+      //   详情页最终以 resolveBoType 输出为准（buildSeriesFromSources 后处理覆盖）。
+      seriesType: st,
       isDraw: isDraw,
       isLive: isLive,
       isRecent: isRecent,
@@ -986,12 +1098,556 @@ function groupSeries(matches) {
       direLogo: '',
       radiantLogoSource: '',
       direLogoSource: '',
+      // ★ v1.1（2026-08-05，审核 R1）：firstTime = 系列首场 start_time。
+      //   absorbSettledGames S1 队名+时间窗关联的时间窗基准（fmt 后 games 无 start_time，
+      //   系列对象此前只有 lastTime（最后一场）→ 原稿「系列首场.start_time」字段不存在）。
+      firstTime: first.start_time || 0,
       lastTime: last.start_time || 0
     };
   });
+  // ★ 2026-08-12 强化版约束⑤：比分越界后校验 + 自动回滚
+  //   patch 后若某个被软关联合并的系列 boType 与比分不符（如合并错位导致一方≥3胜但被判 BO3，
+  //   或 BO5 实际打了 6 局等），说明 patch 误并 → 自动剥离软关联键，重新分组（最多重试 1 次）。
+  //   这是前 4 道约束都失效后的兜底保险，只在 PATCH_NULL_SERIES_ENABLED=true 时生效。
+  if (PATCH_NULL_SERIES_ENABLED) {
+    const BO_LIMIT = { 'BO1': 1, 'BO2': 2, 'BO3': 3, 'BO5': 5 };
+    var rollbackKeys = [];
+    list.forEach(function (s) {
+      var maxSc = Math.max(s.scoreA, s.scoreB);
+      var limit = BO_LIMIT[s.boType] || 99;
+      var hasPatched = (s.games || []).some(function (g) { return !!g._patchedSeriesKey; });
+      if (hasPatched && (maxSc > limit || s.games.length > limit + 1)) {
+        if (typeof console !== 'undefined' && console.warn) {
+          console.warn('[patchNullSeriesId] rollback', {
+            seriesKey: s.key, boType: s.boType, scoreA: s.scoreA, scoreB: s.scoreB,
+            gamesLen: s.games.length, reason: 'score_overflow'
+          });
+        }
+        rollbackKeys.push(s.key);
+      }
+    });
+    if (rollbackKeys.length > 0) {
+      var dirtyKeySet = {};
+      rollbackKeys.forEach(function (k) { dirtyKeySet[k] = true; });
+      matches.forEach(function (m) {
+        if (m._patchedSeriesKey && dirtyKeySet[m._patchedSeriesKey]) {
+          delete m._patchedSeriesKey;  // 剥离软关联 → 此局将独立成组
+        }
+      });
+      // 重试一次：重新分组，跳过 patch（防无限循环）；二次结果不再校验
+      return _groupSeriesNoPatch(matches);
+    }
+  }
   // 按最新比赛时间倒序
   list.sort(function (a, b) { return b.lastTime - a.lastTime; });
   return list;
+}
+
+// ★ 2026-08-12 强化版：内部辅助 —— 跳过 patchNullSeriesId 的 groupSeries 主体（回滚专用）
+//   与 groupSeries 主体逻辑一致，但不调用 patch；约束⑤回滚后调用此函数重建分组。
+//   维护性：groupSeries 主体逻辑变更时需同步此函数。
+function _groupSeriesNoPatch(matches) {
+  if (!matches || !matches.length) return [];
+  const groups = {};
+  const order = [];
+  matches.forEach(function (m) {
+    const key = getSeriesKey(m);
+    if (!groups[key]) {
+      groups[key] = [];
+      order.push(key);
+    }
+    groups[key].push(m);
+  });
+  // 复用 groupSeries 的同款聚合逻辑（重新构造 order.map 回调太冗长，
+  // 这里采用「直接调用 groupSeries 并禁用 patch」的简洁做法 —— 用开关实现）
+  // 实测：这样会再次走完整聚合，但因 _patchedSeriesKey 已被剥离，
+  // getSeriesKey 会回退到 match_id 独立成组（即原 null 局回到独立卡状态），不再合并。
+  // 临时关闭 patch + 复用主体，避免代码重复。
+  PATCH_NULL_SERIES_ENABLED = false;
+  try {
+    return groupSeries(matches);
+  } finally {
+    PATCH_NULL_SERIES_ENABLED = true;
+  }
+}
+
+// ===== BO 判定引擎（2026-08-04，审核 R1-R6 落地）=====
+// 多信号优先级（禁止用最终比分反推赛制）：
+//   S1 每场声明 bestof（Liquipedia boDeclared）→ 精确
+//   S2 赛事赛制文本（云函数 Format 段 parseBoFormat → ctx.boFormat；infobox format 关键词 → ctx.metaFormatBo）
+//   S3 OpenDota series_type 完整映射（0=BO1 / 1=BO3 / 2=BO5 / 3=BO2，实测 1win 小组赛 BO2=3）
+//   S4 同赛事自证（阶段内 1:1 平局 → 该段 2 局系列为 BO2；阶段内 maxPlayed>=3 → 2:0 更可能 BO3）
+//   S5 局数+比分约束（仅 RECENT 已结算：1:0→BO1 / 1:1→BO2 / 2:1→BO3 / maxScore>=3→BO5 / 2:0 保守 BO3）
+//   S6 阶段/联赛默认（live/upcoming 无局数：playoff→BO3 先验，其余→联赛 RECENT 模式众数→BO1）
+// 阶段划分（R4）：LP section 优先（group/playoff/grandFinal）；OpenDota 用时间簇，
+//   边界 = series_type 突变 或 主导局数变化(≥2)，且日期间隔 ≥ 1 天；否则保守合并。
+const BO_MAX = { 'BO1': 1, 'BO2': 2, 'BO3': 3, 'BO5': 5 };
+const BO_WIN = { 'BO1': 1, 'BO2': 2, 'BO3': 2, 'BO5': 3 };
+const BO_LABEL = { 'BO1': '单局制', 'BO2': '双局积分', 'BO3': '三局两胜', 'BO5': '五局三胜' };
+
+// 阶段文本 → 阶段键（LP section / 赛制文本）
+function classifyStage(text) {
+  if (!text) return '';
+  const t = String(text).toLowerCase();
+  if (/grand\s*final|决赛/.test(t)) return 'grandFinal';
+  if (/group|round\s*[- ]?robin|小组|循环/.test(t)) return 'group';
+  if (/playoff|淘汰|quarter\s*final|semi|round\s*of|upper\s*bracket|lower\s*bracket/.test(t)) return 'playoff';
+  return '';
+}
+
+// 已结算局数（OpenDota 有 games；Liquipedia 无小场时用比分和估算）
+// ★ 兼容两种字段：groupSeries 原始字段 radiant_win，以及 league-detail fmt() 变换后的 radiantWin（驼峰）
+function settledCountOf(s) {
+  if (s && s.games && s.games.length) {
+    let n = 0;
+    for (let i = 0; i < s.games.length; i++) {
+      const g = s.games[i];
+      if (g.radiant_win != null || g.radiantWin != null) n++;
+    }
+    return n;
+  }
+  if (s && s.phase === 'recent' && (s.scoreA || s.scoreB)) {
+    return (s.scoreA || 0) + (s.scoreB || 0);
+  }
+  return 0;
+}
+
+// 未结算局数（LIVE「第 3 局 pending」判定用）
+function pendingCountOf(s) {
+  if (!s || !s.games || !s.games.length) return 0;
+  let n = 0;
+  for (let i = 0; i < s.games.length; i++) {
+    const g = s.games[i];
+    if (g.radiant_win == null && g.radiantWin == null) n++;
+  }
+  return n;
+}
+
+// S2a：从自由文本提取 BO 关键词（infobox format / 赛制描述，如 "Round robin (Bo2)"）
+function boFromFreeText(text) {
+  if (!text) return null;
+  const m = String(text).match(/(?:Abbr\/)?Bo\s*(\d)|best\s*of\s*(\d)/i);
+  return m ? ('BO' + (m[1] || m[2])) : null;
+}
+
+// 构建 BO 判定上下文（审核 R3：S4 自证表预计算，先于系列循环）
+// ctx.stages[stageKey] = { draws, maxPlayed }；ctx.defaultBo = S6 联赛默认（RECENT 模式众数）
+// ctx.dailyDraws[UTC日] = 该日是否存在 1:1 平局（同日自证粒度，审核 R4）
+// ctx.uniBo = boFormat.group 与 playoff 非空且相等时的单一赛制权威（v2.1，消除 S2 default 不分阶段污染）
+function buildBoContext(seriesList, league) {
+  const boFormat = (league && league.boFormat) || null;
+  // uniBo（审核 R3 边界）：仅 group/playoff 均非空且相等才成立；只声明单阶段 → null 退化启发式
+  const gp = [boFormat && boFormat.group, boFormat && boFormat.playoff].filter(Boolean);
+  const ctx = {
+    leagueId: (league && league.leagueId) || null,
+    leagueName: (league && league.leagueName) || '',
+    boFormat: boFormat,                                                     // S2 云 Format 段（parseBoFormat 输出）
+    metaFormatBo: boFromFreeText((league && league.metaFormat) || null),    // S2a infobox format 关键词（弱信号，不置 s2Auth）
+    uniBo: (gp.length === 2 && gp[0] === gp[1]) ? gp[0] : null,             // 单一赛制权威
+    stages: {},
+    dailyDraws: {},                                                         // UTC 日 → 是否有 1:1 平局（同日自证）
+    defaultBo: 'BO1'
+  };
+  const list = Array.isArray(seriesList) ? seriesList : [];
+  // 1a) LP section 锚点（优先级 1，v2.1；R2 时间窗守卫 |ΔT|<24h）
+  //     league.liqStages = league-detail 传入的 liqScheduled 带 section 场次 [{ section, startTime }]
+  const anchors = (league && Array.isArray(league.liqStages)) ? league.liqStages : null;
+  if (anchors && anchors.length) {
+    const anchorList = anchors
+      .map((a) => ({ stageKey: classifyStage(a.section || a.stageLabel || '') || 'unknown', startTime: a.startTime || 0 }))
+      .filter((a) => a.stageKey !== 'unknown' && a.startTime > 0);
+    if (anchorList.length) {
+      list.forEach((s) => {
+        if (s.stageKey || s.section || !s.lastTime) return;   // LP series 已有 section，走 1c
+        let best = null, bestD = 24 * 3600;                    // 时间窗守卫：>24h 不归属
+        for (let i = 0; i < anchorList.length; i++) {
+          const d = Math.abs(s.lastTime - anchorList[i].startTime);
+          if (d < bestD) { bestD = d; best = anchorList[i]; }
+        }
+        if (best) s.stageKey = best.stageKey;                 // 仅当最近锚点 |ΔT|<24h 才命中
+      });
+    }
+  }
+  // 1b) 时间簇（优先级 2，仅对仍未归属的 OpenDota 系列；R4 日历日差）
+  const odList = list.filter((s) => !s.section && !s.stageKey).slice().sort((a, b) => (a.lastTime || 0) - (b.lastTime || 0));
+  let prevSt = null, prevLen = null, prevDay = null, curKey = 'od0', idx = 0;
+  odList.forEach((s) => {
+    const st = (s.seriesType != null) ? s.seriesType : null;
+    const len = (s.games && s.games.length) || 0;
+    const t = s.lastTime || 0;
+    // R4（2026-08-04 二次修复）：日期间隔用「日历日差」而非小时差。
+    // 实测 1win 小组末场 8/2 21:00 UTC → 淘汰首场 8/3 00:30 UTC 仅隔 3.5h，
+    // 小时差 < 1 天导致阶段未切分、小组 BO2 自证污染淘汰赛 2:0（误判 BO2）。
+    const day = t ? Math.floor(t / 86400) : 0;
+    const gapDays = prevDay != null ? (day - prevDay) : 0;
+    let cut = false;
+    if (prevSt != null && st !== prevSt && gapDays >= 1) cut = true;                                    // series_type 突变且跨日
+    if (prevLen != null && len !== prevLen && Math.abs(len - prevLen) >= 2 && gapDays >= 1) cut = true;  // 主导局数突变且跨日
+    if (cut) { idx++; curKey = 'od' + idx; }
+    s.stageKey = s.stageKey || curKey;
+    prevSt = st; prevLen = len; prevDay = day;
+  });
+  // 1c) LP series 用 section classify（现状）
+  list.forEach((s) => {
+    if (!s.stageKey) s.stageKey = classifyStage(s.section || s.stageLabel || '') || 'unknown';
+  });
+  // 2) 聚合阶段证据 + S6 联赛模式（仅 RECENT 已结算系列）
+  const boModes = {};
+  list.forEach((s) => {
+    if (s.phase !== 'recent') return;
+    const k = s.stageKey || 'unknown';
+    const ev = ctx.stages[k] = ctx.stages[k] || { draws: 0, maxPlayed: 0 };
+    const played = settledCountOf(s);
+    if ((s.scoreA === s.scoreB) && played === 2) {
+      ev.draws++;                                             // 1:1 平局 = BO2 铁证（段级）
+      const day = s.lastTime ? Math.floor(s.lastTime / 86400) : 0;
+      if (day) ctx.dailyDraws[day] = true;                    // 同日粒度（审核 R4）
+    }
+    if (played > ev.maxPlayed) ev.maxPlayed = played;
+    // 联赛默认粗判（保守推导，仅供 S6 兜底）
+    const maxScore = Math.max(s.scoreA || 0, s.scoreB || 0);
+    let bo = 'BO1';
+    if (maxScore >= 3) bo = 'BO5';
+    else if (played === 2 && maxScore === 1) bo = 'BO2';
+    else if (played >= 3) bo = 'BO3';
+    else if (played === 2 && maxScore === 2) bo = 'BO3';
+    boModes[bo] = (boModes[bo] || 0) + 1;
+  });
+  // 3) S6 联赛默认 = RECENT 模式众数，无样本则 BO1
+  let best = 'BO1', bestN = 0;
+  Object.keys(boModes).forEach((k) => { if (boModes[k] > bestN) { bestN = boModes[k]; best = k; } });
+  ctx.defaultBo = best;
+  return ctx;
+}
+
+// 单个系列的 BO 判定（主引擎，审核 R2 兜底规则表 + R3 一致性校验）
+function resolveBoType(series, ctx) {
+  const played = settledCountOf(series);
+  const pending = pendingCountOf(series);
+  const totalGames = (series && series.games && series.games.length) || 0;
+  const scoreA = (series && series.scoreA) || 0;
+  const scoreB = (series && series.scoreB) || 0;
+  const maxScore = Math.max(scoreA, scoreB);
+  const st = (series && series.seriesType != null) ? series.seriesType : null;
+  const phase = (series && series.phase) || 'recent';
+  const stageKey = (series && series.stageKey) || '';
+  const c = ctx || { stages: {}, defaultBo: 'BO1' };
+
+  // 约束校验：已打局数与比分必须容纳于该赛制。
+  // 已结束（RECENT 且无 pending）系列必须是该 BO 的合法终局：
+  //   胜方局数必须恰达胜场阈值（BO3 2:0/2:1、BO5 3:0/3:1/3:2），
+  //   1:1 平局仅 BO2 合法（BO3/BO5 不可能以 1:1 终局 —— 这是 BO2 的铁证）。
+  // 进行中/未开赛仅校验上界（局数 ≤ 上限、当前胜局 ≤ 胜场阈值），不做终局判定。
+  const isDraw11 = played === 2 && scoreA === scoreB && scoreA === 1;
+  const isFinished = phase === 'recent' && pending === 0 && (played > 0 || (scoreA + scoreB) > 0);
+  const consistent = (bo) => {
+    if (!BO_MAX[bo]) return false;
+    if (played > BO_MAX[bo]) return false;
+    if (maxScore > BO_WIN[bo]) return false;
+    if (isFinished) {
+      if (isDraw11) return bo === 'BO2';
+      if (maxScore !== BO_WIN[bo]) return false;
+    }
+    return true;
+  };
+  // 结果一致性（R3 步骤 7）：局数超上限 → 抬升到可容纳赛制；maxScore>=3 → BO5
+  const finalize = (bo) => {
+    let b = bo || 'BO1';
+    while (played > BO_MAX[b]) {
+      if (b === 'BO1' || b === 'BO2') b = 'BO3';
+      else if (b === 'BO3') b = 'BO5';
+      else break;
+    }
+    if (maxScore >= 3 && BO_WIN[b] < 3) b = 'BO5';
+    return b;
+  };
+  // S2 按阶段取赛制文本（v2.1：uniBo 替代 default 兜底，消除根因 C；s2Auth 标记权威存在）
+  //   - 语义阶段（group/playoff/grandFinal）→ boFormat[stageKey]
+  //   - 时间簇/未知阶段 → uniBo（仅 group 与 playoff 非空且相等，审核 R3）
+  //   - 不再 fallback 到 boFormat.default（不分阶段，会污染混合赛事）
+  //   - metaFormatBo（infobox 关键词）为弱信号，命中不置 s2Auth（允许自证辅助）
+  let s2Auth = false, fmtBo = null;
+  if (c.boFormat) {
+    if (stageKey === 'grandFinal' && c.boFormat.grandFinal) fmtBo = c.boFormat.grandFinal;
+    else if (stageKey === 'group' && c.boFormat.group) fmtBo = c.boFormat.group;
+    else if (stageKey === 'playoff' && c.boFormat.playoff) fmtBo = c.boFormat.playoff;
+    else if (c.uniBo) fmtBo = c.uniBo;
+    if (fmtBo) s2Auth = true;
+  }
+  if (!fmtBo) fmtBo = c.metaFormatBo || null;
+
+  // S1 每场声明（Liquipedia bestof）
+  if (series && series.declaredBo && consistent(series.declaredBo)) return finalize(series.declaredBo);
+  // S2 赛制文本
+  if (fmtBo && consistent(fmtBo)) return finalize(fmtBo);
+  // S3 series_type 完整映射（3=BO2 为 2026-08-04 实证补入）
+  const dayKey = series && series.lastTime ? Math.floor(series.lastTime / 86400) : 0;
+  const sameDayDraw = !!(c.dailyDraws && c.dailyDraws[dayKey]);   // 同日粒度（审核 R4）
+  if (st === 3) {
+    if (consistent('BO2')) return finalize('BO2');
+  } else if (st === 2) {
+    if (consistent('BO5')) return finalize('BO5');
+  } else if (st === 1) {
+    // 同日自证 BO2（v2.1：S4 收窄为同日 + 无 S2 权威）且 2 局 2:0 且无 pending 第 3 局 → 改判 BO2
+    if (!s2Auth && sameDayDraw && totalGames === 2 && played === 2 && pending === 0 &&
+        maxScore === 2 && consistent('BO2')) return finalize('BO2');
+    if (consistent('BO3')) return finalize('BO3');
+  } else if (st === 0) {
+    if (consistent('BO1')) return finalize('BO1');
+  }
+  // ★ 2026-08-12 方案 A·S4.5：map 槽结构信号（LP {{Match}} 模板声明了几个 map 槽位）。
+  //   适用：LP 数据无 OpenDota series_type（st=null），且无 S2 权威赛制时 —— 即 LP-only 系列。
+  //   规则（槽位数→BO 推断）：
+  //     1 槽 → BO1（单局）
+  //     2 槽 → BO2（双局积分制；BO3 模板很少只占 2 槽，BO2 更严谨）
+  //     3 槽 → BO3（三局两胜；最常见）
+  //     4 槽 → BO3（BO5 偶占 4 槽，但 3 局已结算的场景更常见，保守 BO3）
+  //     5 槽 → BO5（五局三胜）
+  //   置于 S3 之后、S4 之前：因 OpenDota 路径 series.games[] 有值而无 mapSlots，
+  //   此时 mapSlots=0 不触发；LP 路径 mapSlots>0 触发，但前提是无 S2 权威且 st=null，
+  //   才会落到本分支 —— 与 S4 同日自证并列，互不冲突。
+  //   防御：须 consistent 校验（比分约束不矛盾才采纳），且 st==null 时才生效（st 有值已被 S3 处理）。
+  if (st == null && !s2Auth) {
+    const slots = (series && series.mapSlots) || 0;
+    if (slots > 0) {
+      let slotBo = null;
+      if (slots === 1) slotBo = 'BO1';
+      else if (slots === 2) slotBo = 'BO2';
+      else if (slots === 3 || slots === 4) slotBo = 'BO3';
+      else if (slots >= 5) slotBo = 'BO5';
+      if (slotBo && consistent(slotBo)) return finalize(slotBo);
+    }
+  }
+  // S4 同日自证（无 series_type 或 st 不可用；无 S2 权威；同日粒度）+ 段内 3 局证据升 BO3
+  if (!s2Auth && sameDayDraw && totalGames === 2 && maxScore === 2 && consistent('BO2')) return finalize('BO2');
+  const ev = c.stages[stageKey];
+  if (ev && ev.maxPlayed >= 3 && totalGames === 2 && maxScore === 2 && consistent('BO3')) return finalize('BO3');
+  // S5 局数+比分约束（仅 RECENT 已结算；live/upcoming 无局数不进入，防比分反推误判）
+  if (phase === 'recent' && (played > 0 || maxScore > 0)) {
+    if (maxScore >= 3 && consistent('BO5')) return finalize('BO5');   // 3:0/3:1/3:2
+    if (played === 3 && maxScore === 2 && consistent('BO3')) return finalize('BO3');  // 2:1
+    if (played === 2 && maxScore === 2) return finalize('BO3');       // 2:0 保守默认（R2）
+    if (played === 2 && maxScore === 1) return finalize('BO2');       // 1:1 铁证
+    if (played === 1 && maxScore === 1) return finalize('BO1');       // 1:0
+  }
+  // S6 阶段/联赛默认（live/upcoming 或零信号）
+  if (stageKey === 'playoff' || stageKey === 'grandFinal') return finalize('BO3');  // 淘汰赛先验
+  return finalize(c.defaultBo);
+}
+
+// 应用 BO 判定结果到系列对象（覆盖 groupSeries/LP 的旧推断）
+// league-detail.buildSeriesFromSources 在 OpenDota + Liquipedia 合并后统一调用
+function applyBo(series, ctx) {
+  if (!series) return series;
+  const bo = resolveBoType(series, ctx);
+  series.boType = bo;
+  series.boLabel = BO_LABEL[bo] || '单局制';
+  series.boTagCls = bo === 'BO2' ? 'bo-bo2' : (bo === 'BO5' ? 'bo-bo5' : '');
+  series.isMulti = bo !== 'BO1';
+  // ★ 2026-08-12 P0-1：resolveBoType 重定 bo 后须重算 isDraw。
+  //   根因：groupSeries L942 按"旧比分反推 boType"判 isDraw，applyBo 覆盖 boType 后未同步；
+  //   场景：BO3 临时 1-1（系列未结束）被 groupSeries 误标 isDraw=true，applyBo 正确定为 BO3，
+  //   若不重算会残留 isDraw=true → 显示成"平局"配色 + 误判胜负方缺失。
+  //   三重限定严谨：① bo==='BO2'（只有 BO2 可能平局）；② 比分相等；
+  //   ③ 已结算（防 live/upcoming 临时 1-1 被误判——系列未结束不是真平局）。
+  //   isFinished 与 resolveBoType L1175 定义保持一致。
+  if (series.games) {
+    const _settled = settledCountOf(series);
+    const _pending = pendingCountOf(series);
+    const _phase = series.phase || 'recent';
+    const _isFinished = _phase === 'recent' && _pending === 0 &&
+      (_settled > 0 || ((series.scoreA || 0) + (series.scoreB || 0)) > 0);
+    series.isDraw = (bo === 'BO2' && _isFinished && (series.scoreA || 0) === (series.scoreB || 0));
+    // bo 变化导致胜负方须同步重算
+    if (!series.isDraw) {
+      series.radiantWin = (series.scoreA || 0) > (series.scoreB || 0);
+      series.direWin = (series.scoreB || 0) > (series.scoreA || 0);
+    } else {
+      series.radiantWin = false;
+      series.direWin = false;
+    }
+  }
+  return series;
+}
+
+// ★ 2026-08-04（v1.1 实施，审核 R3/R4/R5/R6）：LP live/upcoming 卡吸收 OpenDota 已结算局（matchIds 硬关联）
+// 纯函数（不依赖 wx/Page，可单测）。series.games 兼容两种字段：fmt 后 radiantWin/radiantTeamId 与原始 radiant_win/radiant_team_id。
+// 方向映射优先级链由 resolver 内部实现（页面注入 curation → league idMap → null）；单点命中即定方向（补集原理）。
+// 返回 { liqSeries, absorbedKeys }：
+//   - 命中且方向可定 → 注入 games（aWin/bWin 按 LP team1/team2 视角重算）/scoreA/scoreB（team1 胜局数）/radiantTeamId/direTeamId，absorbedKeys=被吸收 OpenDota series key（页面据此移除防 RECENT 重复）
+//   - 方向失败 → 不注入 games，absorbedKeys=[]（跨 tab 双卡为已文档化边界 R6）
+function absorbSettledGames(openSeriesList, liqSeries, teamIdNameResolver) {
+  const byMatchId = new Map();
+  (Array.isArray(openSeriesList) ? openSeriesList : []).forEach(function (s) {
+    (s.games || []).forEach(function (g) {
+      if (g && g.match_id) byMatchId.set(String(g.match_id), { series: s, game: g });
+    });
+  });
+  const absorbedKeys = [];
+  const norm = function (x) { return String(x || '').toLowerCase().replace(/[^a-z0-9]/g, ''); };
+  // ★ 2026-08-05（审核 R2）：去通用队伍后缀后完整匹配 —— 解决短名被长度下限 3 拦截（1w vs 1w Team）。
+  //   方向解析是「任一侧命中即定方向」（补集原理）：dire=1w 本可命中 team1='1wteam'（indexOf），
+  //   但 dn.length=2 < 3 被拦 → 唯一命中点丢失。去后缀后 '1wteam'→'1w' === '1w'（完整匹配，非子串）。
+  //   子串匹配长度下限保持 3 不动（防 'og'/'xg' 等 2 字符出现在任意队名中的误配）。
+  const TEAM_SUFFIX_RE = /(team|tc|gaming|esports|club|gg)$/i;
+  const stripTeamSuffix = function (x) { return String(x || '').replace(TEAM_SUFFIX_RE, ''); };
+  // 队名匹配：① 精确 → ② 去后缀完整匹配（防短名被拦）→ ③ 子串包含（下限 3，双向）
+  const nameMatch = function (openNorm, liqNorm) {
+    if (!openNorm || !liqNorm) return false;
+    if (openNorm === liqNorm) return true;
+    const so = stripTeamSuffix(openNorm), sl = stripTeamSuffix(liqNorm);
+    // 走到 ② 必然 openNorm!==liqNorm（① 已处理全等）；so===sl 即「差异仅在后缀」→ 安全匹配
+    // （1w vs 1wteam：so='1w' 未变、sl='1w' 变了 → 命中；navi vs navijr：strip 后不等 → 不命中）
+    if (so === sl && so.length >= 2) return true;
+    if (openNorm.length >= 3 && liqNorm.indexOf(openNorm) >= 0) return true;
+    if (liqNorm.length >= 3 && openNorm.indexOf(liqNorm) >= 0) return true;
+    return false;
+  };
+
+  // 共享吸收流程（S0/S1 共用，审核 R4）：对命中系列执行方向解析 + 注入 + absorbedKeys
+  // 返回是否成功吸收（S0 的 hit 来自 matchIds 命中；S1 的 hit 来自队名+时间窗关联）
+  function absorbHits(card, hit) {
+    if (!hit || !hit.length) return false;
+    // 方向解析：取该 series 首场 radiant/dire team_id → resolver 解名 → 与 LP team1/team2 比对（单点命中即定方向）
+    const first = hit[0].series.games && hit[0].series.games[0];
+    const rId = first && (first.radiantTeamId || first.radiant_team_id);
+    const dId = first && (first.direTeamId || first.dire_team_id);
+    let radiantIsTeam1 = null;
+    if (rId || dId) {
+      const rn = rId ? (teamIdNameResolver ? norm(teamIdNameResolver(rId)) : '') : '';
+      const dn = dId ? (teamIdNameResolver ? norm(teamIdNameResolver(dId)) : '') : '';
+      // 2026-08-04（v1.1 二次修复）：team1Name/team2Name 可能缺失（页面 map 早期形状）→ 回退 radiantName/direName 兜底
+      const t1 = norm(card.team1Name || card.radiantName), t2 = norm(card.team2Name || card.direName);
+      // ★ 2026-08-05（审核 R2）：方向匹配升级 nameMatch（精确/去后缀/子串），修复 1w vs 1w Team 短名被拦
+      if (rn && nameMatch(rn, t1)) radiantIsTeam1 = true;       // radiant=team1
+      else if (rn && nameMatch(rn, t2)) radiantIsTeam1 = false;  // radiant=team2
+      else if (dn && nameMatch(dn, t1)) radiantIsTeam1 = false;  // dire=team1
+      else if (dn && nameMatch(dn, t2)) radiantIsTeam1 = true;   // dire=team2 → radiant=team1
+    }
+    if (radiantIsTeam1 === null) return false;  // 方向失败 → 不注入（R3/R4）
+    // 吸收：注入 games（aWin/bWin 按 LP team1/team2 视角重算）+ 比分由 games 重算（R4）
+    // ⚠️ 胜负判定必须按 team_id 归属（与 fmt 同逻辑），不能用 radiant 方向 —— BO3 换边局 radiant 可能是 team1（T22 实证）
+    const aId = radiantIsTeam1 ? rId : dId;   // LP team1 的 OpenDota team_id
+    const bId = radiantIsTeam1 ? dId : rId;   // LP team2 的 OpenDota team_id
+    const games = [];
+    let scoreA = 0, scoreB = 0;
+    hit.forEach(function (h) {
+      const g = Object.assign({}, h.game);
+      const rw = (g.radiantWin != null) ? g.radiantWin : g.radiant_win;  // 兼容 fmt 驼峰 / 原始字段
+      let aWin = false, bWin = false;
+      if (rw === true || rw === false) {
+        const gR = g.radiantTeamId || g.radiant_team_id;
+        const gD = g.direTeamId || g.dire_team_id;
+        const winnerId = rw ? gR : gD;
+        if (aId && bId && winnerId) {           // 有有效锚点：按 team_id 归属（换边安全）
+          if (winnerId === aId) aWin = true;
+          else if (winnerId === bId) bWin = true;
+        } else if (radiantIsTeam1) {            // 无锚点兜底：radiant 方向
+          aWin = !!rw; bWin = !rw;
+        } else {
+          bWin = !!rw; aWin = !rw;
+        }
+        if (aWin) scoreA++; else scoreB++;
+      }
+      g.aWin = aWin;
+      g.bWin = bWin;
+      games.push(g);
+    });
+    card.games = games;
+    card.scoreA = scoreA;
+    card.scoreB = scoreB;
+    card.radiantTeamId = aId;  // LP A=team1 对应的 OpenDota team_id（logo/增强用）
+    card.direTeamId = bId;
+    const seen = new Set();
+    hit.forEach(function (h) {
+      if (h.series && h.series.key && !seen.has(h.series.key)) { seen.add(h.series.key); absorbedKeys.push(h.series.key); }
+    });
+    return true;
+  }
+
+  (Array.isArray(liqSeries) ? liqSeries : []).forEach(function (card) {
+    if (card.phase === 'recent') return;  // 仅 live/upcoming 参与吸收
+    // S0：matchIds 硬关联（保留，优先；审核 R3：matchIds 有值一律走 S0，含不命中，不降级 S1）
+    if (card.matchIds && card.matchIds.length) {
+      const hit = [];
+      card.matchIds.forEach(function (id) {
+        const h = byMatchId.get(String(id));
+        if (h) hit.push(h);
+      });
+      absorbHits(card, hit);
+      return;
+    }
+    // ★ v1.1（2026-08-05，审核 R2/R5）：S1 第二关联键 —— matchIds 为空 + 队名 + 时间窗。
+    //   R2：仅 phase==='live' 参与（upcoming 未开赛，禁队名关联 —— S0 靠 matchIds 天然隔离，
+    //       队名关联会命中「同名队伍历史已结束系列」→ 未开赛卡显示历史比分 + RECENT 被误移除）。
+    //   R5：时间窗 |card.lastTime − series.firstTime| ≤ 4h（保守，宁可漏吸收不误吸收）。
+    if (card.phase !== 'live') return;
+    const cardTime = card.lastTime || 0;
+    if (!cardTime) return;
+    const t1 = norm(card.team1Name || card.radiantName), t2 = norm(card.team2Name || card.direName);
+    if (!t1 || !t2) return;
+    let hit = [];
+    (Array.isArray(openSeriesList) ? openSeriesList : []).forEach(function (s) {
+      if (hit.length) return;  // 已关联到系列，不再继续（同名队伍同日多场时优先时间最近的）
+      const g0 = s.games && s.games[0];
+      if (!g0) return;
+      const rId = g0.radiantTeamId || g0.radiant_team_id;
+      const dId = g0.direTeamId || g0.dire_team_id;
+      if (!rId && !dId) return;
+      const rn = rId ? (teamIdNameResolver ? norm(teamIdNameResolver(rId)) : '') : '';
+      const dn = dId ? (teamIdNameResolver ? norm(teamIdNameResolver(dId)) : '') : '';
+      // 队名双向匹配（R4：复用方向解析同一 norm 规则 + 2026-08-05 nameMatch 升级）：radiant 或 dire 解名 分别命中 team1/team2
+      const t1Hit = (rn && nameMatch(rn, t1)) || (dn && nameMatch(dn, t1));
+      const t2Hit = (rn && nameMatch(rn, t2)) || (dn && nameMatch(dn, t2));
+      if (!t1Hit || !t2Hit) return;
+      const sTime = s.firstTime || 0;   // R1：firstTime = 系列首场 start_time（groupSeries 补字段）
+      if (!sTime || Math.abs(cardTime - sTime) > 4 * 3600) return;  // R5：时间窗守卫
+      // 命中：该系列全部已结算局作为 hit（absorbedKeys 移除语义与 S0 一致）
+      (s.games || []).forEach(function (g) {
+        if (g && g.match_id) hit.push({ series: s, game: g });
+      });
+    });
+    absorbHits(card, hit);
+  });
+  return { liqSeries: liqSeries, absorbedKeys: absorbedKeys };
+}
+
+// ★ 2026-08-04（v1.1 实施，审核 R2）：liveProgress 文本 —— 必须在 applyBo 后调用（依赖最终 boType）
+// BO1 不显示；BO2/3/5 显示 `Game {已结算局数}/{上限}`（第 1 局打完 → Game 1/3；B4 轮询随局数自增）
+function liveProgressOf(s) {
+  if (!s || s.phase !== 'live') return '';
+  const bo = s.boType || 'BO1';
+  if (bo === 'BO1') return '';
+  const max = BO_MAX[bo] || 3;
+  const played = settledCountOf(s);
+  if (played <= 0) return '';
+  return 'Game ' + played + '/' + max;
+}
+
+// ★ 2026-08-04（v1.1 实施，审核 R5）：LIVE 低频重拉 OpenDota 的决策纯函数（可单测）
+// 触发条件：有 live 卡 且 距上次重拉 ≥5min（OpenDota 收录滞后 5-30min，5min 粒度可捕捉 BO3 新局；
+//           云函数 leagueMatches TTL 已降 5min，force 调用能拿到新缓存）
+function shouldRefreshOpenDota(liveCount, lastRefreshSec, nowSec) {
+  if (!(liveCount > 0)) return false;
+  const last = Number(lastRefreshSec) || 0;
+  const now = Number(nowSec) || Math.floor(Date.now() / 1000);
+  return (now - last) >= 300;
+}
+
+// ★ 2026-08-05（RECENT 同对局双卡修复，审核 R2）：LP 卡 matchIds 是否全部被 OpenDota 收录（硬关联去重判定）
+//   全命中 → LP recent 卡剔除（OpenDota 数据更全，含比分）；部分/全不命中 → 保留（LP 数据不完整边界，双卡残留为可接受边界 R3）
+function allMatchIdsInSet(matchIds, idSet) {
+  if (!Array.isArray(matchIds) || !matchIds.length || !idSet) return false;
+  return matchIds.every(function (id) { return idSet.has(String(id)); });
+}
+
+// ★ 2026-08-05（RECENT 同对局双卡修复，审核 R2）：team_id → 队名（explorer 预取 map 优先 → curation → raw idMap）
+//   用于 OpenDota 比赛端点队名恒 null 时，把占位名（'天辉'/'夜魇'）解为真实名，恢复队名去重路径
+function resolveTeamIdName(id, idNameMap, curatedTeams, rawIdMap) {
+  if (!id) return null;
+  if (idNameMap && idNameMap[id]) return idNameMap[id];
+  if (curatedTeams && curatedTeams[id] && curatedTeams[id].name) return curatedTeams[id].name;
+  return (rawIdMap && rawIdMap[id]) || null;
 }
 
 module.exports = {
@@ -1004,6 +1660,18 @@ module.exports = {
   getLeagueMetadata: getLeagueMetadata,
   getLeagueStandings: getLeagueStandings,
   groupSeries: groupSeries,
+  // ★ 2026-08-04：BO 判定引擎（S2 赛制文本 / S3 series_type 映射 / S4 同赛事自证 / S5 约束 / S6 默认）
+  buildBoContext: buildBoContext,
+  resolveBoType: resolveBoType,
+  applyBo: applyBo,
+  // ★ 2026-08-04（v1.1 实施）：LP live/upcoming 卡吸收 OpenDota 已结算局 + liveProgress（R2/R5）
+  absorbSettledGames: absorbSettledGames,
+  liveProgressOf: liveProgressOf,
+  // ★ 2026-08-04（v1.1 实施，审核 R5）：LIVE 低频重拉决策（有 live 卡且 ≥5min 间隔）
+  shouldRefreshOpenDota: shouldRefreshOpenDota,
+  allMatchIdsInSet: allMatchIdsInSet,
+  resolveTeamIdName: resolveTeamIdName,
+  classifyStage: classifyStage,
   enrichTeamLogo: enrichTeamLogo,
   enrichPlayerAvatar: enrichPlayerAvatar,
   enrichTeamInfo: enrichTeamInfo,

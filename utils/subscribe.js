@@ -14,6 +14,8 @@
 //   thing5.DATA → 备注（可选，如"即将开始"）
 
 const config = require('./config.js');
+// ★ 2026-08-07（审核 R1）：openid 管理上移至 utils/auth.js（单点实现），此处转发兼容导出
+const auth = require('./auth.js');
 const cloudCache = require('./cloudCache.js');
 const sources = require('./sources.js');
 
@@ -94,6 +96,8 @@ function requestSubscribe(opts) {
           lastStatus: status
         };
         writeStatus(s);
+        // ★ 2026-08-07（R3）：授权结果同步云端 profile.subs（fire-and-forget，防本地丢失）
+        if (status === 'accept') syncSubStatus().catch(() => {});
         resolve(status || 'fail');
       },
       fail: (err) => {
@@ -457,75 +461,62 @@ async function triggerPreMatchReminder(match, openid, opts) {
   };
 }
 
-// ===== OpenID 管理 =====
+// ===== OpenID 管理（★ 2026-08-07 上移至 utils/auth.js，此处转发保持兼容导出）=====
+// 原实现（OPENID_KEY / getOpenIdSync / ensureOpenId / clearOpenId）已迁至 auth.js 单点，
+// 避免双缓存不一致（审核 R1）。新增 syncSubStatus（授权态上云）/ restoreSubFromCloud（云端恢复）。
 
-var OPENID_KEY = 'dota2_openid';
-
-/**
- * 同步读取本地缓存的 openid（不发起云调用）。
- * 仅在 app.js 已预热（globalData.openidReady=true）时使用，避免 await。
- * @returns {string|null}
- */
-function getOpenIdSync() {
-  try {
-    var cached = wx.getStorageSync(OPENID_KEY);
-    if (cached && typeof cached === 'string' && cached.length > 10) {
-      return cached;
-    }
-  } catch (e) {}
-  return null;
-}
+function getOpenIdSync() { return auth.getOpenIdSync(); }
+function ensureOpenId(fresh) { return auth.ensureOpenId(fresh); }
+function clearOpenId() { return auth.clearOpenId(); }
 
 /**
- * 确保有可用的 openid。优先从本地缓存读取，缓存未命中时调用云函数获取。
- * @param {boolean} [fresh=false] 强制刷新（忽略缓存）
- * @returns {Promise<string|null>} openid 或 null
+ * 订阅授权状态同步到云端（R3）：授权成功/失败写本地后调用，并入 follow_profile_{openid}.subs。
+ * @returns {Promise<{ok:boolean}>}
  */
-function ensureOpenId(fresh) {
-  return new Promise(function (resolve) {
-    if (!fresh) {
-      try {
-        var cached = wx.getStorageSync(OPENID_KEY);
-        if (cached && typeof cached === 'string' && cached.length > 10) {
-          resolve(cached);
-          return;
-        }
-      } catch (e) {}
-    }
-    wx.cloud.callFunction({
-      name: 'aggregation',
-      data: { action: 'getOpenId' },
-      success: function (res) {
-        var oid = ((res && res.result) && res.result.openid) || null;
-        if (oid) {
-          try { wx.setStorageSync(OPENID_KEY, oid); } catch (e) {}
-        }
-        resolve(oid);
-      },
-      fail: function () {
-        resolve(null);
-      }
+function syncSubStatus() {
+  return ensureOpenId().then(function (openid) {
+    if (!openid) return { ok: false, reason: 'no_openid' };
+    var key = 'follow_profile_' + openid;
+    return cloudCache.getCached(key).then(function (profile) {
+      var merged = Object.assign({}, profile || {}, {
+        subs: readStatus() || null,
+        savedAt: Date.now()
+      });
+      return cloudCache.setCached(key, merged, 30 * 24 * 3600).then(function () {
+        return { ok: true };
+      });
     });
-  });
+  }).catch(function () { return { ok: false, reason: 'error' }; });
 }
 
 /**
- * 清除本地缓存的 openid（用户退出登录时调用）
+ * 从云端恢复订阅授权状态（R3）：登录后调用，mergeSubs（云端有值优先）合并回本地 dota2_sub_status。
+ * 解决清缓存/换设备后本地授权丢失的问题。
+ * @returns {Promise<{ok:boolean, restored:number}>}
  */
-function clearOpenId() {
-  try { wx.removeStorageSync(OPENID_KEY); } catch (e) {}
+function restoreSubFromCloud() {
+  return ensureOpenId().then(function (openid) {
+    if (!openid) return { ok: false, reason: 'no_openid', restored: 0 };
+    return cloudCache.getCached('follow_profile_' + openid).then(function (profile) {
+      var cloudSubs = (profile && profile.subs) || null;
+      if (!cloudSubs || !Object.keys(cloudSubs).length) return { ok: true, restored: 0 };
+      var merged = auth.mergeSubs(cloudSubs, readStatus());
+      writeStatus(merged);
+      return { ok: true, restored: Object.keys(cloudSubs).length };
+    });
+  }).catch(function () { return { ok: false, reason: 'error', restored: 0 }; });
 }
 
 // ===== #20 服务端策略引擎数据层 =====
 // 把「关注战队 id 列表 + 提醒策略」上传到云端（按 openid 分桶），
 // 供云函数 saveFollowProfile / sendSmartReminders 服务端批量推送使用。
 // 客户端赛前提醒仍走 checkPreMatchReminders（本地策略评估），此处为服务端引擎补齐数据。
-function saveFollowProfile(teamIds, strategy) {
+function saveFollowProfile(teamIds, strategy, subs) {
   return ensureOpenId().then(function (openid) {
     if (!openid) return { ok: false, reason: 'no_openid' };
     return cloudCache.setCached(
       'follow_profile_' + openid,
-      { teams: teamIds || [], strategy: strategy || null, savedAt: Date.now() },
+      { teams: teamIds || [], strategy: strategy || null, subs: subs || null, savedAt: Date.now() },
       30 * 24 * 3600
     ).then(function () { return { ok: true, openid: openid }; });
   }).catch(function () { return { ok: false, reason: 'error' }; });
@@ -560,10 +551,14 @@ module.exports = {
   TMPL_ID: TMPL_ID,
   TEMPLATE_TITLE: '比赛开始提醒',
 
-  // OpenID
+  // OpenID（★ 转发 auth.js，2026-08-07 R1）
   ensureOpenId: ensureOpenId,
   getOpenIdSync: getOpenIdSync,
   clearOpenId: clearOpenId,
+
+  // ★ 2026-08-07（R3）：订阅授权状态上云 / 云端恢复
+  syncSubStatus: syncSubStatus,
+  restoreSubFromCloud: restoreSubFromCloud,
 
   // #20 服务端策略引擎数据层
   saveFollowProfile: saveFollowProfile

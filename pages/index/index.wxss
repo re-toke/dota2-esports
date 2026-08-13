@@ -1,23 +1,23 @@
-.container { padding: 24rpx; }
+.container { padding: var(--space-3); }
 
 /* ===== 关注卡片流（2.1，从 leagues 迁入） ===== */
 .follow-flow {
-  margin: 20rpx 0 4rpx;
+  margin: var(--space-2-5) 0 var(--space-0-5);
 }
 .ff-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4rpx 8rpx 14rpx;
+  padding: var(--space-0-5) var(--space-1) 14rpx;
 }
 .ff-title {
-  font-size: 30rpx;
+  font-size: var(--fs-emphasis);
   font-weight: 700;
   color: #f0f3f6;
   letter-spacing: 0.5rpx;
 }
 .ff-more {
-  font-size: 36rpx;
+  font-size: var(--fs-display);
   color: #6b7280;
   line-height: 1;
 }
@@ -28,7 +28,7 @@
 .ff-track {
   display: inline-flex;
   gap: 18rpx;
-  padding: 4rpx 8rpx 12rpx;
+  padding: var(--space-0-5) var(--space-1) var(--space-1-5);
 }
 .ff-card {
   position: relative;
@@ -36,23 +36,29 @@
   display: inline-flex;
   flex-direction: column;
   width: 300rpx;
-  padding: 20rpx 22rpx 20rpx 30rpx;
-  background: var(--card-bg, #161b22);
-  border: 1rpx solid var(--td-border-level-1-color, #232a33);
+  padding: var(--space-2-5) 22rpx var(--space-2-5) 30rpx;
+  background: var(--card-grad);
+  border: 1rpx solid var(--td-border-level-1-color, #262628);
   border-radius: 18rpx;
-  box-shadow: 0 4rpx 16rpx rgba(0,0,0,.22);
+  box-shadow: var(--card-inner-shadow), 0 4rpx 16rpx rgba(0,0,0,.22);
 }
+/* 左侧 Tier 色浸染（v11 聚光灯：色带 + 向右浸染衰减，铺满卡宽自然过渡） */
 .ff-card::before {
   content: '';
   position: absolute;
   left: 0; top: 0; bottom: 0;
-  width: 6rpx;
-  background: var(--td-border-level-1-color, #232a33);
+  width: 100%;
+  z-index: 0;
+  background: var(--td-border-level-1-color, #262628);
 }
-.ff-card.tier-sss::before { background: var(--tier-sss); }
-.ff-card.tier-s::before { background: var(--tier-s); }
-.ff-card.tier-a::before { background: var(--tier-a); }
-.ff-card.tier-b::before { background: var(--tier-b); }
+.ff-card.tier-sss::before { background: var(--card-glow-sss); }
+.ff-card.tier-s::before { background: var(--card-glow-s); }
+.ff-card.tier-a::before { background: var(--card-glow-a); }
+.ff-card.tier-b::before { background: var(--card-glow-b); }
+.ff-card .ff-card-top,
+.ff-card .ff-name,
+.ff-card .ff-sub,
+.ff-card .ff-meta { position: relative; z-index: 1; }
 .ff-card-top {
   display: flex;
   align-items: center;
@@ -60,16 +66,16 @@
   margin-bottom: 14rpx;
 }
 .ff-tier {
-  font-size: 20rpx;
+  font-size: var(--fs-micro);
   font-weight: 700;
-  color: #0e1116;
-  background: var(--dota-gold, #C8A951);
+  color: #121015;
+  background: linear-gradient(135deg, #FFD15C, #C8A951);
   padding: 2rpx 10rpx;
-  border-radius: 8rpx;
+  border-radius: var(--radius-sm);
   flex-shrink: 0;
 }
 .ff-league {
-  font-size: 24rpx;
+  font-size: var(--fs-body);
   color: #9aa4b2;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -79,11 +85,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 16rpx;
+  gap: var(--space-2);
   margin-bottom: 14rpx;
 }
 .ff-team {
-  font-size: 30rpx;
+  font-size: var(--fs-emphasis);
   font-weight: 800;
   color: #e6ebf2;
   max-width: 110rpx;
@@ -93,7 +99,7 @@
 }
 .ff-team.win { color: var(--h2h-a, #2DD4A7); }
 .ff-vs-sym {
-  font-size: 22rpx;
+  font-size: var(--fs-caption);
   color: #6b7280;
   font-weight: 700;
 }
@@ -104,83 +110,83 @@
   gap: 10rpx;
 }
 .ff-cd {
-  font-size: 24rpx;
+  font-size: var(--fs-body);
   font-weight: 700;
-  color: var(--dota-gold, #C8A951);
+  color: #C8A951;
   font-family: var(--font-numeric, sans-serif);
   letter-spacing: 0.5rpx;
 }
 .ff-ended {
-  font-size: 22rpx;
+  font-size: var(--fs-caption);
   font-weight: 700;
 }
 .ff-ended.win { color: var(--h2h-a, #2DD4A7); }
 .ff-ended.lose { color: var(--h2h-b, #F25C54); }
 .ff-date {
-  font-size: 20rpx;
+  font-size: var(--fs-micro);
   color: #6b7280;
   flex-shrink: 0;
 }
 .ff-skeleton-row {
   display: flex;
   gap: 18rpx;
-  padding: 4rpx 8rpx 12rpx;
+  padding: var(--space-0-5) var(--space-1) var(--space-1-5);
 }
 .ff-skeleton-card {
   width: 300rpx;
   height: 168rpx;
   border-radius: 18rpx;
-  background: var(--card-bg-elevated, #1c232c);
+  background: var(--card-bg-elevated, #222226);
   flex-shrink: 0;
 }
 .ff-empty {
   display: flex;
   flex-direction: column;
   gap: 6rpx;
-  padding: 28rpx 16rpx;
-  background: var(--card-bg, #161b22);
-  border-radius: 16rpx;
-  border: 1rpx dashed var(--td-border-level-1-color, #232a33);
+  padding: var(--space-3-5) var(--space-2);
+  background: var(--card-grad);
+  border-radius: var(--radius-lg);
+  border: 1rpx dashed var(--td-border-level-1-color, #262628);
 }
-.ff-empty-text { font-size: 26rpx; color: #c3ccd9; font-weight: 600; }
-.ff-empty-sub { font-size: 22rpx; color: #6b7280; }
+.ff-empty-text { font-size: var(--fs-label); color: #c3ccd9; font-weight: 600; }
+.ff-empty-sub { font-size: var(--fs-caption); color: #6b7280; }
 
-/* 未关注态引导卡 */
+/* 未关注态引导卡（B+D：增强金色渐变质感） */
 .follow-guide {
   display: flex;
   align-items: center;
   gap: 18rpx;
-  margin: 20rpx 0 4rpx;
-  padding: 22rpx 24rpx;
-  background: linear-gradient(135deg, rgba(200,169,81,0.10), rgba(200,169,81,0.03));
-  border: 1rpx solid rgba(200,169,81,0.28);
+  margin: var(--space-2-5) 0 var(--space-0-5);
+  padding: 22rpx var(--space-3);
+  background: linear-gradient(135deg, rgba(255,209,92,0.10), rgba(200,169,81,0.04));
+  border: 1rpx solid rgba(255,209,92,0.22);
   border-radius: 18rpx;
 }
-.fg-icon { font-size: 44rpx; }
-.fg-text { flex: 1; display: flex; flex-direction: column; gap: 4rpx; }
-.fg-title { font-size: 28rpx; font-weight: 700; color: #f0f3f6; }
-.fg-sub { font-size: 22rpx; color: #9aa4b2; }
+.fg-icon { font-size: var(--fs-mega); }
+.fg-text { flex: 1; display: flex; flex-direction: column; gap: var(--space-0-5); }
+.fg-title { font-size: var(--fs-subhead); font-weight: 700; color: #f0f3f6; }
+.fg-sub { font-size: var(--fs-caption); color: #9aa4b2; }
 .fg-btn {
-  padding: 12rpx 28rpx;
-  background: var(--dota-gold, #C8A951);
-  color: #0e1116;
-  font-size: 26rpx;
+  padding: var(--space-1-5) var(--space-3-5);
+  background: linear-gradient(135deg, #FFD15C, #C8A951);
+  color: #0e0c10;
+  font-size: var(--fs-label);
   font-weight: 700;
-  border-radius: 999rpx;
+  border-radius: var(--radius-pill);
 }
 
 /* ===== 1.3 个性化推荐位 ===== */
-.rec-section { margin: 20rpx 0 4rpx; }
+.rec-section { margin: var(--space-2-5) 0 var(--space-0-5); }
 .section-header {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  padding: 8rpx 4rpx 12rpx;
+  padding: var(--space-1) var(--space-0-5) var(--space-1-5);
 }
-.section-title { font-size: 30rpx; font-weight: 700; color: #f0f3f6; }
-.section-action { font-size: 22rpx; color: #9aa4b2; }
+.section-title { font-size: var(--fs-emphasis); font-weight: 700; color: #f0f3f6; }
+.section-action { font-size: var(--fs-caption); color: #9aa4b2; }
 .rec-scroll { width: 100%; white-space: nowrap; }
-.rec-track { display: inline-flex; gap: 18rpx; padding: 4rpx 2rpx 12rpx; }
+.rec-track { display: inline-flex; gap: 18rpx; padding: var(--space-0-5) 2rpx var(--space-1-5); }
 .rec-card {
   position: relative;
   overflow: hidden;
@@ -188,44 +194,45 @@
   flex-direction: column;
   width: 280rpx;
   padding: 22rpx 22rpx 22rpx 30rpx;
-  background: #161b22;
+  background: var(--card-grad);
   border-radius: 18rpx;
-  border: 1rpx solid var(--td-border-level-1-color, #232a33);
+  border: 1rpx solid var(--td-border-level-1-color, #262628);
   flex-shrink: 0;
+  box-shadow: var(--card-inner-shadow);
 }
 /* 左侧等级彩条（复用全局 .tier-*::before Token） */
 .rec-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 6rpx; }
-.rec-card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12rpx; }
+.rec-card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-1-5); }
 .rec-tag {
-  font-size: 20rpx;
+  font-size: var(--fs-micro);
   font-weight: 700;
-  padding: 3rpx 12rpx;
-  border-radius: 999rpx;
+  padding: 3rpx var(--space-1-5);
+  border-radius: var(--radius-pill);
   background: rgba(255,255,255,0.08);
   color: #c3ccd9;
 }
 .rec-tag--danger { background: rgba(232,68,59,0.16); color: #ff8a82; }
 .rec-tag--warning { background: rgba(240,170,40,0.16); color: #ffcf5c; }
 .rec-tag--default { background: rgba(255,255,255,0.08); color: #c3ccd9; }
-.rec-days { font-size: 20rpx; color: #9aa4b2; font-weight: 600; }
+.rec-days { font-size: var(--fs-micro); color: #9aa4b2; font-weight: 600; }
 .rec-name {
-  font-size: 27rpx;
+  font-size: var(--fs-subhead);
   font-weight: 700;
   color: #f0f3f6;
-  line-height: 1.3;
+  line-height: var(--lh-tight);
   white-space: normal;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.rec-meta { font-size: 21rpx; color: #6b7280; margin-top: 10rpx; }
+.rec-meta { font-size: var(--fs-caption); color: #6b7280; margin-top: 10rpx; }
 
 /* ===== 快捷入口（首页导航） ===== */
 .quick-nav {
   display: flex;
   gap: 18rpx;
-  margin: 28rpx 0 8rpx;
+  margin: var(--space-3-5) 0 var(--space-1);
 }
 .quick-cell {
   flex: 1;
@@ -233,10 +240,11 @@
   flex-direction: column;
   align-items: center;
   gap: 10rpx;
-  padding: 28rpx 0;
-  background: var(--card-bg, #161b22);
+  padding: var(--space-3-5) 0;
+  background: var(--card-grad);
   border: 1rpx solid rgba(255,255,255,0.08);
   border-radius: 18rpx;
+  box-shadow: var(--card-inner-shadow);
 }
 .quick-cell .qc-icon {
   width: 72rpx;
@@ -247,4 +255,4 @@
   border-radius: 18rpx;
   background: rgba(200,169,81,0.14);
 }
-.quick-cell .qc-name { font-size: 26rpx; color: #e8eef6; font-weight: 600; }
+.quick-cell .qc-name { font-size: var(--fs-label); color: #e8eef6; font-weight: 600; }

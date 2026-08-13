@@ -73,7 +73,10 @@ function makeError(code, message, detail) {
 
 const TTL = {
   leagues: 6 * 3600 * 1000,
-  leagueMatches: 30 * 60 * 1000,
+  // 2026-08-04（LIVE 比分刷新 v1.1，R1）：30min → 5min。
+  // 进行中 BO3 的新局在 OpenDota 收录滞后 5-30min，30min 缓存使客户端 force 拿不到新数据 →
+  // LIVE 比分刷新粒度被钳制为 30min；降为 5min 后共享缓存粒度 = BO3 局粒度（≤12 次/h/赛事，全用户合计）。
+  leagueMatches: 5 * 60 * 1000,
   team: 6 * 3600 * 1000,
   teamMatches: 30 * 60 * 1000,
   player: 6 * 3600 * 1000,
@@ -532,20 +535,41 @@ async function liquipediaLeagueMeta(params, force) {
 // 直接返回最近缓存（尽力而为，多实例下节流效果减弱但客户端定时器已是主节流）。
 const FORCE_MIN_GAP_MS = 30 * 1000;
 const _lastForceFetch = {};   // slug -> 最近一次 force 现抓时间戳（实例内存）
+// P3-1（2026-08-05）：通用 OpenDota 端点 force 统一节流 —— 与 liquipediaScheduledMatches
+// 同一 FORCE_MIN_GAP_MS（30s）。客户端详情页 OD 重拉已 5min 主节流，此处防多用户并发
+// force 同端点时高频现抓 OpenDota（60req/min 限制下的并发放大）。key = OpenDota path。
+const _odLastForce = {};   // path -> 最近一次 force 现抓时间戳（实例内存）
 async function liquipediaScheduledMatches(params, force) {
   const pageName = (params && (params.pageName || params.name)) || null;
   if (!pageName) return { data: null, error: makeError(ERROR_CODES.BAD_REQUEST, 'pageName required') };
-  const slug = liquipediaSlugFor(pageName);
+  // ★ 2026-08-11：多页面赛事（如 TI）的主页面不含 {{Match}} 模板（对阵在 Group_Stage 子页面）。
+  //   优先使用 curation 提供的 scheduledMatchesSlug（精确指向对阵子页面），回退到 slugMap 主 slug。
+  //   注：curation-shared.js 只是别名映射表，无 scheduledMatchesSlug 字段；
+  //   云函数端用下面的小硬编码表补充（仅收录主页面 wikitext 不含 {{Match}} 的赛事）。
+  const SCHEDULED_MATCHES_SLUG_OVERRIDE = {
+    'The International 2026': 'The_International/2026/Group_Stage'
+  };
+  const overrideSlug = SCHEDULED_MATCHES_SLUG_OVERRIDE[pageName];
+  const slug = overrideSlug || liquipediaSlugFor(pageName);
   const cacheKey = 'liquipedia_schedule_' + slug;
+  // ★ 2026-08-04：返回契约升级为 { matches, boFormat }（BO 判定引擎 S2 信号）。
+  //   兼容旧形状：旧缓存/旧版本存的裸数组 → 归一化为 { matches, boFormat: null }。
+  function normalizeCached(cached) {
+    if (Array.isArray(cached)) return { matches: cached, boFormat: null };
+    if (cached && Array.isArray(cached.matches)) return { matches: cached.matches, boFormat: cached.boFormat || null };
+    return null;
+  }
   if (!force) {
     const cached = await getCache(cacheKey);
-    if (cached) return { data: cached, source: 'cache' };
+    const norm = normalizeCached(cached);
+    if (norm) return { data: norm, source: 'cache' };
   } else {
     // force 最小间隔：30s 内已现抓过 → 返回最近缓存（若有）
     const last = _lastForceFetch[slug] || 0;
     if (Date.now() - last < FORCE_MIN_GAP_MS) {
       const cached = await getCache(cacheKey);
-      if (cached) return { data: cached, source: 'cache-recent' };
+      const norm = normalizeCached(cached);
+      if (norm) return { data: norm, source: 'cache-recent' };
     }
     _lastForceFetch[slug] = Date.now();
   }
@@ -554,9 +578,12 @@ async function liquipediaScheduledMatches(params, force) {
   // 用 parseScheduledMatches 解析赛程，传入当前时间戳用于 phase 判定
   const nowSec = Math.floor(Date.now() / 1000);
   const matches = liquipediaParse.parseScheduledMatches(wikitext, nowSec);
-  if (!matches || !matches.length) return { data: [], source: 'liquipedia' };
-  await setCache(cacheKey, matches, TTL.liquipediaSchedule).catch(() => {});
-  return { data: matches, source: 'liquipedia' };
+  // ★ 2026-08-04：同份 wikitext 解析 Format 段赛制（零额外请求，审核 R1/R8）
+  const boFormat = liquipediaParse.parseBoFormat(wikitext);
+  if (!matches || !matches.length) return { data: { matches: [], boFormat: boFormat }, source: 'liquipedia' };
+  const payload = { matches: matches, boFormat: boFormat };
+  await setCache(cacheKey, payload, TTL.liquipediaSchedule).catch(() => {});
+  return { data: payload, source: 'liquipedia' };
 }
 
 // ===== Liquipedia 战队 Logo（§8.3 2026-07-29，OpenDota 无 logo 的兜底源）=====
@@ -1024,6 +1051,62 @@ async function handleGetLiquipediaUpcoming() {
   } catch (e) {
     return { error: makeError(ERROR_CODES.UPSTREAM_ERROR, 'Liquipedia 赛程请求失败', (e && e.message) || String(e)) };
   }
+}
+
+// ===== 数据源健康检查（2026-08-11 长期架构改进落地）=====
+// 用途：客户端在「数据为空」时区分「数据源暂不可用」与「赛事确实无数据」，
+//       避免 Liquipedia/OpenDota 链路异常时静默降级让用户误以为没数据。
+// 设计：轻量探测请求 + 短超时（6s）+ 不重试（健康探测追求快速，不落缓存；
+//       客户端侧带 TTL 缓存控制调用频率）。OpenDota /health 返回纯文本 "OK"。
+// 返回：{ ts, sources: { liquipedia: {status,latencyMs}, opendota: {status,latencyMs} }, ok }
+async function probeLiquipedia() {
+  try {
+    const res = await safeFetch({
+      url: LIQUIPEDIA_BASE,
+      searchParams: { action: 'query', meta: 'siteinfo', format: 'json', formatversion: '2' },
+      headers: { 'User-Agent': LIQUIPEDIA_UA, 'Accept': 'application/json', 'Accept-Encoding': 'gzip' },
+      responseType: 'json',
+      timeout: { request: 6000 },
+      retryCount: 0,
+      source: 'Liquipedia-Health'
+    });
+    return !!(res && res.body && res.body.query);
+  } catch (e) {
+    return false;
+  }
+}
+
+async function handleHealth() {
+  const out = { ts: Date.now(), sources: {} };
+  // Liquipedia 探测：siteinfo 轻量查询
+  try {
+    const t0 = Date.now();
+    const up = await probeLiquipedia();
+    out.sources.liquipedia = { status: up ? 'up' : 'down', latencyMs: Date.now() - t0 };
+  } catch (e) {
+    out.sources.liquipedia = { status: 'down', latencyMs: -1, detail: (e && e.message) || String(e) };
+  }
+  // OpenDota 探测：/health（返回 JSON 状态对象，含 postgres/redis 等 usage 指标；
+  // 2026-08-11 实测非纯文本 "OK"，只要请求成功且 body 非空即视为 up）
+  try {
+    const t0 = Date.now();
+    const res = await safeFetch({
+      url: BASE + '/health',
+      responseType: 'json',
+      timeout: { request: 6000 },
+      retryCount: 0,
+      source: 'OpenDota-Health'
+    });
+    const body = res && res.body;
+    out.sources.opendota = {
+      status: (body && typeof body === 'object' && Object.keys(body).length > 0) ? 'up' : 'down',
+      latencyMs: Date.now() - t0
+    };
+  } catch (e) {
+    out.sources.opendota = { status: 'down', latencyMs: -1, detail: (e && e.message) || String(e) };
+  }
+  out.ok = Object.keys(out.sources).some(function (k) { return out.sources[k].status === 'up'; });
+  return { data: out, source: 'fresh' };
 }
 
 async function handleGetUpcomingSchedule() {
@@ -1599,6 +1682,13 @@ async function handleSendSmartReminders(event) {
   if (!profile || !profile.teams || !profile.teams.length) {
     return { ok: true, sent: 0, skipped: 0, failed: 0, reason: 'empty_profile' };
   }
+  // ★ 2026-08-07（审核 R4）：订阅授权检查（R3 上云的 profile.subs）
+  //   - 老用户兼容：profile 无 subs 字段 → 保持现状推送（不突然断推）；有 subs 才检查
+  //   - 对应模板未授权（subscribed !== true）→ 整轮跳过该用户
+  const subs = profile.subs;
+  if (subs && subs[String(templateId)] && subs[String(templateId)].subscribed !== true) {
+    return { ok: true, sent: 0, skipped: profile.teams.length, failed: 0, reason: 'sub_not_authorized' };
+  }
   const strategy = profile.strategy || { leadSec: 1800, tiers: ['SSS', 'S', 'A'] };
   const now = Math.floor(Date.now() / 1000);
   let sent = 0, skipped = 0, failed = 0;
@@ -1627,7 +1717,15 @@ async function handleSendSmartReminders(event) {
         miniprogram_state: 'formal',
         data: data
       });
-      if ((r.errCode || r.errcode || 0) === 0) sent++; else failed++;
+      const code = (r.errCode || r.errcode || 0);
+      if (code === 0) { sent++; continue; }
+      // ★ 2026-08-07（审核 R4）：43101「订阅数不足」= 一次性订阅额度耗尽 → 跳过剩余队伍（防失败刷屏）
+      if (code === 43101) {
+        const idx = profile.teams.indexOf(tid);
+        skipped += (profile.teams.length - idx - 1);
+        break;
+      }
+      failed++;
     } catch (e) { failed++; }
   }
   return { ok: true, sent: sent, skipped: skipped, failed: failed };
@@ -1635,6 +1733,8 @@ async function handleSendSmartReminders(event) {
 
 // ===== B2 核心：Action → Handler 路由表（O(1) 查找，替代 if-else 链）=====
 const HANDLERS = new Map([
+  // 数据源健康检查（2026-08-11 长期架构改进落地）
+  ['health', handleHealth],
   // STRATZ / Steam 代理
   ['stratzGql', handleStratzGql],
   ['steamProxy', handleSteamProxy],
@@ -1875,6 +1975,20 @@ exports.main = async (event, context) => {
       __logEnd(r);
       return r;
     }
+  } else {
+    // P3-1（2026-08-05）：force 统一节流 —— 30s 内已 force 现抓过 → 返回最近缓存（若有）；
+    // 与 liquipediaScheduledMatches 的 FORCE_MIN_GAP_MS 语义一致（尽力而为，多实例下效果减弱）
+    const _now = Date.now();
+    const _last = _odLastForce[cacheKey] || 0;
+    if (_now - _last < FORCE_MIN_GAP_MS) {
+      const cached = await getCache(cacheKey);
+      if (cached) {
+        const r = { data: cached, source: 'cache-recent' };
+        __logEnd(r);
+        return r;
+      }
+    }
+    _odLastForce[cacheKey] = _now;
   }
 
   // 代理请求 OpenDota

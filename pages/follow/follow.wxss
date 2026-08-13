@@ -1,68 +1,161 @@
-.container { padding: 24rpx; }
+.container { padding: var(--space-3); }
 
-/* ===== 头部 ===== */
-.head {
+/* ===== 用户卡片（v11 聚光灯：个人英雄面板） ===== */
+.user-card {
+  position: relative;
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  margin-bottom: 16rpx;
+  align-items: center;
+  gap: var(--space-2-5);
+  background: linear-gradient(135deg, #1c1c20 0%, #1a1a20 50%, #1a1a1c 100%);
+  border-radius: var(--radius-lg, 16rpx);
+  padding: var(--space-3) var(--space-2-5);
+  margin-bottom: var(--space-2);
+  overflow: hidden;
 }
-.head-info { flex: 1; min-width: 0; }
-.head-info .title {
-  font-size: 40rpx;
+/* 顶部金线：暗示"传说级"身份 */
+.user-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 16rpx; right: 16rpx;
+  height: 2rpx;
+  background: linear-gradient(90deg, transparent, var(--dota-gold, #C8A951), transparent);
+  z-index: 1;
+}
+/* 底部三色阵营签名条：天辉绿→金→夜魇红 */
+.user-card::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 2rpx;
+  background: linear-gradient(90deg, var(--radiant, #5fd35f) 0%, var(--dota-gold, #C8A951) 50%, var(--dire, #e8443b) 100%);
+  opacity: 0.6;
+  z-index: 1;
+}
+.user-avatar {
+  width: 88rpx;
+  height: 88rpx;
+  border-radius: 50%;
+  background: rgba(200, 169, 81, 0.12);
+  border: 3rpx solid rgba(200, 169, 81, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.user-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+.user-name {
+  font-size: var(--fs-heading);
+  font-weight: 600;
+  color: #f0f3f6;
+  font-family: var(--font-display, -apple-system, sans-serif);
+}
+.user-status {
+  font-size: var(--fs-body);
+  color: #6b7280;
+}
+
+/* ===== 数据统计行（v11 聚光灯：战斗属性 · 三色数值） ===== */
+.stat-row {
+  display: flex;
+  align-items: center;
+  background: var(--card-bg, #1a1a1e);
+  border-radius: var(--radius-lg, 16rpx);
+  padding: var(--space-2-5) 0;
+  margin-bottom: var(--space-2);
+}
+.stat-cell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-0-5);
+  transition: background 120ms ease;
+}
+.stat-cell:active {
+  background: var(--card-bg-inset, #131316);
+}
+.stat-value {
+  font-size: var(--fs-display);
   font-weight: 700;
   color: #f0f3f6;
   font-family: var(--font-display, -apple-system, sans-serif);
 }
+/* 三色语义：关注战队=天辉绿 / 关注赛事=金色 / 赛事提醒=夜魇红 */
+.stat-cell:nth-child(1) .stat-value { color: var(--radiant, #5fd35f); }
+.stat-cell:nth-child(3) .stat-value { color: var(--dota-gold, #C8A951); }
+.stat-cell:nth-child(5) .stat-value { color: var(--dire, #e8443b); }
+.stat-label {
+  font-size: var(--fs-caption);
+  color: #6b7280;
+}
+.stat-divider {
+  width: 1rpx;
+  height: 48rpx;
+  background: #2e2e30;
+  flex-shrink: 0;
+}
 
-/* ===== KPI Strip 局部：点击高亮 ===== */
-.kpi-cell { transition: background 120ms ease; }
-.kpi-cell:active { background: var(--card-bg-inset, #0f141b); }
-.kpi-value.accent { color: var(--kpi-primary, #5fd35f); }
+/* ===== 分区标签 ===== */
+.section-label {
+  font-size: var(--fs-label);
+  font-weight: 600;
+  color: #9ca3af;
+  letter-spacing: 1rpx;
+  margin: var(--space-2-5) 0 var(--space-1);
+  padding-left: var(--space-0-5);
+}
 
 /* ===== 分段控件 ===== */
 .seg {
   display: flex;
-  background: var(--card-bg-inset, #0f141b);
+  background: var(--card-bg-inset, #131316);
   border-radius: var(--radius-md, 12rpx);
-  padding: 4rpx;
-  margin: 16rpx 0;
+  padding: var(--space-0-5);
+  margin: var(--space-2) 0;
 }
 .seg-item {
   flex: 1;
   text-align: center;
   padding: 14rpx 0;
-  font-size: 26rpx;
+  font-size: var(--fs-label);
   color: #8a8f99;
-  border-radius: 8rpx;
+  border-radius: var(--radius-sm);
   transition: background 120ms ease, color 120ms ease;
 }
 .seg-item.active {
-  background: var(--card-bg-elevated, #1c232c);
+  background: var(--card-bg-elevated, #222226);
   color: #f0f3f6;
   font-weight: 600;
 }
 
-/* ===== 关注卡片（B 风格 · 卡片流） ===== */
-.list { margin-bottom: 24rpx; }
+/* ===== 关注卡片（v11 聚光灯：Tier 浸染 + 冷炭灰底） ===== */
+.list { margin-bottom: var(--space-3); }
 .follow-card {
+  position: relative;
   display: flex;
   align-items: center;
-  background: var(--card-bg, #161b22);
+  background: var(--card-bg, #1a1a1e);
   border-radius: var(--radius-lg, 16rpx);
-  padding: 18rpx 20rpx;
-  margin-bottom: 12rpx;
+  padding: 18rpx var(--space-2-5);
+  margin-bottom: var(--space-1-5);
+  overflow: hidden;
   transition: background 120ms ease;
 }
 .follow-card-hover {
-  background: var(--card-bg-elevated, #1c232c);
+  background: var(--card-bg-elevated, #222226);
 }
 .follow-card-main {
   flex: 1;
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 16rpx;
+  gap: var(--space-2);
 }
 
 /* 头像/Logo 占位符：圆角方块，按类型染色 */
@@ -70,12 +163,12 @@
   width: 72rpx;
   height: 72rpx;
   border-radius: var(--radius-md, 12rpx);
-  background: var(--card-bg-inset, #0f141b);
-  border: 1rpx solid #232a33;
+  background: var(--card-bg-inset, #131316);
+  border: 1rpx solid #262628;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 28rpx;
+  font-size: var(--fs-subhead);
   font-weight: 700;
   color: #8a8f99;
   font-family: var(--font-mono, monospace);
@@ -92,7 +185,7 @@
   border-color: rgba(255, 207, 92, 0.3);
 }
 .follow-avatar-icon {
-  font-size: 32rpx;
+  font-size: var(--fs-heading);
 }
 
 .follow-info {
@@ -100,15 +193,15 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4rpx;
+  gap: var(--space-0-5);
 }
 .follow-name-row {
   display: flex;
   align-items: center;
-  gap: 8rpx;
+  gap: var(--space-1);
 }
 .follow-name {
-  font-size: 30rpx;
+  font-size: var(--fs-emphasis);
   font-weight: 600;
   color: #f0f3f6;
   overflow: hidden;
@@ -117,8 +210,8 @@
   font-family: var(--font-display, -apple-system, sans-serif);
 }
 .type-badge {
-  font-size: 18rpx;
-  padding: 2rpx 8rpx;
+  font-size: var(--fs-badge);
+  padding: 2rpx var(--space-1);
   border-radius: var(--radius-pill, 999rpx);
   font-weight: 600;
   flex-shrink: 0;
@@ -134,7 +227,7 @@
   color: #ffcf5c;
 }
 .follow-sub {
-  font-size: 22rpx;
+  font-size: var(--fs-caption);
   color: #6b7280;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -143,55 +236,57 @@
 
 /* 取消关注按钮 */
 .follow-action {
-  padding: 16rpx 8rpx 16rpx 16rpx;
+  padding: var(--space-2) var(--space-1) var(--space-2) var(--space-2);
   flex-shrink: 0;
 }
 
 /* ===== 底部 ===== */
-.footer { margin-top: 16rpx; }
+.footer { margin-top: var(--space-2); }
 .tip {
-  font-size: 24rpx;
-  line-height: 1.6;
-  margin-bottom: 20rpx;
+  font-size: var(--fs-body);
+  line-height: var(--lh-relaxed);
+  margin-bottom: var(--space-2-5);
   color: #6b7280;
 }
 .muted { color: #6b7280; }
-.loadmore { display: flex; justify-content: center; margin: 24rpx 0 8rpx; }
+.loadmore { display: flex; justify-content: center; margin: var(--space-3) 0 var(--space-1); }
 .center.muted {
   text-align: center;
   color: #6b7280;
-  font-size: 24rpx;
-  padding: 24rpx 0;
+  font-size: var(--fs-body);
+  padding: var(--space-3) 0;
 }
 
 /* ===== 2.2 订阅状态卡片 ===== */
 .sub-card {
-  background: var(--card-bg, #161b22);
+  background: var(--card-bg, #1a1a1e);
   border-radius: var(--radius-lg, 16rpx);
-  padding: 24rpx;
-  margin-bottom: 20rpx;
-  border: 1rpx solid #232a33;
+  padding: var(--space-3);
+  margin-bottom: var(--space-2-5);
+  border: 1rpx solid #262628;
 }
 .sub-card-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12rpx;
+  margin-bottom: var(--space-1-5);
 }
 .sub-card-title {
-  font-size: 30rpx;
+  font-size: var(--fs-emphasis);
   font-weight: 600;
   color: #f0f3f6;
 }
 .sub-badge {
-  font-size: 20rpx;
-  padding: 4rpx 14rpx;
+  font-size: var(--fs-micro);
+  padding: var(--space-0-5) 14rpx;
   border-radius: var(--radius-pill, 999rpx);
   font-weight: 600;
 }
 .sub-badge--on {
   background: rgba(95, 211, 95, 0.14);
   color: #5fd35f;
+  /* v11 聚光灯：信号激活脉冲（signal-dot 定义在 app.wxss；v18 统一呼吸节奏 --dur-breath） */
+  animation: signal-dot var(--dur-breath) var(--ease-in-out) infinite;
 }
 .sub-badge--off {
   background: rgba(107, 114, 128, 0.14);
@@ -201,34 +296,34 @@
   display: flex;
   flex-direction: column;
   gap: 6rpx;
-  margin-bottom: 16rpx;
+  margin-bottom: var(--space-2);
 }
 .sub-info {
-  font-size: 24rpx;
+  font-size: var(--fs-body);
   color: #9ca3af;
 }
 .sub-muted {
   color: #6b7280;
-  font-size: 24rpx;
+  font-size: var(--fs-body);
 }
 
 /* ===== 发送记录 ===== */
-.send-log { margin-top: 16rpx; }
+.send-log { margin-top: var(--space-2); }
 .send-log-title {
-  font-size: 26rpx;
+  font-size: var(--fs-label);
   font-weight: 600;
   color: #f0f3f6;
-  margin-bottom: 12rpx;
+  margin-bottom: var(--space-1-5);
 }
 .send-log-item {
   display: flex;
   align-items: center;
-  gap: 12rpx;
+  gap: var(--space-1-5);
   padding: 10rpx 0;
   border-bottom: 1rpx solid rgba(255,255,255,0.04);
 }
 .sl-status {
-  font-size: 20rpx;
+  font-size: var(--fs-micro);
   padding: 2rpx 10rpx;
   border-radius: var(--radius-pill, 999rpx);
   font-weight: 600;
@@ -249,7 +344,7 @@
   justify-content: space-between;
 }
 .sl-league {
-  font-size: 24rpx;
+  font-size: var(--fs-body);
   color: #d1d5db;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -257,7 +352,7 @@
   max-width: 320rpx;
 }
 .sl-time {
-  font-size: 22rpx;
+  font-size: var(--fs-caption);
   color: #6b7280;
   flex-shrink: 0;
 }
@@ -267,17 +362,17 @@
 
 /* ===== #20 智能提醒设置 ===== */
 .reminder-card {
-  background: var(--card-bg, #161b22);
+  background: var(--card-bg, #1a1a1e);
   border-radius: var(--radius-lg, 16rpx);
-  padding: 24rpx;
-  margin-bottom: 20rpx;
-  border: 1rpx solid #232a33;
+  padding: var(--space-3);
+  margin-bottom: var(--space-2-5);
+  border: 1rpx solid #262628;
 }
-.reminder-block { margin: 16rpx 0; }
+.reminder-block { margin: var(--space-2) 0; }
 .reminder-label {
-  font-size: 24rpx;
+  font-size: var(--fs-body);
   color: #9ca3af;
-  margin-bottom: 12rpx;
+  margin-bottom: var(--space-1-5);
   display: block;
 }
 .reminder-chips {
@@ -286,7 +381,7 @@
   gap: 14rpx;
 }
 .rc-chip {
-  font-size: 24rpx;
+  font-size: var(--fs-body);
   padding: 10rpx 22rpx;
   border-radius: var(--radius-pill, 999rpx);
   background: rgba(255,255,255,0.05);
@@ -300,8 +395,43 @@
   font-weight: 600;
 }
 .reminder-hint {
-  font-size: 22rpx;
+  font-size: var(--fs-caption);
   color: #6b7280;
-  margin-top: 8rpx;
+  margin-top: var(--space-1);
   display: block;
+}
+
+/* ===== v11 新增：系统配置区（个人英雄面板底部） ===== */
+.settings-card {
+  background: var(--card-bg, #1a1a1e);
+  border-radius: var(--radius-lg, 14rpx);
+  overflow: hidden;
+  margin-bottom: var(--space-2);
+}
+.settings-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 88rpx;
+  padding: 0 var(--space-3);
+  background: var(--card-bg, #1a1a1e);
+}
+.settings-item + .settings-item {
+  border-top: 1rpx solid rgba(255,255,255,0.04);
+}
+.settings-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40rpx;
+  flex-shrink: 0;
+}
+.settings-title {
+  flex: 1;
+  font-size: var(--fs-subhead);
+  color: #f0f3f6;
+}
+.settings-value {
+  font-size: var(--fs-caption);
+  color: #6b7280;
 }

@@ -12,7 +12,7 @@
   position: relative;
   width: 100%;
   height: 100%;
-  background: var(--card-bg-inset, #0f141b);
+  background: var(--card-bg-inset, #131316);
   overflow: hidden;
 }
 .imgfb--round { border-radius: 50%; }
@@ -38,7 +38,7 @@
   );
 }
 .imgfb-ph-text {
-  font-size: 28rpx;
+  font-size: var(--fs-subhead);
   font-weight: 800;
   color: var(--dota-gold, #C8A951);
   font-family: var(--font-mono, monospace);
