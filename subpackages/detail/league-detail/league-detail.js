@@ -200,7 +200,6 @@ Page({
     const cur = remoteCuration.curatedEventFor(name, { leagueId: leagueId, game: 'dota2' });
     const effectiveId = (cur && cur.leagueId != null && cur.leagueId !== leagueId) ? cur.leagueId : leagueId;
     if (effectiveId !== leagueId) {
-      console.log('[league-detail] 联赛 Id 重定向: ' + leagueId + ' -> ' + effectiveId + ' (curation pin)');
       wx.redirectTo({
         url: '/subpackages/detail/league-detail/league-detail?leagueId=' + effectiveId + '&name=' + encodeURIComponent(name)
       });
@@ -397,7 +396,6 @@ Page({
     if (!hasValidId) {
       this.allMatches = [];
       this.allSeries = [];
-      console.log('[league-detail] leagueId 无效或为占位(' + this.data.leagueId + ')，跳过 OpenDota；仍尝试 Liquipedia');
     }
     this.setData({ loading: true, error: '' });
     // 并行拉取 OpenDota 比赛数据 + Liquipedia 赛程数据：
@@ -432,8 +430,6 @@ Page({
         const scheduledObj = (scheduled && !Array.isArray(scheduled)) ? scheduled : { matches: scheduled || [], boFormat: null };
         const liqScheduled = scheduledObj.matches || [];
         const liqBoFormat = scheduledObj.boFormat || null;
-        console.log('[league-detail] 原始比赛数:', raw.length, 'Liquipedia 赛程数:', liqScheduled.length,
-          raw[0] ? '首场字段:' + Object.keys(raw[0]).join(',') : '无数据');
         this.allMatches = raw;  // 保留原始（供系列赛聚合用）
         this._rawMatches = raw;  // B4 定时刷新（2026-08-03）：供 refreshSchedule 复用 OpenDota 侧数据
         // ★ 2026-08-04（v1.1，R4）：load 成功拉到 OpenDota → 记重拉时间戳（首轮轮询不立即触发低频重拉）
@@ -441,7 +437,6 @@ Page({
         // ★ v3 优化项26：cancelled 赛事赛程过滤 — 取消的赛事不显示赛程
         const _cur = remoteCuration.curatedEventFor(this.data.name, { leagueId: Number(this.data.leagueId), game: 'dota2' });
         if (_cur && _cur.status === '已取消') {
-          console.log('[league-detail] 赛事已取消，跳过赛程加载');
           this.allSeries = [];
           this.setData({
             loading: false,
@@ -535,21 +530,13 @@ Page({
             if (snapEntry && snapEntry.start && snapEntry.end) {
               if (!winStart) winStart = snapEntry.start;
               if (!winEnd) winEnd = snapEntry.end;
-              console.log('[league-detail] upcoming-local 匹配成功:', nameKey,
-                '→', util.formatTime(winStart) + ' ~ ' + util.formatTime(winEnd));
-            } else {
-              console.log('[league-detail] upcoming-local 匹配失败: name="' + nameKey + '" norm="' + nameNorm + '", 快照events数=' + snap.events.length);
             }
-          } else {
-            console.log('[league-detail] upcoming-local 快照为空或加载失败, snap=', snap ? '有但无events' : 'null');
           }
         }
         // 仍无赛期时，回退到 OpenDota 真实比赛窗口（仅 Liquipedia 也无对应赛事时）
         if ((!winStart || !winEnd) && hasRealWindow) {
           if (!winStart) winStart = mStart;
           if (!winEnd) winEnd = mEnd;
-          console.log('[league-detail] OpenDota 真实窗口兜底:', this.data.name,
-            util.formatTime(winStart) + ' ~ ' + util.formatTime(winEnd));
         }
         let eventWindow = null;
         if (winStart > 0 && winEnd >= winStart) {
@@ -664,9 +651,6 @@ Page({
           }
           return s;
         });
-        console.log('[league-detail] 聚合后系列赛数:', allSeries.length,
-          'BO分布:', allSeries.map(function(s){return s.boType;}).join(','));
-
         // ★ 合并 Liquipedia 赛程数据（2026-07-28 新增）
         // OpenDota 只返回已结束比赛，进行中/未开赛的对阵需要从 Liquipedia {{Match}} 模板补充。
         // 转换为与 groupSeries 返回值兼容的 series 对象，去重后合并到 allSeries。
@@ -883,10 +867,6 @@ Page({
                 lastTime: m.startTime
               };
             });
-          console.log('[league-detail] Liquipedia 补充赛程:', liqSeries.length, '场 (去重后)',
-            '其中 LIVE:', liqSeries.filter(s => s.phase === 'live').length,
-            'UPCOMING:', liqSeries.filter(s => s.phase === 'upcoming').length,
-            'RECENT:', liqSeries.filter(s => s.phase === 'recent').length);
           // 时间窗口过滤：Liquipedia 覆盖了整个赛期的全部赛程，
           // 但用户只需要看近3天的实时对阵。按时间窗口重新归类：
           //   LIVE:   24h 内开赛的未结束比赛（★ v3 优化项⑯：增加 24h 上界二次校验）
@@ -909,9 +889,6 @@ Page({
             if (s.phase === 'upcoming') return st >= _todayStart && st < _threeDaysEnd;
             return true; // RECENT 全部保留
           });
-          console.log('[league-detail] 时间窗口过滤:',
-            '过滤前=' + _tsize, '过滤后=' + liqSeries.length,
-            '剔除=' + (_tsize - liqSeries.length));
           // ★ 2026-08-04（v1.1 实施，审核 R3/R4/R5/R6）：LP live/upcoming 卡吸收 OpenDota 已结算局（matchIds 硬关联）
           //   - 方向映射优先级链：curation team_id→名 → league 内 idMap（raw 收集）→ null；单点命中即定方向（补集原理）
           //   - 方向失败：不注入 games（跨 tab 双卡为已文档化边界，R6）
@@ -1119,8 +1096,6 @@ Page({
         allSeries = liveList.concat(upcomingList, recentList);
         // ★ 已结束对阵胜负标识：金色多层级强调（仅 recent），详见 decorateSeriesWinner
         allSeries = allSeries.map((s) => this.decorateSeriesWinner(s));
-        console.log('[league-detail] 分段统计: LIVE=%d UPCOMING=%d RECENT=%d',
-          liveList.length, upcomingList.length, recentList.length);
 
 
     // F1：赛事进行中判定 —— 存在「未分胜负 + 近 12h 开赛」的比赛即视为直播中（raw 真实比赛）
@@ -1612,8 +1587,6 @@ Page({
       // §8.3 诊断日志（2026-07-29）：汇总 logo 获取结果，便于定位缺失源
       const total = results.length;
       const ok = Object.keys(logoMap).length + Object.keys(nameLogoMap).length;
-      console.info('[enrichLogos] 总计=' + total + ' 成功=' + ok + ' 失败=' + failedIds.length +
-        (failedIds.length ? ' 失败ids=' + failedIds.join(',') : ''));
       if (!Object.keys(logoMap).length && !Object.keys(nameLogoMap).length) return false;
 
       // 4) 路径更新：仅更新当前可见的 series 头部 logo
@@ -1701,10 +1674,6 @@ Page({
         }
         return null;
       };
-      // ★ 2026-08-11 诊断：确认 curParticipants / nameLogoMap 状态
-      console.info('[enrichLogos] 参赛Tab回填: curParticipants=' + curParticipants.length +
-        ' nameLogoMap=' + Object.keys(nameLogoMap).length +
-        ' nameLogoMap.keys=' + Object.keys(nameLogoMap).slice(0, 3).join(','));
       if (curParticipants.length) {
         let _matched = 0, _fuzzyHit = 0, _missed = 0;
         const patched = curParticipants.map((t) => {
@@ -1729,12 +1698,10 @@ Page({
               return Object.assign({}, t, { logo: fuzzy.logo });
             }
             _missed++;
-            console.info('[enrichLogos] 参赛Tab未匹配: name=' + t.name + ' norm=' + norm);
           }
           return t;
         });
         const changed = patched.some((t, i) => t.logo !== curParticipants[i].logo);
-        console.info('[enrichLogos] 参赛Tab回填结果: 精确=' + _matched + ' 模糊=' + _fuzzyHit + ' 未匹配=' + _missed + ' changed=' + changed);
         if (changed) patch.participantsList = patched;
       }
 
@@ -1974,12 +1941,6 @@ Page({
         }
         if (fillers.length) {
           participantsList = participantsList.concat(fillers);
-          // 仅 devtools 下输出 info 级别日志，生产环境静默
-          if (typeof console !== 'undefined' && console.info) {
-            console.info('[league-detail] 参赛队伍占位补齐（Liquipedia 未返回列表，用 curation 数字兜底）',
-              'actual=' + actualCount, 'meta=' + metaParticipants,
-              '— 已补 ' + fillers.length + ' 个待定队伍占位');
-          }
         }
       }
     } else if (metaParticipants > 0 && metaParticipants !== actualCount && actualCount === 0) {
@@ -2075,12 +2036,6 @@ Page({
     // ★ 2026-08-11 诊断日志（定位 logo 不显示根因）
     const _beforeCount = Object.keys(oldLogoMap).length;
     const _newIds = participantsList.map((t) => t && t.id).filter((x) => x != null);
-    const _newIdsStr = _newIds.slice(0, 5).join(',');
-    console.info('[refreshMeta] logo保护: oldLogoMap=' + _beforeCount +
-      ' queryCache.id=' + Object.keys(queryCache.byId).length +
-      ' queryCache.name=' + Object.keys(queryCache.byNormName).length +
-      ' 新list长度=' + participantsList.length + ' 新id前5=' + _newIdsStr +
-      ' 首元素logo=' + (participantsList[0] && participantsList[0].logo ? '有' : '无'));
     // 回填：优先按 id 匹配，id 未命中时按归一化队名匹配（含模糊匹配）
     let fuzzyNameKeysRefresh = null;
     if (Object.keys(queryCache.byNormName).length) {
@@ -2117,9 +2072,6 @@ Page({
       }
       return t;
     });
-    // 诊断：回填后 logo 数量
-    const _afterCount = participantsList.filter((t) => t && t.logo && /^https?:\/\//i.test(t.logo)).length;
-    console.info('[refreshMeta] logo保护结果: 回填后=' + _afterCount + '/' + participantsList.length);
 
     this.setData({ metadata: meta, participantsList: participantsList });
   },

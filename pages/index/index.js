@@ -286,7 +286,6 @@ Page({
       if (!match) return;
       var ev = reminderStrategy.evaluate(match, strategy, now);
       if (!ev.should) {
-        console.log('[subscribe] skip reminder:', match.league_name, '| reason=', ev.reason, '| grade=', ev.grade);
         return;
       }
       match.radiant_name = match.radiant_name || (match.radiant ? t.name : '');
@@ -302,13 +301,10 @@ Page({
       subscribe.triggerPreMatchReminder(candidates[idx], openid)
         .then(function (result) {
           if (result.sent) {
-            console.log('[subscribe] 提醒已发送:',
-              candidates[idx].league_name,
-              candidates[idx].radiant_name, 'VS', candidates[idx].dire_name);
+            // 提醒已发送（生产环境静默）
           }
           // daily_limit 命中时提前终止，避免无效请求
           if (result.reason === 'daily_limit') {
-            console.log('[subscribe] 今日限额已达，停止后续 trigger');
             return;
           }
           triggerNext(idx + 1);

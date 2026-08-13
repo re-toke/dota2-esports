@@ -34,9 +34,6 @@ function migrateFakeIdFollows() {
       }
     });
     wx.setStorageSync('dota2_follow_fakeid_migrated', 1);
-    if (migrated > 0) {
-      console.log('[migrateFakeId] 迁移完成：', migrated, '条关注记录已更新到真实 leagueId');
-    }
   } catch (e) {
     // 失败静默，下次启动重试
   }

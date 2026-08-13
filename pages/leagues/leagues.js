@@ -962,12 +962,6 @@ Page({
       this.upcomingList = results;
       this.setData({ upcomingLoading: false, upcomingProgress: '' });
       this.applyAndSlice(true);
-      console.log('[upcoming] 无串行候选，explorer+curation 结果', {
-        命中即将到来: results.length,
-        explorerHit: diag.explorerHit,
-        curationHit: diag.curationHit,
-        结果: results.map(function(r){return r.name + '(' + r.dateRange + ')';})
-      });
       return;
     }
 
@@ -977,11 +971,6 @@ Page({
         results.sort((a, b) => (a.startDate || 0) - (b.startDate || 0));
         this.upcomingList = results;
         this.setData({ upcomingLoading: false, upcomingProgress: '' });
-        console.log('[upcoming] 查询完成', {
-          候选赛事数: diag.total, 命中即将到来: results.length,
-          数据源统计: diag,
-          结果: results.map(function(r){return r.name + '(' + r.dateRange + ')';})
-        });
         this.applyAndSlice(true);
         return;
       }
@@ -1010,10 +999,6 @@ Page({
             }
           } else {
             diag.noDate++;
-            // 首次查询时输出前 5 个无日期的赛事名，帮助定位
-            if (diag.noDate <= 5) {
-              console.log('[upcoming] 无日期数据:', item.name, '→ 所有数据源均未返回');
-            }
           }
           // sources 内部已做限流/熔断，直接继续
           next();
