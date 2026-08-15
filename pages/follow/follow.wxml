@@ -53,8 +53,9 @@
     <view class="follow-card anim-fade-up" wx:for="{{items}}" wx:key="id" hover-class="follow-card-hover" style="animation-delay: {{ (index % 12) * 50 }}ms">
       <view class="follow-card-main" bindtap="openItem" data-url="{{item.target}}">
         <view class="follow-avatar follow-avatar-{{item.type}}">
-          <text wx:if="{{item.iconText}}">{{item.iconText}}</text>
-          <text wx:else class="follow-avatar-icon">★</text>
+          <!-- ★ 2026-08-13（关注页头像区优化）：战队有队标显示图片；无队标/赛事回退首字母（取消 ★ 收藏图标） -->
+          <image wx:if="{{item.type === 'teams' && item.logo}}" class="follow-avatar-img" src="{{item.logo}}" mode="aspectFill" lazy-load="{{true}}" />
+          <text wx:elif="{{item.iconText}}">{{item.iconText}}</text>
         </view>
         <view class="follow-info">
           <view class="follow-name-row">

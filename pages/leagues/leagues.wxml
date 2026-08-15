@@ -11,21 +11,21 @@
     </view>
   </view>
 
-  <!-- 焦点卡：重点运营节点（TI15 2026 上海 · Valve 官方年度旗舰） -->
+  <!-- 焦点卡：重点运营节点（S 级以上热门赛事自动轮替，2026-08-13 动态化） -->
   <view wx:if="{{focusNode}}" class="focus-card {{focusNode.isLive ? 'focus-card--live' : ''}}" bindtap="openFocus" data-id="{{focusNode.leagueid}}" data-name="{{focusNode.name}}" hover-class="tap-scale">
     <view class="focus-glow" />
     <view class="focus-top">
       <view class="focus-badges">
-        <text class="focus-valve">Valve 官方</text>
-        <text class="focus-flag">年度旗舰</text>
+        <text wx:if="{{focusNode.valve}}" class="focus-valve">Valve 官方</text>
+        <text class="focus-flag">{{focusNode.flagText}}</text>
         <text wx:if="{{focusNode.isLive}}" class="focus-live">● 进行中</text>
       </view>
       <view class="star-btn focus-star" catchtap="toggleFollow" data-id="{{focusNode.leagueid}}" data-name="{{focusNode.name}}">
         <t-icon name="star" size="44rpx" color="{{focusNode.followed ? '#ffcf5c' : '#5b626d'}}" />
       </view>
     </view>
-    <view class="focus-title">The International 2026</view>
-    <view class="focus-sub">国际邀请赛 · {{focusNode.location}} · 第15届</view>
+    <view class="focus-title">{{focusNode.name}}</view>
+    <view class="focus-sub">{{focusNode.tagline}}</view>
     <view class="focus-meta">
       <text class="focus-date">{{focusNode.dateRange}}</text>
       <text class="focus-prize" wx:if="{{focusNode.prizePool}}">{{focusNode.prizePool}}</text>
@@ -35,7 +35,7 @@
       <text class="cd-unit">天后开赛</text>
     </view>
     <view class="focus-countdown focus-countdown--live" wx:else>
-      <text class="cd-live">TI15 正赛进行中</text>
+      <text class="cd-live">{{focusNode.liveText}}</text>
     </view>
     <view class="focus-cta">查看赛事详情 →</view>
   </view>

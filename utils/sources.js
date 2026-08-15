@@ -367,7 +367,15 @@ function getUpcomingFromCuration(now) {
   const events = curation.getEffectiveEvents ? curation.getEffectiveEvents() : [];
   (events || []).forEach((ev) => {
     if (!ev || !ev.start) return;
-    if (ev.start > now && ev.start <= horizon) {
+    // 2026-08-13（TI 2026 修复 · P2）：过滤条件与云函数（L837）/本地快照（L878）对齐——
+    // 原 `ev.start > now` 严格未来过滤会把「已开赛但 OpenDota 尚未收录」的 curation 赛事
+    //（如 TI 2026 开赛日）滤掉，导致「进行中」tab 补充路径（mergeCurationUpcoming）漏该赛事。
+    // 改为允许已开赛但未结束（end >= now），与 2026-07-30 修复口径一致。
+    if (ev.start <= horizon && (!ev.end || ev.end >= now)) {
+      // 防御守卫：已开赛（start <= now）但缺 end 的条目无法判定是否结束，跳过
+      // （下游 mergeCurationUpcoming 的 cardStatus 判定要求 startDate && endDate 都存在，
+      //   缺 end 会落到 'upcoming'，导致已开赛赛事误进「即将到来」tab）。
+      if (ev.start <= now && !ev.end) return;
       list.push({
         name: ev.canonical,
         startDate: ev.start,

@@ -434,9 +434,13 @@ Page({
   toggleFollow(e) {
     const id = e.currentTarget.dataset.id;
     const name = e.currentTarget.dataset.name;
-    const followed = follow.toggle('teams', { id: id, name: name });
-    // 优化：用路径更新替代整体数组重建，避免大数据量 setData 拷贝开销
     const arr = this.data.mode === 'hot' ? this.data.hot : this.data.results;
+    // ★ 2026-08-13（关注页队标优化 · 1a）：关注时把卡片已有的队标一并存入。
+    //   尽力而为——hot 列表 logo 是 onLoad 后异步 enrich 的，弱网下用户可能先点星标
+    //   （card.logo 为空），由关注页 _enrichFollowLogos 异步补全兜底（enrichTeamLogo）。
+    const card = arr.find((t) => t.id === id) || {};
+    const followed = follow.toggle('teams', { id: id, name: name, logo: card.logo || '' });
+    // 优化：用路径更新替代整体数组重建，避免大数据量 setData 拷贝开销
     const idx = arr.findIndex((t) => t.id === id);
     if (idx >= 0) {
       const key = (this.data.mode === 'hot' ? 'hot' : 'results') + '[' + idx + '].followed';

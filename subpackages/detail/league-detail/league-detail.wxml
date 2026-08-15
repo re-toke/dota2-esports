@@ -125,6 +125,12 @@
     <view wx:if="{{cancelledNotice}}" class="cancelled-notice">
       <text>{{cancelledNotice}}</text>
     </view>
+    <!-- ★ 2026-08-13（首页推荐位跳转优化）：骨架提前后 series 尚未到达，用 scheduleLoading 区分
+         「赛程加载中」与「真暂无数据」，避免骨架阶段误显示"暂无比赛数据"闪烁 -->
+    <view wx:elif="{{scheduleLoading && series.length === 0}}" class="hint-card-enhanced">
+      <view class="hint-title">赛程加载中…</view>
+      <view class="hint-desc">正在查询对阵数据，请稍候</view>
+    </view>
     <view wx:elif="{{series.length === 0}}" class="hint-card-enhanced">
       <!-- ★ 2026-08-11 数据源健康检查：链路异常时显式提示「数据源暂不可用」而非「暂无比赛数据」 -->
       <view class="hint-title {{sourceDownHint ? 'hint-warn' : ''}}">{{sourceDownHint || '该赛事暂无比赛数据'}}</view>
@@ -231,7 +237,9 @@
                  BO3/BO5 换边后，radiant_win=true 不等于 A 队赢；未结束（aWin/bWin 均 false）显示灰色。 -->
             <view wx:for="{{s.games}}" wx:for-item="g" wx:key="match_id" class="series-dot {{g.aWin ? 'a-win' : (g.bWin ? 'b-win' : 'pending')}}"></view>
           </view>
-          <text wx:elif="{{s.phase !== 'upcoming'}}" class="series-time">{{s.games[0].time}}</text>
+          <!-- 2026-08-13 修复：Liquipedia 赛程卡片 games=[]（无小场数据）但 phase 可为 recent/live，
+               原 `s.games[0].time` 在 games 为空数组时抛 undefined[0]。加长度守卫兜底。 -->
+          <text wx:elif="{{s.phase !== 'upcoming' && s.games && s.games.length}}" class="series-time">{{s.games[0].time}}</text>
           <!-- ★ v3 优化项⑮：RECENT 总耗时（⏱ Xh Ym） -->
           <text wx:if="{{s.phase === 'recent' && s.totalDurationText}}" class="series-total-duration">⏱ {{s.totalDurationText}}</text>
         </view>

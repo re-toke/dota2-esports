@@ -106,7 +106,7 @@ check('赛期不等于比赛窗口（7/27 结束）', () => {
 
 section('\n--- curation 快照（P3 数据层 + P1 状态硬覆盖信任源）---');
 check('EPL canonical === "EPL Masters I"', () => assert(cur.canonical === 'EPL Masters I'));
-check('EPL status === "进行中"', () => assert(cur.status === '进行中', 'EPL 2026 状态应为 进行中，实际: ' + cur.status));
+check('EPL status === "已结束"（2026-08-14 方案 A：赛事已结束，curation 同步更新）', () => assert(cur.status === '已结束', 'EPL 2026 状态应为 已结束，实际: ' + cur.status));
 check('EPL 不再含过宽别名 epl2026 / eplmasters2026（2026-07-27 修复回归防护）', () => {
   const al = cur.aliases || [];
   assert(al.indexOf('epl2026') < 0, '不应再含过宽别名 epl2026（曾导致 19080 误冠）');
@@ -161,7 +161,7 @@ check('G10: leagueId pin 命中后会返回完整元数据（prizePool / status 
   assert(c, '应返回 curation entry');
   assert(c.canonical === 'EPL Masters I', 'canonical 不对: ' + c.canonical);
   assert(c.prizePool === '$100,000', 'prizePool 应为 DOTA2 实际值 $100,000（非 CS2 $1M），实际: ' + c.prizePool);
-  assert(c.status === '进行中', 'status 应为 进行中，实际: ' + c.status);
+  assert(c.status === '已结束', 'status 应为 已结束（2026-08-14 方案 A），实际: ' + c.status);
   const t = c.tier || {};
   assert(t.grade === 'A', 'tier.grade 应为 A（非 CS2 S-Tier），实际: ' + t.grade);
 });

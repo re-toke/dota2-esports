@@ -223,7 +223,10 @@ const CURATED_EVENTS = [
       { name: 'Team Lynx', region: '欧洲/俄罗斯', group: 'Play-In' },
       { name: 'Aion', region: '欧洲/北欧', group: 'Play-In' }
     ],
-    status: '进行中', liquipediaSlug: 'EPL/Masters/1',
+    // ★ 2026-08-14：赛事已于 2026-08-12 结束，status 由 '进行中' 改为 '已结束'。
+    //   配合 leagues.js / league-detail.js 的「时间窗口守卫」（方案 B），
+    //   即使本字段未及时更新，也不会再卡死为「僵尸进行中」。
+    status: '已结束', liquipediaSlug: 'EPL/Masters/1',
     valve: false, topThirdParty: true },
 
   // ── 2026 下半年即将到来（Tier 1，来源：Liquipedia Tournaments，已核实日期）──

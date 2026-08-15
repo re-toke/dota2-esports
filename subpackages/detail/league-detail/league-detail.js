@@ -388,6 +388,61 @@ Page({
     this.load();
   },
 
+  // ★ 2026-08-13（首页推荐位跳转优化 · 修正版方案1）：本地 curation 骨架——零网络秒出。
+  // 只渲染「不依赖网络数据」的字段：curation 权威赛期/状态/奖金池/地点 + 赛事名。
+  // 不触碰 series（等网络数据到后由 F3 步骤2 增量渲染），避免与既有渲染链竞态。
+  // hasValidId=false（fakeId 赛事）时同样渲染（curation 兜底已有，此处补骨架）。
+  _renderLocalSkeleton(hasValidId) {
+    try {
+      const cur = remoteCuration.curatedEventFor(this.data.name, { leagueId: Number(this.data.leagueId), game: 'dota2' });
+      const nowSec = Math.floor(Date.now() / 1000);
+      const start = (cur && cur.start) || 0;
+      const end = (cur && cur.end) || (start + 10 * 86400);
+      // 状态判定（与 load() 内 statusOf 口径一致）：curation 赛期窗口 + 显式状态覆盖
+      // ★ 2026-08-14 方案 B：加时间窗口守卫，防 curation status 过期导致僵尸状态。
+      //   骨架阶段无 OpenDota 真实数据，mixed 仅含 curation 赛期；判定口径与 leagues.js
+      //   normalize / load() 保持一致（已结束永远信任；进行中/即将到来须时间窗口支持）。
+      const _mixed = util.validateLeagueWindow({
+        earliest: 0, latest: 0, lastEnd: 0,
+        startDate: (cur && cur.start) || null,
+        endDate: (cur && cur.end) || null
+      });
+      let status = 'upcoming';
+      if (cur && cur.status === '已结束') {
+        status = 'ended';
+      } else if (cur && cur.status === '进行中') {
+        if (util.isOngoing(_mixed)) status = 'ongoing';
+        else if (start && end && nowSec > end + 86400) status = 'ended';
+      } else if (cur && cur.status === '即将到来') {
+        if (util.isUpcoming(_mixed)) status = 'upcoming';
+        else if (start && end && nowSec >= start && nowSec <= end + 86400) status = 'ongoing';
+        else if (start && end && nowSec > end + 86400) status = 'ended';
+      } else {
+        // 无 curation 显式 status，按时间窗口自动判定
+        if (start && end && nowSec >= start && nowSec <= end + 86400) status = 'ongoing';
+        else if (start && start > nowSec) status = 'upcoming';
+        else if (start && end && nowSec > end + 86400) status = 'ended';
+      }
+      const badge = statusBadgeOf(status);
+      const patch = {
+        loading: false,          // 骨架阶段即视为"首屏可见"，网络数据到达后 F3 增量更新
+        error: '',
+        scheduleLoading: true,   // 赛程尚未到达：wxml 显示"赛程加载中…"而非"暂无数据"
+        status: status,
+        statusText: badge.text,
+        statusColor: badge.color,
+        prizePool: (cur && cur.prizePool) ? String(cur.prizePool) : this.data.prizePool || '',
+        location: (cur && cur.region) || this.data.location || '',
+        eventWindow: (start && end) ? { start: start, end: end } : (this.data.eventWindow || null)
+      };
+      this.setData(patch);
+    } catch (e) {
+      // curation 异常：保持 loading（网络数据兜底），不阻塞 load()
+      // eslint-disable-next-line no-console
+      console.warn('[league-detail] _renderLocalSkeleton curation miss', e && e.message);
+    }
+  },
+
   load() {
     // B4 定时刷新（2026-08-03）：重载前停止旧轮询（下拉刷新/重试时避免与重建并发）
     this.stopSchedulePolling();
@@ -398,6 +453,12 @@ Page({
       this.allSeries = [];
     }
     this.setData({ loading: true, error: '' });
+    // ★ 2026-08-13（首页推荐位跳转优化 · 修正版方案1）：骨架提前——先用本地 curation 渲染
+    //   基础信息（名称/赛期/状态/奖金池/地点）并置 loading:false，用户立即看到赛事框架，
+    //   不再被最慢网络任务（Liquipedia 赛程云函数现抓 2-4s）阻塞首屏。
+    //   复用既有 F3 分步渲染：本函数只渲染「纯 curation 骨架」（不依赖网络数据），
+    //   网络数据（OD+LP）到达后 F3 步骤1/2 增量更新 eventWindow/计数/series。
+    this._renderLocalSkeleton(hasValidId);
     // 并行拉取 OpenDota 比赛数据 + Liquipedia 赛程数据：
     // - OpenDota 只返回已结束的比赛（需有效 leagueId），Liquipedia 赛程进行中/未开赛用名称为准。
     // - Liquipedia 请求失败时静默降级，仅显示 OpenDota 数据；若两者均无，显示「暂无比赛数据」。
@@ -492,9 +553,17 @@ Page({
           endDate: (cur && cur.end) || null
         });
         // 状态判定：statusOf(mixed) + curation 显式状态覆盖（与列表页完全一致）
+        // ★ 2026-08-14 方案 B：加时间窗口守卫，防 curation status 过期导致僵尸状态。
+        //   与 leagues.js normalize / 本文件 _renderLocalSkeleton 保持字节级一致：
+        //   「已结束」永远信任；「进行中」须 isOngoing 支持；「即将到来」须 isUpcoming 支持。
         let status = util.statusOf(mixed);
-        if (cur && cur.status === '已结束') status = 'ended';
-        else if (cur && cur.status === '进行中') status = 'ongoing';
+        if (cur && cur.status === '已结束') {
+          status = 'ended';
+        } else if (cur && cur.status === '进行中') {
+          if (util.isOngoing(mixed)) status = 'ongoing';
+        } else if (cur && cur.status === '即将到来') {
+          if (util.isUpcoming(mixed)) status = 'upcoming';
+        }
         const badge = statusBadgeOf(status);
         // 赛期显示优先级（与列表页 leagues.js loadLeagueEntry 完全一致）：
         //   ① curation 完整周期（mixed.startDate/endDate）—— 覆盖嘉年华全周期
@@ -561,6 +630,7 @@ Page({
           page: 0,
           hasMore: this.allSeries.length > slice.length,
           loading: false,
+          scheduleLoading: false,   // 2026-08-13：网络赛程已到达，关闭"赛程加载中"（若骨架提前则此处收尾）
           updatedAt: at,
           updatedLabel: util.formatAgo(at),
           isLive: isLive,
@@ -606,7 +676,7 @@ Page({
       })
       .catch((err) => {
         console.error('[league-detail] 加载失败:', err);
-        this.setData({ loading: false, error: '加载失败，请检查网络或域名配置' });
+        this.setData({ loading: false, error: '加载失败，请检查网络或域名配置', scheduleLoading: false });
       });
   },
 

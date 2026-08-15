@@ -63,6 +63,9 @@ Page({
     const pageSize = this.data.pageSize;
     const slice = all.slice(0, pageSize);
 
+    // ★ 2026-08-13（关注页头像区优化 · 1b）：老关注数据（无 logo）异步补全队标
+    this._enrichFollowLogos(all);
+
     const st = subscribe.getSubStatus();
     const history = (subscribe.getSendHistory(10) || []).slice(0, 5);   // P3-3：JS 侧限 5 条，wxml 不再 wx:if
     const today = subscribe.getTodayCount();
@@ -161,6 +164,35 @@ Page({
       page: 0,
       hasMore: all.length > slice.length
     });
+    // ★ 2026-08-13（关注页头像区优化 · 1b）：老关注数据（无 logo）异步补全队标。
+    //   放 refresh 而非仅 onShow：switchTab 切回战队 tab 也走 refresh，保证补全覆盖。
+    this._enrichFollowLogos(all);
+  },
+
+  // ★ 2026-08-13（关注页头像区优化 · 1b）：对无 logo 的关注战队异步补全队标。
+  //   sources.enrichTeamLogo 多源兜底（OpenDota → STRATZ → Liquipedia）+ logoCache
+  //   缓存 + 负命中标记，失败静默（保持字母显示）。拿到后回写关注存储，下次进入零网络。
+  //   ⚠️ 复核 P1-1 修正：更新渲染用「路径更新 items[idx].logo」而非整体重建数组——
+  //   固定 slice(0, pageSize) 会把翻页用户（page>0）的列表重置回第一页。
+  _enrichFollowLogos(items) {
+    const need = items.filter((it) => it.type === 'teams' && !it.logo);
+    if (!need.length) return;
+    need.forEach((it) => {
+      sources.enrichTeamLogo({ id: Number(it.id), name: it.name }).then((r) => {
+        if (!r || !r.logo) return;
+        // 回写关注存储（下次进入零网络直接有）
+        const cur = follow.list('teams').find((x) => String(x.id) === String(it.id));
+        if (cur) { cur.logo = r.logo; follow.follow('teams', cur); }
+        // 增量更新当前渲染（allItems 与 items 索引对齐：items = allItems.slice(0, n)）
+        const idx = this.allItems.findIndex((x) => x.type === 'teams' && String(x.id) === String(it.id));
+        if (idx < 0) return;
+        if (idx < (this.data.page + 1) * this.data.pageSize) {
+          this.setData({ ['items[' + idx + '].logo']: r.logo });
+        } else {
+          this.allItems[idx].logo = r.logo;  // 未渲染到，只更新源数组
+        }
+      }).catch(() => {});
+    });
   },
 
   // loadSubStatus / loadReminder 保留给显式调用（订阅状态变更后）
@@ -194,10 +226,12 @@ Page({
       out.target = '/subpackages/detail/team-detail/team-detail?teamId=' + it.id;
     } else {
       out.typeLabel = '赛事';
-      out.iconText = '';
       // 关注存储的是 OpenDota 原始名，展示层统一走 curation 规范名覆盖
       out.name = sources.leagueDisplayName(it);
       out.displayName = sources.leagueDisplayName(it);
+      // ★ 2026-08-13（关注页头像区优化 · 2b）：取消「★」收藏图标 → 显示赛事名首字母
+      //   （与战队 tab 的字母风格统一）。注意需在 displayName 赋值之后计算。
+      out.iconText = (out.displayName || out.name || '?').slice(0, 1).toUpperCase();
       out.sub = '点击查看赛事详情';
       // ★ 2026-08-11：跳转补传 name（encodeURIComponent）——详情页 onLoad 需要 name 做
       //   curation 名称匹配（重定向 + participants 数组取数）。此前只传 leagueId：

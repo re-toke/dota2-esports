@@ -187,6 +187,13 @@
 .follow-avatar-icon {
   font-size: var(--fs-heading);
 }
+/* ★ 2026-08-13（关注页头像区优化 · 3）：战队队标图片——铺满头像区，圆角继承父级 */
+.follow-avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--card-bg-inset, #131316);
+}
 
 .follow-info {
   flex: 1;

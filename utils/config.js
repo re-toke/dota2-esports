@@ -54,9 +54,13 @@ module.exports = {
     // 放宽到 180 天（约半年），让下半年已公布日期的 Tier 1 赛事都能进入即将到来 tab。
     upcomingRangeSec: 180 * 86400,
     // 即将到来 tab 懒加载时，最多查询的赛事数量（串行补充层上限）。
-    // 原 60 偏低：已知 S 级赛事 >60 时，第 61+ 个不进「即将到来」（RC6）。
-    // 提到 120，仍受 cloudProxy 的 OpenDota 60/min 限流保护，首查稍慢但覆盖更全。
-    upcomingQueryLimit: 120
+    // 2026-08-13 复核修正：120 → 40。原因——Liquipedia 限流为模块级全局串行
+    // （liquipedia.js lastCall 槽位共享），并发改造无效，只能降量提速；
+    // 40 已覆盖 S/A 级核心赛事（云缓存 + 本地快照 + curation 注入兜底其余）。
+    upcomingQueryLimit: 40,
+    // 2026-08-13（「即将」加载优化 · P0）：云函数调用超时（ms）。云函数冷缓存现场预热
+    // 可达 30-60s，超时后客户端降级本地快照 + curation 注入，保证 loading 必复位。
+    upcomingTimeoutMs: 8000
   },
 
   // 列表分页每页条数

@@ -539,16 +539,16 @@ const _lastForceFetch = {};   // slug -> 最近一次 force 现抓时间戳（�
 // 同一 FORCE_MIN_GAP_MS（30s）。客户端详情页 OD 重拉已 5min 主节流，此处防多用户并发
 // force 同端点时高频现抓 OpenDota（60req/min 限制下的并发放大）。key = OpenDota path。
 const _odLastForce = {};   // path -> 最近一次 force 现抓时间戳（实例内存）
+// ★ 2026-08-11：多页面赛事（如 TI）的主页面不含 {{Match}} 模板（对阵在 Group_Stage 子页面）。
+//   云函数端小硬编码表（仅收录主页面 wikitext 不含 {{Match}} 的赛事）。
+//   2026-08-13（方案3）：提升为模块级常量——handleTimer 定时预热赛程缓存也需读取。
+const SCHEDULED_MATCHES_SLUG_OVERRIDE = {
+  'The International 2026': 'The_International/2026/Group_Stage'
+};
+
 async function liquipediaScheduledMatches(params, force) {
   const pageName = (params && (params.pageName || params.name)) || null;
   if (!pageName) return { data: null, error: makeError(ERROR_CODES.BAD_REQUEST, 'pageName required') };
-  // ★ 2026-08-11：多页面赛事（如 TI）的主页面不含 {{Match}} 模板（对阵在 Group_Stage 子页面）。
-  //   优先使用 curation 提供的 scheduledMatchesSlug（精确指向对阵子页面），回退到 slugMap 主 slug。
-  //   注：curation-shared.js 只是别名映射表，无 scheduledMatchesSlug 字段；
-  //   云函数端用下面的小硬编码表补充（仅收录主页面 wikitext 不含 {{Match}} 的赛事）。
-  const SCHEDULED_MATCHES_SLUG_OVERRIDE = {
-    'The International 2026': 'The_International/2026/Group_Stage'
-  };
   const overrideSlug = SCHEDULED_MATCHES_SLUG_OVERRIDE[pageName];
   const slug = overrideSlug || liquipediaSlugFor(pageName);
   const cacheKey = 'liquipedia_schedule_' + slug;
@@ -1112,13 +1112,14 @@ async function handleHealth() {
 async function handleGetUpcomingSchedule() {
   const cached = await getCache('upcoming_schedule');
   if (cached) return { data: cached, source: 'cache' };
-  // 缓存未命中：现场预热一次（耗时较长，客户端应配 loading 提示）
-  const r = await preheatUpcoming();
-  if (r.ok) {
-    const data = await getCache('upcoming_schedule');
-    return { data: data || {}, source: 'fresh' };
-  }
-  return { error: makeError(ERROR_CODES.UPSTREAM_ERROR, '赛程预热失败', r) };
+  // 2026-08-13（「即将」加载优化 · P0）：缓存未命中时不再现场预热。
+  // 原因：preheatUpcoming 耗时 30-60s（STRATZ 30×2s 或 Liquipedia 多页），
+  // 客户端 callFunction 挂起 30-60s = 用户看到 spinner 卡死；且有定时触发器
+  // （handleTimer / preheatShouldRun）周期性预热，冷窗口本就短暂。
+  // 改为 fire-and-forget 后台预热 + 立即返回 cold 空态，客户端据 source='cold'
+  // 走本地快照 + curation 注入兜底（键数判空，见 leagues.js tryCloudUpcoming）。
+  preheatUpcoming().catch(() => {});
+  return { data: {}, source: 'cold', preheating: true };
 }
 
 function handleGetExperiments() {
@@ -1868,6 +1869,28 @@ async function handleTimer() {
     }
   } else {
     results.push({ preheatUpcoming: { ok: false, skipped: 'backoff' } });
+  }
+  // ★ 2026-08-13（首页推荐位跳转优化 · 方案3）：预热多页面赛事（如 TI 2026）的对阵赛程缓存。
+  //   SCHEDULED_MATCHES_SLUG_OVERRIDE 收录「主页 wikitext 不含 {{Match}}、对阵在子页面」的赛事，
+  //   用户从首页推荐位点击时若缓存冷（云函数现抓 LP 2-4s），跳转明显卡顿。
+  //   定时预热让详情页秒开。参与退避（复用 preheatShouldRun/preheatMarkResult）。
+  if (preheatShouldRun('preheatScheduledMatches')) {
+    const preheatTargets = Object.keys(SCHEDULED_MATCHES_SLUG_OVERRIDE);
+    let preheatOk = true;
+    for (const name of preheatTargets) {
+      try {
+        const r = await liquipediaScheduledMatches({ name: name });
+        preheatOk = preheatOk && !!(r && r.data);
+        // 2.2s 限流：抓取多个子页面时留间隔（避免 Liquipedia 429）
+        await new Promise((res) => setTimeout(res, 2300));
+      } catch (e) {
+        preheatOk = false;
+      }
+    }
+    preheatMarkResult('preheatScheduledMatches', preheatOk);
+    results.push({ preheatScheduledMatches: { ok: preheatOk, count: preheatTargets.length } });
+  } else {
+    results.push({ preheatScheduledMatches: { ok: false, skipped: 'backoff' } });
   }
   // #23 搜索索引定时重建（联赛有限集，落库供全局搜索/推荐位复用，降 OpenDota 限流）
   try {

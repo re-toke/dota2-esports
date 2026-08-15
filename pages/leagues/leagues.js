@@ -9,9 +9,6 @@ const cloudProxy = require('../../utils/cloudProxy.js');
 const tiers = require('../../utils/tiers.js');
 const remoteCuration = require('../../utils/remoteCuration.js');
 
-// 焦点卡锁定的重点运营节点（文档建议：TI15 2026 上海为本土流量爆发点）
-const FOCUS_EVENT_CANONICAL = 'The International 2026';
-
 // 跨页状态持久化键（I5）：离开页面时保存筛选/关键词/滚动位置，返回时还原
 const VIEW_KEY = 'leagues_view_state';
 
@@ -327,6 +324,12 @@ Page({
     this._armedScrollTop = 0;
     this._armedMinScroll = 0;
     if (this.data.armedMore) this.setData({ armedMore: false });
+    // 2026-08-13（「即将」加载优化 · P0）：离开页面递增 upcoming 代际 + 清超时 timer，
+    // 让挂起的云函数调用 / 超时回调在 gen 检查点自动放弃（防晚到结果写入 + setTimeout 泄漏）
+    this._upcomingGen = (this._upcomingGen || 0) + 1;
+    if (this._upcomingTimer) { clearTimeout(this._upcomingTimer); this._upcomingTimer = null; }
+    // 2026-08-13（焦点卡动态化 · P1）：页面隐藏时停止 30s 焦点刷新定时器
+    this._stopFocusTimer();
   },
 
   // I5：返回页面时还原视图状态（首次 onShow 跳过，避免覆盖 onLoad 的初始数据）
@@ -335,6 +338,9 @@ Page({
       this.getTabBar().setData({ selected: 1 });
     }
     this.buildFocusNode();
+    // 2026-08-13（焦点卡动态化 · P1）：页面可见期间每 30s 刷新焦点卡
+    // （跨开赛/结束时刻自动更新 + 焦点自动轮替），onHide 停止
+    this._startFocusTimer();
     // Phase 1-④：refreshTeamOptions 延迟到首次点击战队筛选按钮（openTeamFilter）
     if (this._restored) {
       let saved = null;
@@ -550,11 +556,23 @@ Page({
       startDate: (cur && cur.start) || null,
       endDate: (cur && cur.end) || null
     });
-    // curation 显式状态硬覆盖：如果策展库明确标记「已结束」/「进行中」，
-    // 信任人工维护的状态，不再依赖自动时间窗口判定（避免数据回填/修正导致误判）。
+    // curation 显式状态硬覆盖（2026-08-14 方案 B：加时间窗口守卫）：
+    //   原实现无条件信任 curation status，导致人工初值过期后赛事卡死为「僵尸进行中」
+    //   （如 EPL Masters I 标记"进行中"但实际已结束 2 天仍显示 ongoing）。
+    //   修正原则：curation status 是「人工初值」，只能把状态往前推（加速到位），
+    //   不能卡住状态不让它随时间流转。
+    //     ①「已结束」是终态，永远信任（人工主动标记，不会误伤进行中赛事）；
+    //     ②「进行中」仅在时间窗口仍支持时才覆盖（防僵尸）；
+    //     ③「即将到来」仅在开赛时间确实还在未来窗口内才覆盖（防过期预告）。
+    //   与 league-detail.js _renderLocalSkeleton / load() 两处保持字节级一致。
     let status = util.statusOf(mixed);
-    if (cur && cur.status === '已结束') status = 'ended';
-    else if (cur && cur.status === '进行中') status = 'ongoing';
+    if (cur && cur.status === '已结束') {
+      status = 'ended';
+    } else if (cur && cur.status === '进行中') {
+      if (util.isOngoing(mixed)) status = 'ongoing';
+    } else if (cur && cur.status === '即将到来') {
+      if (util.isUpcoming(mixed)) status = 'upcoming';
+    }
     // 展示名经 leagueDisplayName 单一出口解析（形状无关），与详情页口径一致；
     // 提前在此声明，供下方赛期快照名称匹配复用（避免 TDZ 引用错误）。
     const displayName = sources.leagueDisplayName(l);
@@ -804,26 +822,60 @@ Page({
   // STRATZ 未启用且 curation 无日期时，结果为空 —— 由 wxml 提示用户启用 STRATZ。
   loadUpcoming() {
     if (this.data.upcomingLoading) return;
+    // 2026-08-13（「即将」加载优化 · P0 防死锁）：代际标记 + 超时兜底。
+    //   之前：tryCloudUpcoming 的 callFunction 若挂起（云函数冷缓存现场预热 30-60s），
+    //   upcomingLoading 永不复位，用户切走再切回 → loadUpcoming 短路 → 永远卡 spinner。
+    //   现在：8s 超时后走 finishUpcoming（本地快照兜底），gen 递增丢弃晚到云函数结果。
+    this._upcomingGen = (this._upcomingGen || 0) + 1;
+    const gen = this._upcomingGen;
     this.setData({ upcomingLoading: true, upcomingProgress: '准备查询赛程...' });
+    if (this._upcomingTimer) { clearTimeout(this._upcomingTimer); }
+    this._upcomingTimer = setTimeout(() => {
+      if (gen !== this._upcomingGen) return;   // 已被新链路取代，放弃
+      this.finishUpcoming('云函数超时，使用本地赛程', gen);
+    }, config.leagueWindow.upcomingTimeoutMs);
 
     // 赛程数据源回退链：云函数预热缓存 → 本地预构建快照 → 串行查询（OpenDota + curation）
     // 任一层命中即用其数据，无需后续层；保证「即将到来」在任意部署形态下都不为空。
-    this.tryCloudUpcoming().then((hit) => {
+    this.tryCloudUpcoming(gen).then((hit) => {
+      if (gen !== this._upcomingGen) return;   // 已被超时/新链路取代，丢弃
+      if (this._upcomingTimer) { clearTimeout(this._upcomingTimer); this._upcomingTimer = null; }
       if (hit) return;
       return this.tryLocalUpcoming().then((hit2) => {
+        if (gen !== this._upcomingGen) return;
         if (hit2) return;
         this.loadUpcomingSerial();
       });
     });
   },
 
+  // 2026-08-13（「即将」加载优化 · P0 防死锁）：超时/降级兜底——本地快照 + curation 注入。
+  // 与 tryLocalUpcoming 复用同一数据源，但保证在任何路径下 upcomingLoading 都能复位
+  // （tryLocalUpcoming 的 events 为空时会 return false 且不复位，超时路径必须兜底）。
+  finishUpcoming(reason, gen) {
+    if (gen !== this._upcomingGen) return;
+    if (this._upcomingTimer) { clearTimeout(this._upcomingTimer); this._upcomingTimer = null; }
+    this.tryLocalUpcoming().then((hit) => {
+      if (gen !== this._upcomingGen) return;
+      if (!hit) {
+        // 本地快照为空：串行查询兜底（其内部各分支都会复位 upcomingLoading）
+        this.loadUpcomingSerial();
+      }
+    });
+  },
+
   // 尝试从云函数读取预热的赛程缓存。命中返回 true，未命中/失败返回 false。
-  tryCloudUpcoming() {
+  // 2026-08-13（P0-2 判空 + P1-1 gen）：① gen 参数——超时/新链路后丢弃晚到结果；
+  //   ② 判空修正——云函数冷缓存 fire-and-forget 后返回 {data:{}, source:'cold'}，
+  //   空对象是 truthy，原 `!result.data` 判不出 → 会把空列表当命中。改为键数判空。
+  tryCloudUpcoming(gen) {
     if (!cloudProxy.isAvailable()) return Promise.resolve(false);
     return wx.cloud.callFunction({ name: 'aggregation', data: { action: 'getUpcomingSchedule' } })
       .then((res) => {
+        if (gen != null && gen !== this._upcomingGen) return false;   // 已被超时/新链路取代
         const result = res && res.result;
         if (!result || result.error || !result.data) return false;
+        if (Object.keys(result.data).length === 0) return false;      // 冷缓存空 data = miss
         const schedule = result.data; // { id: { id, name, grade, rank, label, tier, start, end, source } }
         const now = util.nowSec();
         const horizon = now + config.leagueWindow.upcomingRangeSec;
@@ -1162,10 +1214,32 @@ Page({
     if (this.data.sortMode === 'smart') {
       arr = sortSmart(arr);
     } else {
-      const tkey = (x) => (f === 'upcoming' ? (x.startDate || x.latest || 0) : (x.latest || 0));
+      // 2026-08-13（TI 2026 不可见修复 · P0）：time 模式排序键与 smart 模式（sortSmart 用
+      // startDate || latest）对齐——latest 兜底 startDate。修复「OpenDota 已收录元数据但无比赛
+      // 记录（latest=0，如 TI 2026 开赛首日）」的赛事在「全部」tab 沉底到分页外不可见。
+      // 有真实比赛记录的赛事 latest>0 行为不变；阶段 2 normalize 完成前 startDate=null 仍沉底，
+      // 完成后 applyAndSlice(true) 自动上浮（<300ms 过渡）。
+      const tkey = (x) => (f === 'upcoming' ? (x.startDate || x.latest || 0) : (x.latest || x.startDate || 0));
       if (f === 'upcoming') {
         // 即将：按开赛时间从近到远（升序），越近的赛事越靠上
         arr.sort((a, b) => tkey(a) - tkey(b));
+      } else if (f === 'all') {
+        // 2026-08-13（「全部」tab 排序优化）：三段式状态分组——进行中 → 即将 → 已结束。
+        // 组内排序：
+        //   ongoing：最新时间降序（正在交锋的赛事按最新比赛时间排）
+        //   upcoming：开赛时间升序（越近开赛越靠前，与「即将到来」tab 口径一致）
+        //   ended：最新时间降序（越新结束越靠前）
+        // 说明：smart 模式（关注置顶）不受影响；阶段 2 修正 status 后 applyAndSlice(true) 自动重排。
+        const STATUS_ORDER = { ongoing: 0, upcoming: 1, ended: 2 };
+        arr.sort((a, b) => {
+          const oa = STATUS_ORDER[a.status] != null ? STATUS_ORDER[a.status] : 3;
+          const ob = STATUS_ORDER[b.status] != null ? STATUS_ORDER[b.status] : 3;
+          if (oa !== ob) return oa - ob;
+          if (oa === 1) { // upcoming 组：升序（越近越靠前）
+            return tkey(a) - tkey(b);
+          }
+          return tkey(b) - tkey(a); // ongoing / ended 组：降序
+        });
       } else {
         // 其他：按最新时间从近到远（降序）
         arr.sort((a, b) => tkey(b) - tkey(a));
@@ -1253,6 +1327,12 @@ Page({
     const sync = (arr) => arr && arr.forEach((x) => { if (x.leagueid === id) x.followed = followed; });
     sync(this.allLeagues);
     sync(this.upcomingList);
+    // 2026-08-13（焦点卡动态化 · P1）：焦点卡关注态即时同步——焦点卡星星点击后
+    // 无需等下次 onShow，立即更新（含 _lastFocusSig 刷新，避免定时器把它当旧状态跳过）
+    if (this.data.focusNode && Number(this.data.focusNode.leagueid) === Number(id)) {
+      this.setData({ 'focusNode.followed': followed });
+      this._lastFocusSig = (this.data.focusNode.isLive ? 'true' : 'false') + '|' + this.data.focusNode.daysToStart + '|' + followed;
+    }
     wx.showToast({ title: followed ? '已关注' : '已取消关注', icon: 'none' });
   },
 
@@ -1279,35 +1359,68 @@ Page({
     });
   },
 
-  // 「重点运营节点」焦点卡：当前锁定 TI15 2026 上海（Valve 官方年度旗舰）。
-  // 纯本地 curation 数据驱动，无需网络；TI 结束后自动隐藏（避免展示过期焦点）。
-  // 复用 curation 规范名解析，与赛事详情页 curation 兜底一致；fakeId 与
-  // mergeCurationUpcoming 命名归一逻辑相同，保证关注态与「即将到来」列表互通。
+  // 「重点运营节点」焦点卡：仅 TI + Esports World Cup 双旗舰（2026-08-13 收窄，按复核修正）。
+  // 纯本地 curation 数据驱动，无需网络；无合适候选时隐藏（避免展示过期/空焦点）。
+  // 候选：仅 TI / EWC 系列主赛事（排除预选赛变体），赛前 30 天预热期起展示，结束即隐藏。
+  // 简化评分：进行中恒优先（层优先级）；未开始按临近开赛线性加分。
+  // ⚠️ 修正（2026-08-13 复核）：① tagline 动态取 ev.region（EWC 2026 在巴黎，2024/25 在沙特，
+  //    不能写死地点）；② IS_FLAGSHIP 排除 qualifier/open/regional 预选赛变体；
+  //    ③ 时间窗口统一为赛前 30 天（§2.1 与决策 2 不再矛盾）。
   buildFocusNode() {
-    // 焦点赛事：按 canonical 字面名查找，无 leagueId 上下文；显式声明 game 防跨游戏污染。
-    const cur = remoteCuration.curatedEventFor(FOCUS_EVENT_CANONICAL, { game: 'dota2' });
-    if (!cur || !cur.start) {
+    const nowSec = Math.floor(Date.now() / 1000);
+    // 候选窗口：赛前 30 天预热期 起，进行中延续，结束后立即排除
+    const windowStart = nowSec - 30 * 86400;
+    const windowEnd = nowSec + 30 * 86400;
+    // 双旗舰白名单：TI / EWC 主赛事（排除预选赛/海选/区域赛变体）
+    const IS_FLAGSHIP = (c) => {
+      if (!c) return false;
+      if (/qualifier|open|regional/i.test(c)) return false;   // 预选赛/海选/区域赛排除
+      return /^the international/i.test(c) || /^esports world cup/i.test(c);
+    };
+    let best = null, bestScore = 0, bestLive = false;
+
+    (remoteCuration.getEffectiveEvents() || []).forEach((ev) => {
+      if (!ev || !ev.start) return;
+      if (!IS_FLAGSHIP(ev.canonical)) return;                  // 仅 TI / EWC 主赛事
+      const start = ev.start;
+      const end = ev.end || (start + 10 * 86400);
+      if (start > windowEnd || end < windowStart) return;      // 预热期外（>30 天前/超30天后）
+      // 已结束排除（对齐 util.isOngoing 口径：end 是"最后一天 00:00"，加 1 天宽限，
+      // 避免 TI 最后一天 00:00 后被提前隐藏）
+      if (end + 86400 < nowSec) return;
+      const isLive = nowSec >= start && nowSec <= end;
+      const daysToStart = Math.ceil((start - nowSec) / 86400);
+      // 简化评分（双旗舰专属，无需 valve/topThirdParty/等级加分——两者天然是旗舰）：
+      //   进行中恒优先（层优先级）；未开始按临近开赛线性加分
+      const score = isLive ? 100 : Math.max(0, 60 - daysToStart * 2);
+      const liveRank = isLive ? 1 : 0;
+      if (liveRank > (bestLive ? 1 : 0) || (liveRank === (bestLive ? 1 : 0) && score > bestScore)) {
+        bestScore = score; bestLive = isLive; best = { ev, start, end, isLive, daysToStart };
+      }
+    });
+
+    if (!best) {
       if (this._lastFocusSig !== 'null') { this._lastFocusSig = 'null'; this.setData({ focusNode: null }); }
       return;
     }
-    const nowSec = Math.floor(Date.now() / 1000);
-    const start = cur.start;
-    const end = cur.end || (cur.start + 10 * 86400);
-    // TI 结束后不再展示焦点卡
-    if (nowSec > end) {
-      if (this._lastFocusSig !== 'ended') { this._lastFocusSig = 'ended'; this.setData({ focusNode: null }); }
-      return;
-    }
-    const isLive = nowSec >= start && nowSec <= end;
-    const daysToStart = Math.ceil((start - nowSec) / 86400);
+    const { ev, start, end, isLive, daysToStart } = best;
     // 稳定的 id：优先 curation 真实 leagueId（方案 E），无则回退哈希 fakeId（与 mergeCurationUpcoming 一致）
     // ⚠️ 哈希须剥离 'the' 前缀，与 mergeCurationUpcoming 的 norm() 对齐，否则焦点卡与列表 tab 关注态割裂
     let hash = 0;
-    const k = (cur.canonical || '').toLowerCase().replace(/[^a-z0-9]/g, '').replace(/^the/, '');
+    const k = (ev.canonical || '').toLowerCase().replace(/[^a-z0-9]/g, '').replace(/^the/, '');
     for (let j = 0; j < k.length; j++) { hash = ((hash << 5) - hash + k.charCodeAt(j)) | 0; }
     const fallbackFakeId = -(Math.abs(hash) % 1000000 + 1000000);
-    const focusId = (cur.leagueId != null) ? cur.leagueId : fallbackFakeId;
+    const focusId = (ev.leagueId != null) ? ev.leagueId : fallbackFakeId;
     const followed = follow.isFollowed('leagues', focusId);
+    // 动态展示文案（wxml 去 TI 硬编码）：
+    //   flagText：年度旗舰（Valve/TI）/ 顶级第三方（EWC）
+    //   tagline：Valve→"Valve 官方 · 地点"；EWC→"顶级第三方 · 地点"（地点动态取 ev.region，
+    //     2026 巴黎 / 2024-25 沙特，随 curation 数据自动正确，不写死）
+    //   liveText："{name} 正赛进行中"
+    const flagText = ev.valve ? '年度旗舰' : (ev.topThirdParty ? '顶级第三方' : '年度旗舰');
+    const loc = ev.region || ev.location || '';
+    const tagline = ev.valve ? ('Valve 官方 · ' + (loc || '线下')) : ('顶级第三方 · ' + (loc || '线上'));
+    const liveText = (ev.canonical || '赛事') + ' 正赛进行中';
     // 签名：只有「是否直播 + 距开赛天数 + 关注态」变化时才 setData
     // 这三个是用户可感知的状态，其余字段（name/dateRange 等）恒定不变
     const sig = isLive + '|' + daysToStart + '|' + followed;
@@ -1316,20 +1429,35 @@ Page({
     this.setData({
       focusNode: {
         leagueid: focusId,
-        legacyFakeId: (cur.leagueId != null) ? fallbackFakeId : null,  // 详情页兼容层用
-        name: cur.canonical,
-        canonical: cur.canonical,
+        legacyFakeId: (ev.leagueId != null) ? fallbackFakeId : null,  // 详情页兼容层用
+        name: ev.canonical,
+        canonical: ev.canonical,
         start: start,
         end: end,
         dateRange: util.formatDateRange(start, end),
-        prizePool: cur.prizePool ? String(cur.prizePool) : '',
-        location: cur.region || '上海',
-        valve: true,
+        prizePool: ev.prizePool ? String(ev.prizePool) : '',
+        location: ev.region || ev.location || '',
+        valve: !!ev.valve,
+        topThirdParty: !!ev.topThirdParty,
+        flagText: flagText,
+        tagline: tagline,
+        liveText: liveText,
         isLive: isLive,
         daysToStart: daysToStart,
         followed: followed
       }
     });
+  },
+
+  // 2026-08-13（焦点卡动态化 · P1）：30s 定时刷新焦点卡。
+  // onShow 启动 / onHide 停止 / onUnload 清理；buildFocusNode 内部有 _lastFocusSig 签名防抖，
+  // 只有 isLive/daysToStart/followed 变化才 setData，跨开赛/结束时刻自动更新 + 焦点自动轮替。
+  _startFocusTimer() {
+    this._stopFocusTimer();
+    this._focusTimer = setInterval(() => this.buildFocusNode(), 30000);
+  },
+  _stopFocusTimer() {
+    if (this._focusTimer) { clearInterval(this._focusTimer); this._focusTimer = null; }
   },
 
   // 焦点卡点击：进入赛事详情（curation-only 赛事由详情页兜底渲染）

@@ -128,12 +128,22 @@ Page({
     const events = sources.getUpcomingFromCuration(now) || [];
     const recs = events
       .filter((ev) => ev.tier && (ev.tier.grade === 'SSS' || ev.tier.grade === 'S'))
-      .filter((ev) => followedIds.indexOf(String(ev.id)) < 0)
+      // 2026-08-13（TI 2026 修复 · P3）：ev.id → ev.leagueId。getUpcomingFromCuration 返回
+      // 对象字段为 leagueId（驼峰），原 ev.id 恒为 undefined → String(undefined)='undefined'
+      // 导致「排除已关注」从未生效 + leagueid=NaN 跳转异常（预存 bug）。
+      .filter((ev) => followedIds.indexOf(String(ev.leagueId)) < 0)
       .slice(0, 8)
       .map((ev) => {
         const grade = ev.tier.grade;
+        // 2026-08-13（推荐位跳转优化 · 方案2）：leagueId 兜底 fakeId 哈希（与列表页
+        // mergeCurationUpcoming 同一算法）。修复 Number(null)=0 导致详情页 hasValidId=false
+        // 的歧义跳转；关注态与列表页互通（同一 id 计算）。
+        let hash = 0;
+        const normK = (ev.name || '').toLowerCase().replace(/[^a-z0-9]/g, '').replace(/^the/, '');
+        for (let j = 0; j < normK.length; j++) { hash = ((hash << 5) - hash + normK.charCodeAt(j)) | 0; }
+        const fallbackFakeId = -(Math.abs(hash) % 1000000 + 1000000);
         return {
-          leagueid: Number(ev.id),
+          leagueid: (ev.leagueId != null) ? Number(ev.leagueId) : fallbackFakeId,
           name: ev.name,
           grade: grade,
           rank: ev.tier.rank,
