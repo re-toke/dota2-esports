@@ -382,6 +382,19 @@ function transformLeagueWindows(data) {
   return map;
 }
 
+// O-2（2026-08-15）：下拉刷新失效修复。
+// 根因：leagues.js 原 cache.remove('/leagues|{}') 缺 _v() 版本前缀，与 cached() 写入的
+//   真实 key（_v() + path + '|{}'）不匹配 → 永远删不到旧缓存；且 explorer 缓存 key
+//   用手拼 SQL（缺 last_end，第三份拷贝），与 getLeagueWindows() 引用的权威
+//   sqlFragments.LEAGUE_WINDOWS_SQL 不一致 → 同样删不到。
+// 修复：封装为单一函数，复用与写入侧完全一致的 key 构造，根治 key 漂移。
+function invalidateLeagues() {
+  const leaguesKey = _v() + '/leagues|{}';
+  const windowsKey = _v() + '/explorer?sql=' + encodeURIComponent(sqlFragments.LEAGUE_WINDOWS_SQL) + '|{}';
+  cache.remove(leaguesKey);
+  cache.remove(windowsKey);
+}
+
 function getLeagueWindows() {
   const path = '/explorer?sql=' + encodeURIComponent(sqlFragments.LEAGUE_WINDOWS_SQL);
   return tryCloudOrDirect('getLeagueWindows', [],
@@ -600,6 +613,7 @@ module.exports = {
   request: request,
   cached: cached,
   cachedFresh: cachedFresh,
+  invalidateLeagues: invalidateLeagues,
   fetchedAtOf: fetchedAtOf,
   getLeagues: getLeagues,
   getLeagueWindows: getLeagueWindows,

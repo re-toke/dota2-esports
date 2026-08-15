@@ -1,7 +1,6 @@
 const api = require('../../utils/api.js');
 const util = require('../../utils/util.js');
 const follow = require('../../utils/follow.js');
-const cache = require('../../utils/cache.js');
 const config = require('../../utils/config.js');
 const sources = require('../../utils/sources.js');
 const stratz = require('../../utils/stratz.js');
@@ -248,12 +247,10 @@ Page({
 
   onPullDownRefresh() {
     // 下拉强制刷新：清掉赛事列表与时间窗口缓存后重新拉取
-    cache.remove('/leagues|{}');
-    cache.remove('/explorer?sql=' + encodeURIComponent(
-      "SELECT leagueid, min(start_time) AS earliest, max(start_time) AS latest, count(*) AS n " +
-      "FROM matches WHERE start_time > extract(epoch FROM now() - interval '6 months') " +
-      "GROUP BY leagueid"
-    ));
+    // O-2（2026-08-15）：改用 api.invalidateLeagues() 封装，复用写入侧完全一致的
+    //   _v() 版本前缀 + sqlFragments.LEAGUE_WINDOWS_SQL，根治 key 漂移导致删不到旧缓存。
+    //   旧实现 cache.remove('/leagues|{}') 缺版本前缀 + 手拼 SQL 缺 last_end，均失效。
+    api.invalidateLeagues();
     this.upcomingList = null;
     this.setData({ page: 0 });
     this.loadLeagues(() => wx.stopPullDownRefresh());

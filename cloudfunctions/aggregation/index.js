@@ -62,6 +62,7 @@ const ERROR_CODES = {
   UPSTREAM_ERROR: 'upstream_error',     // 外部 API 请求失败（5xx/网络）
   PARSE_ERROR: 'parse_error',           // 数据解析失败
   NOT_FOUND: 'not_found',               // 资源不存在
+  FORBIDDEN: 'forbidden',              // O-26：鉴权拦截（无权调用管理 action）
   UNKNOWN: 'unknown'                   // 未知错误
 };
 function makeError(code, message, detail) {
@@ -1975,6 +1976,35 @@ exports.main = async (event, context) => {
     return r;
   }
   // B2 优化：专用 action 通过 Map O(1) 路由（替代 if-else 链）
+  // O-26（2026-08-15）：危险 action 鉴权守卫。
+  // 背景：小程序包可解包提取云函数名（函数名不是秘密），拿到名称即可直接调用，
+  // 无鉴权则任何客户端可篡改 curation / 读写任意共享缓存 / 冒充发送订阅消息。
+  // 纯管理员 action（客户端从不直接调用）须命中 ADMIN_OPENIDS 白名单；
+  // 半开放 action（getCached/setCached 被 subscribe.js 正常用于 follow_profile_* 画像）
+  // 降级为 key 前缀白名单校验，防写入伪造 /leagues 数据污染全体共享缓存。
+  const ADMIN_ACTIONS = new Set([
+    'adminWriteCuration', 'sendSmartReminders',
+    'buildSearchIndex', 'buildTeamsIndex',
+    'discoverOpenDotaTournaments', 'refreshTeams'
+  ]);
+  const PUBLIC_CACHE_PREFIXES = ['follow_profile_'];  // getCached/setCached 允许的 key 前缀
+  if (ADMIN_ACTIONS.has(action)) {
+    const wxCtx = cloud.getWXContext();
+    const adminList = (process.env.ADMIN_OPENIDS || '')
+      .split(',').map(s => s.trim()).filter(Boolean);
+    if (!adminList.length || !adminList.includes(wxCtx.OPENID)) {
+      const r = { error: makeError(ERROR_CODES.FORBIDDEN, 'unauthorized') };
+      __logEnd(r);
+      return r;
+    }
+  } else if (action === 'getCached' || action === 'setCached') {
+    const ck = (params && params.key) || '';
+    if (!PUBLIC_CACHE_PREFIXES.some(pf => ck.startsWith(pf))) {
+      const r = { error: makeError(ERROR_CODES.FORBIDDEN, 'key prefix not allowed') };
+      __logEnd(r);
+      return r;
+    }
+  }
   const handler = HANDLERS.get(action);
   if (handler) {
     const r = await handler(event);
