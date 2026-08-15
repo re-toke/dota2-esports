@@ -943,7 +943,8 @@ Page({
           //   UPCOMING: 3天内（北京时间）内开始的未结束比赛（★ v3 优化项⑤：从2天扩展到3天）
           //   RECENT:  已结束（全部保留）
           // 2026-07-31 修复：使用北京时间（UTC+8）计算当天零点
-          const _BJ_OFFSET = 8 * 3600;
+          // O-7（2026-08-15）：魔数收敛 config.time.bjOffsetSec（值保持 8*3600 不变）
+          const _BJ_OFFSET = config.time.bjOffsetSec;
           const _bjNow = fmtNowSec + _BJ_OFFSET;
           const _todayStart = Math.floor(_bjNow / 86400) * 86400 - _BJ_OFFSET;
           const _todayEnd = _todayStart + 86400;
@@ -1035,11 +1036,11 @@ Page({
         liveList.sort(function (a, b) { return b.lastTime - a.lastTime; });
         // ★ v3 优化项21：UPCOMING 按 dateGroup 分组排序
         // 先计算 dateGroup（北京时间日期偏移）
-        var _bjNowSec = fmtNowSec + 8 * 3600;
+        var _bjNowSec = fmtNowSec + config.time.bjOffsetSec;
         var _nowBjDay = Math.floor(_bjNowSec / 86400);
         upcomingList.forEach(function (s) {
           if (s.lastTime > 0) {
-            var bjTime = s.lastTime + 8 * 3600;
+            var bjTime = s.lastTime + config.time.bjOffsetSec;
             var bjDay = Math.floor(bjTime / 86400);
             s.dateGroup = bjDay - _nowBjDay;  // 0=今天, 1=明天, 2=后天, ...
           } else {
@@ -1077,9 +1078,9 @@ Page({
             if (elapsed < 2 * 3600) {
               s.timeLayer = 'just_ended';  // 刚刚结束（2h内）
             } else {
-              var bjTime = s.lastTime + 8 * 3600;
+              var bjTime = s.lastTime + config.time.bjOffsetSec;
               var bjDay = Math.floor(bjTime / 86400);
-              var nowBjDay = Math.floor((_nowSec + 8 * 3600) / 86400);
+              var nowBjDay = Math.floor((_nowSec + config.time.bjOffsetSec) / 86400);
               s.timeLayer = (bjDay === nowBjDay) ? 'today' : 'earlier';
             }
           } else {

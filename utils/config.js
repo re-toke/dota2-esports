@@ -39,6 +39,7 @@ module.exports = {
     teamMatches: 30 * 60,     // 战队比赛历史（新鲜窗口 10min）
     player: 6 * 3600,         // 选手详情（新鲜窗口 1h）
     playerMatches: 30 * 60,   // 选手比赛历史（新鲜窗口 10min）
+    search: 5 * 60,           // 战队搜索（O-4：与 searchTeams direct 硬编码 5min 对齐）
     heroes: 24 * 3600         // 英雄表（几乎不变）
   },
 
@@ -173,6 +174,13 @@ module.exports = {
     // 连续失败达到阈值后，本会话内暂时停用云代理（避免无云环境时的持续失败开销）。
     // 设为 0 表示不启用熔断（始终尝试云调用）。
     circuitBreakerThreshold: 3
+  },
+
+  // 北京时间偏移（秒）。O-7（2026-08-15）：原 league-detail.js 5 处硬编码 8*3600
+  // 收敛为单一常量（零行为提取，值必须保持 8*3600 不变）。
+  // 用途：按北京时间计算「今天/明天/更早」的日界分组（dateGroup/timeLayer 等）。
+  time: {
+    bjOffsetSec: 8 * 3600
   },
 
   // T4 实时比分连接配置。

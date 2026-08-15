@@ -128,7 +128,11 @@ function liquipediaMarkSuccess() {
 // 注意：wx.request 禁止设置 "User-Agent"（微信运行时会报 Refused to set unsafe header），
 //       只保留 Accept-Encoding: gzip（官方要求 + 微信允许）。
 //       Liquipedia 官方要求描述性 UA → 需通过云函数代理（Node.js 可设 UA）。
-function request(params) {
+// O-5（2026-08-15）：_retryCount 内部参数 —— 重试走本函数重新排队（重新预留槽位），
+//   保证任意两次真实发出的请求间隔 ≥ RATE_GAP_MS，符合 Liquipedia ToS（1 次/2 秒）。
+//   旧实现：重试在 attempt() 内 setTimeout 直接再调 attempt()，绕过槽位预留 →
+//   重试密集期实际请求间隔可能 < RATE_GAP_MS（合规风险，TI 期间 429/5xx 概率上升）。
+function request(params, _retryCount) {
   if (!ENABLED) return Promise.resolve(null);
   // 会话级熔断：连续失败达阈值后直接返回 null，不再发起请求
   if (liquipediaBroken()) return Promise.resolve(null);
@@ -138,7 +142,7 @@ function request(params) {
   var wait = Math.max(0, lastCall + RATE_GAP_MS - now);
   lastCall = now + wait;
 
-  return sleep(wait).then(function () { return attempt(params, 0); });
+  return sleep(wait).then(function () { return attempt(params, _retryCount || 0); });
 }
 
 function attempt(params, retryCount) {
@@ -175,7 +179,8 @@ function attempt(params, retryCount) {
         if (isRetriable(res.statusCode) && retryCount < MAX_RETRIES) {
           var delay = RETRY_DELAYS_MS[retryCount] || 6000;
           console.warn('[liquipedia] HTTP ' + res.statusCode + ' 准备重试 ' + (retryCount + 1) + '/' + MAX_RETRIES + '（' + delay + 'ms 后）');
-          setTimeout(function () { attempt(params, retryCount + 1).then(resolve); }, delay);
+          // O-5：重试走 request() 重新排队（重新预留槽位），非直接 attempt
+          setTimeout(function () { request(params, retryCount + 1).then(resolve); }, delay);
           return;
         }
         console.warn('[liquipedia] HTTP ' + res.statusCode + ' 请求失败，降级返回 null');
@@ -187,7 +192,8 @@ function attempt(params, retryCount) {
         if (retryCount < MAX_RETRIES) {
           var delay = RETRY_DELAYS_MS[retryCount] || 6000;
           console.warn('[liquipedia] 网络错误 准备重试 ' + (retryCount + 1) + '/' + MAX_RETRIES + '（' + delay + 'ms 后）:', err && err.errMsg);
-          setTimeout(function () { attempt(params, retryCount + 1).then(resolve); }, delay);
+          // O-5：重试走 request() 重新排队（重新预留槽位），非直接 attempt
+          setTimeout(function () { request(params, retryCount + 1).then(resolve); }, delay);
           return;
         }
         console.warn('[liquipedia] 请求失败（重试耗尽）:', err && err.errMsg);

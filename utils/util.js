@@ -210,6 +210,17 @@ function formatAgo(fetchedAt) {
   return day + ' 天前更新';
 }
 
+// 开赛倒计时文案（天级粒度，O-9 2026-08-15 收敛 leagues.js 4 处内联）。
+// daysToStart = Math.ceil((startSec - nowSec) / 86400)，语义与 leagues.js 现有一致。
+// isOngoing=true 时显示「正在交锋」（进行中卡片用）；否则按距开赛天数分档。
+// ⚠️ 勿并入 league-detail 的分钟级 formatCountdown（不同粒度语义 + TI 数据链路红线）。
+function countdownTextOf(daysToStart, isOngoing) {
+  if (isOngoing) return '正在交锋';
+  if (daysToStart <= 0) return '今日开赛';
+  if (daysToStart === 1) return '明天开赛';
+  return daysToStart + ' 天后开赛';
+}
+
 module.exports = {
   formatDuration,
   formatTime,
@@ -227,5 +238,6 @@ module.exports = {
   validateLeagueWindow,
   formatDateRange,
   formatAgo,
+  countdownTextOf,
   nowSec
 };

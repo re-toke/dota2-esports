@@ -24,6 +24,8 @@ Page({
   },
 
   onLoad() {
+    // O-13（2026-08-15）：记录首次加载时间，onShow 节流基准（60s 内切回不重拉 15 卡）
+    this._lastReloadMs = Date.now();
     this.loadFollowCards();
     this.loadRecommendations();
   },
@@ -34,10 +36,22 @@ Page({
       this.getTabBar().setData({ selected: 0 });
     }
     // 首次 onShow 跳过（onLoad 已加载），仅启动定时器；
-    // 后续 onShow（从其他 tab 切回）才刷新数据，避免首次进入时 onLoad+onShow 重复执行
+    // 后续 onShow（从其他 tab 切回）才刷新数据，避免首次进入时 onLoad+onShow 重复执行。
+    // O-13：60s 节流——频繁切 tab 时 15 卡 Promise.all 重拉是浪费（api 有 10min 缓存兜底，
+    //   数据新鲜度有保障），仅在距上次加载 >60s 时才重拉。
+    //   例外：关注/取关数变化（用户刚在别处操作过）→ 突破节流立即重拉，保证关注同步即时性。
     if (this._loaded) {
-      this.loadFollowCards();
-      this.loadRecommendations();
+      const nowMs = Date.now();
+      const c = follow.counts();
+      const sig = c.teams + '|' + c.leagues;
+      const stale = !this._lastReloadMs || (nowMs - this._lastReloadMs > 60 * 1000);
+      const followChanged = sig !== this._followSig;
+      this._followSig = sig;
+      if (stale || followChanged) {
+        this._lastReloadMs = nowMs;
+        this.loadFollowCards();
+        this.loadRecommendations();
+      }
     }
     this._loaded = true;
     this.startTimer();

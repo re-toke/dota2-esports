@@ -329,16 +329,21 @@ function cloudEnabled() {
 }
 
 // 方法名 → (action, params-builder)，与 cloudProxy.js 的 PARAM_MAP 对齐
+// O-4（2026-08-15）：增加 path / data / ttlKey 元数据，供 tryCloudOrDirect 云成功路径
+//   writeThrough 写穿本地缓存（断网兜底）。key 形态统一 _v()+path+'|'+JSON.stringify(data||{})，
+//   与各 direct 函数 cached/cachedFreshIncremental 写入侧逐字符一致（单一事实来源）。
+//   ⚠️ searchTeams 的 direct 用 cached('/search', {q}, ...) → data 非空，key 是 |{"q":..} 形态，
+//      其余方法 data 为 null → |{} 形态。两者都必须与 direct 侧完全一致。
 const ACTION_MAP = {
-  getLeagues: function () { return { action: 'getLeagues', params: {} }; },
-  getLeagueWindows: function () { return { action: 'getLeagueWindows', params: {} }; },
-  getLeagueMatches: function (id) { return { action: 'getLeagueMatches', params: { leagueId: id } }; },
-  getMatch: function (id) { return { action: 'getMatch', params: { matchId: id } }; },
-  searchTeams: function (name) { return { action: 'searchTeams', params: { q: name } }; },
-  getTeam: function (id) { return { action: 'getTeam', params: { teamId: id } }; },
-  getTeamPlayers: function (id) { return { action: 'getTeamPlayers', params: { teamId: id } }; },
-  getTeamMatches: function (id) { return { action: 'getTeamMatches', params: { teamId: id } }; },
-  getHeroes: function () { return { action: 'getHeroes', params: {} }; }
+  getLeagues: function () { return { action: 'getLeagues', params: {}, path: '/leagues', ttlKey: 'leagues' }; },
+  getLeagueWindows: function () { return { action: 'getLeagueWindows', params: {}, path: '/explorer?sql=' + encodeURIComponent(sqlFragments.LEAGUE_WINDOWS_SQL), ttlKey: 'leagueWindows' }; },
+  getLeagueMatches: function (id) { return { action: 'getLeagueMatches', params: { leagueId: id }, path: '/leagues/' + id + '/matches', ttlKey: 'leagueMatches' }; },
+  getMatch: function (id) { return { action: 'getMatch', params: { matchId: id }, path: '/matches/' + id, ttlKey: 'match' }; },
+  searchTeams: function (name) { return { action: 'searchTeams', params: { q: name }, path: '/search', data: { q: name }, ttlKey: 'search' }; },
+  getTeam: function (id) { return { action: 'getTeam', params: { teamId: id }, path: '/teams/' + id, ttlKey: 'team' }; },
+  getTeamPlayers: function (id) { return { action: 'getTeamPlayers', params: { teamId: id }, path: '/teams/' + id + '/players', ttlKey: 'teamPlayers' }; },
+  getTeamMatches: function (id) { return { action: 'getTeamMatches', params: { teamId: id }, path: '/teams/' + id + '/matches', ttlKey: 'teamMatches' }; },
+  getHeroes: function () { return { action: 'getHeroes', params: {}, path: '/heroes', ttlKey: 'heroes' }; }
 };
 
 // C1 高阶函数（2026-07-29）：统一「云代理优先 → 失败回退直连」模式。
@@ -348,11 +353,27 @@ const ACTION_MAP = {
 // transform 可选：对云代理返回的数据做转换（与直连路径一致）。
 // 2026-08-04（v1.1，R3）：第 5 参 force 透传给 cloudFetch（仅云函数路径；直连兜底不经 force，
 // 本地缓存照常命中，防多用户 NAT 共享 IP 打爆 OpenDota 429）
+// O-4（2026-08-15）：云成功路径 writeThrough 写穿本地缓存——断网/云熔断时回退直连
+// 能命中本地缓存兜底（否则云路径拿到的数据从不落盘，断网即空）。
+// 写穿 key 复用 ACTION_MAP 的 path/data/ttlKey 元数据，与 direct 写入侧逐字符一致。
+function writeThrough(path, data, ttlSec) {
+  if (!path || data == null) return;
+  const key = _v() + path + '|' + JSON.stringify(data || {});
+  cache.set(key, data, ttlSec);
+}
 function tryCloudOrDirect(methodName, args, directFn, transform, force) {
   const direct = directFn;
   if (!cloudEnabled()) return direct();
   const m = ACTION_MAP[methodName].apply(null, args || []);
   const cloud = cloudFetch(m.action, m.params, force);
+  // O-4：写穿必须用 cloud 原始响应（transform 前），与 direct 侧 cached 的缓存内容
+  //   （原始数据，transform 在返回给调用方前才做）完全一致；若写穿 transform 后的数据，
+  //   下次直连命中会双重转换导致数据损坏。失败静默，不影响主流程。
+  if (m.path && m.ttlKey && config.cacheTTL[m.ttlKey]) {
+    cloud.then((raw) => {
+      try { writeThrough(m.path, raw, config.cacheTTL[m.ttlKey]); } catch (e) { /* 静默 */ }
+    }).catch(() => {});
+  }
   const chain = transform ? cloud.then(transform) : cloud;
   return chain.catch(function () { return direct(); });
 }

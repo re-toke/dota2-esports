@@ -43,6 +43,10 @@
       "network": "all",
       "packages": ["detail"]
     },
+    "pages/follow/follow": {
+      "network": "all",
+      "packages": ["detail"]
+    },
     "pages/data/data": {
       "network": "all",
       "packages": ["data"]

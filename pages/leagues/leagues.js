@@ -166,7 +166,7 @@ function buildUpcomingCard(entry, ctx) {
     statusColor: cardBadge.color,
     dateRange: util.formatDateRange(entry.start, entry.end),
     daysToStart: daysToStart,
-    countdownText: cardStatus === 'ongoing' ? '正在交锋' : (daysToStart <= 0 ? '今日开赛' : (daysToStart === 1 ? '明天开赛' : daysToStart + ' 天后开赛')),
+    countdownText: util.countdownTextOf(daysToStart, cardStatus === 'ongoing'),
     source: entry.source || (matched && matched.source) || 'liquipedia',
     valve: !!(entry.valve != null ? entry.valve : tiers.flagValve(name)),
     topThirdParty: !!(entry.topThirdParty != null ? entry.topThirdParty : tiers.flagTopThirdParty(name)),
@@ -973,7 +973,7 @@ Page({
           statusColor: statusBadgeOf('upcoming').color,
           dateRange: util.formatDateRange(er, endT),
           daysToStart: daysToStart,
-          countdownText: daysToStart <= 0 ? '今日开赛' : (daysToStart === 1 ? '明天开赛' : daysToStart + ' 天后开赛')
+          countdownText: util.countdownTextOf(daysToStart, false)
         }));
         diag.explorerHit++;
       } else {
@@ -1045,7 +1045,7 @@ Page({
                 statusColor: statusBadgeOf('upcoming').color,
                 dateRange: util.formatDateRange(win.startDate, win.endDate),
                 daysToStart: daysToStart,
-                countdownText: daysToStart <= 0 ? '今日开赛' : (daysToStart === 1 ? '明天开赛' : daysToStart + ' 天后开赛')
+                countdownText: util.countdownTextOf(daysToStart, false)
               }));
             }
           } else {
@@ -1162,7 +1162,7 @@ Page({
         statusColor: cardBadge.color,
         dateRange: util.formatDateRange(ev.startDate, ev.endDate),
         daysToStart: daysToStart,
-        countdownText: cardStatus === 'ongoing' ? '正在交锋' : (daysToStart <= 0 ? '今日开赛' : (daysToStart === 1 ? '明天开赛' : daysToStart + ' 天后开赛')),
+        countdownText: util.countdownTextOf(daysToStart, cardStatus === 'ongoing'),
         matchCount: 0,
         earliest: 0,
         latest: 0,
