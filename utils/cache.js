@@ -156,17 +156,11 @@ function touch(key, ttlSec) {
 }
 
 // 清空本项目的全部缓存（设置页「清除缓存」用）
-function clearAll() {
-  try {
-    const info = wx.getStorageInfoSync();
-    (info.keys || []).forEach((k) => {
-      if (k.indexOf(PREFIX) === 0) wx.removeStorageSync(k);
-    });
-  } catch (e) {}
-}
+// O-11（2026-08-15）：clearAll 曾 0 引用（follow.js 手写 wx.clearStorageSync 替代）。
+// 复核：仍 0 调用，删除。若未来设置页需「清缓存」，改调 wx.clearStorageSync 全清即可。
 
 module.exports = {
   get: get, peek: peek, getStale: getStale,
   set: set, remove: remove, touch: touch,
-  clearAll: clearAll, prune: prune
+  prune: prune
 };

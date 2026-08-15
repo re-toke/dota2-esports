@@ -37,8 +37,6 @@ module.exports = {
     team: 6 * 3600,           // 战队详情（新鲜窗口 1h）
     teamPlayers: 3 * 3600,    // 战队成员（新鲜窗口 1h）
     teamMatches: 30 * 60,     // 战队比赛历史（新鲜窗口 10min）
-    player: 6 * 3600,         // 选手详情（新鲜窗口 1h）
-    playerMatches: 30 * 60,   // 选手比赛历史（新鲜窗口 10min）
     search: 5 * 60,           // 战队搜索（O-4：与 searchTeams direct 硬编码 5min 对齐）
     heroes: 24 * 3600         // 英雄表（几乎不变）
   },

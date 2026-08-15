@@ -101,18 +101,29 @@ function rawRequest(path, data) {
 }
 
 // 带限流的请求：滑动窗口并发限流，仅在窗口满时排队等待
+// O-16（2026-08-15）：重试复用原 slot —— 429/5xx 重试不再重复 acquireSlot（新增占位）。
+//   旧实现递归 request() 会再次占位：429 已说明配额耗尽，重试再占位会雪上加霜，
+//   且退避等待期间窗口可能被其他请求占满导致重试无限排队。
+//   修复：_keepSlot=true 时跳过 acquireSlot 复用首次槽位（首次已计过一次配额）。
+//   窗口不变式守卫：重试真实发出时若首次时间戳已滑出 1 分钟窗口（>WINDOW_MS 等待），
+//   则重新 acquireSlot 占位，避免「复用已过期槽位」导致窗口计数失真。
 function request(path, data, opts) {
   opts = opts || {};
-  return acquireSlot().then(() => rawRequest(path, data))
+  const retry = opts.retries || 0;
+  const firstTs = opts._firstTs;
+  const slotPromise = (retry > 0 && firstTs && (Date.now() - firstTs) < WINDOW_MS)
+    ? Promise.resolve(firstTs)            // 重试且首次槽位未过期 → 复用（不再占位）
+    : acquireSlot().then((ts) => { if (firstTs == null) opts._firstTs = ts; return ts; });
+  return slotPromise.then(() => rawRequest(path, data))
     .catch((err) => {
       const code = err && err.statusCode;
       // 429 限流 / 5xx 源站抖动（OpenDota 经 Cloudflare 常返回的 521/502/503）
       // 均做退避重试：429 是触发限流，5xx 多为瞬时源站不可用，重试通常可恢复，
       // 避免把瞬时故障直接暴露到 Console / 触发页面加载失败态。
-      if ((code === 429 || (code >= 500 && code < 600)) && (opts.retries || 0) < RATE.maxRetries) {
-        const delay = RATE.retryBaseMs * Math.pow(2, opts.retries || 0);
+      if ((code === 429 || (code >= 500 && code < 600)) && retry < RATE.maxRetries) {
+        const delay = RATE.retryBaseMs * Math.pow(2, retry);
         return sleep(delay).then(() =>
-          request(path, data, { retries: (opts.retries || 0) + 1 }));
+          request(path, data, { retries: retry + 1, _firstTs: opts._firstTs }));
       }
       // G7.4：重试耗尽 / 不可重试的最终失败上报（按 path 去重，避免刷屏）。
       // 注：cached() 可能用陈旧缓存兜底不抛到调用方，但本次回源失败仍值得监控。
@@ -443,34 +454,6 @@ function getMatch(matchId) {
     function () { return cached('/matches/' + matchId, null, config.cacheTTL.match); });
 }
 
-// 比赛双方选手明细：从 getMatch 结果中拆出 players 数组并按阵营分组。
-// 返回 { radiant: [...], dire: [...] }，每个元素含
-//   { account_id, hero_id, kills, deaths, assists, gpm, xpm, name, personaname }
-function getMatchPlayers(matchId) {
-  return getMatch(matchId).then(function (m) {
-    if (!m || !m.players) return { radiant: [], dire: [] };
-    const radiant = [];
-    const dire = [];
-    m.players.forEach(function (p) {
-      const item = {
-        account_id: p.account_id,
-        hero_id: p.hero_id,
-        kills: p.kills || 0,
-        deaths: p.deaths || 0,
-        assists: p.assists || 0,
-        gpm: p.gold_per_min || 0,
-        xpm: p.xp_per_min || 0,
-        name: p.name || p.personaname || '',
-        // OpenDota player_slot 0-4 天辉，128-132 夜魇
-        isRadiant: (p.isRadiant != null) ? p.isRadiant : (p.player_slot < 128)
-      };
-      if (item.isRadiant) radiant.push(item);
-      else dire.push(item);
-    });
-    return { radiant: radiant, dire: dire };
-  });
-}
-
 function transformSearchTeams(list) {
   return (list || [])
     .filter((item) => item && item.team_id)
@@ -634,13 +617,14 @@ module.exports = {
   request: request,
   cached: cached,
   cachedFresh: cachedFresh,
+  // O-15（2026-08-15）：导出版本前缀构造，供 cloudCache 复用（本地 key 与 api 缓存同语义失效）
+  _v: _v,
   invalidateLeagues: invalidateLeagues,
   fetchedAtOf: fetchedAtOf,
   getLeagues: getLeagues,
   getLeagueWindows: getLeagueWindows,
   getLeagueMatches: getLeagueMatches,
   getMatch: getMatch,
-  getMatchPlayers: getMatchPlayers,
   searchTeams: searchTeams,
   findTeamByName: findTeamByName,
   getTeam: getTeam,

@@ -66,16 +66,8 @@ function liquipediaSlugFor(name) {
   }
   return name;
 }
-function getSlugStats() {
-  var total = _slugHitCount + _slugMissCount;
-  return {
-    hit: _slugHitCount,
-    miss: _slugMissCount,
-    total: total,
-    hitRate: total > 0 ? (_slugHitCount / total) : 0,
-    missedNames: Object.keys(_slugMissedNames)
-  };
-}
+// O-11（2026-08-15）：getSlugStats 调试函数已删（0 业务引用）；计数变量保留增量维护，
+// 未来需 slug 命中率调试时可恢复读取入口。
 
 var ENABLED = !!(config.liquipedia && config.liquipedia.enabled);
 var BASE = (config.liquipedia && config.liquipedia.base) || 'https://liquipedia.net/dota2/api.php';
@@ -439,117 +431,6 @@ function getTeamRoster(name) {
   }).catch(function () { return []; });
 }
 
-// 3. 选手资料
-// 返回 { name, realName, country, role, team, birthDate, status, alternateIds, teamHistory, achievements } 或 null。
-// 解析 {{Infobox player}} 模板参数。
-// §8.3 选手档案完善（2026-07-29）：新增 realName/birthDate/status/alternateIds 字段
-function getPlayerProfile(name) {
-  if (!ENABLED) return Promise.resolve(null);
-  if (!name) return Promise.resolve(null);
-
-  var cacheKey = 'liquipedia_player_' + consensus.normName(name);
-  var cached = cache.get(cacheKey, CACHE_TTL);
-  if (cached) return Promise.resolve(cached);
-
-  return fetchPageWikitext(name).then(function (wikitext) {
-    if (!wikitext) return null;
-
-    var tpl = LiquiParse.parseTemplate(wikitext, 'Infobox player') || LiquiParse.parseTemplate(wikitext, 'Infobox team member');
-    if (!tpl) return null;
-
-    var result = { achievements: [] };
-    var anyField = false;
-
-    try { result.name = tpl.name || tpl.romanized || name; anyField = true; } catch (e) { result.name = name; }
-    // §8.3 真实姓名（区别于游戏 ID）：优先 romanized，其次 realname/fullname
-    try {
-      result.realName = tpl.romanized || tpl.realname || tpl.fullname || tpl.real_name || null;
-      if (result.realName && result.realName === result.name) result.realName = null;  // 避免与 ID 重复
-      if (result.realName) anyField = true;
-    } catch (e) { result.realName = null; }
-    try {
-      result.country = tpl.country || tpl.nationality || tpl.region || null;
-      if (result.country) anyField = true;
-    } catch (e) { result.country = null; }
-    try {
-      result.role = tpl.role || tpl.position || null;
-      if (result.role) anyField = true;
-    } catch (e) { result.role = null; }
-    try {
-      result.team = tpl.team || tpl.currentteam || null;
-      if (result.team) anyField = true;
-    } catch (e) { result.team = null; }
-    // §8.3 出生日期（用于计算年龄/职业生涯时长）
-    try {
-      result.birthDate = tpl.birthdate || tpl.birth_date || tpl.born || null;
-      if (result.birthDate) {
-        // 清理 wikitext 标记（如 {{birth date and age|...}}）
-        result.birthDate = LiquiParse.stripWikitextMarkup(result.birthDate);
-        if (result.birthDate) anyField = true;
-      }
-    } catch (e) { result.birthDate = null; }
-    // §8.3 状态（active/retired/inactive）
-    try {
-      result.status = tpl.status || null;
-      if (result.status) anyField = true;
-    } catch (e) { result.status = null; }
-    // §8.3 曾用 ID（别称/历史 ID）
-    try {
-      result.alternateIds = tpl.ids || tpl.aliases || tpl.altid || null;
-      if (result.alternateIds) {
-        // 拆分为数组（逗号分隔）
-        if (typeof result.alternateIds === 'string') {
-          result.alternateIds = result.alternateIds.split(/[,，]/).map(function (s) { return s.trim(); }).filter(Boolean);
-        }
-        if (result.alternateIds && result.alternateIds.length) anyField = true;
-        else result.alternateIds = null;
-      }
-    } catch (e) { result.alternateIds = null; }
-
-    // 历史队伍表：解析 wikitext 表格
-    result.teamHistory = [];
-    try {
-      var tableMatch = wikitext.match(/\{\|[\s\S]*?\|\}/g);
-      if (tableMatch) {
-        for (var t = 0; t < tableMatch.length; t++) {
-          var table = tableMatch[t];
-          if (table.toLowerCase().indexOf('team') < 0 && table.toLowerCase().indexOf('date') < 0) continue;
-          var rows = table.split('\n|-');
-          for (var r = 1; r < rows.length; r++) {
-            var row = rows[r].replace(/\|\}[\s\S]*$/, '').trim();
-            if (!row) continue;
-            var cells = row.split(/\n?\|\||\|\s+/).map(function (c) { return LiquiParse.stripWikitextMarkup(c); });
-            cells = cells.filter(function (c) { return c && c.indexOf('class=') < 0; });
-            if (cells.length < 2) continue;
-            var team = cells[0];
-            var dates = [];
-            for (var j = 1; j < cells.length; j++) {
-              var found = LiquiParse.collectDates(cells[j]);
-              for (var k = 0; k < found.length; k++) dates.push(found[k]);
-            }
-            if (team) {
-              result.teamHistory.push({
-                team: team,
-                joinDate: dates.length >= 1 ? dates[0] : null,
-                leaveDate: dates.length >= 2 ? dates[1] : null
-              });
-            }
-          }
-          if (result.teamHistory.length) break;
-        }
-      }
-      if (result.teamHistory.length) anyField = true;
-    } catch (e) {
-      result.teamHistory = [];
-    }
-
-    if (!anyField) return null;
-
-    cache.set(cacheKey, result, CACHE_TTL);
-    return result;
-  }).catch(function () { return null; });
-}
-
 // 3. 赛程数据（未开赛/进行中的对阵）
 // 从 Liquipedia wikitext 的 {{Match}} 模板中提取赛程数据，
 // 补充 OpenDota 不返回的"未开赛"和"进行中"对阵。
@@ -670,40 +551,15 @@ function getTeamLogo(name) {
 //
 // 返回 [{ slug, title }] 或 []。任何失败均 resolve 空数组，不影响其它功能。
 // slug 可直接传入 fetchPageWikitext 获取具体赛事页内容；title 用于展示/匹配。
-function listAllTournaments() {
-  if (!ENABLED) return Promise.resolve([]);
-
-  // 客户端本地缓存（7 天，与云端对齐）：赛事列表变化慢，长缓存减少云函数调用
-  var cacheKey = 'liquipedia_tournament_list';
-  var LIST_CACHE_TTL = 7 * 24 * 3600;  // 7 天（秒）
-  var cached = cache.get(cacheKey, LIST_CACHE_TTL);
-  if (cached && Array.isArray(cached) && cached.length) {
-    return Promise.resolve(cached);
-  }
-
-  // 仅走云函数代理路径
-  if (typeof wx !== 'undefined' && wx.cloud && cloudProxy.isAvailable()) {
-    return cloudProxy.liquipediaListTournamentsProxy().then(function (remote) {
-      if (remote && Array.isArray(remote) && remote.length) {
-        cache.set(cacheKey, remote, LIST_CACHE_TTL);
-        return remote;
-      }
-      return [];
-    }).catch(function () { return []; });
-  }
-  // 无云代理可用 → 返回空数组（不降级本地 wx.request，因为 UA 缺失会被拦）
-  return Promise.resolve([]);
-}
+// O-11（2026-08-15）：listAllTournaments 已删（0 业务引用）；cloudProxy.liquipediaListTournamentsProxy
+//   与云函数 handler 防御性保留（未来恢复赛事枚举能力时成本低）。
 
 module.exports = {
   ENABLED: ENABLED,
   getLeagueMetadata: getLeagueMetadata,
   getLeagueTier: getLeagueTier,
   getTeamRoster: getTeamRoster,
-  getPlayerProfile: getPlayerProfile,
   getScheduledMatches: getScheduledMatches,
   getTeamLogo: getTeamLogo,
-  listAllTournaments: listAllTournaments,
-  parseParticipants: LiquiParse.parseParticipants,  // 2026-07-28 导出供单元测试直接调用（单一来源：liquipedia-parse.js）
-  getSlugStats: getSlugStats  // §6.2 slug 命中率统计（供调试/日志输出）
+  parseParticipants: LiquiParse.parseParticipants  // 2026-07-28 导出供单元测试直接调用（单一来源：liquipedia-parse.js）
 };

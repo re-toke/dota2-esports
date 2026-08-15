@@ -1,4 +1,3 @@
-const TIER_RANK = require('./api.js').TIER_RANK;
 const tiers = require('./tiers.js');
 
 // 统一赛事分级：优先社区精选规则（tiers.js），否则回退 OpenDota 的 tier 枚举。
@@ -41,27 +40,6 @@ function formatTime(unix) {
   return y + '-' + mo + '-' + da;
 }
 
-// 赛事等级中文标签
-function tierLabel(tier) {
-  const map = {
-    professional: 'S级',
-    premium: 'A级',
-    amateur: '业余',
-    excluded: '其他'
-  };
-  return map[tier] || '未知';
-}
-
-// 等级数字（用于排序/筛选）
-function tierRank(tier) {
-  return TIER_RANK[tier] || 0;
-}
-
-// 判断「我方战队」是否获胜：radiant 表示我方是否处于天辉方
-function didTeamWin(match) {
-  return match.radiant === match.radiant_win;
-}
-
 // 胜率
 function winRate(wins, total) {
   if (!total) return '0%';
@@ -77,14 +55,6 @@ function isCurrentMember(p) {
 function playerWon(match) {
   const isRadiant = match.player_slot < 128;
   return isRadiant === match.radiant_win;
-}
-
-// 解析 "2024-04-22" 为 Unix 秒（UTC）；非法返回 null
-function parseISODate(s) {
-  if (!s) return null;
-  const m = String(s).trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-  if (!m) return null;
-  return Math.floor(Date.UTC(+m[1], +m[2] - 1, +m[3]) / 1000);
 }
 
 // now（Unix 秒），不传则取当前
@@ -224,14 +194,10 @@ function countdownTextOf(daysToStart, isOngoing) {
 module.exports = {
   formatDuration,
   formatTime,
-  tierLabel,
-  tierRank,
   unifiedTier,
-  didTeamWin,
   winRate,
   isCurrentMember,
   playerWon,
-  parseISODate,
   isOngoing,
   isUpcoming,
   statusOf,

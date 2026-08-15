@@ -2158,11 +2158,14 @@ Page({
     const page = this.data.page + 1;
     const pageSize = this.data.pageSize;
     const slice = this.allSeries.slice(0, (page + 1) * pageSize);
-    this.setData({
-      series: slice,
-      page: page,
-      hasMore: this.allSeries.length > slice.length
-    }, () => {
+    // O-14（2026-08-15）：路径式 patch —— 只追加新页的 series 项，不重传已渲染部分。
+    // 旧实现全量 setData({ series: slice })，数据量随页码线性增长，后续页触底时传输量变大。
+    const patch = { page: page, hasMore: this.allSeries.length > slice.length };
+    const start = this.data.page * pageSize;  // 已渲染的起始偏移（slice 基于 page 累进）
+    for (let i = start; i < slice.length; i++) {
+      patch['series[' + i + ']'] = slice[i];
+    }
+    this.setData(patch, () => {
       // ★ 新页加载后补全可见 series 的 logo（allSeries 内存已有则路径更新直接命中）
       this.enrichTeamLogos();
     });

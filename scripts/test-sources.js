@@ -348,10 +348,10 @@ check('sources.getLeagueMetadata Steam 兜底（Liquipedia 缺失奖金池）', 
   }
 });
 
-// 测试 8：getLeagueName 包含 Liquipedia 候选
+// 测试 8：voteLeagueNameForMatch 包含 Liquipedia 候选（原 getLeagueName @deprecated 别名，O-11 已删，改测正式名）
 // 传 { name: 'TI 2024' }（无 leagueid → stratz 分支跳过），curation 与 liquipedia 均返回
 // 'The International 2024'，voteName 归一后两源一致胜出，sources 含 liquipedia。
-check('sources.getLeagueName 包含 Liquipedia 候选', async () => {
+check('sources.voteLeagueNameForMatch 包含 Liquipedia 候选', async () => {
   const origLiq = liquipedia.getLeagueMetadata;
   const origStratzDisp = stratz.getLeagueDisplayName;
   liquipedia.getLeagueMetadata = function () {
@@ -359,7 +359,7 @@ check('sources.getLeagueName 包含 Liquipedia 候选', async () => {
   };
   stratz.getLeagueDisplayName = function () { return Promise.resolve(null); };
   try {
-    const r = await sources.getLeagueName({ name: 'TI 2024' });
+    const r = await sources.voteLeagueNameForMatch({ name: 'TI 2024' });
     assert(r !== null, '返回不应为 null');
     assert(r.value === 'The International 2024',
       'value 应为 The International 2024，实际: ' + r.value);

@@ -731,46 +731,6 @@ function leagueDisplayName(league, ctx) {
   return display;
 }
 
-// 就地给 league 对象挂载 displayName 字段（= leagueDisplayName(league)），
-// 供列表/卡片构建后直接 obj.displayName 透传给 WXML。返回原对象，便于链式调用。
-// 注意：本函数只添加展示用字段，不修改其它字段。
-function attachDisplayName(league) {
-  if (league && typeof league === 'object') {
-    league.displayName = leagueDisplayName(league);
-  }
-  return league;
-}
-
-// ===== 选手资料多源增强：接入 Liquipedia getPlayerProfile =====
-// 历史背景：选手详情页此前完全未调用 liquipedia.getPlayerProfile，
-// 选手真实姓名/国籍/位置/队伍履历/成就均缺失（ASSESSMENT.md P1 待办）。
-// 数据接入以 OpenDota + Liquipedia 为主，本函数封装 Liquipedia 调用，
-// 失败静默回退，不阻塞主流程。
-//
-// 入参：{ name, accountId }（优先按 name 查询，缺失则用 OpenDota 比赛的玩家名）
-// 返回：{ realName, country, role, team, teamHistory, achievements, source, confidence } 或 null
-async function enrichPlayerProfile(player) {
-  const name = (player && player.name) || '';
-  if (!name || !liquipedia.ENABLED) return null;
-  try {
-    const p = await liquipedia.getPlayerProfile(name);
-    if (!p) return null;
-    return {
-      realName: p.name || '',
-      country: p.country || '',
-      role: p.role || '',
-      team: p.team || '',
-      teamHistory: Array.isArray(p.teamHistory) ? p.teamHistory : [],
-      achievements: Array.isArray(p.achievements) ? p.achievements : [],
-      source: 'liquipedia',
-      confidence: 'medium'
-    };
-  } catch (e) {
-    /* 隔离 Liquipedia 异常，不影响其它源 */
-    return null;
-  }
-}
-
 // ===== 赛事排名聚合 =====
 // 由 api.getLeagueMatches 提供的已结束比赛聚合每支队伍的胜负，
 // 不依赖 Liquipedia（避免 IP 风险）。
@@ -1669,7 +1629,6 @@ function resolveTeamIdName(id, idNameMap, curatedTeams, rawIdMap) {
 module.exports = {
   SOURCE_LABEL: SOURCE_LABEL,
   getLeagueTier: getLeagueTier,
-  getLeagueName: voteLeagueNameForMatch, // @deprecated 别名：仅供向后兼容；新代码请用 voteLeagueNameForMatch，且勿用于展示
   voteLeagueNameForMatch: voteLeagueNameForMatch,
   getLeagueWindow: getLeagueWindow,
   getUpcomingFromCuration: getUpcomingFromCuration,
@@ -1697,7 +1656,5 @@ module.exports = {
   getMatchTier: getMatchTier,
   canonicalLeagueName: canonicalLeagueName,
   leagueDisplayName: leagueDisplayName,
-  attachDisplayName: attachDisplayName,
-  enrichPlayerProfile: enrichPlayerProfile,
   getUpcomingLocalSnapshot: getUpcomingLocalSnapshot
 };

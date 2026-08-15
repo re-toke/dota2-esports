@@ -152,12 +152,26 @@ async function getCache(key) {
   return null;
 }
 
+// TCB 单文档上限 512KB（O-17 2026-08-15）：超限的 doc().set() 会静默失败（配额合规风险），
+// 且该 key 的 L2 缓存永远缺失，客户端持续回源直连 → 限流风险。此处保留 L1（内存缓存）
+// 仍可用，但跳过 L2 落库并显式 warn 日志，便于发现超大缓存项。
+const TCB_DOC_LIMIT_BYTES = 512 * 1024;   // TCB 单文档硬上限
+const TCB_SAFE_BYTES = 450 * 1024;        // 保守阈值（留 62KB 余量给 expire/fetchedAt/_id 等字段）
+
 async function setCache(key, data, ttlMs) {
   const fullKey = _v() + key;
   const expire = Date.now() + (ttlMs || 30 * 60 * 1000);
   // 同时写 L1 + L2
   l1Set(fullKey, data, ttlMs);
   try {
+    // O-17：序列化体积预检，超限跳过 L2 落库（L1 仍有效，本实例命中；跨实例回退直连）
+    let payloadBytes = 0;
+    try { payloadBytes = JSON.stringify(data).length; } catch (e) { payloadBytes = TCB_DOC_LIMIT_BYTES + 1; }  // 序列化失败按超限处理
+    if (payloadBytes > TCB_SAFE_BYTES) {
+      console.warn('[setCache] 跳过 L2 落库（超 TCB 单文档阈值）key=' + key +
+        ' size=' + payloadBytes + 'B > ' + TCB_SAFE_BYTES + 'B，仅 L1 生效');
+      return;
+    }
     const db = cloud.database();
     await db.collection(CACHE_COLL).doc(fullKey).set({
       data: data,

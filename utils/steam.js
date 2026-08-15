@@ -98,56 +98,9 @@ function getTournamentPrizePool(leagueId) {
   }).catch(() => null);
 }
 
-// 赛事选手聚合统计（联赛维度的选手汇总：场次/K/D/A，字段可能缺失，做防御性解析）
-function getTournamentPlayerStats(leagueId, accountId) {
-  if (!ENABLED) return Promise.resolve(null);
-  return get('/GetTournamentPlayerStats', { league_id: leagueId, account_id: accountId }).then((d) => {
-    const r = (d && d.result) || null;
-    if (!r) return null;
-    return {
-      accountId: accountId,
-      leagueId: leagueId,
-      matchesPlayed: r.matches_played != null ? Number(r.matches_played) : 0,
-      kills: r.kills != null ? Number(r.kills) : 0,
-      deaths: r.deaths != null ? Number(r.deaths) : 0,
-      assists: r.assists != null ? Number(r.assists) : 0,
-      source: 'steam'
-    };
-  }).catch(() => null);
-}
-
-// 单场比赛详情（比 OpenDota match 列表字段更全，可用于交叉校验）
-function getMatchDetails(matchId) {
-  if (!ENABLED) return Promise.resolve(null);
-  return get('/GetMatchDetails', { match_id: matchId }).then((d) => {
-    const r = (d && d.result) || null;
-    if (!r) return null;
-    const players = (r.players || []).map((p) => ({
-      account_id: p.account_id || 0,
-      hero_id: p.hero_id || 0,
-      kills: p.kills || 0,
-      deaths: p.deaths || 0,
-      assists: p.assists || 0,
-      gpm: p.gold_per_min || 0,
-      xpm: p.xp_per_min || 0
-    }));
-    return {
-      match_id: matchId,
-      duration: r.duration || 0,
-      radiant_win: !!r.radiant_win,
-      radiant_score: r.radiant_score || 0,
-      dire_score: r.dire_score || 0,
-      players: players,
-      source: 'steam'
-    };
-  }).catch(() => null);
-}
-
 module.exports = {
   ENABLED: ENABLED,
   getLeagues: getLeagues,
   getTeamInfo: getTeamInfo,
-  getTournamentPrizePool: getTournamentPrizePool,
-  getTournamentPlayerStats: getTournamentPlayerStats,
-  getMatchDetails: getMatchDetails
+  getTournamentPrizePool: getTournamentPrizePool
 };
