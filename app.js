@@ -96,5 +96,24 @@ App({
       // ★ 2026-08-11 方案 E：迁移老用户 fakeId 关注记录到真实 leagueId（一次性幂等）
       migrateFakeIdFollows();
     }, 0);
+  },
+
+  // O-27（2026-08-15）：全局错误兜底 —— 线上未捕获 JS 异常静默丢失的补救通道。
+  // 复用 utils/monitor.js 的 wx.reportAnalytics 上报（devtools 下自动静默，不影响开发调试），
+  // 部署后在 MP 后台「自定义分析」看 js_error / js_unhandled_rejection 事件量感知线上健康度。
+  onError(msg) {
+    require('./utils/monitor.js').report('js_error', { message: String(msg).slice(0, 200) });
+  },
+  onUnhandledRejection(res) {
+    require('./utils/monitor.js').report('js_unhandled_rejection', {
+      reason: String((res && res.reason) || '').slice(0, 200)
+    });
+  },
+  onPageNotFound() {
+    // 分享链接指向已下线页面（如已删除的 player-detail）时避免白屏，回退首页
+    wx.switchTab({ url: '/pages/index/index' });
+  },
+  onMemoryWarning(res) {
+    require('./utils/monitor.js').report('memory_warning', { level: (res && res.level) || 0 });
   }
 });
