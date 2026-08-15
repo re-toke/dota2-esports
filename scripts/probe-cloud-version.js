@@ -76,8 +76,10 @@
     } else if (healthRes.result && healthRes.result.error && /unknown action/.test(healthRes.result.error.message || '')) {
       healthVerdict = '❌ 旧版（返回 unknown action: health）';
       healthIsNew = false;
-    } else if (healthRes.result && healthRes.result.ts && healthRes.result.sources) {
-      healthVerdict = '✅ 新版（返回 ts + sources 健康对象）';
+    } else if (healthRes.result && healthRes.result.data && healthRes.result.data.ts && healthRes.result.data.sources) {
+      // ⚠️ 2026-08-15 修正（重复踩坑记录）：handleHealth 返回 {data:{ts,sources,ok}, source:'fresh'}
+      //   字段在 result.data 层，非顶层。旧判定检查 result.ts 会误判新版为「异常」。
+      healthVerdict = '✅ 新版（返回 data.ts + data.sources 健康对象）';
       healthIsNew = true;
     } else {
       healthVerdict = `⚠️ 异常返回：${JSON.stringify(healthRes.result)}`;
