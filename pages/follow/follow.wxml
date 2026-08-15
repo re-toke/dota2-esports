@@ -95,8 +95,13 @@
       <view class="sub-card-body" wx:else>
         <text class="sub-info sub-muted">开启后，关注的战队赛前将收到微信提醒</text>
       </view>
-      <t-button theme="{{subStatus.subscribed ? 'light' : 'primary'}}" size="medium" block bindtap="onSubscribe">
-        {{subStatus.subscribed ? '重新授权' : (userInfo.loggedIn ? '开启赛事提醒' : '登录并开启赛事提醒')}}
+      <!-- ★ 2026-08-15：已开启 → 「重新授权」+「取消提醒」双按钮（补全取消途径） -->
+      <view class="sub-actions" wx:if="{{subStatus.subscribed}}">
+        <t-button theme="light" size="medium" style="flex:1" bindtap="onSubscribe">重新授权</t-button>
+        <t-button theme="danger" size="medium" variant="outline" style="flex:1" bindtap="onUnsubscribe">取消提醒</t-button>
+      </view>
+      <t-button wx:else theme="{{userInfo.loggedIn ? 'primary' : 'primary'}}" size="medium" block bindtap="onSubscribe">
+        {{userInfo.loggedIn ? '开启赛事提醒' : '登录并开启赛事提醒'}}
       </t-button>
     </view>
 

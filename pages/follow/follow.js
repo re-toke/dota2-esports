@@ -306,6 +306,28 @@ Page({
     });
   },
 
+  // ★ 2026-08-15：取消比赛开始提醒（补全功能按键）。
+  //   微信订阅是「一次性授权」无法编程式取消，取消 = 清本地 subscribed + 同步云端 subs，
+  //   服务端（sendSmartReminders）据此停止推送。加确认弹窗防误触。
+  onUnsubscribe() {
+    wx.showModal({
+      title: '取消赛事提醒',
+      content: '取消后将不再收到关注的战队赛前提醒，确定取消吗？',
+      confirmText: '取消提醒',
+      confirmColor: '#e64340',
+      success: (res) => {
+        if (!res.confirm) return;
+        subscribe.unsubscribe().then((r) => {
+          wx.showToast({
+            title: r && r.ok ? '已取消赛事提醒' : '已在本机取消',
+            icon: 'none'
+          });
+          this.loadSubStatus();
+        });
+      }
+    });
+  },
+
   // ===== 2.2 订阅状态展示 =====
   loadSubStatus() {
     var st = subscribe.getSubStatus();

@@ -59,6 +59,26 @@ function getSubStatus() {
 }
 
 /**
+ * 取消比赛开始提醒（2026-08-15 补全功能按键）。
+ * 说明：微信订阅消息为「一次性授权」，不提供编程式取消 API（用户可在微信设置中彻底关闭）；
+ *   但项目内服务端推送（sendSmartReminders）读 follow_profile_{openid}.subs 决定是否推送，
+ *   因此「取消」= 清除本地 subscribed 标记 + 同步云端 subs（服务端停止推送）。
+ *   本地标记保留 lastStatus 供历史追溯，仅置 subscribed=false。
+ * @returns {Promise<{ok:boolean}>} 本地清除必然成功；云端同步失败不阻塞（返回 ok:false 提示）
+ */
+function unsubscribe() {
+  const s = readStatus();
+  if (s[TMPL_ID]) {
+    s[TMPL_ID] = Object.assign({}, s[TMPL_ID], { subscribed: false, cancelledAt: Date.now() });
+  } else {
+    s[TMPL_ID] = { subscribed: false, time: null, cancelledAt: Date.now(), lastStatus: 'cancelled' };
+  }
+  writeStatus(s);
+  // 同步云端（fire-and-forget，失败静默；云端旧 subs 仍可能推一次，属可接受边界）
+  return syncSubStatus().catch(function () { return { ok: false, reason: 'error' }; });
+}
+
+/**
  * 判断是否应该弹出授权弹窗。
  * 规则：未配置模板 → false；已订阅且在冷却期内 → false；否则 true
  */
@@ -559,6 +579,8 @@ module.exports = {
   // ★ 2026-08-07（R3）：订阅授权状态上云 / 云端恢复
   syncSubStatus: syncSubStatus,
   restoreSubFromCloud: restoreSubFromCloud,
+  // ★ 2026-08-15：取消比赛开始提醒（清本地 + 同步云端）
+  unsubscribe: unsubscribe,
 
   // #20 服务端策略引擎数据层
   saveFollowProfile: saveFollowProfile
