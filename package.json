@@ -6,7 +6,7 @@
     "lint": "eslint --rulesdir scripts/eslint-rules utils/ pages/ subpackages/ cloudfunctions/ scripts/ --ext .js",
     "lint:fix": "eslint --rulesdir scripts/eslint-rules utils/ pages/ subpackages/ cloudfunctions/ scripts/ --ext .js --fix",
     "test": "node scripts/test-canonical.js && node scripts/test-bo.js",
-    "test:all": "node scripts/test-sources.js && node scripts/test-consensus.js && node scripts/test-canonical.js && node scripts/test-bo.js",
+    "test:all": "node scripts/test-sources.js && node scripts/test-consensus.js && node scripts/test-canonical.js && node scripts/test-bo.js && node scripts/test-formatters.js && node scripts/test-incremental.js && node scripts/test-remote-curation.js && node scripts/test-search-history.js",
     "sync:canon": "node scripts/sync-canon-map.js",
     "sync:parse": "node scripts/sync-liquipedia-parse.js",
     "sync:slugmap": "node scripts/sync-slugmap.js",

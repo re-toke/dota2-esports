@@ -82,6 +82,14 @@ let _stratzFails = 0;
 let _stratzSkippedUntil = 0;     // 跳过截止时间戳（ms），0=不跳过
 
 // STRATZ 是否可用：未启用 / 连续失败达阈值 且未过冷却期 → false
+// O-10（2026-08-15）：STRATZ 调用点统一短路标注。
+//   现状：config.stratz.enabled=false（2026-07-30 起，Cloudflare 反爬虫 403 拦截，
+//   本地直连与云函数代理均被 "Just a moment..." 挑战页拒绝，非 key 问题）。
+//   因此 stratz.ENABLED 恒为 false，本函数第一行即短路返回——下方 6 处调用点
+//   （getLeagueTier/getLeagueDisplayName/getLeagueWindow/getTeamLogo/getPlayerAvatar/
+//   getTeamRoster）的 `stratzHealthy() &&` 条件永假，运行时零请求零成本。
+//   ⚠️ 勿仅改 config.stratz.enabled=true 恢复 STRATZ：需先验证 Cloudflare 封锁是否解除，
+//   否则会重新触发逐次 403 失败（熔断器会兜底，但无谓消耗）。
 function stratzHealthy() {
   if (!stratz.ENABLED) return false;
   if (_stratzFails < STRATZ_FAIL_THRESHOLD) return true;

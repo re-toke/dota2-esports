@@ -139,7 +139,9 @@ function upcomingCardStatus(entry, now) {
 function buildUpcomingCard(entry, ctx) {
   const now = ctx.now;
   const lid = ctx.lid != null ? String(ctx.lid) : String(entry.id);
-  const matched = (ctx.allLeagues || []).find((x) => String(x.leagueid) === lid);
+  // O-6（2026-08-15）：find 线性扫描 → Map 查表。ctx.leagueMap 是 _leagueMap（leagueid→league 对象），
+  //   已在 normalize 阶段同步构建，复用零额外成本；O(赛事数) → O(1)。兼容回退：无 leagueMap 时仍走数组 find。
+  const matched = ctx.leagueMap ? ctx.leagueMap[lid] : (ctx.allLeagues || []).find((x) => String(x.leagueid) === lid);
   const grade = entry.grade || (matched && matched.grade) || 'S';
   const rank = entry.rank || (matched && matched.rank) || 3;
   const label = entry.label || (matched && matched.label) || 'S级';
@@ -885,7 +887,7 @@ Page({
           // 视野内放行（无法判定是否结束），避免误杀。
           if (s.start <= horizon && (!s.end || s.end >= now)) {
             // 复用 buildUpcomingCard 统一构造（STRATZ 真实联赛 id 经 lid 回查 allLeagues 复用分级/关注）
-            results.push(buildUpcomingCard(s, { now: now, allLeagues: this.allLeagues, lid: lid }));
+            results.push(buildUpcomingCard(s, { now: now, leagueMap: this._leagueMap, lid: lid }));
           }
         });
         results.sort((a, b) => (a.startDate || 0) - (b.startDate || 0));
@@ -925,7 +927,7 @@ Page({
     const horizon = now + config.leagueWindow.upcomingRangeSec;
     const results = events
       .filter((e) => e.start && e.start <= horizon && (!e.end || e.end >= now))
-      .map((e) => buildUpcomingCard(e, { now: now, allLeagues: this.allLeagues, lid: e.id }));
+      .map((e) => buildUpcomingCard(e, { now: now, leagueMap: this._leagueMap, lid: e.id }));
     if (!results.length) return Promise.resolve(false);
 
     results.sort((a, b) => (a.startDate || 0) - (b.startDate || 0));
@@ -1095,7 +1097,7 @@ Page({
           return;
         }
         seen[k] = true;
-        results.push(buildUpcomingCard(e, { now: now, allLeagues: this.allLeagues, lid: e.id }));
+        results.push(buildUpcomingCard(e, { now: now, leagueMap: this._leagueMap, lid: e.id }));
       });
   },
 
