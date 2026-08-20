@@ -75,3 +75,33 @@ git checkout c5fbc00 -- <文件路径>
 | 2026-08-15 | `rollback-pre-p3-2026-08-15` | P3 架构专项实施前（当前，c5fbc00） |
 | 2026-08-15 | `rollback-post-release-fixes-2026-08-15`（tag 保留，zip 已删） | 8-13/14 上线后修复汇总后 |
 | 2026-08-09 | `rollback/pre-spotlight-ui-2026-08-09`（zip 保留） | 聚光灯 UI 实施前 |
+
+---
+
+## 2026-08-20 · 回滚记录：PRD v1.6 编辑部改版失败 → 恢复 UI 更新前
+
+> **回滚动作**：`git reset --hard 9588fa5`（UI 改版前最后稳定版）
+> **回滚原因**：PRD v1.6《赛事日历·编辑部》改版失败，需恢复上个版本保证功能可用
+> **失败状态保护**：`rollback-failed-v16-2026-08-20`（annotated tag → c8a359f，含全部 v1.6 提交链，可随时找回）
+
+### 关键信息
+
+| 项目 | 说明 |
+|------|------|
+| 回滚目标 | `9588fa5`（feat(follow): 比赛开始提醒补全，v1.5 暖墨深底 + teams 页完整结构） |
+| 保护 tag | `rollback-failed-v16-2026-08-20` → `c8a359f`（v1.6 失败状态，含 de878a4/c8a359f） |
+| 注意 | `rollback-pre-l1-2026-08-19` tag 实际指向 `088e432`（L1-2，皮肤线已开始）——**不是**纯 UI 前，本次回滚以 `9588fa5` 为准 |
+| 覆盖范围 | 撤销 9533498 起全部 v1.6 提交（L1 皮肤线 / L2 结构线 / P1-P2 还原 / Phase1 数据收口 / P1-P2 落地 / TDesign 事故修复） |
+
+### 回滚后验证（全部通过）
+
+- ✅ 12 套测试全绿（canonical 58 / bo 119 / sources 46 / consensus 18 / formatters 37 / incremental 15 / remote-curation 11 / search-history 8 / league-tier 14 / team-logo 11）
+- ✅ app.json 回 v1.5 深底（navBg #0d0d0d）、pages 含 teams 6 页
+- ✅ 关键页面 `node --check` 全过；miniprogram_npm tdesign 17 组件完整
+- ⚠️ **落盘修复**：reset 后 deliverables/scripts 目录在中文长路径下未完整落盘（git status 显示 D），用 `git checkout-index -a -f` 强制恢复，最终工作区与索引一致
+
+### 找回 v1.6 状态
+
+```bash
+git checkout rollback-failed-v16-2026-08-20   # 或 git reset --hard rollback-failed-v16-2026-08-20
+```
