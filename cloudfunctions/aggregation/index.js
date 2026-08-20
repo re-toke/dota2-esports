@@ -561,6 +561,116 @@ const SCHEDULED_MATCHES_SLUG_OVERRIDE = {
   'The International 2026': 'The_International/2026/Group_Stage'
 };
 
+// ===== LiquipediaDB v3 REST API（2026-08-20，P0 修复 LIVE/UPCOMING）=====
+// 背景：2026 年起 Liquipedia 赛事页对阵改为 {{Matchlist}} 空占位 + LPDB 动态查询，
+//   现有 wikitext 解析器对新结构解析出 0 场 → 详情页 LIVE/UPCOMING 恒空。
+// 方案：云函数侧集成 LiquipediaDB v3 API，按 tournament pagename 查 match 表，
+//   返回完整对阵 JSON（含 status: 'upcoming'|'finished' 等字段）。
+// 认证：Authorization: Apikey <key>，key 从云函数环境变量 LIQUIPEDIA_API_KEY 读取。
+// 申请：contact@liquipedia.net（人工审批，1-3 工作日）。
+// 限流：60 req/hour（赛事聚合场景足够；客户端缓存 5min 进一步降负载）。
+// 降级：未配置 key → 自动回退到现有 wikitext 解析路径（对旧结构赛事仍有效）。
+const LIQUIPEDIA_V3_BASE = 'https://api.liquipedia.net/api/v3';
+const LIQUIPEDIA_V3_KEY = process.env.LIQUIPEDIA_API_KEY || '';
+
+// 把赛事展示名转换为 v3 API 用的 tournament pagename。
+// 复用 SCHEDULED_MATCHES_SLUG_OVERRIDE + liquipediaSlugFor（单一事实来源，与 wikitext 路径一致）。
+function liquipediaV3PagenameFor(displayName) {
+  const override = SCHEDULED_MATCHES_SLUG_OVERRIDE[displayName];
+  if (override) return override;
+  return liquipediaSlugFor(displayName);
+}
+
+// v3 API 调用：按 tournament pagename 查 match 表。
+// 返回归一化后的对阵数组（与 parseScheduledMatches 输出形状对齐，供客户端零改动消费）。
+// 失败/未配置 key → 返回 null（调用方回退到 wikitext 解析路径）。
+async function fetchLiquipediaV3Matches(displayName) {
+  if (!LIQUIPEDIA_V3_KEY) return null;
+  const pagename = liquipediaV3PagenameFor(displayName);
+  if (!pagename) return null;
+  // v3 match 端点：wiki=dota2，conditions 按 tournament pagename 过滤。
+  // [[tournament::pagename]] 做 LPDB 前缀匹配（与 Lua mw.ext.LiquipediaDB.lpdb 语义一致），
+  // 匹配整棵子树（主赛事 + Group_Stage + Main_Event 等子页面）。
+  const conditions = '[[tournament::' + pagename + ']]';
+  try {
+    const res = await safeFetch({
+      url: LIQUIPEDIA_V3_BASE + '/match',
+      searchParams: {
+        wiki: 'dota2',
+        conditions: conditions,
+        query: 'date,tournament,opponentleft,opponentright,status,scoreleft,scoreright,extradata,match2bracketid,pagename',
+        order: 'date asc',
+        limit: '100'
+      },
+      headers: {
+        'Authorization': 'Apikey ' + LIQUIPEDIA_V3_KEY,
+        'User-Agent': LIQUIPEDIA_UA,
+        'Accept': 'application/json',
+        'Accept-Encoding': 'gzip'
+      },
+      responseType: 'json',
+      source: 'LiquipediaV3',
+      // v3 API 限流更严，重试间隔加大
+      retry: { limit: 1, backoffLimit: 5000 }
+    });
+    if (!res || !res.body) return null;
+    const data = res.body.data || res.body;
+    const rawMatches = Array.isArray(data) ? data : (data.match || data.matches || []);
+    if (!rawMatches.length) return null;
+    // 归一化为 parseScheduledMatches 输出形状（客户端 groupSeries 期望的字段）
+    return rawMatches.map(normalizeV3Match).filter(Boolean);
+  } catch (e) {
+    console.warn('[LiquipediaV3] fetch failed for', pagename, ':', e && e.message || e);
+    return null;
+  }
+}
+
+// v3 match 字段 → 客户端 parseScheduledMatches 输出形状的归一化。
+// v3 字段参考：https://liquipedia.net/hub/Help:LiquipediaDB（match 表）
+// 关键映射：
+//   opponentleft/right {name, image} → team1Name/team2Name
+//   date (ISO 8601) → startTime (unix sec)
+//   status ('upcoming'|'finished'|...) → phase 推导
+//   scoreleft/right → score1/score2（用于 RECENT 胜负判定）
+//   extradata → boType 等扩展
+function normalizeV3Match(m) {
+  if (!m) return null;
+  try {
+    const dateStr = m.date || '';
+    const startTime = dateStr ? Math.floor(new Date(dateStr + 'Z').getTime() / 1000) : 0;
+    if (!startTime) return null;
+    const ol = m.opponentleft || (m.opponent && m.opponent[0]) || {};
+    const or = m.opponentright || (m.opponent && m.opponent[1]) || {};
+    const status = m.status || '';
+    // phase 粗粒度推导：客户端 groupSeries 会按 startTime + isOngoing 重新精确判定
+    const nowSec = Math.floor(Date.now() / 1000);
+    let phase = 'recent';
+    if (status === 'upcoming' || startTime > nowSec) phase = 'upcoming';
+    else if (status === 'finished' || (m.scoreleft != null && m.scoreright != null && (m.scoreleft || m.scoreright))) phase = 'recent';
+    else phase = 'live'; // 未明确状态 + 已开赛 + 无比分 → 假定进行中
+    // boType 从 extradata 提取（v3 存 bestof 或 format）
+    const extra = m.extradata || {};
+    const boType = extra.bestof || extra.format || extra.bo || null;
+    return {
+      team1Name: ol.name || ol.identifier || '',
+      team2Name: or.name || or.identifier || '',
+      team1Short: ol.shortname || ol.name || '',
+      team2Short: or.shortname || or.name || '',
+      startTime: startTime,
+      phase: phase,
+      status: status,
+      boType: boType,
+      score1: typeof m.scoreleft === 'number' ? m.scoreleft : null,
+      score2: typeof m.scoreright === 'number' ? m.scoreright : null,
+      bracketId: m.match2bracketid || null,
+      pagename: m.pagename || m.tournament || ''
+    };
+  } catch (e) {
+    console.warn('[LiquipediaV3] normalize failed:', e && e.message);
+    return null;
+  }
+}
+
 async function liquipediaScheduledMatches(params, force) {
   const pageName = (params && (params.pageName || params.name)) || null;
   if (!pageName) return { data: null, error: makeError(ERROR_CODES.BAD_REQUEST, 'pageName required') };
@@ -588,6 +698,15 @@ async function liquipediaScheduledMatches(params, force) {
     }
     _lastForceFetch[slug] = Date.now();
   }
+  // ★ 2026-08-20：v3 API 优先路径（P0 修复 LIVE/UPCOMING）。
+  // 未配置 LIQUIPEDIA_API_KEY 或调用失败 → fetchLiquipediaV3Matches 返回 null，自动回退到 wikitext 路径。
+  const v3Matches = await fetchLiquipediaV3Matches(pageName);
+  if (v3Matches && v3Matches.length) {
+    const payload = { matches: v3Matches, boFormat: null };
+    await setCache(cacheKey, payload, TTL.liquipediaSchedule).catch(() => {});
+    return { data: payload, source: 'liquipedia-v3' };
+  }
+  // 回退：现有 wikitext 解析路径（对旧结构赛事仍有效；对新结构赛事会返回 0 场）
   const wikitext = await fetchLiquipediaWikitext(slug);
   if (!wikitext) return { data: null, source: 'liquipedia' };
   // 用 parseScheduledMatches 解析赛程，传入当前时间戳用于 phase 判定
