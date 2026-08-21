@@ -881,6 +881,39 @@ function patchNullSeriesId(matches) {
       }
     }
   }
+  // 4. ★ 孤儿互并（补齐旧版只能借邻居、无法两孤儿彼此合并的缺口）：
+  //    对 series_id 仍为空、且未被步骤3借到邻居的局，按「同队ID对(不计顺序) + 同日(UTC 自然日)」
+  //    直接合成共享 series 键，使同一 BO 系列的若干局合并成一张系列卡（而非各自 BO1）。
+  //    适用：LPDB v3 来源（normalizeV3Match 现已产出 series_id，此为兜底）或 OpenDota 两局都漏填 series_id。
+  //    防误并：① 仅同队ID对；② 同日粒度；③ 合成键前缀 'orphan_' 与真实 's<series_id>' 不冲突；④ 步骤5 比分越界自动回滚。
+  var orphanList = [];
+  for (var p = 0; p < matches.length; p++) {
+    var pm = matches[p];
+    if ((pm.series_id == null || pm.series_id === 0) && !pm._patchedSeriesKey) {
+      var pA = pm.radiant_team_id, pB = pm.dire_team_id;
+      if (pA == null || pA <= 0 || pB == null || pB <= 0) continue;
+      var pStart = pm.start_time || 0;
+      if (!pStart) continue;
+      orphanList.push({ m: pm, A: pA, B: pB, day: Math.floor(pStart / 86400) });
+    }
+  }
+  var obuckets = {};
+  orphanList.forEach(function (it) {
+    var pk = it.A < it.B ? (it.A + '_' + it.B) : (it.B + '_' + it.A);
+    var bk = pk + '@' + it.day;
+    (obuckets[bk] || (obuckets[bk] = [])).push(it);
+  });
+  Object.keys(obuckets).forEach(function (bk) {
+    var arr = obuckets[bk];
+    if (arr.length < 2) return;
+    var synKey = 'orphan_' + bk;
+    arr.forEach(function (it) {
+      it.m._patchedSeriesKey = synKey;
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn('[patchNullSeriesId]', { matchId: it.m.match_id, toKey: synKey, reason: 'orphan_pair_day_cluster' });
+      }
+    });
+  });
   return matches;
 }
 
@@ -1626,8 +1659,105 @@ function resolveTeamIdName(id, idNameMap, curatedTeams, rawIdMap) {
   return (rawIdMap && rawIdMap[id]) || null;
 }
 
+// ★ 2026-08-20：Liquipedia 来源的系列赛聚合（修复「一场 BO3 被拆成多张 BO1 卡」）
+// 根因：Liquipedia v3 / wikitext 对阵中，同一 BO 系列的每一局是独立 match 记录；
+//   buildSeriesFromSources 的 Liquipedia 合并段原本直接 .map 每个 match 成一张独立 series 卡，
+//   未做 series 维度聚合（OpenDota 路径走 groupSeries 正确聚合，Liquipedia 路径缺失这一步）。
+//   导致 LPDB 返回的 BO3 三局 → 3 张 BO1 卡（用户实测「Team Spirit vs Iron Wing 拆成两张 BO1」）。
+// 纯函数（不依赖 wx/Page），与 groupSeries 对称：按 series_id（或队名对+同日兜底）把同系列多局合并为一项。
+// 返回聚合后的 Liquipedia 形状 match 列表（字段对齐 buildSeriesFromSources map 段读取需求）。
+function _liqStartOf(m) { return m.startTime || m.start_time || 0; }
+const PHASE_RANK = { live: 3, recent: 2, upcoming: 1 };
+
+function groupLiquipediaMatches(matches) {
+  if (!Array.isArray(matches) || !matches.length) return [];
+  // 聚合键：series_id 优先；缺失时用「队名对(顺序无关) + UTC 自然日」兜底（覆盖 LPDB 未返回 series_id / 旧 wikitext 路径）
+  function keyOf(m) {
+    const sid = m.series_id;
+    if (sid != null && sid !== '' && !/^orphan_/.test(String(sid))) {
+      return 's_' + sid;
+    }
+    const t1 = String(m.team1Name || m.radiant_team_name || '').trim().toLowerCase();
+    const t2 = String(m.team2Name || m.dire_team_name || '').trim().toLowerCase();
+    const st = _liqStartOf(m);
+    const day = st ? Math.floor(st / 86400) : 0;
+    if ((t1 || t2) && st > 0) return 'k_' + [t1, t2].sort().join('|') + '@' + day;
+    return null; // 无法聚合 → 单独成行
+  }
+  const buckets = {};
+  const order = [];
+  matches.forEach(function (m) {
+    const k = keyOf(m);
+    if (k == null) { order.push(m); return; }
+    if (!buckets[k]) { buckets[k] = []; order.push(k); }
+    buckets[k].push(m);
+  });
+  const out = [];
+  order.forEach(function (entry) {
+    if (typeof entry === 'string' && buckets[entry]) {
+      out.push(mergeLiquipediaGroup(buckets[entry]));
+    } else {
+      out.push(entry); // 无法聚合的原始 match，原样保留
+    }
+  });
+  return out;
+}
+
+function mergeLiquipediaGroup(group) {
+  const base = group[0];
+  const starts = group.map(_liqStartOf).filter(Boolean);
+  const startTime = starts.length ? Math.min.apply(null, starts) : _liqStartOf(base);
+  // phase：取最高优先级（live > recent > upcoming），保证系列状态正确
+  const phase = group
+    .map(function (m) { return m.phase || 'upcoming'; })
+    .sort(function (a, b) { return (PHASE_RANK[b] || 0) - (PHASE_RANK[a] || 0); })[0] || 'upcoming';
+  // 比分：取同组「总分最大」的那场作为系列最终比分（最接近真实战报）
+  function total(m) { return (m.score1 || 0) + (m.score2 || 0); }
+  const best = group.slice().sort(function (a, b) { return total(b) - total(a); })[0] || base;
+  // matchIds 合并去重（供后续 matchIds 硬关联去重 / 吸收）
+  const ids = [];
+  const seen = {};
+  group.forEach(function (m) {
+    if (m.matchIds && m.matchIds.length) ids.push.apply(ids, m.matchIds);
+    else if (m.match_id) ids.push(m.match_id);
+  });
+  const dedupIds = ids.filter(function (x) {
+    const k = String(x);
+    if (seen[k]) return false;
+    seen[k] = 1;
+    return true;
+  });
+  return {
+    // —— 透传 Liquipedia 形状字段（保证 buildSeriesFromSources map 段兼容）——
+    team1Name: base.team1Name || base.radiant_team_name || '',
+    team2Name: base.team2Name || base.dire_team_name || '',
+    team1Short: base.team1Short || '',
+    team2Short: base.team2Short || '',
+    startTime: startTime,
+    start_time: startTime,        // 兼容两种字段名（v3 输出 start_time，旧 wikitext 输出 startTime）
+    phase: phase,
+    status: best.status || base.status || '',
+    boType: base.boType || best.boType || null,
+    score1: best.score1 != null ? best.score1 : 0,
+    score2: best.score2 != null ? best.score2 : 0,
+    series_id: base.series_id || null,
+    series_type: (base.series_type != null ? base.series_type : null),  // applyBo S3 据此定 BO（如 LPDB bestof=3 → BO3）
+    bracketId: base.bracketId || null,
+    matchIds: dedupIds,
+    mapSlots: base.mapSlots || 0,
+    section: base.section || '',
+    walkover: base.walkover || 0,
+    boDeclared: base.boDeclared || false,
+    pagename: base.pagename || '',
+    // 标记：由聚合产生，供调试 / 可选渲染小场（各局原始记录）
+    _aggregated: true,
+    _games: group
+  };
+}
+
 module.exports = {
   SOURCE_LABEL: SOURCE_LABEL,
+  groupLiquipediaMatches: groupLiquipediaMatches,
   getLeagueTier: getLeagueTier,
   voteLeagueNameForMatch: voteLeagueNameForMatch,
   getLeagueWindow: getLeagueWindow,

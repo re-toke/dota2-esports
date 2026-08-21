@@ -724,7 +724,10 @@ Page({
         // ★ 合并 Liquipedia 赛程数据（2026-07-28 新增）
         // OpenDota 只返回已结束比赛，进行中/未开赛的对阵需要从 Liquipedia {{Match}} 模板补充。
         // 转换为与 groupSeries 返回值兼容的 series 对象，去重后合并到 allSeries。
-        if (liqScheduled && liqScheduled.length) {
+        // ★ 2026-08-20：先按 series 聚合 Liquipedia match（同 BO 系列多局合并为一项，
+        //   修复「一场 BO3 被拆成多张 BO1 卡」——此前直接 .map 每场独立成卡，缺聚合步骤）。
+        const liqGrouped = sources.groupLiquipediaMatches(liqScheduled);
+        if (liqGrouped && liqGrouped.length) {
           // §9 P0-D2（2026-07-30）：TBD 占位隔离
           // 痛点：TBD（待定/待公布）队伍参与队名归一化键构建，会导致多个 TBD 对阵被误判为同一对阵而合并，
           //   如 "TBD vs Team A" 与 "TBD vs Team B" 因 TBD 相同而被误去重。
@@ -797,7 +800,7 @@ Page({
             }
           });
           // 将 Liquipedia 赛程转换为 series 对象
-          let liqSeries = liqScheduled
+          let liqSeries = liqGrouped
             .filter(function (m) {
               // ★ 2026-08-04（v1.1 实施，审核 R1）：LP live/upcoming 永不剔除 —— 它是 OpenDota 进行中系列唯一的 live 状态来源。
               //   原实现（v3 优化项33）matchIds.every 全命中即剔，把「仅第一局被 OpenDota 收录」的 live BO3 剔掉 →
@@ -995,7 +998,7 @@ Page({
           boFormat: liqBoFormat || null,
           metaFormat: (this.data.metadata && this.data.metadata.format) || null,
           // v2.1：LP section 锚点（liqScheduled 带 section 场次 → 阶段识别优先级 1，R2 时间窗守卫在引擎内）
-          liqStages: (liqScheduled || []).map(function (m) {
+          liqStages: (liqGrouped || []).map(function (m) {
             return { section: m.section || '', startTime: m.startTime || 0 };
           })
         });

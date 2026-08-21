@@ -567,11 +567,35 @@ const SCHEDULED_MATCHES_SLUG_OVERRIDE = {
 // 方案：云函数侧集成 LiquipediaDB v3 API，按 tournament pagename 查 match 表，
 //   返回完整对阵 JSON（含 status: 'upcoming'|'finished' 等字段）。
 // 认证：Authorization: Apikey <key>，key 从云函数环境变量 LIQUIPEDIA_API_KEY 读取。
-// 申请：contact@liquipedia.net（人工审批，1-3 工作日）。
+// 申请：访问 https://liquipedia.net/api 提交 LPDB API 申请表单（含免费档 free tier），
+//   审批进度可到 Liquipedia Discord #api-help 频道咨询。人工审批，通常 1-3 工作日。
 // 限流：60 req/hour（赛事聚合场景足够；客户端缓存 5min 进一步降负载）。
 // 降级：未配置 key → 自动回退到现有 wikitext 解析路径（对旧结构赛事仍有效）。
 const LIQUIPEDIA_V3_BASE = 'https://api.liquipedia.net/api/v3';
 const LIQUIPEDIA_V3_KEY = process.env.LIQUIPEDIA_API_KEY || '';
+
+// v3 归一化辅助：队名 → 稳定正整数 id（LPDB 只给 pagename 不给数字 id）。
+// djb2 哈希取正 int；同系列左右队 id 恒定，使客户端 score-by-team 按队归属比分正确
+// （不受 radiant/dire 换边影响——LPDB 左右队固定不换边）。
+function v3StableTeamId(name) {
+  if (!name) return 0;
+  let h = 5381;
+  for (let i = 0; i < name.length; i++) h = ((h << 5) + h + name.charCodeAt(i)) >>> 0;
+  return h === 0 ? 1 : h;
+}
+// LPDB bestof 数字/字符串 → 标准 BO 串
+function v3BoString(bestof) {
+  if (bestof == null) return null;
+  const n = parseInt(bestof, 10);
+  if (!isNaN(n)) return n === 1 ? 'BO1' : n === 2 ? 'BO2' : n === 3 ? 'BO3' : n === 5 ? 'BO5' : null;
+  const s = String(bestof).toUpperCase();
+  if (s.indexOf('BO') === 0) return s;
+  return null;
+}
+// 标准 BO 串 → OpenDota series_type（0=BO1/1=BO3/2=BO5/3=BO2），供 resolveBoType S3 信号
+function v3BoToSeriesType(bo) {
+  return bo === 'BO1' ? 0 : bo === 'BO2' ? 3 : bo === 'BO3' ? 1 : bo === 'BO5' ? 2 : null;
+}
 
 // 把赛事展示名转换为 v3 API 用的 tournament pagename。
 // 复用 SCHEDULED_MATCHES_SLUG_OVERRIDE + liquipediaSlugFor（单一事实来源，与 wikitext 路径一致）。
@@ -589,9 +613,10 @@ async function fetchLiquipediaV3Matches(displayName) {
   const pagename = liquipediaV3PagenameFor(displayName);
   if (!pagename) return null;
   // v3 match 端点：wiki=dota2，conditions 按 tournament pagename 过滤。
-  // [[tournament::pagename]] 做 LPDB 前缀匹配（与 Lua mw.ext.LiquipediaDB.lpdb 语义一致），
-  // 匹配整棵子树（主赛事 + Group_Stage + Main_Event 等子页面）。
-  const conditions = '[[tournament::' + pagename + ']]';
+  // [[tournament::pagename*]] 用 LPDB 前缀通配（尾随 *）匹配整棵子树：
+  //   主赛事 + Group_Stage + Main_Event 等所有子页面对阵一并返回。
+  //   注意：pagename 须为父级（如 The_International/2026），不含子页后缀；否则 * 会漏匹配。
+  const conditions = '[[tournament::' + pagename + '*]]';
   try {
     const res = await safeFetch({
       url: LIQUIPEDIA_V3_BASE + '/match',
@@ -614,8 +639,8 @@ async function fetchLiquipediaV3Matches(displayName) {
       retry: { limit: 1, backoffLimit: 5000 }
     });
     if (!res || !res.body) return null;
-    const data = res.body.data || res.body;
-    const rawMatches = Array.isArray(data) ? data : (data.match || data.matches || []);
+    const data = res.body.data || res.body.result || res.body;
+    const rawMatches = Array.isArray(data) ? data : (data.match || data.matches || data.result || []);
     if (!rawMatches.length) return null;
     // 归一化为 parseScheduledMatches 输出形状（客户端 groupSeries 期望的字段）
     return rawMatches.map(normalizeV3Match).filter(Boolean);
@@ -641,6 +666,8 @@ function normalizeV3Match(m) {
     if (!startTime) return null;
     const ol = m.opponentleft || (m.opponent && m.opponent[0]) || {};
     const or = m.opponentright || (m.opponent && m.opponent[1]) || {};
+    const t1 = ol.name || ol.identifier || '';
+    const t2 = or.name || or.identifier || '';
     const status = m.status || '';
     // phase 粗粒度推导：客户端 groupSeries 会按 startTime + isOngoing 重新精确判定
     const nowSec = Math.floor(Date.now() / 1000);
@@ -650,19 +677,43 @@ function normalizeV3Match(m) {
     else phase = 'live'; // 未明确状态 + 已开赛 + 无比分 → 假定进行中
     // boType 从 extradata 提取（v3 存 bestof 或 format）
     const extra = m.extradata || {};
-    const boType = extra.bestof || extra.format || extra.bo || null;
+    const boStr = v3BoString(extra.bestof || extra.format || extra.bo);
+    // ★ 合成 series_id：优先 LPDB bracket id（同系列共享），否则用 (队名对 + UTC 日) 兜底。
+    //   目的：让同一 BO 系列的若干场在客户端 groupSeries 自然归组（与 OpenDota 同路径，已验证可正确聚合），
+    //   而不是每场各自成为 BO1。这是修复「一场 BO3 被识别成两场 BO1」的关键。
+    const bracket = m.match2bracketid || '';
+    const dayBucket = Math.floor(startTime / 86400);
+    const seriesId = bracket
+      ? ('lp_' + bracket)
+      : ('lp_' + (t1 || 'x') + '|' + (t2 || 'x') + '|' + dayBucket);
+    // 每场胜负：LPDB 左右队固定不换边，radiant_win 按左队(scoreleft)是否胜；
+    // 客户端按 radiant_team_id/dire_team_id（=左右队稳定 id）归属比分 → 系列比分 = 左队总胜:右队总胜。
+    const sl = typeof m.scoreleft === 'number' ? m.scoreleft : null;
+    const sr = typeof m.scoreright === 'number' ? m.scoreright : null;
+    const radiantWin = (sl != null && sr != null) ? (sl > sr) : null;
     return {
-      team1Name: ol.name || ol.identifier || '',
-      team2Name: or.name || or.identifier || '',
-      team1Short: ol.shortname || ol.name || '',
-      team2Short: or.shortname || or.name || '',
-      startTime: startTime,
+      // —— OpenDota 形状兼容字段（客户端 groupSeries / score / resolveBoType 依赖）——
+      match_id: m.pagename || (seriesId + '_' + startTime),
+      series_id: seriesId,
+      series_type: v3BoToSeriesType(boStr),
+      radiant_team_id: v3StableTeamId(t1),
+      dire_team_id: v3StableTeamId(t2),
+      radiant_team_name: t1,
+      dire_team_name: t2,
+      radiant_win: radiantWin,
+      start_time: startTime,
+      startTime: startTime,   // ★ 2026-08-20：别名对齐客户端 Liquipedia 合并段读取的 m.startTime
+      // —— 向后兼容字段（其他消费方可能读取）——
+      team1Name: t1,
+      team2Name: t2,
+      team1Short: ol.shortname || t1,
+      team2Short: or.shortname || t2,
       phase: phase,
       status: status,
-      boType: boType,
-      score1: typeof m.scoreleft === 'number' ? m.scoreleft : null,
-      score2: typeof m.scoreright === 'number' ? m.scoreright : null,
-      bracketId: m.match2bracketid || null,
+      boType: boStr,
+      score1: sl,
+      score2: sr,
+      bracketId: bracket || null,
       pagename: m.pagename || m.tournament || ''
     };
   } catch (e) {
