@@ -2382,6 +2382,15 @@ exports.main = async (event, context) => {
   }
   const handler = HANDLERS.get(action);
   if (handler) {
+    // ★ 2026-08-21 DIAG：steamLeagueScheduled 路由入口打印一行，覆盖所有早退分支
+    //   （leagueId 缺失 / STEAM_KEY 未配置 / 缓存命中 / 真请求 / 异常）
+    //   便于排查「日志看不到 [SteamLive]」是否因为请求根本没到 handler。
+    if (action === 'steamLeagueScheduled') {
+      console.log('[SteamRoute] ENTER action=steamLeagueScheduled leagueId=' +
+        ((params && (params.leagueId || params.id)) || 'null') +
+        ' force=' + (!!force) +
+        ' STEAM_KEY=' + (STEAM_KEY ? 'SET(' + STEAM_KEY.length + 'chars)' : 'EMPTY'));
+    }
     const r = await handler(event);
     __logEnd(r);
     return r;
