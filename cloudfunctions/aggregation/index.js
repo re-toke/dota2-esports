@@ -1252,9 +1252,15 @@ async function handleSteamProxy(event) {
 //     team1Name, team2Name, startTime, score1, score2, phase }
 async function fetchSteamLiveLeagueGames(leagueId) {
   // GetLiveLeagueGames 无 league_id 过滤参数，返回全量；需本地按 league_id 筛。
+  // ★ 2026-08-21 BUG 修复：Steam API 返回顶层是 { result: { games: [...] } }，
+  //   不是 { games: [...] }。RDota2 包源码 / TF2 Wiki 均确认。
+  //   原实现读 data.games 永远为 undefined → 直接 return [] → LIVE 段恒空。
   const data = await fetchSteam('/GetLiveLeagueGames', {});
-  if (!data || !data.games) return [];
-  const games = Array.isArray(data.games) ? data.games : [];
+  if (!data || !data.result) return [];
+  const result = data.result;
+  // 部分老版本兼容：极少情况下顶层直接是 games 数组
+  const games = Array.isArray(result.games) ? result.games
+              : (Array.isArray(data.games) ? data.games : []);
   return games.filter(function (g) {
     return String(g.league_id) === String(leagueId);
   });
