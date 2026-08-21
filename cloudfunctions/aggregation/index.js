@@ -1256,11 +1256,22 @@ async function fetchSteamLiveLeagueGames(leagueId) {
   //   不是 { games: [...] }。RDota2 包源码 / TF2 Wiki 均确认。
   //   原实现读 data.games 永远为 undefined → 直接 return [] → LIVE 段恒空。
   const data = await fetchSteam('/GetLiveLeagueGames', {});
-  if (!data || !data.result) return [];
+  if (!data || !data.result) {
+    console.log('[SteamLive] league=' + leagueId + ' rawResp=' + JSON.stringify(data).slice(0, 200));
+    return [];
+  }
   const result = data.result;
   // 部分老版本兼容：极少情况下顶层直接是 games 数组
   const games = Array.isArray(result.games) ? result.games
               : (Array.isArray(data.games) ? data.games : []);
+  // 诊断：打印全量 LIVE 游戏所属 league 列表，便于确认 TI2026 真的没在直播（vs 被 filter 漏掉）
+  const leagueSet = {};
+  games.forEach(function (g) {
+    const lid = g.league_id || 0;
+    leagueSet[lid] = (leagueSet[lid] || 0) + 1;
+  });
+  console.log('[SteamLive] league=' + leagueId + ' totalGames=' + games.length +
+              ' leagueDistribution=' + JSON.stringify(leagueSet));
   return games.filter(function (g) {
     return String(g.league_id) === String(leagueId);
   });
