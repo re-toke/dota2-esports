@@ -59,7 +59,15 @@ module.exports = {
     upcomingQueryLimit: 40,
     // 2026-08-13（「即将」加载优化 · P0）：云函数调用超时（ms）。云函数冷缓存现场预热
     // 可达 30-60s，超时后客户端降级本地快照 + curation 注入，保证 loading 必复位。
-    upcomingTimeoutMs: 8000
+    upcomingTimeoutMs: 8000,
+    // 2026-08-21 新增：赛事窗口最大合理跨度（秒）。
+    // 用于拦截 OpenDota 被滥用的 leagueid（如 16251 Party To Play league，
+    // 920 天里被挂 836 场杂乱对局）。当 earliest/lastEnd 跨度超过此阈值，
+    // 且该赛事未在 curation 权威库中（即非人工策展赛事），视为脏数据，
+    // validateLeagueWindow 会清零窗口字段让它从列表消失。
+    // 阈值取 365 天：DPC 整赛季约 4 个月、最长 TI 周期约 11 天，
+    // 真实职业赛事没有跨年举行的；保留 1 年余量足够覆盖任何正式赛事。
+    maxSpanSec: 365 * 86400
   },
 
   // 列表分页每页条数

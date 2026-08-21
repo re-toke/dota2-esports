@@ -1229,6 +1229,178 @@ async function handleSteamProxy(event) {
   }
 }
 
+// ===== Steam 联赛 LIVE 对阵聚合（2026-08-21，LIVE 主源）=====
+// 背景：Liquipedia 2026 把对阵数据搬进了 LPDB（需 API key，且审批不确定）；
+//       STRATZ GraphQL 仍被 Cloudflare 反爬虫挑战页拦截（2026-07-30 起未解封）。
+//       Steam Web API 项目已配 STEAM_API_KEY 且云函数环境已知可达，作为 LIVE 主源最稳。
+//
+// 数据来源（2026-08-21 实测确认）：
+//   - GetLiveLeagueGames/v1      ✅ 端点存活（xpaw.me 文档、沙箱探测均确认）
+//     · 支持按 league_id 过滤（xpaw.me 列出该参数）
+//     · 原生返回 series_id / series_type / radiant_series_wins / dire_series_wins
+//   - GetScheduledLeagueGames/v1 ❌ 已被 Valve 删除（2026-08-21 沙箱探测返回 404：
+//     "Method 'GetScheduledLeagueGames' not found in interface 'IDOTA2Match_570'"）
+//     · 函数定义保留（带废弃标记）便于未来若 Valve 恢复时一行启用
+//     · 当前 steamLeagueScheduledMatches 不再调用该端点（避免每次请求浪费一次 404）
+//
+// UPCOMING 段需依赖 Liquipedia LPDB v3（用户已提交申请，审批中）或 curation 兜底。
+//
+// 返回契约与 liquipediaScheduledMatches 对齐：{ matches: [...], boFormat: null }
+//   matches 每项形状兼容客户端 league-detail.js 合并段读取的字段：
+//   { series_id, series_type, league_id, radiant_team_id, dire_team_id,
+//     radiant_team_name, dire_team_name, radiant_win, start_time,
+//     team1Name, team2Name, startTime, score1, score2, phase }
+async function fetchSteamLiveLeagueGames(leagueId) {
+  // GetLiveLeagueGames 无 league_id 过滤参数，返回全量；需本地按 league_id 筛。
+  const data = await fetchSteam('/GetLiveLeagueGames', {});
+  if (!data || !data.games) return [];
+  const games = Array.isArray(data.games) ? data.games : [];
+  return games.filter(function (g) {
+    return String(g.league_id) === String(leagueId);
+  });
+}
+
+// ⚠️ DEPRECATED 2026-08-21：Valve 已删除此端点（返回 404 Not Found）。
+//    定义保留以便未来恢复时一行启用，但 steamLeagueScheduledMatches 不再调用它。
+//    UPCOMING 数据改由 Liquipedia LPDB v3 或 curation 兜底。
+async function fetchSteamScheduledLeagueGames(leagueId, dateMin, dateMax) {
+  // date_min/date_max：Unix 秒（Valve 规范）；云函数环境用 process.env 避免时区漂移
+  const nowSec = Math.floor(Date.now() / 1000);
+  const params = {
+    date_min: dateMin || nowSec,
+    date_max: dateMax || (nowSec + 14 * 24 * 3600)  // 默认未来 14 天
+  };
+  const data = await fetchSteam('/GetScheduledLeagueGames', params);
+  if (!data || !data.result || !data.result.games) return [];
+  const games = Array.isArray(data.result.games) ? data.result.games : [];
+  return games.filter(function (g) {
+    return String(g.league_id) === String(leagueId);
+  });
+}
+
+// 把 Steam live/scheduled 对局归一化为客户端合并段兼容的字段
+function normalizeSteamLiveGame(g) {
+  if (!g) return null;
+  try {
+    const rad = g.radiant_team || {};
+    const dire = g.dire_team || {};
+    const seriesId = g.series_id || 0;
+    const seriesType = typeof g.series_type === 'number' ? g.series_type : null;
+    const startTime = Math.floor(Date.now() / 1000);  // live 无固定开始时间，用当前
+    return {
+      // —— OpenDota 形状（客户端 groupSeries 聚合键）——
+      series_id: seriesId,
+      series_type: seriesType,
+      league_id: g.league_id,
+      radiant_team_id: rad.team_id || 0,
+      dire_team_id: dire.team_id || 0,
+      radiant_win: (g.radiant_series_wins > g.dire_series_wins),
+      match_id: g.match_id || g.server_steam_id || 0,
+      start_time: startTime,
+      // —— Liquipedia 形状（league-detail.js L800 合并段读取）——
+      team1Name: rad.team_name || '',
+      team2Name: dire.team_name || '',
+      team1Short: rad.team_name || '',
+      team2Short: dire.team_name || '',
+      startTime: startTime,
+      // 系列 BO 比分（Steam 原生提供，比 LPDB 自己推断更准）
+      score1: typeof g.radiant_series_wins === 'number' ? g.radiant_series_wins : 0,
+      score2: typeof g.dire_series_wins === 'number' ? g.dire_series_wins : 0,
+      phase: 'live',
+      boType: null,
+      // 队标 UGC URL（Steam 直接返回，无需另查）
+      team1Logo: rad.team_logo || '',
+      team2Logo: dire.team_logo || '',
+      stage: g.stage_name || '',
+      source: 'steam-live'
+    };
+  } catch (e) {
+    console.warn('[SteamLive] normalize failed:', e && e.message);
+    return null;
+  }
+}
+
+function normalizeSteamScheduledGame(g) {
+  if (!g) return null;
+  try {
+    // GetScheduledLeagueGames 返回的 teams 是数组（可能为空——未公布对阵）
+    const teams = Array.isArray(g.teams) ? g.teams : [];
+    const t1 = teams[0] || {};
+    const t2 = teams[1] || {};
+    const startTime = typeof g.starttime === 'number' ? g.starttime : 0;
+    return {
+      // Scheduled 无 series_id/series_type（Valve 设计：未开赛不分配）
+      // 用「队名对 + 同日」让客户端 groupLiquipediaMatches 兜底聚合
+      series_id: 0,
+      series_type: null,
+      league_id: g.league_id,
+      radiant_team_id: t1.team_id || 0,
+      dire_team_id: t2.team_id || 0,
+      match_id: g.game_id || 0,
+      start_time: startTime,
+      team1Name: t1.team_name || '',
+      team2Name: t2.team_name || '',
+      team1Short: t1.team_name || '',
+      team2Short: t2.team_name || '',
+      startTime: startTime,
+      score1: null,
+      score2: null,
+      phase: 'upcoming',
+      boType: null,
+      team1Logo: '',
+      team2Logo: '',
+      stage: g.comment || '',
+      source: 'steam-scheduled'
+    };
+  } catch (e) {
+    console.warn('[SteamScheduled] normalize failed:', e && e.message);
+    return null;
+  }
+}
+
+async function steamLeagueScheduledMatches(params, force) {
+  const leagueId = (params && (params.leagueId || params.id)) || null;
+  if (!leagueId) return { data: null, error: makeError(ERROR_CODES.BAD_REQUEST, 'leagueId required') };
+  if (!STEAM_KEY) return { data: null, error: makeError(ERROR_CODES.NOT_CONFIGURED, 'STEAM_API_KEY not set') };
+
+  const cacheKey = 'steam_schedule_' + leagueId;
+  // force 节流：与 liquipediaScheduledMatches 同策略
+  if (!force) {
+    const cached = await getCache(cacheKey);
+    if (cached) return { data: cached, source: 'cache' };
+  } else {
+    const last = _lastForceFetch[cacheKey] || 0;
+    if (Date.now() - last < FORCE_MIN_GAP_MS) {
+      const cached = await getCache(cacheKey);
+      if (cached) return { data: cached, source: 'cache-recent' };
+    }
+    _lastForceFetch[cacheKey] = Date.now();
+  }
+
+  try {
+    // ★ 2026-08-21：GetScheduledLeagueGames 端点已被 Valve 删除（返回 404），
+    //   故只抓 LIVE；UPCOMING 段依赖 Liquipedia LPDB v3（申请中）或 curation 兜底。
+    const liveRaw = await fetchSteamLiveLeagueGames(leagueId).catch(function (e) {
+      console.warn('[SteamLive] fetch failed:', e && e.message);
+      return [];
+    });
+
+    const liveMatches = (liveRaw || []).map(normalizeSteamLiveGame).filter(Boolean);
+    const all = liveMatches;
+
+    console.log('[SteamLeague] league=' + leagueId + ' liveGames=' + (liveRaw || []).length +
+                ' normalized=' + liveMatches.length);
+
+    const payload = { matches: all, boFormat: null };
+    if (all.length) {
+      await setCache(cacheKey, payload, TTL.liquipediaSchedule).catch(function () {});
+    }
+    return { data: payload, source: 'steam' };
+  } catch (e) {
+    return { data: null, error: makeError(ERROR_CODES.UPSTREAM_ERROR, 'Steam 联赛对阵请求异常', (e && e.message) || String(e)) };
+  }
+}
+
 async function handleGetLiquipediaUpcoming() {
   try {
     const data = await fetchLiquipediaUpcoming();
@@ -1924,6 +2096,8 @@ const HANDLERS = new Map([
   // STRATZ / Steam 代理
   ['stratzGql', handleStratzGql],
   ['steamProxy', handleSteamProxy],
+  // Steam 联赛 LIVE + UPCOMING 对阵（2026-08-21，LIVE/UPCOMING 主源）
+  ['steamLeagueScheduled', (e) => steamLeagueScheduledMatches(e.params, e.force)],
   // Liquipedia
   ['getLiquipediaUpcoming', handleGetLiquipediaUpcoming],
   ['liquipediaLeagueMeta', (e) => liquipediaLeagueMeta(e.params, e.force)],

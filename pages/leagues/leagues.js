@@ -7,6 +7,7 @@ const stratz = require('../../utils/stratz.js');
 const cloudProxy = require('../../utils/cloudProxy.js');
 const tiers = require('../../utils/tiers.js');
 const remoteCuration = require('../../utils/remoteCuration.js');
+const curation = require('../../utils/curation.js');
 
 // 跨页状态持久化键（I5）：离开页面时保存筛选/关键词/滚动位置，返回时还原
 const VIEW_KEY = 'leagues_view_state';
@@ -383,6 +384,9 @@ Page({
     // 轻量 normalize：只用 util.unifiedTier（OpenDota tier 映射，无网络/无 curation），
     // 不调 remoteCuration.curatedEventFor()（最重的遍历，单条 1-3ms × 150-300 条 = 150-900ms）。
     if (!l || !l.leagueid) return null;
+    // 2026-08-21：curation 黑名单守卫——OpenDota 被滥用的 leagueid（如 16251 Party To Play league）
+    // 直接返回 null，被后续 .filter(x => x && x.rank >= 1) 丢弃。
+    if (curation.isExcludedLeagueId(l.leagueid)) return null;
     const ut = util.unifiedTier(l);
     const grade = (ut.grade || 'S').toUpperCase();
     const rank = ut.rank || 0;
@@ -521,6 +525,8 @@ Page({
 
   normalize(l, win) {
     if (!l || !l.leagueid) return null;
+    // 2026-08-21：curation 黑名单守卫（与 normalizeLite 一致）
+    if (curation.isExcludedLeagueId(l.leagueid)) return null;
     const ut = util.unifiedTier(l);
     // 从 curation（含 remoteCuration 热更新覆盖）取权威补充字段
     // 2026-07-27：传入 leagueId + game 上下文，启用 curation 引擎的
@@ -554,7 +560,7 @@ Page({
       lastEnd: w.lastEnd || 0,
       startDate: (cur && cur.start) || null,
       endDate: (cur && cur.end) || null
-    });
+    }, { leagueid: l.leagueid, curated: !!cur });
     // curation 显式状态硬覆盖（2026-08-14 方案 B：加时间窗口守卫）：
     //   原实现无条件信任 curation status，导致人工初值过期后赛事卡死为「僵尸进行中」
     //   （如 EPL Masters I 标记"进行中"但实际已结束 2 天仍显示 ongoing）。

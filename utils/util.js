@@ -1,4 +1,6 @@
 const tiers = require('./tiers.js');
+const curation = require('./curation.js');
+const config = require('./config.js');
 
 // 统一赛事分级：优先社区精选规则（tiers.js），否则回退 OpenDota 的 tier 枚举。
 // 返回 { grade:'S'|'A'|'B'|'C', rank:0..3, label, source:'community'|'opendota' }
@@ -124,11 +126,21 @@ function statusOf(win, now) {
 //   1. earliest/latest/lastEnd 为正数（无效值置 0）
 //   2. 单调性：lastEnd >= latest >= earliest，违反则丢弃异常值（防 SQL 返回脏数据）
 //   3. curation startDate/endDate 有效性：start > 0 且 end >= start，否则置 null
+//   4. 跨度合理性：lastEnd - earliest > maxSpanSec（默认 365 天）且该 leagueid 不在
+//      curation 权威库中时，视为被滥用的脏数据，清零全部窗口字段（让列表过滤掉）。
 // 返回归一化后的 { earliest, latest, lastEnd, startDate, endDate }。
 // 2026-07-28：列表页 loadLeagueEntry/loadUpcomingSerial 与详情页 load() 均应调用此函数，
 //   确保两边对「赛期」与「状态判定」使用完全一致的数据源，防止同类不一致 BUG 复发。
-function validateLeagueWindow(win) {
-  if (!win) return { earliest: 0, latest: 0, lastEnd: 0, startDate: null, endDate: null };
+// 2026-08-21：新增跨度阈值守卫（ctx.leagueid + ctx.curated 命中守卫），拦截
+//   Party To Play league 类 OpenDota 被滥用的脏数据。
+//
+// ★ 可选第二参 ctx：{ leagueid, curated }，用于跨度守卫
+//   - leagueid：当命中跨度阈值时检查是否在 curation 权威库（已策展则豁免）
+//   - curated：curation 命中标志（调用方预先查询的结果，避免函数内反复查表）
+//   不传 ctx 或 ctx 缺失时退化为旧行为（不做跨度守卫，保持向后兼容）。
+function validateLeagueWindow(win, ctx) {
+  const zero = { earliest: 0, latest: 0, lastEnd: 0, startDate: null, endDate: null };
+  if (!win) return zero;
   const num = function (v) { const n = Number(v); return (isFinite(n) && n > 0) ? n : 0; };
   const earliest = num(win.earliest);
   const latest = num(win.latest);
@@ -141,6 +153,22 @@ function validateLeagueWindow(win) {
   const curE = num(win.endDate);
   const startDate = (curS > 0 && curE >= curS) ? curS : null;
   const endDate = (startDate != null) ? curE : null;
+  // 跨度守卫：满足以下全部条件时视为脏数据，清零窗口
+  //   ① 有 ctx 上下文（调用方传入 leagueid）
+  //   ② earliest 与 validLastEnd 都为正数
+  //   ③ 跨度超过 maxSpanSec（默认 365 天）
+  //   ④ 该 leagueid 既不在 curation 黑名单（isExcludedLeagueId）也未在 curation 权威库命中（ctx.curated）
+  //     —— curation 命中的真实赛事（如 DPC 整赛季）即使跨度过长也保留
+  if (ctx && earliest > 0 && validLastEnd > 0) {
+    var maxSpan = (config.leagueWindow && config.leagueWindow.maxSpanSec) || (365 * 86400);
+    if (validLastEnd - earliest > maxSpan) {
+      // 黑名单 leagueid 直接清零
+      if (curation.isExcludedLeagueId(ctx.leagueid)) return zero;
+      // 未在 curation 命中（非人工策展）也清零
+      if (!ctx.curated) return zero;
+      // 命中 curation 则保留（真实长周期赛事）
+    }
+  }
   return {
     earliest: earliest,
     latest: validLatest,

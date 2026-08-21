@@ -464,7 +464,7 @@ Page({
     // - Liquipedia 请求失败时静默降级，仅显示 OpenDota 数据；若两者均无，显示「暂无比赛数据」。
     const tasks = [
       hasValidId ? api.getLeagueMatches(this.data.leagueId) : Promise.resolve([]),
-      liquipedia.getScheduledMatches(this.data.name)
+      liquipedia.getScheduledMatches(this.data.name, { leagueId: hasValidId ? this.data.leagueId : null })
     ];
     return Promise.all(tasks)
       .then(([list, scheduled]) => {
@@ -551,7 +551,7 @@ Page({
           lastEnd: mEnd,
           startDate: (cur && cur.start) || null,
           endDate: (cur && cur.end) || null
-        });
+        }, { leagueid: Number(this.data.leagueId), curated: !!cur });
         // 状态判定：statusOf(mixed) + curation 显式状态覆盖（与列表页完全一致）
         // ★ 2026-08-14 方案 B：加时间窗口守卫，防 curation status 过期导致僵尸状态。
         //   与 leagues.js normalize / 本文件 _renderLocalSkeleton 保持字节级一致：
@@ -1206,7 +1206,7 @@ Page({
     }
     this._refreshing = true;
     var self = this;
-    return liquipedia.getScheduledMatches(this.data.name, { force: true })
+    return liquipedia.getScheduledMatches(this.data.name, { force: true, leagueId: this.data.leagueId })
       .then(function (scheduled) {
         // ★ 2026-08-04：新契约 { matches, boFormat }（兼容旧数组）
         if (!scheduled || !Array.isArray(scheduled.matches)) return { live: 0, upcoming: 0 };

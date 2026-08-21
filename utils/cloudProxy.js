@@ -87,6 +87,15 @@ proxy.steamProxy = function (path, params) {
   return call('steamProxy', { path: path, params: params || {} });
 };
 
+// Steam 联赛 LIVE + UPCOMING 对阵聚合（2026-08-21，LIVE/UPCOMING 主源）：
+// 云端调 GetLiveLeagueGames + GetScheduledLeagueGames 按 leagueId 过滤，归一化为
+// { matches: [...], boFormat: null }（与 liquipediaScheduledProxy 同契约）。
+// 用于 liquipedia.getScheduledMatches 前置优先路径——Steam 命中即返回，
+// 未命中 / 云函数未部署 / STEAM_API_KEY 未配 → 调用方回退到 Liquipedia 路径。
+proxy.steamLeagueScheduledProxy = function (leagueId, force) {
+  return call('steamLeagueScheduled', { leagueId: leagueId }, force ? { force: true } : null);
+};
+
 // Liquipedia 赛事元数据代理（A+B 双源）：客户端走云函数（Node.js 可设 UA），
 // 规避 wx.request 禁设 User-Agent 的限制。云函数 aggregation 的 liquipediaLeagueMeta
 // action 抓取 + 纯解析，返回与 liquipedia.getLeagueMetadata 同形状的 metadata。

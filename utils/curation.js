@@ -13,6 +13,27 @@
 
 const consensus = require('./consensus.js');
 
+// ===== §10 已知脏数据黑名单（按 leagueid）（2026-08-21）=====
+// 痛点：OpenDota 的 tier=professional 审核宽松，社区赛/业余对局经常被打成 professional，
+//   又因 leagues.js 信任 OpenDota tier 直接映射 S 级，导致脏数据进入列表。
+// 典型案例：leagueid=16251 "Party To Play league" —— 有人在 2024-02-11 ~ 2026-08-19
+//   长达 920 天里把 836 场杂乱对局都挂到这个 leagueid 下，Liquipedia 不收录（反向验证）。
+// 方案：curation 黑名单 + validateLeagueWindow 跨度阈值（util.js）双保险拦截。
+const EXCLUDE_LEAGUE_IDS = [
+  16251   // Party To Play league —— 非正式赛事，920 天 / 836 场脏数据
+];
+
+// 检查 leagueid 是否在黑名单中（参数类型宽松，支持数字或数字字符串）
+function isExcludedLeagueId(id) {
+  if (id == null) return false;
+  var n = Number(id);
+  if (!isFinite(n) || n <= 0) return false;
+  for (var i = 0; i < EXCLUDE_LEAGUE_IDS.length; i++) {
+    if (Number(EXCLUDE_LEAGUE_IDS[i]) === n) return true;
+  }
+  return false;
+}
+
 // ===== 重大赛事（规范名 + 等级 + 可选日期提示）=====
 // aliases 含规范名的小写无分隔形式，用于模糊匹配 OpenDota 返回的各种写法。
 // start/end 为 Unix 秒（UTC），用于时间交叉验证补强。
@@ -717,6 +738,8 @@ module.exports = {
   CURATED_EVENTS: CURATED_EVENTS,
   CURATED_TEAMS: CURATED_TEAMS,
   TI_CONTESTANT_TEAM_IDS: TI_CONTESTANT_TEAM_IDS,
+  EXCLUDE_LEAGUE_IDS: EXCLUDE_LEAGUE_IDS,
+  isExcludedLeagueId: isExcludedLeagueId,
   buildLookups: buildLookups,
   curatedEventFor: curatedEventFor,
   curatedTeamFor: curatedTeamFor,

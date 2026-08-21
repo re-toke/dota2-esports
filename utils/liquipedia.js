@@ -447,6 +447,11 @@ function getTeamRoster(name) {
 //   - 对外调用形态不变：getScheduledMatches(name) / getScheduledMatches(name, { force: true })
 //   - ★ 2026-08-04 返回契约升级：resolve { matches: [...], boFormat: {...} }（BO 判定引擎 S2 信号）
 //     （兼容旧形状：旧云函数/旧缓存返回数组 → 归一化为 { matches: arr, boFormat: null }）
+//   - ★ 2026-08-21 新增 Steam 优先路径：opts.leagueId 有值且云函数可用时，
+//     先调 Steam GetLiveLeagueGames（LIVE 主源，2026-08-21 实测存活）。
+//     注意：原计划同时覆盖 UPCOMING 的 GetScheduledLeagueGames 已被 Valve 删除，
+//     UPCOMING 段仍依赖 Liquipedia LPDB v3（申请中）或 curation 兜底。
+//     Steam 命中即返回；未命中 / 未配 leagueId / Steam 失败 → 走原 Liquipedia 路径。
 function getScheduledMatches(name, opts) {
   if (!ENABLED) return Promise.resolve({ matches: [], boFormat: null });
   if (!name) return Promise.resolve({ matches: [], boFormat: null });
@@ -478,16 +483,44 @@ function getScheduledMatches(name, opts) {
     return { matches: [], boFormat: null };
   }
 
-  if (typeof wx !== 'undefined' && wx.cloud && cloudProxy.isAvailable()) {
-    return cloudProxy.liquipediaScheduledProxy(name, force).then(function (res) {
+  // ★ 2026-08-21：Steam 优先路径（LIVE/UPCOMING 主源）
+  //   条件：opts.leagueId 有值 + 云函数可用 → 先查 Steam，命中即返回，未命中回退 Liquipedia。
+  //   设计：Steam 与 Liquipedia 数据互补——Steam 专精 LIVE/UPCOMING（Valve 原生 series_id），
+  //   Liquipedia 专精赛程元数据/小组赛对阵。两者都查会有冗余但不会冲突（客户端按 series_id 去重）。
+  var leagueId = opts && (opts.leagueId || opts.league_id);
+  var steamTried = false;
+  function trySteamFirst() {
+    if (steamTried) return null;
+    steamTried = true;
+    if (!leagueId) return null;
+    if (typeof wx === 'undefined' || !wx.cloud || !cloudProxy.isAvailable()) return null;
+    return cloudProxy.steamLeagueScheduledProxy(leagueId, force).then(function (res) {
       var norm = normalizeScheduled(res);
-      if (norm.matches.length) {
-        cache.set(cacheKey, norm, CACHE_TTL_SCHEDULE);
+      // Steam 命中（有 LIVE 或 UPCOMING 数据）→ 直接返回
+      if (norm.matches && norm.matches.length) {
         return norm;
       }
-      return fetchScheduledLocal(slug, cacheKey);
+      return null;  // Steam 空 → 回退 Liquipedia
     }).catch(function () {
-      return fetchScheduledLocal(slug, cacheKey);
+      return null;  // Steam 失败 → 回退 Liquipedia
+    });
+  }
+
+  if (typeof wx !== 'undefined' && wx.cloud && cloudProxy.isAvailable()) {
+    // 先试 Steam（若配置了 leagueId）
+    return trySteamFirst().then(function (steamResult) {
+      if (steamResult) return steamResult;
+      // Steam 未命中 → 走原 Liquipedia 云代理路径
+      return cloudProxy.liquipediaScheduledProxy(name, force).then(function (res) {
+        var norm = normalizeScheduled(res);
+        if (norm.matches.length) {
+          cache.set(cacheKey, norm, CACHE_TTL_SCHEDULE);
+          return norm;
+        }
+        return fetchScheduledLocal(slug, cacheKey);
+      }).catch(function () {
+        return fetchScheduledLocal(slug, cacheKey);
+      });
     });
   }
   return fetchScheduledLocal(slug, cacheKey);
