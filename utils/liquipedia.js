@@ -30,6 +30,8 @@ var config = require('./config.js');
 var cache = require('./cache.js');
 var consensus = require('./consensus.js');
 var cloudProxy = require('./cloudProxy.js');
+// ★ 2026-08-22 新增：haglund 兜底源（Liquipedia 云代理失败/空时的降级路径）
+var haglund = require('./haglund.js');
 // 纯 wikitext 解析层（零 wx 依赖）：客户端 / 云函数 aggregation 共用同一份拷贝。
 // 由 scripts/sync-liquipedia-parse.js 镜像到 cloudfunctions/aggregation/liquipedia-parse.js，
 // 保证两侧解析逻辑一致（消除"客户端解析 / 云端解析"漂移）。
@@ -517,13 +519,50 @@ function getScheduledMatches(name, opts) {
           cache.set(cacheKey, norm, CACHE_TTL_SCHEDULE);
           return norm;
         }
-        return fetchScheduledLocal(slug, cacheKey);
+        // ★ Liquipedia 云代理返回空 → 回退 haglund 第三方源
+        return tryHaglundFallback(name, force, cacheKey).then(function (hf) {
+          if (hf && hf.matches.length) return hf;
+          return fetchScheduledLocal(slug, cacheKey);
+        });
       }).catch(function () {
-        return fetchScheduledLocal(slug, cacheKey);
+        // ★ Liquipedia 云代理失败 → 回退 haglund 第三方源
+        return tryHaglundFallback(name, force, cacheKey).then(function (hf) {
+          if (hf && hf.matches.length) return hf;
+          return fetchScheduledLocal(slug, cacheKey);
+        });
       });
     });
   }
-  return fetchScheduledLocal(slug, cacheKey);
+  // 云函数不可用：直接试 haglund 再回退本地
+  return tryHaglundFallback(name, force, cacheKey).then(function (hf) {
+    if (hf && hf.matches.length) return hf;
+    return fetchScheduledLocal(slug, cacheKey);
+  });
+}
+
+// ★ 2026-08-22 haglund 兜底：Liquipedia 云代理失败/空时的降级入口
+//   返回 { matches, boFormat } 形状（与 normalizeScheduled 一致），失败返回 null
+//   - name：当前赛事名（用于按 leagueName 过滤 haglund 的全量对阵）
+//   - force：透传跳过缓存
+//   - cacheKey：可选，命中时把结果写入与 Liquipedia 相同的缓存槽，下次直接走主缓存
+function tryHaglundFallback(name, force, cacheKey) {
+  return haglund.fetchUpcoming({ leagueName: name, force: force }).then(function (res) {
+    if (res && res.matches && res.matches.length) {
+      // 命中则写入与 Liquipedia 相同的 cache key，下次走缓存（与主源缓存策略一致）
+      if (cacheKey) {
+        try { cache.set(cacheKey, res, CACHE_TTL_SCHEDULE); } catch (e) {}
+      }
+      console.log('[liquipedia] haglund 兜底命中, matches=' + res.matches.length +
+                  ' league=' + name + ' boFormat=' + (res.boFormat ? res.boFormat.format : 'null'));
+      return res;
+    }
+    console.log('[liquipedia] haglund 兜底未命中, league=' + name);
+    return null;
+  }).catch(function (e) {
+    // haglund 失败不应阻塞下游，返回 null 让调用方继续回退
+    console.log('[liquipedia] haglund 兜底异常: ' + (e && e.message));
+    return null;
+  });
 }
 
 // 本地抓取 wikitext + 解析赛程（云代理不可用时的兜底路径）
