@@ -508,29 +508,60 @@ function getScheduledMatches(name, opts) {
     });
   }
 
-  if (typeof wx !== 'undefined' && wx.cloud && cloudProxy.isAvailable()) {
-    // 先试 Steam（若配置了 leagueId）
-    return trySteamFirst().then(function (steamResult) {
-      if (steamResult) return steamResult;
-      // Steam 未命中 → 走原 Liquipedia 云代理路径
-      return cloudProxy.liquipediaScheduledProxy(name, force).then(function (res) {
-        var norm = normalizeScheduled(res);
-        if (norm.matches.length) {
-          cache.set(cacheKey, norm, CACHE_TTL_SCHEDULE);
-          return norm;
-        }
-        // ★ Liquipedia 云代理返回空 → 回退 haglund 第三方源
-        return tryHaglundFallback(name, force, cacheKey).then(function (hf) {
-          if (hf && hf.matches.length) return hf;
-          return fetchScheduledLocal(slug, cacheKey);
-        });
-      }).catch(function () {
-        // ★ Liquipedia 云代理失败 → 回退 haglund 第三方源
-        return tryHaglundFallback(name, force, cacheKey).then(function (hf) {
-          if (hf && hf.matches.length) return hf;
-          return fetchScheduledLocal(slug, cacheKey);
-        });
+  // ★ 2026-08-22 关键修复：Steam 只覆盖 LIVE 段（GetScheduledLeagueGames 已被 Valve 删除），
+  //   若 Steam 命中后短路返回，UPCOMING 段永远拿不到数据。
+  //   新策略：Steam 与 Liquipedia/haglund 并行拉取 → 按 phase 合并（Steam 补 LIVE，haglund 补 UPCOMING）。
+  //   phase 区分由 sources.groupLiquipediaMatches / buildSeriesFromSources 下游天然处理。
+  function fetchLiquipediaChain() {
+    return cloudProxy.liquipediaScheduledProxy(name, force).then(function (res) {
+      var norm = normalizeScheduled(res);
+      if (norm.matches.length) {
+        return norm;
+      }
+      // ★ Liquipedia 云代理返回空 → 回退 haglund 第三方源
+      return tryHaglundFallback(name, force, cacheKey).then(function (hf) {
+        if (hf && hf.matches.length) return hf;
+        return fetchScheduledLocal(slug, cacheKey);
       });
+    }).catch(function () {
+      // ★ Liquipedia 云代理失败 → 回退 haglund 第三方源
+      return tryHaglundFallback(name, force, cacheKey).then(function (hf) {
+        if (hf && hf.matches.length) return hf;
+        return fetchScheduledLocal(slug, cacheKey);
+      });
+    });
+  }
+
+  if (typeof wx !== 'undefined' && wx.cloud && cloudProxy.isAvailable()) {
+    // Steam 与 Liquipedia/haglund 并行拉取，合并两源的 matches（互补覆盖 LIVE/UPCOMING）
+    var steamPromise = trySteamFirst();
+    var liqPromise = fetchLiquipediaChain();
+    return Promise.all([steamPromise, liqPromise]).then(function (results) {
+      var steam = results[0] || { matches: [], boFormat: null };
+      var liq = results[1] || { matches: [], boFormat: null };
+      // 按 phase 合并：Steam 主要贡献 LIVE，haglund/Liquipedia 贡献 UPCOMING；
+      //   去重键：(team1Name, team2Name, startTime) 三元组近似唯一
+      var seen = {};
+      var merged = [];
+      var pushIfNew = function (m) {
+        if (!m) return;
+        var key = (m.team1Name || '') + '|' + (m.team2Name || '') + '|' + (m.startTime || m.start_time || 0);
+        if (!seen[key]) {
+          seen[key] = true;
+          merged.push(m);
+        }
+      };
+      (steam.matches || []).forEach(pushIfNew);
+      (liq.matches || []).forEach(pushIfNew);
+      var boFormat = steam.boFormat || liq.boFormat || null;
+      var combined = { matches: merged, boFormat: boFormat };
+      if (merged.length) {
+        try { cache.set(cacheKey, combined, CACHE_TTL_SCHEDULE); } catch (e) {}
+      }
+      console.log('[liquipedia] 合并完成: steam=' + (steam.matches || []).length +
+                  ' liquipedia/haglund=' + (liq.matches || []).length +
+                  ' merged=' + merged.length + ' league=' + name);
+      return combined;
     });
   }
   // 云函数不可用：直接试 haglund 再回退本地
