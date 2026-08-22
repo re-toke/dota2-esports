@@ -96,11 +96,20 @@ function normalizeMatch(raw, nowSec) {
   var nameB = (tB.name && tB.name !== 'TBD' && tB.name !== 'TBA') ? tB.name : '';
   nowSec = nowSec || Math.floor(Date.now() / 1000);
 
-  // phase 推断（与 parseMatchFields 同口径）：
-  //   未来时间 → upcoming；已开始但 < 24h → live；超过 24h → recent
+  // phase 推断（与 parseMatchFields / cloudfunctions/aggregation/liquipedia-parse.js 保持字节级镜像）：
+  //   未来时间（含 5min 缓冲，防时钟漂移）→ upcoming
+  //   已开赛但 < 6h → live（保守，避免短暂状态切换误判）
+  //   超过 6h → recent（绝大多数比赛 < 6h）
+  //   ★ 原 24h 阈值太宽松，导致已结束但缓存陈旧的对局被推为 live → 「进行中误判已开始」
+  //   ★ 2026-08-22 根因 J（顺延误判修复·方案 A 上游侧）：
+  //     顺延场景下规划时间到了但实际未开赛。haglund 无 map/score 信息，
+  //     走「兜底证据 E4：规划时间过后 15min 才视为真正 LIVE」。
+  //     该 15min 容忍窗覆盖：① 准点开赛但数据源延迟回填 ② 与下游 league-detail.js 二次过滤口径一致。
+  var PROVISIONAL_GRACE_SEC = 15 * 60;
   var phase = 'upcoming';
-  if (start && start <= nowSec) {
-    phase = ((nowSec - start) < 24 * 3600) ? 'live' : 'recent';
+  if (start && start <= nowSec - 5 * 60 - PROVISIONAL_GRACE_SEC) {  // 已开赛超过 5min + 15min 顺延容忍才算非 upcoming
+    var elapsed = nowSec - start;
+    phase = (elapsed < 6 * 3600) ? 'live' : 'recent';
   }
 
   return {

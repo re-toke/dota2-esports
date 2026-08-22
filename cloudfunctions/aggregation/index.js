@@ -623,7 +623,7 @@ async function fetchLiquipediaV3Matches(displayName) {
       searchParams: {
         wiki: 'dota2',
         conditions: conditions,
-        query: 'date,tournament,opponentleft,opponentright,status,scoreleft,scoreright,extradata,match2bracketid,pagename',
+        query: 'date,tournament,opponentleft,opponentright,status,scoreleft,scoreright,extradata,match2id,match2bracketid,pagename',
         order: 'date asc',
         limit: '100'
       },
@@ -670,22 +670,49 @@ function normalizeV3Match(m) {
     const t2 = or.name || or.identifier || '';
     const status = m.status || '';
     // phase 粗粒度推导：客户端 groupSeries 会按 startTime + isOngoing 重新精确判定
+    // ★ 2026-08-22 关键修复：原逻辑「有部分比分即推 recent」会把系列中途比分（如 BO3 进行中 1-0）
+    //   误判为已结束；且「startTime <= now 即推 live」无时间漂移缓冲，开赛前几十秒就会误判 live。
+    //   新规则三档：
+    //     · status==='finished' 或 status 显式表示已结束 → recent（信任 LPDB 原生 status）
+    //     · status==='upcoming' 或 startTime > nowSec + 缓冲（5min）→ upcoming（防时钟漂移误判）
+    //     · 其它（已开赛但未显式 finished）→ live（保守进行中，等下游按 isOngoing 二次确认）
     const nowSec = Math.floor(Date.now() / 1000);
-    let phase = 'recent';
-    if (status === 'upcoming' || startTime > nowSec) phase = 'upcoming';
-    else if (status === 'finished' || (m.scoreleft != null && m.scoreright != null && (m.scoreleft || m.scoreright))) phase = 'recent';
-    else phase = 'live'; // 未明确状态 + 已开赛 + 无比分 → 假定进行中
+    const PHASE_BUFFER_SEC = 5 * 60;  // 开赛前 5min 内仍算 upcoming，防服务器/客户端时钟漂移
+    let phase;
+    if (status === 'finished' || /finish|ended|complete/i.test(status)) {
+      phase = 'recent';
+    } else if (status === 'upcoming' || startTime > nowSec + PHASE_BUFFER_SEC) {
+      phase = 'upcoming';
+    } else if (status === 'live' || /live|running|ongoing/i.test(status)) {
+      phase = 'live';
+    } else {
+      // status 缺失或未知：按时间窗口推断
+      // 已开赛但 < 6h 且无 status=finished → 假定进行中（保守，避免把进行中判成已结束）
+      if (startTime <= nowSec + PHASE_BUFFER_SEC && (nowSec - startTime) < 6 * 3600) {
+        phase = 'live';
+      } else if ((nowSec - startTime) >= 6 * 3600) {
+        // 已过开赛 6h 且无显式 status → 推 recent（绝大多数赛事 < 6h，超 6h 基本已结束）
+        phase = 'recent';
+      } else {
+        phase = 'upcoming';
+      }
+    }
     // boType 从 extradata 提取（v3 存 bestof 或 format）
     const extra = m.extradata || {};
     const boStr = v3BoString(extra.bestof || extra.format || extra.bo);
-    // ★ 合成 series_id：优先 LPDB bracket id（同系列共享），否则用 (队名对 + UTC 日) 兜底。
-    //   目的：让同一 BO 系列的若干场在客户端 groupSeries 自然归组（与 OpenDota 同路径，已验证可正确聚合），
-    //   而不是每场各自成为 BO1。这是修复「一场 BO3 被识别成两场 BO1」的关键。
+    // ★ 合成 series_id（2026-08-22 关键修复）：
+    //   优先级：match2id（LPDB 的系列级 ID，同 BO3 各局共享） > match2bracketid > (队名对+UTC日) 兜底。
+    //   ⚠️ 此前用 match2bracketid 作主键 → 同一 bracket 内不同系列会被错误合并；
+    //      且 LPDB 可能给同系列各局分配独立 bracketid（含局号后缀，如 R02-M003-001/002）→ 拆成多张 BO1 卡。
+    //   match2id 才是系列级标识符（参考 Liquipedia DB schema）。
+    const m2id = m.match2id || '';
     const bracket = m.match2bracketid || '';
     const dayBucket = Math.floor(startTime / 86400);
-    const seriesId = bracket
-      ? ('lp_' + bracket)
-      : ('lp_' + (t1 || 'x') + '|' + (t2 || 'x') + '|' + dayBucket);
+    const seriesId = m2id
+      ? ('lp_m' + m2id)
+      : (bracket
+          ? ('lp_' + bracket.replace(/[-_\s]\d{2,3}$/, ''))  // 去掉末尾局号（-001/_002 等），保留系列级前缀
+          : ('lp_' + (t1 || 'x') + '|' + (t2 || 'x') + '|' + dayBucket));
     // 每场胜负：LPDB 左右队固定不换边，radiant_win 按左队(scoreleft)是否胜；
     // 客户端按 radiant_team_id/dire_team_id（=左右队稳定 id）归属比分 → 系列比分 = 左队总胜:右队总胜。
     const sl = typeof m.scoreleft === 'number' ? m.scoreleft : null;
@@ -1304,6 +1331,30 @@ function normalizeSteamLiveGame(g) {
     const seriesId = g.series_id || 0;
     const seriesType = typeof g.series_type === 'number' ? g.series_type : null;
     const startTime = Math.floor(Date.now() / 1000);  // live 无固定开始时间，用当前
+    const score1 = typeof g.radiant_series_wins === 'number' ? g.radiant_series_wins : 0;
+    const score2 = typeof g.dire_series_wins === 'number' ? g.dire_series_wins : 0;
+    // ★ 2026-08-22 修复「已结束比赛卡在进行中」：
+    //   Steam GetLiveLeagueGames 在比赛结束后短暂残留返回该对局（Valve 后端延迟清理），
+    //   旧代码无条件 phase='live' 导致已结束比赛（如 Nigma vs BetBoom 2:0）仍显示进行中。
+    //   新规则：根据系列比分是否已达 BO 上限判定系列是否已结束——
+    //     series_type: 0=BO1(需1胜), 1=BO3(需2胜), 2=BO5(需3胜), 3=BO2(需2胜), 4=BO7(需4胜)
+    //     winsToClinch = Math.ceil((boNum+1)/2)，即 BO3 需 2 胜、BO5 需 3 胜、BO7 需 4 胜
+    //   若 max(score1, score2) >= winsToClinch → 系列已结束 → phase='recent'
+    //   此外，即便无法精确判定（series_type 缺失），若比分总和 >= 6（绝不可能在 BO5 内达到），
+    //   也认为已结束（兜底防御）。
+    let phase = 'live';
+    const totalScore = score1 + score2;
+    if (seriesType != null && seriesType >= 0) {
+      // series_type 映射到 BO 局数：0→BO1, 1→BO3, 2→BO5, 3→BO2, 4→BO7
+      const boNum = [1, 3, 5, 2, 7][seriesType] || (seriesType * 2 + 1);
+      const winsToClinch = Math.ceil(boNum / 2);
+      if (Math.max(score1, score2) >= winsToClinch) {
+        phase = 'recent';
+      }
+    } else if (totalScore >= 6) {
+      // series_type 缺失的兜底：比分总和 >= 6 不可能是进行中的系列
+      phase = 'recent';
+    }
     return {
       // —— OpenDota 形状（客户端 groupSeries 聚合键）——
       series_id: seriesId,
@@ -1311,7 +1362,7 @@ function normalizeSteamLiveGame(g) {
       league_id: g.league_id,
       radiant_team_id: rad.team_id || 0,
       dire_team_id: dire.team_id || 0,
-      radiant_win: (g.radiant_series_wins > g.dire_series_wins),
+      radiant_win: (score1 > score2),
       match_id: g.match_id || g.server_steam_id || 0,
       start_time: startTime,
       // —— Liquipedia 形状（league-detail.js L800 合并段读取）——
@@ -1321,9 +1372,9 @@ function normalizeSteamLiveGame(g) {
       team2Short: dire.team_name || '',
       startTime: startTime,
       // 系列 BO 比分（Steam 原生提供，比 LPDB 自己推断更准）
-      score1: typeof g.radiant_series_wins === 'number' ? g.radiant_series_wins : 0,
-      score2: typeof g.dire_series_wins === 'number' ? g.dire_series_wins : 0,
-      phase: 'live',
+      score1: score1,
+      score2: score2,
+      phase: phase,
       boType: null,
       // 队标 UGC URL（Steam 直接返回，无需另查）
       team1Logo: rad.team_logo || '',

@@ -797,99 +797,21 @@ function getSeriesKey(m) {
   return (sid != null && sid !== 0) ? ('s' + sid) : ('m' + m.match_id);
 }
 
-// ★ 2026-08-12 强化版：series_id 缺失兜底（5 重约束防误并）。
-//   遍历 series_id=null 的局，找到「同队ID对（不计顺序）+ 邻居 series_type≥1 + 邻居≥2局
-//   + 时间夹在邻居实际跨度[first-30min, last+30min]内 + 时间最近」的合格邻居系列，
-//   借用其 series_id 写入 _patchedSeriesKey 软关联字段（不动原 series_id，便于审计回滚）。
-//   OpenDota 修复后无 null 局，此函数自然空转，无副作用。
-function patchNullSeriesId(matches) {
-  if (!PATCH_NULL_SERIES_ENABLED || !matches || matches.length === 0) return matches;
-  const TOL_SEC = 30 * 60;  // 时间容差：前后各 30min（覆盖局间休息 + 数据延迟）
-
-  // 1. 按 series_id 聚合：统计每个非 null 系列的「首末时间 / 局数 / series_type」
-  const seriesStats = {};  // 's1129613' -> { first, last, count, seriesType, teamAId, teamBId }
-  for (var i = 0; i < matches.length; i++) {
-    var m = matches[i];
-    var sid = m.series_id;
-    if (sid == null || sid === 0) continue;
-    var key = 's' + sid;
-    var st = seriesStats[key];
-    var t = m.start_time || 0;
-    if (!st) {
-      seriesStats[key] = {
-        first: t, last: t, count: 1, seriesType: m.series_type,
-        teamAId: m.radiant_team_id, teamBId: m.dire_team_id
-      };
-    } else {
-      if (t < st.first) st.first = t;
-      if (t > st.last) st.last = t;
-      st.count++;
-    }
-  }
-
-  // 2. 构造合格邻居候选清单（约束①②：series_type≥1 + count≥2）
-  var qualified = [];  // [{ key, first, last, seriesType, teamAId, teamBId }]
-  Object.keys(seriesStats).forEach(function (k) {
-    var s = seriesStats[k];
-    if (s.seriesType != null && s.seriesType >= 1 && s.count >= 2 &&
-        s.teamAId != null && s.teamAId > 0 && s.teamBId != null && s.teamBId > 0) {
-      qualified.push({
-        key: k, first: s.first, last: s.last,
-        teamAId: s.teamAId, teamBId: s.teamBId
-      });
-    }
-  });
-  if (qualified.length === 0) return matches;  // 无合格邻居，直接返回原数组
-
-  // 3. 遍历 series_id=null 的局，找时间最近的合格邻居（约束③④⑤）
-  for (var j = 0; j < matches.length; j++) {
-    var nm = matches[j];
-    if (nm.series_id != null && nm.series_id !== 0) continue;
-    // 必须有有效 team_id 对（避免 null===null 误匹配）
-    var nA = nm.radiant_team_id, nB = nm.dire_team_id;
-    if (nA == null || nA <= 0 || nB == null || nB <= 0) continue;
-    var nStart = nm.start_time || 0;
-    if (!nStart) continue;
-
-    var bestNbr = null;
-    var bestDelta = Infinity;
-    for (var k = 0; k < qualified.length; k++) {
-      var q = qualified[k];
-      // 约束③：null 局时间必须夹在邻居系列 [first-TOL, last+TOL] 内
-      if (nStart < q.first - TOL_SEC || nStart > q.last + TOL_SEC) continue;
-      // 约束：队ID 对不计顺序相等（BO3 会换边）
-      var sameDirect = (nA === q.teamAId && nB === q.teamBId);
-      var sameReversed = (nA === q.teamBId && nB === q.teamAId);
-      if (!sameDirect && !sameReversed) continue;
-      // 约束④：取时间最近的合格邻居
-      var delta = Math.abs(nStart - (q.first + q.last) / 2);  // 到邻居系列中心的距离
-      if (delta < bestDelta) {
-        bestDelta = delta;
-        bestNbr = q;
-      }
-    }
-    if (bestNbr) {
-      // ★ 软关联：不动原 series_id，写入 _patchedSeriesKey；可审计 + 可回滚
-      nm._patchedSeriesKey = bestNbr.key;
-      // 结构化日志（开发期可观测；线上自动收集到 wx 结算日志）
-      if (typeof console !== 'undefined' && console.warn) {
-        console.warn('[patchNullSeriesId]', {
-          matchId: nm.match_id, fromSid: null, toKey: bestNbr.key,
-          nbrSpan: [bestNbr.first, bestNbr.last], nullStart: nStart,
-          reason: 'qualified_neighbor_in_window'
-        });
-      }
-    }
-  }
-  // 4. ★ 孤儿互并（补齐旧版只能借邻居、无法两孤儿彼此合并的缺口）：
-  //    对 series_id 仍为空、且未被步骤3借到邻居的局，按「同队ID对(不计顺序) + 同日(UTC 自然日)」
-  //    直接合成共享 series 键，使同一 BO 系列的若干局合并成一张系列卡（而非各自 BO1）。
-  //    适用：LPDB v3 来源（normalizeV3Match 现已产出 series_id，此为兜底）或 OpenDota 两局都漏填 series_id。
-  //    防误并：① 仅同队ID对；② 同日粒度；③ 合成键前缀 'orphan_' 与真实 's<series_id>' 不冲突；④ 步骤5 比分越界自动回滚。
+// ★ 2026-08-22 修复根因 F：孤儿互并段提取为独立函数
+//   原因：patchNullSeriesId 的 L842 `if (qualified.length === 0) return matches;`
+//   在「所有局都 series_id=0/null」时直接返回，跳过孤儿互并段 → 两局各自独立成卡。
+//   提取后让 qualified 为空时也能调用本函数。
+//   逻辑：对 series_id 为空/null/0 且未被借邻居的局，按「同队ID对(不计顺序) + 同日」合成共享键。
+//   防误并：① 仅同队ID对；② 同日粒度；③ 合成键前缀 'orphan_' 与真实 's<series_id>' 不冲突；
+//          ④ series_type >= 1（BO3/BO5）才参与孤儿互并；series_type=0/null 的 BO1 不合并（它们本就是独立的）。
+function _orphanPairMerge(matches) {
   var orphanList = [];
   for (var p = 0; p < matches.length; p++) {
     var pm = matches[p];
     if ((pm.series_id == null || pm.series_id === 0) && !pm._patchedSeriesKey) {
+      // ★ 2026-08-22 防回归：仅 series_type>=1（BO3/BO5）的局才参与孤儿互并。
+      //   series_type=0/null 的局通常是独立 BO1（如小组赛各场独立），不应被合并。
+      if (pm.series_type == null || pm.series_type < 1) continue;
       var pA = pm.radiant_team_id, pB = pm.dire_team_id;
       if (pA == null || pA <= 0 || pB == null || pB <= 0) continue;
       var pStart = pm.start_time || 0;
@@ -915,6 +837,114 @@ function patchNullSeriesId(matches) {
     });
   });
   return matches;
+}
+
+// ★ 2026-08-12 强化版 / 2026-08-22 根因 G 修复：series_id 缺失兜底。
+//   遍历 series_id=null 的局，找到「同队ID对（不计顺序）+ 邻居 series_type≥1
+//   + 时间夹在邻居实际跨度[first-WINDOW, last+WINDOW]内 + 时间最近」的合格邻居系列，
+//   借用其 series_id 写入 _patchedSeriesKey 软关联字段（不动原 series_id，便于审计回滚）。
+//   ★ 2026-08-22 根因 G（Iron Wing vs Spirit）：OpenDota 可能给同一 BO3 的局 1 分配 series_id=null、
+//     局 2 分配有效 series_id（如 TI 2026 主赛事 leagueid=19719 的 Iron Wing vs Spirit：
+//     match_id=8955197224 sid=null（02:36），match_id=8955247801 sid=1132142（04:12）→ null 局在有效局之前 1.6h）。
+//     原约束 count>=2 + 前后容差 30min 双重失败：① 单局邻居 count=1 被排除；② null 局早于有效局 1.6h 超出前侧 30min。
+//     修复：① series_type>=1 即视为合格（即使 count=1）；② 前后窗口对称放宽到 6h（BO3 局间最长 5h+缓冲）。
+//     防误并：① 必须同队ID 对（不计顺序）；② 必须有 series_type≥1（BO3/BO5）；③ 时间窗 6h 上限；
+//            ④ 队ID 对不计顺序匹配（BO3 会换边）。
+function patchNullSeriesId(matches) {
+  if (!PATCH_NULL_SERIES_ENABLED || !matches || matches.length === 0) return matches;
+  // ★ 2026-08-22 根因 G：前后对称 6h 窗口（覆盖 BO3 局间最长 5h + 数据延迟）
+  const WINDOW_SEC = 6 * 3600;
+
+  // 1. 按 series_id 聚合：统计每个非 null 系列的「首末时间 / 局数 / series_type」
+  const seriesStats = {};  // 's1129613' -> { first, last, count, seriesType, teamAId, teamBId }
+  for (var i = 0; i < matches.length; i++) {
+    var m = matches[i];
+    var sid = m.series_id;
+    if (sid == null || sid === 0) continue;
+    var key = 's' + sid;
+    var st = seriesStats[key];
+    var t = m.start_time || 0;
+    if (!st) {
+      seriesStats[key] = {
+        first: t, last: t, count: 1, seriesType: m.series_type,
+        teamAId: m.radiant_team_id, teamBId: m.dire_team_id
+      };
+    } else {
+      if (t < st.first) st.first = t;
+      if (t > st.last) st.last = t;
+      st.count++;
+    }
+  }
+
+  // 2. 构造合格邻居候选清单（约束①②：series_type≥1；★ 2026-08-22 根因 G：count≥1 即可）
+  //   原约束 count>=2 在「单局邻居」场景下失效（如 Iron Wing vs Spirit：局 2 有效 sid 但 count=1）。
+  //   series_type>=1 已经足够区分 BO1（独立）与 BO3/BO5（需合并）；count 仅用于审计，不再做硬约束。
+  var qualified = [];  // [{ key, first, last, seriesType, teamAId, teamBId, count }]
+  Object.keys(seriesStats).forEach(function (k) {
+    var s = seriesStats[k];
+    if (s.seriesType != null && s.seriesType >= 1 && s.count >= 1 &&
+        s.teamAId != null && s.teamAId > 0 && s.teamBId != null && s.teamBId > 0) {
+      qualified.push({
+        key: k, first: s.first, last: s.last, count: s.count,
+        teamAId: s.teamAId, teamBId: s.teamBId
+      });
+    }
+  });
+  if (qualified.length === 0) {
+    // ★ 2026-08-22 修复根因 F：原此处直接 return matches，跳过步骤4（孤儿互并），
+    //   导致「所有局都 series_id=0/null」（如 OpenDota 对 TI 2026 BO3 两局都 series_id=0）时，
+    //   孤儿互并段不执行 → 两局各自独立成卡 → 同一 BO3 显示两张 BO1。
+    //   修复：跳过步骤3（借邻居），但不跳过步骤4（孤儿互并）。
+    //   步骤4 只依赖 series_id 为空/null/0 的局本身，不需要 qualified 邻居。
+    return _orphanPairMerge(matches);
+  }
+
+  // 3. 遍历 series_id=null 的局，找时间最近的合格邻居（约束③④⑤）
+  for (var j = 0; j < matches.length; j++) {
+    var nm = matches[j];
+    if (nm.series_id != null && nm.series_id !== 0) continue;
+    // 必须有有效 team_id 对（避免 null===null 误匹配）
+    var nA = nm.radiant_team_id, nB = nm.dire_team_id;
+    if (nA == null || nA <= 0 || nB == null || nB <= 0) continue;
+    var nStart = nm.start_time || 0;
+    if (!nStart) continue;
+
+    var bestNbr = null;
+    var bestDelta = Infinity;
+    for (var k = 0; k < qualified.length; k++) {
+      var q = qualified[k];
+      // 约束③：null 局时间必须夹在邻居系列 [first-WINDOW, last+WINDOW] 内
+      //   ★ 2026-08-22 根因 G：双向对称 6h 窗口，覆盖 null 局在有效局之前或之后的真实场景
+      //     （OpenDota 的 null 局可能是 BO3 的局 1 或 局 2，顺序不固定）。
+      //     6h 上限足以覆盖 BO3 局间最长 5h + 数据延迟，且能排除「跨日独立场次」（间隔 >6h）。
+      if (nStart < q.first - WINDOW_SEC || nStart > q.last + WINDOW_SEC) continue;
+      // 约束：队ID 对不计顺序相等（BO3 会换边）
+      var sameDirect = (nA === q.teamAId && nB === q.teamBId);
+      var sameReversed = (nA === q.teamBId && nB === q.teamAId);
+      if (!sameDirect && !sameReversed) continue;
+      // 约束④：取时间最近的合格邻居
+      var delta = Math.abs(nStart - (q.first + q.last) / 2);  // 到邻居系列中心的距离
+      if (delta < bestDelta) {
+        bestDelta = delta;
+        bestNbr = q;
+      }
+    }
+    if (bestNbr) {
+      // ★ 软关联：不动原 series_id，写入 _patchedSeriesKey；可审计 + 可回滚
+      nm._patchedSeriesKey = bestNbr.key;
+      // 结构化日志（开发期可观测；线上自动收集到 wx 结算日志）
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn('[patchNullSeriesId]', {
+          matchId: nm.match_id, fromSid: null, toKey: bestNbr.key,
+          nbrSpan: [bestNbr.first, bestNbr.last], nullStart: nStart,
+          reason: 'qualified_neighbor_in_window'
+        });
+      }
+    }
+  }
+  // 4. ★ 孤儿互并（提取为 _orphanPairMerge，2026-08-22 修复根因 F）：
+  //    对 series_id 仍为空/null/0、且未被步骤3借到邻居的局，按「同队ID对(不计顺序) + 同日」合成共享键。
+  return _orphanPairMerge(matches);
 }
 
 function groupSeries(matches) {
@@ -1003,15 +1033,39 @@ function groupSeries(matches) {
         }
       }
     }
-    const phase = isLive ? 'live' : (isUpcoming ? 'upcoming' : 'recent');
-    // 系列 BO 类型判定（基于胜负场数，比 series_type 更可靠）
-    // 规则：
-    //   一方赢3局 → BO5（五局三胜，BO3 不可能出现3胜）
-    //   一方赢2局 → BO3（三局两胜），除非 series_type=0 且恰好2场→BO2（双局积分全胜）
-    //   1-1 平局 → BO2（双局积分制，BO3 不可能平局）
-    //   1场 → BO1
     let boType = 'BO1';
     const st = first.series_type;
+    // ★ 2026-08-22 根因 H（修复 BO3 中途单局独立成 BO1 卡）：
+    //   OpenDota 对进行中的 BO3，可能只收录到已结算的第 1 局（局 2 进行中但 OpenDota 收录滞后）。
+    //   此时所有已返回的局都已结算（radiant_win!=null）→ isLive=false；又没有未来场 → isUpcoming=false
+    //   → phase='recent' → 单局被当成独立 BO1 卡显示在已结束段（比分 1:0 不达 BO3 胜场条件）。
+    //   修复：当 series_type≥1（明确标记 BO3/BO5/BO2）且系列比分未达胜场条件时，强制 isLive=true。
+    //   防误判：① 仅对 series_type≥1（明确系列赛标记）生效，BO1（series_type=0）不受影响；
+    //          ② 必须比分未达胜场条件（已结束 BO3 2:0/2:1 不受影响 → 仍判 recent）；
+    //          ③ 时间窗守卫：最后一场结算后不超过 6h（避免历史 BO3 中途异常数据被无限拉成 live）。
+    if (!isLive && !isUpcoming && st != null && st >= 1) {
+      var _boNumH = { 1: 3, 2: 5, 3: 2 }[st] || 0;  // series_type → BO 局数
+      if (_boNumH > 1) {
+        // ★ BO2 特殊：双局积分制必须打满 2 局才算结束（不论 2:0 还是 1:1 平局），
+        //   不能用「比分达胜场条件」判定（BO2 的 ceil(2/2)=1 → 1:0 会误判已结束）。
+        //   BO3/BO5 用「比分达胜场条件」判定（先达 BO_WIN 即结束，未必打满）。
+        var _seriesStillGoing = false;
+        if (st === 3) {  // BO2
+          _seriesStillGoing = games.length < _boNumH;  // 局数不足 → 仍进行
+        } else {          // BO3/BO5
+          var _winThresholdH = Math.ceil(_boNumH / 2);
+          _seriesStillGoing = Math.max(scoreA, scoreB) < _winThresholdH;
+        }
+        if (_seriesStillGoing) {
+          // 系列仍未决出胜负 → 系列还在进行
+          var _lastEndSecH = (last.start_time || 0) + ((last.duration || 0) || 0);
+          if (_lastEndSecH > 0 && (nowSec - _lastEndSecH) < 6 * 3600) {
+            isLive = true;
+          }
+        }
+      }
+    }
+    const phase = isLive ? 'live' : (isUpcoming ? 'upcoming' : 'recent');
     const maxScore = Math.max(scoreA, scoreB);
     const minScore = Math.min(scoreA, scoreB);
     const totalGames = games.length;
@@ -1621,7 +1675,21 @@ function absorbSettledGames(openSeriesList, liqSeries, teamIdNameResolver) {
         }
       }
       absorbHits(card, hit);
-      return;
+      // ★ 2026-08-22 根因 I：S0/S0.5 全部不命中（hit 为空）时降级到 S1 队名+时间窗关联。
+      //   场景：LPDB v3 路径的 LP 卡 matchIds 与 OpenDota match_id 永不匹配（不同源），
+      //         series_id 也是 'lp_m...' 格式（与 OpenDota 数字格式不同）→ S0/S0.5 全失败。
+      //         原「matchIds 有值即 return」（审核 R3 防 matchIds 部分命中场景降级）在此场景下
+      //         会跳过 S1 → 吸收失败 → 两张 LIVE 卡共存。
+      //   ★ R3 保护精细化：仅当 matchIds 含「OpenDota 同源数字 match_id」时保留 R3 保护（return）；
+      //     若 matchIds 全部是非数字字符串（LPDB v3 路径 'lp_match_...' 格式），允许降级 S1。
+      if (hit.length) return;
+      // 检查 matchIds 是否含 OpenDota 同源格式（纯数字字符串）。
+      //   含 → 上游明确知道这些 match_id（即使本次不命中，可能是数据延迟）→ 保留 R3 return 保护；
+      //   全无 → matchIds 是 LPDB v3 的 'lp_match_...' 格式（不同源）→ 安全降级 S1。
+      var hasOdMatchId = card.matchIds.some(function (id) {
+        return typeof id === 'number' || /^\\d+$/.test(String(id));
+      });
+      if (hasOdMatchId) return;
     }
     // ★ v1.1（2026-08-05，审核 R2/R5）：S1 第二关联键 —— matchIds 为空 + 队名 + 时间窗。
     //   R2：仅 phase==='live' 参与（upcoming 未开赛，禁队名关联 —— S0 靠 matchIds 天然隔离，
@@ -1706,19 +1774,136 @@ function resolveTeamIdName(id, idNameMap, curatedTeams, rawIdMap) {
 function _liqStartOf(m) { return m.startTime || m.start_time || 0; }
 const PHASE_RANK = { live: 3, recent: 2, upcoming: 1 };
 
+// ★ 2026-08-22 根因 E：跨源同对局去重（LPDB v3 ↔ wikitext/Steam LIVE 同时返回同一场 BO3）
+// 诊断脚本 test-iron-wing-diagnosis.js 场景 3/6 确认：两条同队名对+同日记录因 series_id 形态
+// 不同（'lp_mX' vs undefined/数字）被 keyOf 分到不同桶 → 同一 BO3 拆成两张卡。
+// 本函数在进入 keyOf 聚类前先按「归一化队名对 + 同 UTC 日」分组，同组只保留信息量最大的一条。
+// 信息量排序：① 有有效 series_id > 无；② phase rank 高 > 低；③ 系列比分总和 大 > 小；④ 有 boType > 无。
+function _dedupCrossSourceMatches(matches) {
+  if (!matches || matches.length <= 1) return matches;
+  function _normTeam(s) {
+    if (!s) return '';
+    var n = String(s).toLowerCase().trim();
+    n = n.replace(/\s*(esports|e-sports|gaming|team|club)\s*$/g, '');
+    n = n.replace(/[^a-z0-9一-鿿а-яё]/g, '');
+    return n;
+  }
+  function _isTBD(n) { return !n || n === 'tbd' || n === 'tba'; }
+  function _hasValidSid(m) {
+    var sid = m.series_id;
+    if (sid == null) return false;
+    var s = String(sid).trim();
+    return s !== '' && s !== '0' && s !== 'null' && s !== 'undefined' && !/^orphan_/.test(s);
+  }
+  function _infoScore(m) {
+    var score = 0;
+    if (_hasValidSid(m)) score += 1000;
+    score += (PHASE_RANK[m.phase] || 0) * 100;
+    score += ((m.score1 || 0) + (m.score2 || 0)) * 10;
+    if (m.boType) score += 5;
+    if (m.boDeclared) score += 2;
+    if (m.mapSlots) score += 1;
+    return score;
+  }
+  var groups = {};  // 'pairKey@day' -> [matches]
+  var standalone = [];  // 无法归组（TBD 或缺队名）的原样保留
+  matches.forEach(function (m) {
+    var n1 = _normTeam(m.team1Name || m.radiant_team_name);
+    var n2 = _normTeam(m.team2Name || m.dire_team_name);
+    if (_isTBD(n1) || _isTBD(n2) || !n1 || !n2) {
+      standalone.push(m);
+      return;
+    }
+    var st = _liqStartOf(m);
+    if (!st) { standalone.push(m); return; }
+    var day = Math.floor(st / 86400);
+    var pairKey = n1 < n2 ? (n1 + '|' + n2) : (n2 + '|' + n1);
+    var gk = pairKey + '@' + day;
+    if (!groups[gk]) groups[gk] = [];
+    groups[gk].push(m);
+  });
+  var result = standalone.slice();
+  Object.keys(groups).forEach(function (gk) {
+    var grp = groups[gk];
+    if (grp.length === 1) { result.push(grp[0]); return; }
+    // ★ 2026-08-22 修复回归（test-bo3-split-fix T4）：同队名同日多条可能本就是独立场次
+    //   （如小组赛早晚两场），不能无条件合并。按 startTime 排序后用 6h 阈值聚类成子组，
+    //   每个子组只保留 infoScore 最高的一条；子组间隔 >6h 保持独立。
+    grp.sort(function (a, b) { return _liqStartOf(a) - _liqStartOf(b); });
+    var subGroups = [];
+    var curSub = [grp[0]];
+    for (var gi = 1; gi < grp.length; gi++) {
+      var prevStart = _liqStartOf(curSub[curSub.length - 1]);
+      var thisStart = _liqStartOf(grp[gi]);
+      if (thisStart - prevStart <= 6 * 3600) {
+        curSub.push(grp[gi]);  // 间隔 ≤6h → 同一子组（可能是 BO3 的各局）
+      } else {
+        subGroups.push(curSub);
+        curSub = [grp[gi]];  // 间隔 >6h → 新子组（独立场次）
+      }
+    }
+    subGroups.push(curSub);
+    subGroups.forEach(function (sg) {
+      if (sg.length === 1) { result.push(sg[0]); return; }
+      sg.sort(function (a, b) { return _infoScore(b) - _infoScore(a); });
+      result.push(sg[0]);
+    });
+  });
+  return result;
+}
+
 function groupLiquipediaMatches(matches) {
   if (!Array.isArray(matches) || !matches.length) return [];
-  // 聚合键：series_id 优先；缺失时用「队名对(顺序无关) + UTC 自然日」兜底（覆盖 LPDB 未返回 series_id / 旧 wikitext 路径）
+  // ★ 2026-08-22 根因 E 修复：跨源同对局去重（LPDB v3 + wikitext/Steam 同时返回同一场 BO3）
+  //   诊断确认：LPDB v3 路径 series_id='lp_mR02-M001' 与 wikitext 路径 series_id=undefined
+  //   进入 keyOf 后分到不同桶 → 不合并 → 同一 BO3 显示两张卡（Iron Wing vs Spirit 根因）。
+  //   方案：入口先按「归一化队名对 + 同 UTC 日」去重，同组只保留信息量最大的一条
+  //   （优先级：有 series_id > 无；phase=recent > live > upcoming；比分总和大的 > 小的）。
+  matches = _dedupCrossSourceMatches(matches);
+  // 聚合键：series_id 优先（非 0/非空/非 orphan_ 前缀）；否则用「队名对(顺序无关) + 同日桶」兜底。
+  // ★ 2026-08-22 修复 BO3 被拆成两场 BO1：
+  //   ① series_id === 0 视为无效（Steam Scheduled 硬编码 0、LPDB 未分配），不再返回 's_0' 把所有 0 合并；
+  //   ② 兜底键的 day 维度保持「UTC 自然日」粒度（同 PatchNullSeriesId 步骤4 的 orphan 互并口径一致）；
+  //   ③ 合并段二次校验「相邻局时间差 ≤ 6h」链式聚类 —— 解决跨 UTC 午夜的 BO3（23:30→00:30）
+  //      落到不同 day 桶的问题：合并段会检测「同一队名对的多个桶」并按时间差跨桶缝合。
   function keyOf(m) {
     const sid = m.series_id;
-    if (sid != null && sid !== '' && !/^orphan_/.test(String(sid))) {
-      return 's_' + sid;
+    // 有效 series_id：非 null、非空串、非 0（数字或字符串'0'）、非 'null'/'undefined'、非 orphan_ 前缀
+    // ★ 2026-08-22 强化：原仅检查 sid !== 0（数字），漏掉字符串 '0'（Steam LIVE JSON 反序列化后）
+    var sidStr = (sid == null ? '' : String(sid)).trim();
+    var sidInvalid = sid == null || sidStr === '' || sidStr === '0' ||
+                     sidStr === 'null' || sidStr === 'undefined' ||
+                     /^orphan_/.test(sidStr);
+    if (!sidInvalid) {
+      // ★ 2026-08-22：剥离 LPDB bracket id 的局号后缀（如 lp_R02-M003-001 → lp_R02-M003）
+      //   防御 LPDB 给同 BO3 各局分配独立 bracketid（含局号）导致拆分。
+      //   仅对 'lp_' 前缀生效；OpenDota 数字 series_id 与其他前缀原样返回。
+      if (sidStr.indexOf('lp_') === 0) {
+        var stripped = sidStr.replace(/[-_\s]\d{2,3}$/, '');
+        if (stripped !== sidStr) return 's_' + stripped;
+      }
+      return 's_' + sidStr;
     }
-    const t1 = String(m.team1Name || m.radiant_team_name || '').trim().toLowerCase();
-    const t2 = String(m.team2Name || m.dire_team_name || '').trim().toLowerCase();
+    // ★ 2026-08-22 强化兜底键：归一化队名对（顺序无关），与 liquipedia.js 跨源去重同口径。
+    //   原 toLowerCase + sort 容易被 "Team Spirit" vs "Team  Spirit" 双空格、
+    //   "Nigma Galaxy" vs "Nigma" 后缀差异等切开 → 同一 BO3 各局分到不同桶。
+    //   归一化：小写 + 去 esports/gaming/team/club 后缀 + 去非字母数字 + 双向排序。
+    function _normTeam(s) {
+      if (!s) return '';
+      var n = String(s).toLowerCase().trim();
+      n = n.replace(/\s*(esports|e-sports|gaming|team|club)\s*$/g, '');
+      n = n.replace(/[^a-z0-9一-鿿а-яё]/g, '');
+      return n;
+    }
+    var t1 = _normTeam(m.team1Name || m.radiant_team_name);
+    var t2 = _normTeam(m.team2Name || m.dire_team_name);
     const st = _liqStartOf(m);
-    const day = st ? Math.floor(st / 86400) : 0;
-    if ((t1 || t2) && st > 0) return 'k_' + [t1, t2].sort().join('|') + '@' + day;
+    if ((t1 || t2) && st > 0) {
+      const day = Math.floor(st / 86400);
+      // 顺序无关：归一名排序后拼接（防数据源换边）
+      var pair = t1 < t2 ? (t1 + '|' + t2) : (t2 + '|' + t1);
+      return 'k_' + pair + '@' + day;
+    }
     return null; // 无法聚合 → 单独成行
   }
   const buckets = {};
@@ -1729,10 +1914,74 @@ function groupLiquipediaMatches(matches) {
     if (!buckets[k]) { buckets[k] = []; order.push(k); }
     buckets[k].push(m);
   });
-  const out = [];
+  // ★ 跨桶缝合：同一队名对可能跨 UTC 日界分到两个 day 桶（如 BO3 跨午夜），
+  //   这里把队名对相同、day 相邻（差 ≤ 1）的桶合并后再做链式聚类。
+  var teamPairBuckets = {};  // 'teamA|teamB' -> [{ day, key, arr }]
+  Object.keys(buckets).forEach(function (k) {
+    if (/^k_/.test(k) && buckets[k].length) {
+      var atIdx = k.lastIndexOf('@');
+      if (atIdx > 2) {
+        var pair = k.substring(2, atIdx);
+        if (!teamPairBuckets[pair]) teamPairBuckets[pair] = [];
+        teamPairBuckets[pair].push({ key: k, arr: buckets[k] });
+      }
+    }
+  });
+  var stitchedKeys = {};  // 已被缝合消费的桶 key → true
+  var stitchedGroups = [];  // 缝合后的组（每个是数组的数组）
+  Object.keys(teamPairBuckets).forEach(function (pair) {
+    var list = teamPairBuckets[pair];
+    if (list.length <= 1) return;  // 单桶无需缝合
+    // 按 day 升序排
+    list.sort(function (a, b) {
+      var da = a.arr.length ? (_liqStartOf(a.arr[0]) || 0) : 0;
+      var db = b.arr.length ? (_liqStartOf(b.arr[0]) || 0) : 0;
+      return da - db;
+    });
+    // 合并所有同队名对的桶（不限制 day 差，由后续链式聚类的时间差约束精确切分）
+    var merged = [];
+    list.forEach(function (b) { merged = merged.concat(b.arr); stitchedKeys[b.key] = true; });
+    stitchedGroups.push(merged);
+  });
+  // 链式聚类：按 startTime 排序的数组，相邻差 >6h 切开成子组
+  function chainCluster(sorted) {
+    if (!sorted || sorted.length <= 1) return sorted ? [sorted] : [];
+    var groups = [];
+    var cur = [sorted[0]];
+    for (var i = 1; i < sorted.length; i++) {
+      var prevStart = _liqStartOf(cur[cur.length - 1]) || 0;
+      var thisStart = _liqStartOf(sorted[i]) || 0;
+      if (prevStart > 0 && thisStart > 0 && Math.abs(thisStart - prevStart) > 6 * 3600) {
+        groups.push(cur);
+        cur = [sorted[i]];
+      } else {
+        cur.push(sorted[i]);
+      }
+    }
+    groups.push(cur);
+    return groups;
+  }
+  var out = [];
+  // ① 缝合后的组（跨 day 桶的同队名对）→ 链式聚类 → mergeLiquipediaGroup
+  stitchedGroups.forEach(function (merged) {
+    var sorted = merged.slice().sort(function (a, b) {
+      return (_liqStartOf(a) || 0) - (_liqStartOf(b) || 0);
+    });
+    chainCluster(sorted).forEach(function (sg) {
+      if (sg.length >= 1) out.push(mergeLiquipediaGroup(sg));
+    });
+  });
+  // ② 原桶顺序处理（跳过已被缝合消费的）
   order.forEach(function (entry) {
     if (typeof entry === 'string' && buckets[entry]) {
-      out.push(mergeLiquipediaGroup(buckets[entry]));
+      if (stitchedKeys[entry]) return;  // 已在缝合段处理
+      var group = buckets[entry];
+      var sorted = group.slice().sort(function (a, b) {
+        return (_liqStartOf(a) || 0) - (_liqStartOf(b) || 0);
+      });
+      chainCluster(sorted).forEach(function (sg) {
+        if (sg.length >= 1) out.push(mergeLiquipediaGroup(sg));
+      });
     } else {
       out.push(entry); // 无法聚合的原始 match，原样保留
     }

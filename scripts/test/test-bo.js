@@ -776,13 +776,27 @@ function lpSeries(opts) {
       '实际: patched=' + m3._patchedSeriesKey + ' series=' + series.length);
   })();
 
-  // T40④：邻居系列只有 1 局 → 不并（约束②拦截）
+  // T40④：邻居系列只有 1 局 + series_type≥1 → 合并（2026-08-22 根因 G 修复）
+  //   原断言「count=1 不并」与 Iron Wing vs Spirit 真实数据冲突：
+  //   OpenDota 给同 BO3 的两局分别分配 sid=null 与 sid=有效（count=1），原约束②把单局邻居排除 → 拆成两卡。
+  //   修复后：series_type≥1 的单局邻居也视为合格；同时双向 6h 时间窗（覆盖 BO3 局间间隔）。
   (function () {
-    const m1 = mkOd(8900000010, 6666, 1, 3333333, 4444444, true, base);              // 邻居仅 1 局
-    const m2 = mkOd(8900000011, null, null, 3333333, 4444444, true, base + 600);     // null 局
+    const m1 = mkOd(8900000010, 6666, 1, 3333333, 4444444, true, base);              // 邻居仅 1 局（series_type=1）
+    const m2 = mkOd(8900000011, null, null, 3333333, 4444444, true, base + 600);     // null 局，同队ID 对、时间窗内
     const series = sources.groupSeries([m1, m2]);
-    // 邻居 series_type=1 但 count=1，不满足约束②（≥2 局）→ null 局独立
-    assert('T40④: 单局邻居不并 → null 局独立',
+    // 邻居 series_type=1 且 count=1，符合新约束（≥1 即可）→ null 局并入
+    assert('T40④: 单局邻居 series_type≥1 → null 局并入',
+      m2._patchedSeriesKey === 's6666' && series.length === 1,
+      '实际: patched=' + m2._patchedSeriesKey + ' series=' + series.length);
+  })();
+
+  // T40④b：邻居系列只有 1 局 + series_type=0（BO1）→ 不并（防 BO1 数据异常误并到其他独立 BO1）
+  (function () {
+    const m1 = mkOd(8900000015, 6667, 0, 3333333, 4444444, true, base);              // 邻居 BO1（series_type=0）
+    const m2 = mkOd(8900000016, null, null, 3333333, 4444444, true, base + 600);     // null 局
+    const series = sources.groupSeries([m1, m2]);
+    // 邻居 series_type=0（BO1），不满足约束①（≥1）→ null 局独立
+    assert('T40④b: 单局邻居 BO1 (series_type=0) → 不并',
       !m2._patchedSeriesKey && series.length === 2,
       '实际: patched=' + m2._patchedSeriesKey + ' series=' + series.length);
   })();

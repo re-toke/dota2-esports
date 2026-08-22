@@ -37,6 +37,17 @@ function isTBD(name) {
   return TBD_RE.test(s);
 }
 
+// ★ v3 优化项25（2026-08-22 提升为模块级）：队名归一化 —— 小写 + 去常见后缀（esports/gaming/team/club）+ 去空格标点。
+//   原实现位于 §9 局部 if 块内（原 L738），8-22 新增的 refresh logo 队名兜底（oldByTeamPair 双保险，L1332 起）
+//   在块外调用导致 no-undef（ESLint error）+ 运行时 ReferenceError。纯函数无外部依赖，提升后两处共用同一口径。
+function normalizeTeamNameForDedup(name) {
+  if (!name) return '';
+  var n = String(name).toLowerCase().trim();
+  n = n.replace(/\s*(esports|e-sports|gaming|team|club)\s*$/g, '');
+  n = n.replace(/[^a-z0-9一-鿿а-яё]/g, '');
+  return n;
+}
+
 // B4 定时刷新（2026-08-03）：series 指纹 —— 稳定 key + 关键状态字段。
 // refreshSchedule 用它做逐项 diff，仅路径 setData 变化的项，保留用户翻页/折叠态。
 // key：OpenDota series 用 series_id/match_id（groupSeries 生成，稳定）；
@@ -735,13 +746,7 @@ Page({
           //   - 构建 openDotaKeys 时跳过含 TBD 的对阵（避免污染键集）
           //   - 过滤 Liquipedia 赛程时，含 TBD 的对阵直接保留（不查去重键）
           // ★ v3 优化项25：队名归一化增强 — 去掉常见后缀（esports/gaming/team）+ 去空格标点
-          function normalizeTeamNameForDedup(name) {
-            if (!name) return '';
-            var n = String(name).toLowerCase().trim();
-            n = n.replace(/\s*(esports|e-sports|gaming|team|club)\s*$/g, '');
-            n = n.replace(/[^a-z0-9一-鿿а-яё]/g, '');
-            return n;
-          }
+          //   2026-08-22：实现已提升至模块级（文件顶部 isTBD 之后），此处与 refresh 队名兜底共用同一口径。
           // 模糊匹配：队名 A 包含队名 B 或反之（长度 >= 3）
           function fuzzyMatchName(a, b) {
             var na = normalizeTeamNameForDedup(a);
@@ -883,7 +888,12 @@ Page({
               var liqTeamACls = liqIsDraw ? 'draw' : (liqScoreA > liqScoreB ? 'win' : '');
               var liqTeamBCls = liqIsDraw ? 'draw' : (liqScoreB > liqScoreA ? 'win' : '');
               return {
-                key: 'liq-' + normalizeTeamNameForDedup(m.team1Name) + '__' + normalizeTeamNameForDedup(m.team2Name) + '-' + (m.startTime || 0),  // B4 稳定 key（原含不稳定 idx）
+                // ★ 2026-08-22 修复 LOGO 间歇性消失：startTime 改分钟级时间桶（降敏感）。
+                //   原因：进行中比赛的数据源会在轮询间切换（Steam LIVE 用 Date.now() 秒级变化，
+                //   LPDB/haglund 用真实开赛时间），同一对局 key 不同 → refreshSchedule 的
+                //   oldByKey 回填匹配失败 → 轮询重建的空 logo 覆盖已 enrich 的 logo。
+                //   分钟级时间桶让同一对局在 ±60s 内的 startTime 差异归一为同一 key。
+                key: 'liq-' + normalizeTeamNameForDedup(m.team1Name) + '__' + normalizeTeamNameForDedup(m.team2Name) + '-' + Math.floor((m.startTime || 0) / 60),  // B4 稳定 key（分钟桶）
                 games: [],               // Liquipedia 赛程无小场数据
                 scoreA: liqScoreA,
                 scoreB: liqScoreB,
@@ -891,10 +901,12 @@ Page({
                 boLabel: m.boType === 'BO1' ? '单局制' : (m.boType === 'BO2' ? '双局积分' : (m.boType === 'BO3' ? '三局两胜' : '五局三胜')),
                 boTagCls: m.boType === 'BO2' ? 'bo-bo2' : (m.boType === 'BO3' ? 'bo-bo3' : (m.boType === 'BO5' ? 'bo-bo5' : '')),
                 // ★ 2026-08-04：BO 判定引擎信号 —— declaredBo=S1 每场声明（仅 bestof 显式时）；
-                //   seriesType=null（LP 无 OpenDota series_type）；section 用于 S6 阶段先验。
+                //   seriesType：LPDB v3 路径有 series_type（云函数 normalizeV3Match 已映射，
+                //     OpenDota series_type 0/1/2/3），供 resolveBoType S3 信号判定 BO（如 series_type=1 → BO3）；
+                //     wikitext 路径无 series_type → null（由 S4.5 mapSlots 或 S5 比分约束兜底）。
                 //   最终 boType 由 buildSeriesFromSources 末尾的 sources.applyBo 统一覆盖。
                 declaredBo: m.boDeclared ? m.boType : null,
-                seriesType: null,
+                seriesType: (m.series_type != null ? m.series_type : null),
                 // ★ 2026-08-12 方案 A：map 槽数（字段存在计数，含空壳）从 LP parseMatchFields 透传，
                 //   供 resolveBoType S4.5 信号推断 BO（如 3 槽→BO3、5 槽→BO5）。
                 //   LP upcoming/recent 场次无 OpenDota 比分反推路径，mapSlots 是关键 BO 信号。
@@ -957,9 +969,69 @@ Page({
           const _tsize = liqSeries.length;
           liqSeries = liqSeries.filter(function(s) {
             var st = s.lastTime || 0;
-            // ★ v3 优化项⑯：LIVE 24h 二次校验 — 开赛时间必须在 24h 内
+            // ★ 2026-08-22 收紧 LIVE 判定（修复「未开赛对局误判进行中」+「已结束卡在进行中」）：
+            //   原「(fmtNowSec - st) < 24h」会放过未到开赛时间的卡（如服务器时钟漂移、上游 phase 推早）。
+            //   新规则四条件全部满足才算 LIVE：
+            //     ① 已开赛（st <= nowSec + 60s 容差）
+            //     ② 开赛不超过 6h（绝大多数比赛时长上限，超 6h 基本已结束）
+            //     ③ 不在「即将到来 5min 内」（防 phase=live 但 startTime 仍在未来的边界场景）
+            //     ④ 系列比分未达 BO 上限（防 Steam LIVE 残留：比分 2:0 的 BO3 已结束）
             if (s.phase === 'live') {
-              return st > 0 && (fmtNowSec - st) < 24 * 3600;
+              if (!st) return false;
+              var elapsedLive = fmtNowSec - st;
+              if (!(elapsedLive >= -60 && elapsedLive < 6 * 3600)) return false;
+              // ★ 2026-08-22 根因 J（顺延误判修复·方案 A：实际开赛证据守卫）：
+              //   顺延场景：前场 BO3 未结束，后场规划时间到但实际未开赛。原规则只看时间不验证实际进度
+              //   → 后场被误判 LIVE。守卫：必须有「实际开赛证据」才允许进入 LIVE 段。
+              //   证据链（满足任一即放行）：
+              //     E1 系列比分非 0:0（至少一局已结算）—— 适用 LPDB/OpenDota 已返回比分
+              //     E2 matchIds 含真实 OpenDota match（数组非空且首元素数字 > 0）—— 适用已吸收局
+              //     E3 games 数组含已开赛局（radiant_win!=null 或 start_time<=now+60s）—— 适用 OpenDota 直连
+              //     E4 兜底：规划时间已过 15min（PROVISIONAL_GRACE_SEC）—— 准点开赛但数据延迟的容忍窗
+              //   防误伤：守卫只在「无任何证据」时生效，已有真实比分的对局天然通过。
+              var _hasKickoffProof = false;
+              var _s1 = typeof s.score1 === 'number' ? s.score1 : 0;
+              var _s2 = typeof s.score2 === 'number' ? s.score2 : 0;
+              var _scoreA = typeof s.scoreA === 'number' ? s.scoreA : 0;
+              var _scoreB = typeof s.scoreB === 'number' ? s.scoreB : 0;
+              // E1：系列比分非 0:0（兼容 liqSeries.score1/2 与 openDota series.scoreA/B 双字段）
+              if ((_s1 + _s2) > 0 || (_scoreA + _scoreB) > 0) _hasKickoffProof = true;
+              // E2：matchIds 含真实 OpenDota match（数字格式）
+              if (!_hasKickoffProof && Array.isArray(s.matchIds) && s.matchIds.length > 0) {
+                var _firstMid = s.matchIds[0];
+                if (typeof _firstMid === 'number' && _firstMid > 0) _hasKickoffProof = true;
+              }
+              // E3：games 含已开赛局（OpenDota 直连路径才有 games 数组）
+              if (!_hasKickoffProof && Array.isArray(s.games) && s.games.length > 0) {
+                for (var gi = 0; gi < s.games.length; gi++) {
+                  var _g = s.games[gi];
+                  if (_g && (_g.radiant_win != null || (_g.start_time && _g.start_time <= fmtNowSec + 60))) {
+                    _hasKickoffProof = true;
+                    break;
+                  }
+                }
+              }
+              // E4 兜底：规划时间已过 PROVISIONAL_GRACE_SEC（默认 15min），容忍数据延迟
+              var PROVISIONAL_GRACE_SEC = 15 * 60;
+              if (!_hasKickoffProof && (fmtNowSec - st) >= PROVISIONAL_GRACE_SEC) {
+                _hasKickoffProof = true;
+              }
+              // 无任何实际开赛证据 → 降级回 UPCOMING（顺延等待中）
+              if (!_hasKickoffProof) return false;
+              // ★ 比分结束判定：若系列比分已达到 BO 上限则归为已结束，不进 LIVE 段
+              if (_s1 + _s2 > 0) {
+                var _boNum = 0;
+                if (s.boType && /^BO\s*([1-9])$/i.test(s.boType)) {
+                  _boNum = parseInt(RegExp.$1, 10);
+                } else if (s.seriesType != null && s.seriesType >= 0) {
+                  _boNum = [1, 3, 5, 2, 7][s.seriesType] || 0;
+                }
+                if (_boNum > 0) {
+                  var _winsToClinch = Math.ceil(_boNum / 2);
+                  if (Math.max(_s1, _s2) >= _winsToClinch) return false;  // 系列已结束
+                }
+              }
+              return true;
             }
             // UPCOMING：3天内（北京时间）内开始的比赛
             if (s.phase === 'upcoming') return st >= _todayStart && st < _threeDaysEnd;
@@ -1254,9 +1326,27 @@ Page({
         // 按稳定 key 回填旧 series 已 enrich 的 logo/队名 → enrichTeamLogos 的 skip 生效，
         // 只处理新增/变化的 series；队名也不再回退占位。
         var oldByKey = {};
-        (self.allSeries || []).forEach(function (o) { if (o && o.key) oldByKey[o.key] = o; });
+        // ★ 2026-08-22 双保险：同步建一份「归一化队名对」索引，供 key 不匹配时按队名兜底回填 logo。
+        //   场景：进行中比赛数据源切换导致 key 变化（Steam LIVE Date.now() vs LPDB 真实时间），
+        //   按 key 回填失败 → 按队名匹配兜底，确保 logo 不因数据源切换而丢失。
+        var oldByTeamPair = {};
+        (self.allSeries || []).forEach(function (o) {
+          if (!o) return;
+          if (o.key) oldByKey[o.key] = o;
+          if (o.radiantName && o.direName) {
+            var _normA = normalizeTeamNameForDedup(o.radiantName);
+            var _normB = normalizeTeamNameForDedup(o.direName);
+            if (_normA && _normB) oldByTeamPair[_normA + '|' + _normB] = o;
+          }
+        });
         all.forEach(function (s) {
           var old = oldByKey[s.key];
+          // ★ 队名兜底：key 不匹配时按归一化队名对查找（同一场比赛即便 key 变了队名也不变）
+          if (!old && s.radiantName && s.direName) {
+            var _na = normalizeTeamNameForDedup(s.radiantName);
+            var _nb = normalizeTeamNameForDedup(s.direName);
+            if (_na && _nb) old = oldByTeamPair[_na + '|' + _nb];
+          }
           if (!old) return;
           if (!s.radiantLogo && old.radiantLogo) s.radiantLogo = old.radiantLogo;
           if (!s.direLogo && old.direLogo) s.direLogo = old.direLogo;

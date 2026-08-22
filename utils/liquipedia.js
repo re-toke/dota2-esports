@@ -539,18 +539,45 @@ function getScheduledMatches(name, opts) {
     return Promise.all([steamPromise, liqPromise]).then(function (results) {
       var steam = results[0] || { matches: [], boFormat: null };
       var liq = results[1] || { matches: [], boFormat: null };
-      // 按 phase 合并：Steam 主要贡献 LIVE，haglund/Liquipedia 贡献 UPCOMING；
-      //   去重键：(team1Name, team2Name, startTime) 三元组近似唯一
-      var seen = {};
+      // ★ 2026-08-22 修复跨源同对局重复（Steam LIVE ↔ haglund UPCOMING 同对局双卡）：
+      //   Steam LIVE 用 `Date.now()` 作 startTime（无固定开始时间），haglund 用真实开赛时间，
+      //   旧三元组 (team1,team2,startTime) 去重键因 startTime 不同而失效 → 同对局双卡。
+      //   方案：两段去重 ——
+      //     ① 队名归一化键（顺序无关）覆盖跨源同对局；② 三元组键保留作同源内保险。
+      var seen = {};           // 三元组键 → true（同源内严格重复保险）
+      var seenTeams = {};      // 队名对归一化键（顺序无关）→ 'steam-live'（跨源同对局去重主键）
       var merged = [];
-      var pushIfNew = function (m) {
+      // 队名归一化（小写+去空格+去常见后缀，与 league-detail normalizeTeamNameForDedup 同口径）
+      function _normTeam(s) {
+        if (!s) return '';
+        var n = String(s).toLowerCase().trim();
+        n = n.replace(/\s*(esports|e-sports|gaming|team|club)\s*$/g, '');
+        n = n.replace(/[^a-z0-9一-鿿а-яё]/g, '');
+        return n;
+      }
+      function _teamPairKey(n1, n2) {
+        // 顺序无关：两归一名排序后拼接（防 Steam/haglund 队名换边）
+        return n1 < n2 ? (n1 + '|' + n2) : (n2 + '|' + n1);
+      }
+      function _isTBD(n) { return !n || n === 'tbd' || n === 'tba'; }
+      function pushIfNew(m) {
         if (!m) return;
-        var key = (m.team1Name || '') + '|' + (m.team2Name || '') + '|' + (m.startTime || m.start_time || 0);
-        if (!seen[key]) {
-          seen[key] = true;
-          merged.push(m);
+        // ① 三元组严格去重（保险）
+        var tri = (m.team1Name || '') + '|' + (m.team2Name || '') + '|' + (m.startTime || m.start_time || 0);
+        if (seen[tri]) return;
+        // ② 队名对跨源去重：Steam live 卡已存在时，后续同队名对阵（不论 phase/startTime）一律剔除
+        //    （Steam LIVE 数据更权威：含真实 series_id/series_wins；haglund 无 series_id）
+        var n1 = _normTeam(m.team1Name);
+        var n2 = _normTeam(m.team2Name);
+        if (n1 && n2 && !_isTBD(n1) && !_isTBD(n2)) {
+          var pk = _teamPairKey(n1, n2);
+          if (seenTeams[pk]) return;  // 已被先入的 Steam live 占位 → 跳过
+          seenTeams[pk] = m.source || m.phase || 'unknown';
         }
-      };
+        seen[tri] = true;
+        merged.push(m);
+      }
+      // Steam 先入表（LIVE 优先占位），haglund/Liquipedia 后入（同对局被跳过）
       (steam.matches || []).forEach(pushIfNew);
       (liq.matches || []).forEach(pushIfNew);
       var boFormat = steam.boFormat || liq.boFormat || null;
