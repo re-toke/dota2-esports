@@ -908,6 +908,8 @@ Page({
                 // ★ 2026-08-04（v1.1 二次修复）：透传吸收所需字段 —— 此前缺失导致 absorbSettledGames 恒跳过、
                 //   LIVE 比分永远显示 LP score 0:0（模拟脚本手工补了字段掩盖了此断点，真机 0:0 实证）
                 matchIds: m.matchIds || [],
+                // ★ 2026-08-22：透传 series_id —— absorbSettledGames S0.5 跨源关联键（修复 Steam live ↔ OpenDota recent 双卡）
+                series_id: m.series_id != null ? m.series_id : null,
                 team1Name: m.team1Name,
                 team2Name: m.team2Name,
                 radiantName: m.team1Name,

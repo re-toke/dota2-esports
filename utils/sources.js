@@ -1487,9 +1487,21 @@ function applyBo(series, ctx) {
 //   - 方向失败 → 不注入 games，absorbedKeys=[]（跨 tab 双卡为已文档化边界 R6）
 function absorbSettledGames(openSeriesList, liqSeries, teamIdNameResolver) {
   const byMatchId = new Map();
+  // ★ 2026-08-22 新增 bySeriesId 索引：修复 Steam live ↔ OpenDota recent 同对局双卡 BUG。
+  //   背景：同一系列 BO3 的不同局 match_id 不同（第1局=78...98，第2局=78...99），
+  //   仅靠 byMatchId 关联时 Steam 当前局 match_id 在 OpenDota 已结算局中查不到 → 吸收失败 → 双卡。
+  //   series_id 同系列保持一致 → 是跨源关联的更强键。
+  //   仅索引 series_id > 0 的局（0/null 表示无系列，跨不了）。
+  const bySeriesId = new Map();
   (Array.isArray(openSeriesList) ? openSeriesList : []).forEach(function (s) {
     (s.games || []).forEach(function (g) {
       if (g && g.match_id) byMatchId.set(String(g.match_id), { series: s, game: g });
+      const sid = g && (g.series_id != null ? g.series_id : (s.series_id != null ? s.series_id : null));
+      if (sid != null && sid !== 0 && String(sid) !== '') {
+        const key = String(sid);
+        if (!bySeriesId.has(key)) bySeriesId.set(key, []);  // 同 series_id 多局累积
+        bySeriesId.get(key).push({ series: s, game: g });
+      }
     });
   });
   const absorbedKeys = [];
@@ -1577,12 +1589,37 @@ function absorbSettledGames(openSeriesList, liqSeries, teamIdNameResolver) {
   (Array.isArray(liqSeries) ? liqSeries : []).forEach(function (card) {
     if (card.phase === 'recent') return;  // 仅 live/upcoming 参与吸收
     // S0：matchIds 硬关联（保留，优先；审核 R3：matchIds 有值一律走 S0，含不命中，不降级 S1）
+    //   ★ 2026-08-22 S0.5 增强：match_id 不命中时回退 series_id 关联（修复 Steam live ↔ OpenDota recent 双卡）。
+    //   场景：Steam live 卡的 matchIds 含「当前进行局的 match_id」，
+    //         但 OpenDota 已结算局的 match_id 是「该系列上一局」——两者不同，
+    //         而 series_id 在同系列内保持一致 → 回退到 bySeriesId 可正确关联。
     if (card.matchIds && card.matchIds.length) {
       const hit = [];
+      const seriesIdsTried = new Set();   // 防同 series_id 多局重复加入
       card.matchIds.forEach(function (id) {
         const h = byMatchId.get(String(id));
-        if (h) hit.push(h);
+        if (h) {
+          hit.push(h);
+          // 顺带记录这条命中的 series_id，后续不再用同一 series_id 二次加入
+          const sid = h.game && h.game.series_id;
+          if (sid != null && sid !== 0) seriesIdsTried.add(String(sid));
+        }
       });
+      // ★ S0.5：match_id 未全部命中 → 用 card.series_id 回退查 bySeriesId（仅对 live 卡生效，
+      //   upcoming 卡的 series_id 可能尚未分配——未开赛 Valve 不分配 series_id）
+      if ((!hit.length || hit.length < card.matchIds.length) && card.series_id != null && card.phase === 'live') {
+        const sid = String(card.series_id);
+        if (sid !== '0' && sid !== '' && !seriesIdsTried.has(sid) && bySeriesId.has(sid)) {
+          const gamesInSeries = bySeriesId.get(sid);
+          gamesInSeries.forEach(function (h) {
+            // 过滤掉已经在 match_id 命中里的局（避免重复）
+            const alreadyInHit = hit.some(function (existing) {
+              return existing.game && h.game && String(existing.game.match_id) === String(h.game.match_id);
+            });
+            if (!alreadyInHit) hit.push(h);
+          });
+        }
+      }
       absorbHits(card, hit);
       return;
     }
