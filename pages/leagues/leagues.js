@@ -8,6 +8,7 @@ const cloudProxy = require('../../utils/cloudProxy.js');
 const tiers = require('../../utils/tiers.js');
 const remoteCuration = require('../../utils/remoteCuration.js');
 const curation = require('../../utils/curation.js');
+const haglund = require('../../utils/haglund.js');   // ★ 2026-08-22 列表 tab 即将到来兜底源
 
 // 跨页状态持久化键（I5）：离开页面时保存筛选/关键词/滚动位置，返回时还原
 const VIEW_KEY = 'leagues_view_state';
@@ -903,10 +904,15 @@ Page({
         this.mergeLocalSnapshot(results, now);
         // 合并 curation 库的未来赛事（云函数缓存可能未含未举办的重大赛事）
         this.mergeCurationUpcoming(results, null);
-        results.sort((a, b) => (a.startDate || 0) - (b.startDate || 0));
-        this.upcomingList = results;
-        this.setData({ upcomingLoading: false, upcomingProgress: '' });
-        this.applyAndSlice(true);
+        // ★ 2026-08-22：异步合并 haglund 源赛事（Liquipedia 故障期间的核心补充）
+        //  待 haglund 合并完成后再 setData 刷新列表
+        this.mergeHaglundUpcoming(results, now, gen).then(() => {
+          if (gen !== this._upcomingGen) return;
+          results.sort((a, b) => (a.startDate || 0) - (b.startDate || 0));
+          this.upcomingList = results;
+          this.setData({ upcomingLoading: false, upcomingProgress: '' });
+          this.applyAndSlice(true);
+        });
         return true;
       })
       .catch(() => false);
@@ -943,6 +949,15 @@ Page({
     this.upcomingList = results;
     this.setData({ upcomingLoading: false, upcomingProgress: '' });
     this.applyAndSlice(true);
+    // ★ 2026-08-22：异步合并 haglund 源（本地快照可能过时，haglund 提供实时赛事补充）
+    //   先把已有数据立即渲染，haglund 合并完成后再次刷新列表
+    const gen = this._upcomingGen;
+    this.mergeHaglundUpcoming(results, now, gen).then(() => {
+      if (gen !== this._upcomingGen) return;
+      results.sort((a, b) => (a.startDate || 0) - (b.startDate || 0));
+      this.upcomingList = results;
+      this.applyAndSlice(true);
+    });
     return Promise.resolve(true);
   },
 
@@ -998,6 +1013,16 @@ Page({
       this.setData({ upcomingLoading: false, upcomingProgress: '' });
       this.applyAndSlice(true);
     }
+
+    // ★ 2026-08-22：异步合并 haglund 源（与串行查询并行进行，互不阻塞）
+    //   haglund 通常 1-2s 返回，比逐个查 STRATZ/Liquipedia 快很多
+    const haglundGen = this._upcomingGen;
+    this.mergeHaglundUpcoming(results, nowSec, haglundGen).then(() => {
+      if (haglundGen !== this._upcomingGen) return;
+      results.sort((a, b) => (a.startDate || 0) - (b.startDate || 0));
+      this.upcomingList = results.slice();
+      this.applyAndSlice(true);
+    });
 
     // 3. 串行查询剩余赛事（earliest 不在未来的），作为后台补充
     //    优先查知名赛事；同优先级下按最近比赛时间倒序（近期活跃的优先）
@@ -1175,6 +1200,120 @@ Page({
         _win: { startDate: ev.startDate, endDate: ev.endDate }
       });
       if (diag) diag.curationHit = (diag.curationHit || 0) + 1;
+    });
+  },
+
+  // ★ 2026-08-22 新增：从 haglund 第三方源聚合「即将到来」赛事到列表 tab。
+  //
+  // 背景：Liquipedia 故障期间，云函数 preheatUpcoming 无法预热 upcoming_schedule 缓存，
+  // 导致「即将到来」tab 主要靠 curation + 本地快照兜底，遗漏 Liquipedia 独有的新增赛事。
+  // haglund 源（dota.haglund.dev）实时返回全量对阵，可补充这部分缺失。
+  //
+  // 实现：haglund 返回的是「对阵级」数据（每场一条），需聚合为「赛事级」
+  // （按 leagueName 分组，取 min(startsAt)/max(startsAt) 作为赛事 start/end）。
+  // 聚合后用 buildUpcomingCard 转换为卡片，按归一名与已有 results 去重。
+  //
+  // 同步性：本方法是异步的（haglund.fetchUpcoming 返回 Promise），
+  // 调用方（tryCloudUpcoming / tryLocalUpcoming / loadUpcomingSerial）须在
+  // mergeCurationUpcoming 之后链式调用，完成后才会 setData 刷新列表。
+  mergeHaglundUpcoming(results, now, gen) {
+    return haglund.fetchUpcoming({ force: false }).then(function (res) {
+      // gen 校验：调用方传入当前代际，若过时则丢弃（防止晚到的 haglund 响应污染新链路）
+      if (gen != null && gen !== this._upcomingGen) return;
+      const matches = (res && res.matches) || [];
+      if (!matches.length) {
+        console.log('[leagues] mergeHaglundUpcoming: haglund 无数据');
+        return;
+      }
+      console.log('[leagues] mergeHaglundUpcoming: haglund 返回', matches.length, '场对阵');
+
+      // 1) 按 _leagueName 聚合成赛事级（同一 leagueName 下所有场取最早/最晚 startTime）
+      //    ★ TBD/TBA 占位场也参与时间范围计算（它们占据了真实时间槽位，扩展赛事的 end），
+      //      仅 matchCount 不计入（避免虚高场次计数）
+      const evMap = {};
+      matches.forEach(function (m) {
+        const ln = m._leagueName || m.leagueName;
+        if (!ln || !m.startTime) return;
+        const hasTeams = !!(m.team1Name || m.team2Name);
+        if (!evMap[ln]) {
+          evMap[ln] = { name: ln, start: m.startTime, end: m.startTime, count: hasTeams ? 1 : 0 };
+        } else {
+          evMap[ln].start = Math.min(evMap[ln].start, m.startTime);
+          evMap[ln].end = Math.max(evMap[ln].end, m.startTime);
+          if (hasTeams) evMap[ln].count++;
+        }
+      });
+
+      // 2) 时间窗过滤（与 tryCloudUpcoming / mergeLocalSnapshot 同口径）
+      const horizon = now + config.leagueWindow.upcomingRangeSec;
+      const norm = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '').replace(/^the/, '');
+      const seen = {};
+      results.forEach((r) => { const k = norm(r.name); if (k) seen[k] = true; });
+
+      // 3) 与已有 results 去重后合并
+      Object.keys(evMap).forEach((ln) => {
+        const ev = evMap[ln];
+        if (ev.start > horizon) return;       // 超出未来 180 天
+        if (ev.end < now - 86400) return;     // 全部场次已结束超 24h（无 ongoing 价值）
+        const k = norm(ev.name);
+        if (!k) return;
+        if (seen[k]) {
+          // 已存在：若 haglund 数据更完整（end 更晚或 start 更早），修正日期
+          const existing = results.find((r) => norm(r.name) === k);
+          if (existing && ev.end > (existing.endDate || 0)) {
+            existing.endDate = ev.end;
+            existing.dateRange = util.formatDateRange(existing.startDate, ev.end);
+            existing._win = Object.assign({}, existing._win, { endDate: ev.end });
+          }
+          return;
+        }
+        seen[k] = true;
+
+        // haglund 不返回 leagueId/tier，用归一名哈希生成稳定的负数 id（与 mergeCurationUpcoming 同款策略）
+        let hash = 0;
+        for (let j = 0; j < k.length; j++) {
+          hash = ((hash << 5) - hash + k.charCodeAt(j)) | 0;
+        }
+        const fakeId = -(Math.abs(hash) % 1000000 + 2000000);  // -2999999..-2000000 区间（与 curation 区隔）
+        // tier 默认 S（haglund 不返回分级，主流对局通常 S 级；下游展示侧已有兜底）
+        const cardStatus = upcomingCardStatus({ start: ev.start, end: ev.end }, now);
+        const cardBadge = statusBadgeOf(cardStatus);
+        const daysToStart = Math.ceil((ev.start - now) / 86400);
+        const t = tagThemeOf('S');
+        results.push({
+          leagueid: fakeId,
+          legacyFakeId: fakeId,
+          name: ev.name,
+          grade: 'S',
+          rank: 3,
+          tierClass: 'tier-s',
+          label: 'S级',
+          displayLabel: tiers.displayOf('S'),
+          valve: tiers.flagValve(ev.name),
+          topThirdParty: tiers.flagTopThirdParty(ev.name),
+          defunct: false,
+          source: 'haglund',
+          tagTheme: t.theme,
+          tagVariant: t.variant,
+          followed: follow.isFollowed('leagues', fakeId),
+          startDate: ev.start,
+          endDate: ev.end,
+          status: cardStatus,
+          statusText: cardBadge.text,
+          statusColor: cardBadge.color,
+          dateRange: util.formatDateRange(ev.start, ev.end),
+          daysToStart: daysToStart,
+          countdownText: util.countdownTextOf(daysToStart, cardStatus === 'ongoing'),
+          matchCount: ev.count,
+          earliest: ev.start,
+          latest: ev.end,
+          _win: { startDate: ev.start, endDate: ev.end }
+        });
+        console.log('[leagues] mergeHaglundUpcoming: 新增', ev.name, 'start=' + new Date(ev.start * 1000).toISOString());
+      });
+    }.bind(this)).catch(function (e) {
+      // haglund 失败不应阻塞列表加载
+      console.log('[leagues] mergeHaglundUpcoming: 失败', e && e.message);
     });
   },
 
