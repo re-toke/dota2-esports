@@ -13,8 +13,8 @@
 //   - sourceStatus(name)    → 同步读某源状态：'up' | 'down' | 'unknown'
 //   - isDown(name)          → 某源是否明确 down（仅 'down' 为 true，其余 false）
 
-const cache = require('./cache.js');
-const cloudProxy = require('./cloudProxy.js');
+const cache = require('../../utils/cache.js');
+const cloudProxy = require('../../utils/cloudProxy.js');
 
 const TTL = 5 * 60;              // 5min 缓存，控制 health 探测频率
 const KEY = 'data_health_status';

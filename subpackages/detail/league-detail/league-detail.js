@@ -12,7 +12,7 @@ const liquipedia = require('../../../utils/liquipedia.js');
 const heroes = require('../../../utils/heroes.js');
 const logoCache = require('../../../utils/logoCache.js'); // Phase 1-⑦：persistNow onUnload
 // ★ 2026-08-11 长期架构改进落地：数据源健康检查（数据为空时区分「数据源暂不可用」与「确实无数据」）
-const dataHealth = require('../../../utils/dataHealth.js');
+const dataHealth = require('../dataHealth.js');
 // 2026-07-30 修复赛期截断：详情页回退读取 upcoming-local.json 的日期窗口，
 // 覆盖不在 curation 中且无 OpenDota 比赛的赛事（如 1win Essence II，leagueId 为负数占位）。
 // ★ 通过主包 sources 模块间接获取 upcoming-local 快照，避免分包直接 require JSON 的兼容性问题。

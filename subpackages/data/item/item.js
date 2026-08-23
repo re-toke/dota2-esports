@@ -1,6 +1,6 @@
 // subpackages/data/item/item.js
 // 物品列表：搜索 + 分类(全部/常规/配方/中立) + 价格排序（默认/由低到高/由高到低）。
-const items = require('../../../utils/items.js');
+const items = require('../items.js');
 const config = require('../../../utils/config.js');   // P2-A：分页 pageSize（5 列表页既有惯例）
 
 const SORTS = [

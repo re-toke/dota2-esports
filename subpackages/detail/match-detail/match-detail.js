@@ -2,7 +2,7 @@ const api = require('../../../utils/api.js');
 const util = require('../../../utils/util.js');
 const app = getApp();
 const liveSources = require('../../../utils/liveSources.js');
-const realtime = require('../../../utils/realtime.js');
+const realtime = require('../realtime.js');
 const heroes = require('../../../utils/heroes.js');
 const sources = require('../../../utils/sources.js');
 

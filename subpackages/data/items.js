@@ -10,9 +10,9 @@
 //   - 中立物品通过 neutralItems.js 合并入列表（category='neutral'），不再单独追加（避免 id 冲突）。
 //   - 物品图标统一走 Steam CDN（cdn.cloudflare.steamstatic.com，需在小程序后台 downloadFile 合法域名加入）。
 
-const api = require('./api.js');
-const itemZh = require('./itemZh.js');
-const neutralItems = require('./neutralItems.js');
+const api = require('../../utils/api.js');
+const itemZh = require('../../utils/itemZh.js');
+const neutralItems = require('../../utils/neutralItems.js');
 
 // Steam CDN 源站（物品图标绝对地址基址，与英雄头像一致）
 const ITEM_CDN_ORIGIN = 'https://cdn.cloudflare.steamstatic.com';

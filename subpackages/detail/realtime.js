@@ -3,7 +3,7 @@
 // 设计：优先 WebSocket（wss），断线指数退避重连，超过上限或后端不可用时自动降级为轮询。
 // 后端契约见 README「实时比分后端契约」一节；未配置 wss 时直接使用轮询（无后端也能跑）。
 
-const config = require('./config.js');
+const config = require('../../utils/config.js');
 
 function getConf() {
   return (config && config.realtime) || {};

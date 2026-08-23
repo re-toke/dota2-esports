@@ -1532,8 +1532,11 @@ Page({
       // 已结束排除（对齐 util.isOngoing 口径：end 是"最后一天 00:00"，加 1 天宽限，
       // 避免 TI 最后一天 00:00 后被提前隐藏）
       if (end + 86400 < nowSec) return;
-      const isLive = nowSec >= start && nowSec <= end;
-      const daysToStart = Math.ceil((start - nowSec) / 86400);
+      // ★ 2026-08-23 修复「-10天后开赛」：isLive 判定的 end 也须加 1 天宽限，
+      //   与 L1534「已结束」判定保持同一口径。否则赛事最后一天 00:00 后 ~24h 内，
+      //   isLive=false 但 daysToStart<0 → 显示「-N 天后开赛」错误文案。
+      const isLive = nowSec >= start && nowSec <= end + 86400;
+      const daysToStart = Math.max(0, Math.ceil((start - nowSec) / 86400));
       // 简化评分（双旗舰专属，无需 valve/topThirdParty/等级加分——两者天然是旗舰）：
       //   进行中恒优先（层优先级）；未开始按临近开赛线性加分
       const score = isLive ? 100 : Math.max(0, 60 - daysToStart * 2);

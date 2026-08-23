@@ -1,7 +1,7 @@
 // subpackages/data/item-detail/item-detail.js
 // 物品详情：名称 / 价格 / 是否配方 / 商店类型 / 合成树（§8.3 深度数据，2026-07-29）
 // 适用英雄 / 赛事出装率需策展数据或赛后分析，已在详情页标注为「待补充」。
-const items = require('../../../utils/items.js');
+const items = require('../items.js');
 
 Page({
   data: {
