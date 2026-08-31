@@ -77,7 +77,7 @@
 }
 .sk-line {
   height: 24rpx;
-  border-radius: 6rpx;
+  border-radius: var(--radius-sm);
 }
 .sk-line-80 { width: 80%; }
 .sk-line-60 { width: 60%; }
@@ -99,7 +99,7 @@
 .sk-head-icon {
   width: 110rpx;
   height: 110rpx;
-  border-radius: 20rpx;
+  border-radius: var(--radius-lg);
   flex-shrink: 0;
 }
 .sk-detail-head-info {
@@ -116,7 +116,7 @@
 .sk-head-sub {
   height: 26rpx;
   width: 40%;
-  border-radius: 6rpx;
+  border-radius: var(--radius-sm);
 }
 .sk-kpi-strip {
   display: grid;
@@ -135,7 +135,7 @@
 .sk-kpi-label {
   height: 22rpx;
   width: 50%;
-  border-radius: 6rpx;
+  border-radius: var(--radius-sm);
 }
 .sk-kpi-value {
   height: 32rpx;
@@ -176,7 +176,7 @@
 .sk-follow-card {
   width: 300rpx;
   height: 168rpx;
-  border-radius: 18rpx;
+  border-radius: var(--radius-lg);
   background: var(--card-bg-elevated, #222226);
   padding: var(--space-2-5);
   display: flex;
@@ -205,7 +205,7 @@
 .sk-follow-tier {
   width: 80rpx;
   height: 28rpx;
-  border-radius: 6rpx;
+  border-radius: var(--radius-sm);
 }
 .sk-follow-vs {
   height: 32rpx;
@@ -216,7 +216,7 @@
 .sk-follow-meta {
   height: 24rpx;
   width: 80%;
-  border-radius: 6rpx;
+  border-radius: var(--radius-sm);
 }
 
 /* ===== row：简单行骨架 ===== */
@@ -250,7 +250,7 @@
 .sk-row-sub {
   height: 22rpx;
   width: 35%;
-  border-radius: 6rpx;
+  border-radius: var(--radius-sm);
 }
 .sk-row-tail {
   width: 48rpx;

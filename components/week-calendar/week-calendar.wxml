@@ -1,0 +1,29 @@
+<!-- components/week-calendar/week-calendar.wxml -->
+<!-- 批次2 · PRD §4.1：周日历时间轴（横向 7 格 + 数字角标 + 跨周箭头） -->
+<view class="wk">
+  <view wx:if="{{weekSwitchable}}" class="wk-arrow" data-dir="-1" bindtap="onWeekShift" hover-class="wk-arrow--pressed">
+    <text class="wk-arrow-glyph">‹</text>
+  </view>
+
+  <view class="wk-grid">
+    <view
+      wx:for="{{days}}"
+      wx:key="key"
+      class="wk-cell {{item.isToday ? 'wk-cell--today' : ''}} {{selected === item.key ? 'wk-cell--selected' : ''}}"
+      data-key="{{item.key}}"
+      bindtap="onDayTap"
+      hover-class="wk-cell--pressed"
+    >
+      <text class="wk-weekday">{{item.label}}</text>
+      <view class="wk-datewrap">
+        <text class="wk-date {{item.isToday ? 'wk-date--today' : ''}}">{{item.dateNum}}</text>
+        <!-- 数字角标：当日比赛场次数（今天格内反色深色；无比赛不渲染） -->
+        <text wx:if="{{item.count > 0}}" class="wk-badge {{item.isToday ? 'wk-badge--today' : ''}}">{{item.count}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{weekSwitchable}}" class="wk-arrow" data-dir="1" bindtap="onWeekShift" hover-class="wk-arrow--pressed">
+    <text class="wk-arrow-glyph">›</text>
+  </view>
+</view>

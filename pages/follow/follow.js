@@ -40,8 +40,11 @@ Page({
     tierOptions: reminderStrategy.TIER_OPTIONS.map((t) => ({
       grade: t.grade, label: t.label, selected: ['S', 'A'].indexOf(t.grade) >= 0
     })),
-    // 用户登录态展示（R2：不放 letter 字段——openid 恒以 "o" 开头，首字母无区分度）
-    userInfo: { loggedIn: false, name: '' },
+    // ★ 批次4（2026-08-30）· PRD §11.2：用户卡身份升级为 chooseAvatar + 昵称 input，
+    //   仅存本地 storage（无服务端账号体系）。openid 登录保留（订阅前置），不再驱动用户卡 UI。
+    profile: { avatarUrl: '', nickname: '' },
+    // ★ 批次4 §11.1：推送记录默认折叠（sendLogExpanded）
+    sendLogExpanded: false,
     // 每日推送上限（O2/V1：subscribe.js DAILY_LIMIT 未导出，WXML 无法访问模块对象，故硬编码）
     dailyLimit: 5,
     // 空态「发现」按钮文案（按当前 Tab + A/B 实验动态生成）
@@ -51,8 +54,9 @@ Page({
   },
 
   onShow() {
+    // 批次0（2026-08-30）：3-tab 后「我的」索引 3 → 2（首页0/赛事1/我的2）
     if (typeof this.getTabBar === 'function' && this.getTabBar()) {
-      this.getTabBar().setData({ selected: 3 });
+      this.getTabBar().setData({ selected: 2 });
     }
     // 合并 4 次 setData 为 1 次：ctaVariant + items/counts + subStatus + reminder
     // 收集所有字段后一次性 setData，减少 onShow 切回时的渲染开销
@@ -98,20 +102,70 @@ Page({
     };
     this.setData(patch);
     this.syncProfile();
-    this.refreshUserInfo();
+    this._loadProfile();
   },
 
-  // ★ 用户卡片点击：未登录时触发登录流程（R7：不调 restoreSubFromCloud，留给 onShow fire-and-forget）
-  onUserCardTap() {
-    if (this.data.userInfo.loggedIn) return;
-    wx.showLoading({ title: '登录中...', mask: true });
-    auth.ensureLogin().then(() => {
-      wx.hideLoading();
-      this.refreshUserInfo();
-    }).catch(() => {
-      wx.hideLoading();
-      wx.showToast({ title: '登录失败，请稍后重试', icon: 'none' });
-    });
+  // ★ 批次4 §11.2：chooseAvatar 回调——持久化到用户目录（临时路径重启失效），
+  //   saveFile 失败（如磁盘满）时退回存临时路径（本次会话内仍可显示）。
+  onChooseAvatar(e) {
+    const url = e.detail && e.detail.avatarUrl;
+    if (!url) return;
+    try {
+      const fs = wx.getFileSystemManager();
+      const dest = wx.env.USER_DATA_PATH + '/user_avatar_' + Date.now() + '.png';
+      fs.saveFile({
+        tempFilePath: url,
+        filePath: dest,
+        success: () => this._saveProfile({ avatarUrl: dest }),
+        fail: () => this._saveProfile({ avatarUrl: url })
+      });
+    } catch (err) {
+      this._saveProfile({ avatarUrl: url });
+    }
+  },
+
+  // ★ 批次4 §11.2：昵称 input（type=nickname）失焦保存。空值/未变化不写。
+  onNicknameBlur(e) {
+    const v = (e.detail.value || '').trim();
+    if (!v || v === this.data.profile.nickname) return;
+    this._saveProfile({ nickname: v });
+  },
+
+  // 读写本地 profile（key: user_profile）。clearCache 的 clearStorageSync 会一并清空，
+  //   其后 onShow 重新 _loadProfile 回到默认态（龙首剪影 + 占位文案），符合预期。
+  _loadProfile() {
+    let p = null;
+    try { p = wx.getStorageSync('user_profile'); } catch (e) { /* 忽略 */ }
+    if (p && typeof p === 'object') {
+      this.setData({ profile: { avatarUrl: p.avatarUrl || '', nickname: p.nickname || '' } });
+    } else {
+      this.setData({ profile: { avatarUrl: '', nickname: '' } });
+    }
+  },
+
+  _saveProfile(patch) {
+    const p = Object.assign({}, this.data.profile, patch);
+    try { wx.setStorageSync('user_profile', p); } catch (e) { /* 忽略写失败 */ }
+    this.setData({ profile: p });
+  },
+
+  // ★ 批次4 §11.1：推送记录折叠/展开
+  toggleSendLog() {
+    this.setData({ sendLogExpanded: !this.data.sendLogExpanded });
+  },
+
+  // ★ 批次4 §11.3：统计行第三格点击 → 滚动至段三「赛前提醒」卡
+  scrollToReminder() {
+    wx.pageScrollTo({ selector: '#sec-reminder', duration: 300 });
+  },
+
+  // ★ 批次4 §11.1：合并卡开关（卡头 pill）——已开启走取消（含确认弹窗），未开启走订阅
+  onToggleReminder() {
+    if (this.data.subStatus && this.data.subStatus.subscribed) {
+      this.onUnsubscribe();
+    } else {
+      this.onSubscribe();
+    }
   },
 
   // ★ v11 系统配置：隐私与协议入口
@@ -130,7 +184,6 @@ Page({
         if (!res.confirm) return;
         try {
           wx.clearStorageSync();
-          this.refreshUserInfo();
           this.onShow();
           wx.showToast({ title: '已清空', icon: 'success' });
         } catch (e) {
@@ -140,15 +193,8 @@ Page({
     });
   },
 
-  // ★ 刷新用户信息（登录态 + 显示名）
-  refreshUserInfo() {
-    const loggedIn = auth.isLoggedIn();
-    this.setData({
-      userInfo: { loggedIn: loggedIn, name: loggedIn ? '微信用户' : '' }
-    });
-  },
-
   // refresh 保留给显式调用（如取消关注后），onShow 不再调用
+  // （批次4：refreshUserInfo 已随 userInfo 登录态展示移除，改 _loadProfile 本地 profile）
   refresh() {
     const active = this.data.activeTab;
     const raw = follow.list(active);
@@ -278,7 +324,8 @@ Page({
     if (tab === 'leagues') {
       wx.switchTab({ url: '/pages/leagues/leagues' });
     } else {
-      wx.switchTab({ url: '/pages/teams/teams' });
+      // 批次0（2026-08-30）：teams 已退出 tabBar，改 navigateTo
+      wx.navigateTo({ url: '/pages/teams/teams' });
     }
   },
 

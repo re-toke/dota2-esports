@@ -41,7 +41,7 @@
 
 .live-sub {
   font-size: var(--fs-caption);
-  color: #8a8f99;
+  color: var(--text-2);
 }
 
 .live-list {

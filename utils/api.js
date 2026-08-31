@@ -141,9 +141,10 @@ function validateResponse(path, data) {
     return !!(data && Array.isArray(data.rows));
   }
   // 数组型端点：/leagues, /search, /heroes, /heroStats, /items, /heroes/{id}/matchups,
-  //              /teams/{id}/matches, /teams/{id}/players, /leagues/{id}/matches, /players/{id}/matches
+  //              /teams/{id}/matches, /teams/{id}/players, /leagues/{id}/matches, /players/{id}/matches,
+  //              /proMatches, /live（批次2 首页比赛流）
   if (path === '/leagues' || path === '/search' || path === '/heroes' ||
-      path === '/heroStats' || path === '/items' ||
+      path === '/heroStats' || path === '/items' || path === '/proMatches' || path === '/live' ||
       /^\/heroes\/\d+\/matchups$/.test(path) ||
       /^\/teams\/\d+\/matches$/.test(path) || /^\/teams\/\d+\/players$/.test(path) ||
       /^\/leagues\/\d+\/matches$/.test(path) || /^\/players\/\d+\/matches$/.test(path)) {
@@ -396,6 +397,20 @@ function getLeagues() {
     function () { return cached('/leagues', null, config.cacheTTL.leagues); });
 }
 
+// ===== 批次2（2026-08-30）：首页全量比赛流数据源（直连 + 缓存，暂不接入云代理） =====
+// OpenDota /proMatches：最近约 100 场职业赛（含双方队名/比分/胜负/series_type），
+// 覆盖「已结束」主体。字段为平铺形态（radiant_name/dire_name 为字符串）。
+function getProMatches() {
+  return cached('/proMatches', null, config.cacheTTL.proMatches);
+}
+
+// OpenDota /live：当前所有进行中的公开对局（含路人局）。
+// 职业场判定：league_id > 0（注意字段名是 league_id，与 proMatches 的 leagueid 不同）。
+// 该端点天然含 radiant_score/dire_score 实时比分，供 LIVE 卡 60s 轮询刷新。
+function getLiveMatches() {
+  return cached('/live', null, config.cacheTTL.liveMatches);
+}
+
 // 一次 SQL 拿所有赛事近半年的时间窗口：{ leagueid -> { earliest, latest, count } }
 // 用于「正在进行 / 全部（按最近比赛排序）」判定，避免逐个拉 /leagues/{id}/matches。
 function transformLeagueWindows(data) {
@@ -622,6 +637,8 @@ module.exports = {
   invalidateLeagues: invalidateLeagues,
   fetchedAtOf: fetchedAtOf,
   getLeagues: getLeagues,
+  getProMatches: getProMatches,
+  getLiveMatches: getLiveMatches,
   getLeagueWindows: getLeagueWindows,
   getLeagueMatches: getLeagueMatches,
   getMatch: getMatch,

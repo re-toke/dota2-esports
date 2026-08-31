@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>图标方案对比 · 三套风格（含 DOTA2 元素）</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #08090b;
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: #f0f3f6;
+    padding: 32px 0 64px;
+  }
+  .page-head { text-align: center; margin-bottom: 8px; }
+  .page-head h1 { font-size: 20px; color: #FFD15C; font-weight: 700; letter-spacing: 1px; }
+  .page-head p { font-size: 12px; color: #6b7280; margin-top: 6px; line-height: 1.7; }
+  .warn { max-width: 860px; margin: 14px auto 26px; padding: 12px 16px; border: 1px solid rgba(216,68,60,.35); background: rgba(216,68,60,.08); border-radius: 12px; font-size: 12px; color: #ff9d96; line-height: 1.7; }
+  .stage { display: flex; gap: 24px; justify-content: center; flex-wrap: wrap; padding: 0 16px; align-items: flex-start; }
+
+  .set-card { width: 420px; background: #101014; border: 1px solid #23272e; border-radius: 20px; overflow: hidden; }
+  .set-head { padding: 16px 18px 12px; border-bottom: 1px solid #1d2127; }
+  .set-name { font-size: 16px; font-weight: 700; color: #FFD15C; }
+  .set-name small { font-weight: 400; font-size: 11px; color: #6b7280; margin-left: 8px; }
+  .set-desc { font-size: 11px; color: #8b949e; margin-top: 6px; line-height: 1.7; }
+  .set-body { padding: 16px 18px 18px; }
+
+  /* 情境预览：tab bar + 快捷区 */
+  .preview-label { font-size: 10px; color: #6b7280; text-transform: uppercase; letter-spacing: 1px; margin: 2px 0 8px; font-weight: 600; }
+  .pv-tabbar { display: flex; background: rgba(13,13,13,.95); border: 1px solid #23272e; border-radius: 14px; padding: 8px 0 6px; margin-bottom: 10px; }
+  .pv-tab { flex: 1; text-align: center; color: #6b6b73; }
+  .pv-tab.on { color: #FFD15C; }
+  .pv-tab .ic { width: 23px; height: 23px; margin: 0 auto; }
+  .pv-tab .t { font-size: 10px; margin-top: 3px; }
+  .pv-quick { display: flex; gap: 10px; margin-bottom: 16px; }
+  .pv-cell { flex: 1; background: rgba(26,26,30,.92); border: 1px solid #232329; border-radius: 12px; padding: 10px 0 8px; text-align: center; }
+  .pv-cell .ic { width: 26px; height: 26px; margin: 0 auto 6px; }
+  .pv-cell .t { font-size: 11px; color: #c9d1d9; }
+
+  /* 大图标网格 */
+  .grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 8px; }
+  .g-cell { text-align: center; padding: 10px 0 8px; background: #16161a; border: 1px solid #26262b; border-radius: 12px; }
+  .g-cell .ic { width: 30px; height: 30px; margin: 0 auto 6px; }
+  .g-cell .t { font-size: 10px; color: #8b949e; }
+
+  /* 激活态颜色 */
+  .ic { display: inline-block; }
+  .gold { color: #FFD15C; background-color: #FFD15C; }
+  .radiant { color: #3FB950; background-color: #3FB950; }
+  .sapphire { color: #58a6ff; background-color: #58a6ff; }
+  .plain { color: #6b6b73; background-color: #6b6b73; }
+
+  /* game-icons mask 渲染 */
+  .gi { -webkit-mask: var(--gi) center / contain no-repeat; mask: var(--gi) center / contain no-repeat; }
+
+  /* 线性图标 */
+  .luc { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* 填充几何 */
+  .fill { fill: currentColor; }
+
+  .alt-block { margin-top: 10px; padding-top: 12px; border-top: 1px dashed #26262b; }
+  .alt-title { font-size: 11px; color: #8b949e; margin-bottom: 8px; font-weight: 600; }
+  .alt-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .alt-chip { display: flex; align-items: center; gap: 7px; background: #16161a; border: 1px solid #26262b; border-radius: 999px; padding: 6px 12px 6px 8px; }
+  .alt-chip .ic { width: 18px; height: 18px; }
+  .alt-chip .t { font-size: 11px; color: #c9d1d9; }
+  .alt-chip .p { font-size: 10px; color: #6b7280; }
+
+  .license { margin-top: 12px; padding: 10px 12px; background: rgba(200,169,81,.07); border: 1px solid rgba(200,169,81,.25); border-radius: 10px; font-size: 11px; color: #bda05c; line-height: 1.7; }
+</style>
+</head>
+<body>
+<div class="page-head">
+  <h1>图标方案对比 · 三套风格</h1>
+  <p>位置共 6 个：TabBar（首页 / 赛事 / 我的）+ 首页快捷区（战队 / 英雄库 / 物品库）</p>
+</div>
+<div class="warn">
+  版权提示：DOTA2 官方图标（天辉/夜魇 LOGO、英雄头像、物品原图）为 Valve 版权资产，<b>不可直接商用</b>。「DOTA2 元素」通过同题材奇幻游戏符号（遗迹/水晶/盾徽/宝箱/卷轴/奖杯）实现，由 CC BY 3.0 等免费商用授权覆盖。
+</div>
+
+<div class="stage">
+
+  <!-- ============ 方案 A：game-icons.net 剪影风 ============ -->
+  <div class="set-card">
+    <div class="set-head">
+      <div class="set-name">方案 A · 奇幻剪影风<small>game-icons.net</small></div>
+      <div class="set-desc">取自 game-icons.net（4100+ 游戏图标库），实心剪影、游戏味最浓、DOTA2 语境贴合度最高。小尺寸下剪影依然清晰，但与现有 lucide 线性体系差异最大。</div>
+    </div>
+    <div class="set-body">
+      <div class="preview-label">TabBar 情境预览</div>
+      <div class="pv-tabbar">
+        <div class="pv-tab on">
+          <div class="ic gi gold" style="--gi:url('gi/castle.svg')"></div>
+          <div class="t">首页</div>
+        </div>
+        <div class="pv-tab">
+          <div class="ic gi plain" style="--gi:url('gi/diamond-trophy.svg')"></div>
+          <div class="t">赛事</div>
+        </div>
+        <div class="pv-tab">
+          <div class="ic gi plain" style="--gi:url('gi/hooded-figure.svg')"></div>
+          <div class="t">我的</div>
+        </div>
+      </div>
+      <div class="preview-label">快捷区情境预览</div>
+      <div class="pv-quick">
+        <div class="pv-cell"><div class="ic gi gold" style="--gi:url('gi/checked-shield.svg')"></div><div class="t">战队</div></div>
+        <div class="pv-cell"><div class="ic gi radiant" style="--gi:url('gi/sword-brandish.svg')"></div><div class="t">英雄库</div></div>
+        <div class="pv-cell"><div class="ic gi sapphire" style="--gi:url('gi/scroll-unfurled.svg')"></div><div class="t">物品库</div></div>
+      </div>
+
+      <div class="grid">
+        <div class="g-cell"><div class="ic gi gold" style="--gi:url('gi/castle.svg')"></div><div class="t">首页·堡垒</div></div>
+        <div class="g-cell"><div class="ic gi gold" style="--gi:url('gi/diamond-trophy.svg')"></div><div class="t">赛事·奖杯</div></div>
+        <div class="g-cell"><div class="ic gi gold" style="--gi:url('gi/hooded-figure.svg')"></div><div class="t">我的·玩家</div></div>
+        <div class="g-cell"><div class="ic gi gold" style="--gi:url('gi/checked-shield.svg')"></div><div class="t">战队·盾徽</div></div>
+        <div class="g-cell"><div class="ic gi gold" style="--gi:url('gi/sword-brandish.svg')"></div><div class="t">英雄·挥剑</div></div>
+        <div class="g-cell"><div class="ic gi gold" style="--gi:url('gi/scroll-unfurled.svg')"></div><div class="t">物品·卷轴</div></div>
+      </div>
+
+      <div class="alt-block">
+        <div class="alt-title">备选图标（同一库可替换）</div>
+        <div class="alt-row">
+          <div class="alt-chip"><div class="ic gi plain" style="--gi:url('gi/tower-fall.svg')"></div><div><div class="t">崩塌防御塔</div><div class="p">首页备选</div></div></div>
+          <div class="alt-chip"><div class="ic gi plain" style="--gi:url('gi/crossed-swords.svg')"></div><div><div class="t">交叉双剑</div><div class="p">英雄库备选</div></div></div>
+          <div class="alt-chip"><div class="ic gi plain" style="--gi:url('gi/potion-ball.svg')"></div><div><div class="t">秘法药水</div><div class="p">物品库备选</div></div></div>
+          <div class="alt-chip"><div class="ic gi plain" style="--gi:url('gi/book-cover.svg')"></div><div><div class="t">魔法书</div><div class="p">物品库备选</div></div></div>
+          <div class="alt-chip"><div class="ic gi plain" style="--gi:url('gi/orb-wand.svg')"></div><div><div class="t">法球权杖</div><div class="p">英雄库备选</div></div></div>
+          <div class="alt-chip"><div class="ic gi plain" style="--gi:url('gi/spiked-dragon-head.svg')"></div><div><div class="t">龙首</div><div class="p">极端风格参考</div></div></div>
+        </div>
+      </div>
+
+      <div class="license">授权：CC BY 3.0（免费商用，需署名）。落地时在「我的 → 关于」页添加署名：图标来自 game-icons.net（作者 Delapouite / Lorc 等）。</div>
+    </div>
+  </div>
+
+  <!-- ============ 方案 B：填充几何风（自绘） ============ -->
+  <div class="set-card">
+    <div class="set-head">
+      <div class="set-name">方案 B · 填充几何风<small>自绘</small></div>
+      <div class="set-desc">自绘实心几何图形，语义取自 DOTA2：首页 = 遗迹水晶（双方争夺的远古遗迹），英雄库 = 四芒星（英雄高光）。现代感强、实心醒目、无任何授权成本，风格介于剪影与线性之间。</div>
+    </div>
+    <div class="set-body">
+      <div class="preview-label">TabBar 情境预览</div>
+      <div class="pv-tabbar">
+        <div class="pv-tab on">
+          <svg class="ic fill gold" viewBox="0 0 24 24"><path d="M12 1.8l5.6 7.5L12 22.2 6.4 9.3 12 1.8z"/><path d="M12 1.8l1.5 7.4 5.2-.5-5.2 13.5-1.5-20.4z" opacity=".45"/><path d="M6.4 9.3L12 1.8l1.5 7.4-7.1.1z" opacity=".2"/></svg>
+          <div class="t">首页</div>
+        </div>
+        <div class="pv-tab">
+          <svg class="ic fill plain" viewBox="0 0 24 24"><path d="M8 2.5h8v4.2c0 2.9-1.7 5-4 5s-4-2.1-4-5V2.5z"/><path d="M6.3 3.5H3.6c-.4 3.2 1 5.6 3.6 6.4l.9-1.7c-1-.6-1.7-2-1.8-4.7z"/><path d="M17.7 3.5h2.7c.4 3.2-1 5.6-3.6 6.4l-.9-1.7c1-.6 1.7-2 1.8-4.7z"/><path d="M10.8 12.4h2.4l.5 3.3h-3.4l.5-3.3z"/><path d="M6.8 17h10.4l.8 4.5H6l.8-4.5z"/></svg>
+          <div class="t">赛事</div>
+        </div>
+        <div class="pv-tab">
+          <svg class="ic fill plain" viewBox="0 0 24 24"><circle cx="12" cy="7.4" r="3.9"/><path d="M5 20.4c1-4.1 3.9-6.1 7-6.1s6 2 7 6.1c.1.5-.2.9-.7.9H5.7c-.5 0-.8-.4-.7-.9z"/></svg>
+          <div class="t">我的</div>
+        </div>
+      </div>
+      <div class="preview-label">快捷区情境预览</div>
+      <div class="pv-quick">
+        <div class="pv-cell">
+          <svg class="ic fill gold" viewBox="0 0 24 24"><path d="M12 2l7.4 2.5v5.5c0 4.6-3 8.6-7.4 10.4C7.6 18.6 4.6 14.6 4.6 10V4.5L12 2z"/><path d="M12 5l4.6 1.6v3.4c0 3-1.9 5.6-4.6 6.9V5z" opacity=".3"/></svg>
+          <div class="t">战队</div>
+        </div>
+        <div class="pv-cell">
+          <svg class="ic fill radiant" viewBox="0 0 24 24"><path d="M12 1.6l2.4 8 8 2.4-8 2.4-2.4 8-2.4-8-8-2.4 8-2.4 2.4-8z"/><circle cx="12" cy="12" r="1.8" opacity=".35"/></svg>
+          <div class="t">英雄库</div>
+        </div>
+        <div class="pv-cell">
+          <svg class="ic fill sapphire" viewBox="0 0 24 24"><path d="M4.6 4h14.8l2.6 5H2l2.6-5z"/><path d="M4 10h16a1 1 0 0 1 1 1v7.5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V11a1 1 0 0 1 1-1z"/><path d="M9 10h6v3.2a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1V10z" opacity=".4"/><path d="M11 12h2v7h-2v-7z" opacity=".2"/></svg>
+          <div class="t">物品库</div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="g-cell"><svg class="ic fill gold" viewBox="0 0 24 24"><path d="M12 1.8l5.6 7.5L12 22.2 6.4 9.3 12 1.8z"/><path d="M12 1.8l1.5 7.4 5.2-.5-5.2 13.5-1.5-20.4z" opacity=".45"/></svg><div class="t">首页·遗迹水晶</div></div>
+        <div class="g-cell"><svg class="ic fill gold" viewBox="0 0 24 24"><path d="M8 2.5h8v4.2c0 2.9-1.7 5-4 5s-4-2.1-4-5V2.5z"/><path d="M6.3 3.5H3.6c-.4 3.2 1 5.6 3.6 6.4l.9-1.7c-1-.6-1.7-2-1.8-4.7z"/><path d="M17.7 3.5h2.7c.4 3.2-1 5.6-3.6 6.4l-.9-1.7c1-.6 1.7-2 1.8-4.7z"/><path d="M10.8 12.4h2.4l.5 3.3h-3.4l.5-3.3z"/><path d="M6.8 17h10.4l.8 4.5H6l.8-4.5z"/></svg><div class="t">赛事·奖杯</div></div>
+        <div class="g-cell"><svg class="ic fill gold" viewBox="0 0 24 24"><circle cx="12" cy="7.4" r="3.9"/><path d="M5 20.4c1-4.1 3.9-6.1 7-6.1s6 2 7 6.1c.1.5-.2.9-.7.9H5.7c-.5 0-.8-.4-.7-.9z"/></svg><div class="t">我的·玩家</div></div>
+        <div class="g-cell"><svg class="ic fill gold" viewBox="0 0 24 24"><path d="M12 2l7.4 2.5v5.5c0 4.6-3 8.6-7.4 10.4C7.6 18.6 4.6 14.6 4.6 10V4.5L12 2z"/></svg><div class="t">战队·盾徽</div></div>
+        <div class="g-cell"><svg class="ic fill gold" viewBox="0 0 24 24"><path d="M12 1.6l2.4 8 8 2.4-8 2.4-2.4 8-2.4-8-8-2.4 8-2.4 2.4-8z"/></svg><div class="t">英雄·四芒星</div></div>
+        <div class="g-cell"><svg class="ic fill gold" viewBox="0 0 24 24"><path d="M4.6 4h14.8l2.6 5H2l2.6-5z"/><path d="M4 10h16a1 1 0 0 1 1 1v7.5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V11a1 1 0 0 1 1-1z"/><path d="M9 10h6v3.2a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1V10z" opacity=".4"/></svg><div class="t">物品·宝箱</div></div>
+      </div>
+
+      <div class="license">授权：自绘（无任何授权成本与署名义务）。实心填充在 tab bar 上视觉重量更大，选中态可配合缩小动效。</div>
+    </div>
+  </div>
+
+  <!-- ============ 方案 C：lucide 线性（现状参照） ============ -->
+  <div class="set-card">
+    <div class="set-head">
+      <div class="set-name">方案 C · 线性极简（现状参照）<small>lucide + 自绘</small></div>
+      <div class="set-desc">当前项目采用的 lucide 线性体系（Tab 3 枚为 lucide，快捷区 3 枚为自绘线性）。保留作为对照：与现代 App 通行风格一致、最轻量，但 DOTA2 语境最弱。</div>
+    </div>
+    <div class="set-body">
+      <div class="preview-label">TabBar 情境预览</div>
+      <div class="pv-tabbar">
+        <div class="pv-tab on">
+          <svg class="ic luc gold" viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+          <div class="t">首页</div>
+        </div>
+        <div class="pv-tab">
+          <svg class="ic luc plain" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+          <div class="t">赛事</div>
+        </div>
+        <div class="pv-tab">
+          <svg class="ic luc plain" viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <div class="t">我的</div>
+        </div>
+      </div>
+      <div class="preview-label">快捷区情境预览</div>
+      <div class="pv-quick">
+        <div class="pv-cell">
+          <svg class="ic luc gold" viewBox="0 0 24 24"><path d="M12 3l7 2.4v5.1c0 4.4-2.9 8.3-7 9.9-4.1-1.6-7-5.5-7-9.9V5.4L12 3z"/><path d="M8 13.5l8-6"/></svg>
+          <div class="t">战队</div>
+        </div>
+        <div class="pv-cell">
+          <svg class="ic luc radiant" viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9L12 3.5z"/></svg>
+          <div class="t">英雄库</div>
+        </div>
+        <div class="pv-cell">
+          <svg class="ic luc sapphire" viewBox="0 0 24 24"><path d="M4 10.5l2.2-4.5h11.6l2.2 4.5"/><rect x="4" y="10.5" width="16" height="9" rx="1.5"/><rect x="10.4" y="10.5" width="3.2" height="4" rx="0.6"/></svg>
+          <div class="t">物品库</div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="g-cell"><svg class="ic luc gold" viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><div class="t">首页·房屋</div></div>
+        <div class="g-cell"><svg class="ic luc gold" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg><div class="t">赛事·旗帜</div></div>
+        <div class="g-cell"><svg class="ic luc gold" viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><div class="t">我的·人像</div></div>
+        <div class="g-cell"><svg class="ic luc gold" viewBox="0 0 24 24"><path d="M12 3l7 2.4v5.1c0 4.4-2.9 8.3-7 9.9-4.1-1.6-7-5.5-7-9.9V5.4L12 3z"/><path d="M8 13.5l8-6"/></svg><div class="t">战队·盾+斜线</div></div>
+        <div class="g-cell"><svg class="ic luc gold" viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9L12 3.5z"/></svg><div class="t">英雄·五角星</div></div>
+        <div class="g-cell"><svg class="ic luc gold" viewBox="0 0 24 24"><path d="M4 10.5l2.2-4.5h11.6l2.2 4.5"/><rect x="4" y="10.5" width="16" height="9" rx="1.5"/><rect x="10.4" y="10.5" width="3.2" height="4" rx="0.6"/></svg><div class="t">物品·宝箱</div></div>
+      </div>
+
+      <div class="license">授权：lucide 为 ISC（免费商用、无署名义务）；快捷区自绘。与现状一致，零迁移成本，但缺乏游戏辨识度。</div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

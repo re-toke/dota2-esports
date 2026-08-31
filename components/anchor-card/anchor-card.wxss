@@ -2,7 +2,7 @@
 .anchor-card {
   background: linear-gradient(135deg, rgba(200, 169, 81, 0.10), rgba(0, 0, 0, 0.22));
   border: 1rpx solid rgba(200, 169, 81, 0.28);
-  border-radius: 20rpx;
+  border-radius: var(--radius-lg);
   padding: 26rpx var(--space-3-5) 22rpx;
   margin: var(--space-2) 0;
 }

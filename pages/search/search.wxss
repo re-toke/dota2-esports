@@ -23,7 +23,7 @@
 .intro-sub {
   margin-top: var(--space-1-5);
   font-size: var(--fs-body);
-  color: #6b7280;
+  color: var(--text-3);
   text-align: center;
   padding: 0 60rpx;
 }
@@ -35,7 +35,7 @@
   align-items: center;
   padding-top: 120rpx;
 }
-.loading-text { margin-top: var(--space-2-5); font-size: var(--fs-body); color: #6b7280; }
+.loading-text { margin-top: var(--space-2-5); font-size: var(--fs-body); color: var(--text-3); }
 .spinner {
   width: 56rpx;
   height: 56rpx;
@@ -48,7 +48,7 @@
 
 .result-summary {
   font-size: var(--fs-body);
-  color: #6b7280;
+  color: var(--text-3);
   margin-bottom: var(--space-1-5);
 }
 
@@ -57,7 +57,7 @@
   margin-bottom: var(--space-3);
   background: var(--card-bg, #1a1a1e);
   border: 1rpx solid var(--border, rgba(255,255,255,0.08));
-  border-radius: 18rpx;
+  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 .group-head {
@@ -102,7 +102,7 @@
   align-items: center;
   justify-content: center;
   background: #2a2f3a;
-  color: #9aa4b2;
+  color: var(--text-2);
   font-size: var(--fs-micro);
 }
 
@@ -121,7 +121,7 @@
 .qk-title {
   font-size: var(--fs-label);
   font-weight: 700;
-  color: #8a8f99;
+  color: var(--text-2);
 }
 .qk-clear {
   font-size: var(--fs-body);

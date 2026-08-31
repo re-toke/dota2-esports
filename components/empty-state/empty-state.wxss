@@ -25,14 +25,14 @@
 .es-title {
   font-size: var(--fs-emphasis);
   font-weight: 600;
-  color: #f0f3f6;
+  color: var(--text-1);
   margin-bottom: var(--space-1-5);
   font-family: var(--font-display, -apple-system, sans-serif);
 }
 .es-desc {
   font-size: var(--fs-body);
   line-height: var(--lh-relaxed);
-  color: #6b7280;
+  color: var(--text-3);
   max-width: 520rpx;
 }
 .es-action {

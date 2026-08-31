@@ -279,9 +279,7 @@ Page({
 
   // I5：返回页面时还原视图状态（首次 onShow 跳过，避免覆盖 onLoad 的初始数据）
   onShow() {
-    if (typeof this.getTabBar === 'function' && this.getTabBar()) {
-      this.getTabBar().setData({ selected: 2 });
-    }
+    // 批次0（2026-08-30）：teams 已退出 tabBar，不再渲染 custom-tab-bar，移除高亮同步
     if (this._restored) {
       let saved = null;
       try { saved = wx.getStorageSync(VIEW_KEY) || null; } catch (e) { saved = null; }

@@ -11,14 +11,18 @@
     </view>
   </view>
 
-  <!-- 焦点卡：重点运营节点（S 级以上热门赛事自动轮替，2026-08-13 动态化） -->
-  <view wx:if="{{focusNode}}" class="focus-card {{focusNode.isLive ? 'focus-card--live' : ''}}" bindtap="openFocus" data-id="{{focusNode.leagueid}}" data-name="{{focusNode.name}}" hover-class="tap-scale">
-    <view class="focus-glow" />
+  <!-- 焦点卡：重点运营节点（S 级以上热门赛事自动轮替，2026-08-13 动态化）
+       批次3（2026-08-30）· PRD §10.2 hero 级视觉：Tier 色浸染背景（替代 focus-glow 光斑）、
+       倒计时 fs-hero 52rpx tnum 大数字、LIVE 红色脉冲徽章、等级徽章删除（背景色已表达）。 -->
+  <view wx:if="{{focusNode}}" class="focus-card focus-card--tier {{focusNode.isLive ? 'focus-card--live' : ''}}" bindtap="openFocus" data-id="{{focusNode.leagueid}}" data-name="{{focusNode.name}}" hover-class="tap-scale">
     <view class="focus-top">
       <view class="focus-badges">
         <text wx:if="{{focusNode.valve}}" class="focus-valve">Valve 官方</text>
         <text class="focus-flag">{{focusNode.flagText}}</text>
-        <text wx:if="{{focusNode.isLive}}" class="focus-live">● 进行中</text>
+        <view wx:if="{{focusNode.isLive}}" class="focus-live">
+          <view class="focus-live-dot" />
+          <text>进行中</text>
+        </view>
       </view>
       <view class="star-btn focus-star" catchtap="toggleFollow" data-id="{{focusNode.leagueid}}" data-name="{{focusNode.name}}">
         <t-icon name="star" size="44rpx" color="{{focusNode.followed ? '#ffcf5c' : '#5b626d'}}" />
@@ -57,7 +61,8 @@
     </view>
   </view>
 
-  <!-- B-1 筛选抽屉：等级 / 排序 / 视图 / 战队 收拢于此 -->
+  <!-- B-1 筛选抽屉：等级 / 排序 / 战队 收拢于此
+       批次3（2026-08-30）· PRD §10.3：「视图」区块移除（周轴视图下线，时间轴由新首页周日历承接）。 -->
   <view wx:if="{{filterPanel}}" class="fp-mask" bindtap="closeFilterPanel">
     <view class="fp-sheet" catchtap="noop">
       <view class="fp-head">
@@ -80,14 +85,6 @@
         <view class="seg-row">
           <view class="seg {{sortMode==='smart'?'seg--active':''}}" data-m="smart" bindtap="onToggleSort"><t-icon name="filter" size="26rpx" />智能</view>
           <view class="seg {{sortMode==='time'?'seg--active':''}}" data-m="time" bindtap="onToggleSort"><t-icon name="sort" size="26rpx" />时间</view>
-        </view>
-      </view>
-
-      <view class="fp-section">
-        <text class="fp-label">视图</text>
-        <view class="seg-row">
-          <view class="seg {{viewMode==='list'?'seg--active':''}}" data-m="list" bindtap="onToggleView"><t-icon name="list" size="26rpx" />列表</view>
-          <view class="seg {{viewMode==='week'?'seg--active':''}}" data-m="week" bindtap="onToggleView"><t-icon name="calendar" size="26rpx" />周轴</view>
         </view>
       </view>
 
@@ -140,7 +137,7 @@
   </view>
 
   <empty-state
-    wx:elif="{{viewMode === 'list' && list.length === 0}}"
+    wx:elif="{{list.length === 0}}"
     type="empty"
     title="{{filter==='upcoming' ? '暂无未来两个月内开赛的赛事' : '暂无符合条件的赛事'}}"
     desc="{{teamActive ? '所选战队近期暂无匹配的赛事' : '试试切换筛选条件或下拉刷新'}}"
@@ -149,8 +146,11 @@
   />
 
   <block wx:else>
-    <!-- 列表视图（默认） -->
-    <block wx:if="{{viewMode === 'list'}}">
+    <!-- 批次3（2026-08-30）· PRD §10.1 行式卡三层结构：
+         名称行（名称+等级+状态徽章，≤2 枚；Valve官方为信任信号保留）
+         meta 行（日期 · 场次 · 奖金池 ≤3 项 + 来源胶囊行尾右对齐；主办方/赛区移入详情页）
+         倒计时胶囊（仅 upcoming，琥珀）。
+         周轴视图已按 §10.3 移除（时间轴由新首页周日历承接）。 -->
     <view
       class="league-item {{item.tierClass}} {{item.status === 'ongoing' ? 'league-item--ongoing' : (item.status === 'ended' ? 'league-item--ended' : '')}} anim-fade-up"
       wx:for="{{list}}"
@@ -167,25 +167,21 @@
           <view class="league-badges">
             <t-tag theme="{{item.tagTheme}}" variant="{{item.tagVariant}}" size="small">{{item.displayLabel}}</t-tag>
             <text wx:if="{{item.valve}}" class="hl-badge hl-valve">Valve官方</text>
-            <text wx:if="{{item.topThirdParty}}" class="hl-badge hl-tp">顶级第三方</text>
-            <text wx:if="{{item.defunct}}" class="status-tag defunct-tag">已停办</text>
-            <text wx:if="{{!item.defunct}}" class="status-tag" style="color:{{item.statusColor}};border-color:{{item.statusColor}}">{{item.statusText}}</text>
+            <text class="status-tag" style="color:{{item.statusColor}};border-color:{{item.statusColor}}">{{item.statusText}}</text>
           </view>
         </view>
-        <!-- B-2 表格化：日期/场次/来源合并一行，去掉独立来源块 -->
-        <view class="league-sub muted">
-          <text class="date-range" wx:if="{{item.dateRange}}">{{item.dateRange}}</text>
-          <text wx:if="{{item.matchCount}}"> · {{item.matchCount}} 场</text>
-          <text wx:if="{{item.prizePool}}"> · {{item.prizePool}}</text>
-          <text wx:if="{{item.organizer}}"> · {{item.organizer}}</text>
-          <text wx:if="{{item.region}}"> · {{item.region}}</text>
+        <view class="league-sub">
+          <view class="league-sub-info">
+            <text class="date-range" wx:if="{{item.dateRange}}">{{item.dateRange}}</text>
+            <text wx:if="{{item.matchCount}}"> · {{item.matchCount}} 场</text>
+            <text wx:if="{{item.prizePool}}"> · {{item.prizePool}}</text>
+          </view>
           <text class="src-inline src-{{item.source === 'community' ? 'curation' : (item.source === 'liquipedia' ? 'liquipedia' : (item.source === 'stratz' ? 'stratz' : 'opendota'))}}">{{item.source === 'community' ? '社区分级' : (item.source === 'liquipedia' ? 'Liquipedia' : (item.source === 'stratz' ? 'STRATZ' : 'OpenDota'))}}</text>
         </view>
         <!-- 即将到来：突出显示倒计时 -->
         <view class="league-countdown" wx:if="{{filter === 'upcoming' && item.countdownText}}">
           <text class="countdown-text">{{item.countdownText}}</text>
         </view>
-        <!-- B-2 表格化：来源已并入上方 league-sub -->
       </view>
       <view class="star-btn" catchtap="toggleFollow" data-id="{{item.leagueid}}" data-name="{{item.name}}">
         <t-icon name="star" size="44rpx" color="{{item.followed ? '#ffcf5c' : '#5b626d'}}" />
@@ -214,44 +210,6 @@
     </view>
 
     <!-- 2026-08-07（v1.2）：已停办赛事归档区移除，defunct 赛事直接从列表过滤 -->
-    </block><!-- /viewMode=list -->
-
-    <!-- 1.2 周轴视图：横向日期轴（按周分列）+ 同周赛事聚合 -->
-    <block wx:else>
-      <empty-state
-        wx:if="{{weekGroups.length === 0}}"
-        type="empty"
-        title="周轴视图下暂无可展示赛事"
-        desc="试试切换筛选条件或切回列表视图"
-      />
-      <scroll-view wx:else scroll-x class="wk-scroll" enhanced enable-flex show-scrollbar="{{false}}">
-        <view class="wk-row">
-          <view class="wk-col" wx:for="{{weekGroups}}" wx:key="key">
-            <view class="wk-head">
-              <text class="wk-label">{{item.label}}</text>
-              <text class="wk-count">{{item.leagues.length}}</text>
-            </view>
-            <view
-              class="wk-item {{l.tierClass}}"
-              wx:for="{{item.leagues}}"
-              wx:for-item="l"
-              wx:key="leagueid"
-              data-id="{{l.leagueid}}"
-              data-name="{{l.name}}"
-              bindtap="openLeague"
-              hover-class="tap-scale"
-            >
-              <text class="wk-item-name">{{l.name}}</text>
-              <view class="wk-item-meta">
-                <text class="wk-tag {{l.tierClass}}">{{l.label}}</text>
-                <text class="wk-date">{{l.wkDate}}</text>
-              </view>
-            </view>
-          </view>
-        </view>
-      </scroll-view>
-    </block>
-
       <view class="fresh-bottom" wx:if="{{updatedLabel && !loading}}">
         <text class="fresh-label">{{updatedLabel}}</text>
       </view>

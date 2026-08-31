@@ -1,0 +1,96 @@
+<!-- components/match-flow/match-flow.wxml -->
+<!-- 批次2 · PRD §4.2：状态筛选 chips + 比赛卡片流 -->
+<view class="mf">
+  <!-- 状态筛选 chips（与周日历联动，默认「全部」） -->
+  <view class="mf-chips">
+    <view class="mf-chip {{activeFilter === 'all' ? 'mf-chip--active' : ''}}" data-filter="all" bindtap="onChipTap" hover-class="mf-chip--pressed">
+      <text class="mf-chip-text">全部</text>
+    </view>
+    <view class="mf-chip {{activeFilter === 'live' ? 'mf-chip--active mf-chip--live' : ''}}" data-filter="live" bindtap="onChipTap" hover-class="mf-chip--pressed">
+      <view class="mf-chip-dot mf-chip-dot--live"></view>
+      <text class="mf-chip-text">进行中 {{counts.live}}</text>
+    </view>
+    <view class="mf-chip {{activeFilter === 'upcoming' ? 'mf-chip--active' : ''}}" data-filter="upcoming" bindtap="onChipTap" hover-class="mf-chip--pressed">
+      <text class="mf-chip-text">即将开始 {{counts.upcoming}}</text>
+    </view>
+    <view class="mf-chip {{activeFilter === 'ended' ? 'mf-chip--active' : ''}}" data-filter="ended" bindtap="onChipTap" hover-class="mf-chip--pressed">
+      <text class="mf-chip-text">已结束 {{counts.ended}}</text>
+    </view>
+  </view>
+
+  <!-- 降级提示：OpenDota 不可用时仅本地数据 -->
+  <view wx:if="{{degraded}}" class="mf-degraded">
+    <text class="mf-degraded-text">实时数据暂不可用，展示最近获取的数据</text>
+  </view>
+
+  <!-- 比赛卡片列表 -->
+  <view wx:if="{{cards.length}}" class="mf-list">
+    <view
+      wx:for="{{cards}}"
+      wx:key="key"
+      class="mf-card {{item.status === 'live' ? 'mf-card--live' : ''}} {{item.isFollow ? 'mf-card--follow' : ''}}"
+      data-key="{{item.key}}"
+      data-matchid="{{item.matchId}}"
+      data-leagueid="{{item.leagueId}}"
+      bindtap="onCardTap"
+      hover-class="mf-card--pressed"
+    >
+      <!-- 头部：等级标签 + 赛事名（纯文字）+ BO -->
+      <view class="mf-head">
+        <text wx:if="{{item.tierLabel}}" class="mf-tier {{item.tierClass}}">{{item.tierLabel}}</text>
+        <text class="mf-league">{{item.leagueName}}</text>
+        <text wx:if="{{item.boLabel}}" class="mf-bo">{{item.boLabel}}</text>
+      </view>
+
+      <!-- 主体：队标 A | 比分/倒计时/状态 | 队标 B -->
+      <view class="mf-body">
+        <view class="mf-team">
+          <image-fallback class="mf-logo" src="{{item.teamA.logo}}" placeholder="{{item.teamA.tag}}" mode="aspectFill" />
+          <text class="mf-tag {{item.winA ? 'mf-tag--win' : ''}}">{{item.teamA.tag}}</text>
+        </view>
+
+        <view class="mf-mid">
+          <!-- LIVE：红点脉冲 + 实时比分 -->
+          <block wx:if="{{item.status === 'live'}}">
+            <view class="mf-score {{item.flash ? 'mf-score--flash' : ''}}">
+              <text class="mf-score-num {{item.winA ? 'mf-score-num--win' : ''}}">{{item.scoreA}}</text>
+              <text class="mf-score-sep">:</text>
+              <text class="mf-score-num {{item.winB ? 'mf-score-num--win' : ''}}">{{item.scoreB}}</text>
+            </view>
+            <view class="mf-live-row">
+              <view class="mf-live-dot"></view>
+              <text class="mf-live-text">正在交锋</text>
+            </view>
+          </block>
+          <!-- 即将开始：开赛倒计时 -->
+          <block wx:elif="{{item.status === 'upcoming'}}">
+            <view class="mf-countdown {{item.flash ? 'mf-score--flash' : ''}}">
+              <text class="mf-cd-text">{{item.countdownText}}</text>
+            </view>
+            <text class="mf-sub">{{item.timeText}}</text>
+          </block>
+          <!-- 已结束：终局比分 + 胜方高亮 -->
+          <block wx:else>
+            <view class="mf-score {{item.flash ? 'mf-score--flash' : ''}}">
+              <text class="mf-score-num {{item.winA ? 'mf-score-num--win' : ''}}">{{item.scoreA}}</text>
+              <text class="mf-score-sep">:</text>
+              <text class="mf-score-num {{item.winB ? 'mf-score-num--win' : ''}}">{{item.scoreB}}</text>
+            </view>
+            <text class="mf-sub">{{item.timeText}}</text>
+          </block>
+        </view>
+
+        <view class="mf-team">
+          <image-fallback class="mf-logo" src="{{item.teamB.logo}}" placeholder="{{item.teamB.tag}}" mode="aspectFill" />
+          <text class="mf-tag {{item.winB ? 'mf-tag--win' : ''}}">{{item.teamB.tag}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 空态：选中日期无比赛 -->
+  <view wx:elif="{{!loading}}" class="mf-empty">
+    <image class="mf-empty-icon" src="/assets/icons/gi-shield.png" mode="aspectFit" />
+    <text class="mf-empty-text">{{emptyText}}</text>
+  </view>
+</view>

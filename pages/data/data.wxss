@@ -17,7 +17,7 @@
 .entry-icon {
   width: 96rpx;
   height: 96rpx;
-  border-radius: 20rpx;
+  border-radius: var(--radius-lg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -27,10 +27,10 @@
 }
 
 .entry-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6rpx; }
-.entry-title { font-size: var(--fs-heading); font-weight: 700; color: #f0f3f6; }
+.entry-title { font-size: var(--fs-heading); font-weight: 700; color: var(--text-1); }
 .entry-desc {
   font-size: var(--fs-body);
-  color: #8a8f99;
+  color: var(--text-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -39,6 +39,6 @@
 .data-foot {
   text-align: center;
   font-size: var(--fs-caption);
-  color: #6b7280;
+  color: var(--text-3);
   padding: var(--space-3-5) 0 var(--space-1);
 }

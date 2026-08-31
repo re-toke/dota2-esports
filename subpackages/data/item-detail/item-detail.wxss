@@ -2,38 +2,38 @@
 
 /* ===== 头部 ===== */
 .head { display: flex; align-items: center; gap: var(--space-2-5); margin-bottom: var(--space-3); }
-.head-icon { width: 110rpx; height: 110rpx; border-radius: 20rpx; overflow: hidden; flex-shrink: 0; }
+.head-icon { width: 110rpx; height: 110rpx; border-radius: var(--radius-lg); overflow: hidden; flex-shrink: 0; }
 .head-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6rpx; }
-.head-name { font-size: var(--fs-display); font-weight: 800; color: #f0f3f6; }
-.head-sub { font-size: var(--fs-caption); color: #6b7280; font-family: var(--font-mono, monospace); }
+.head-name { font-size: var(--fs-display); font-weight: 800; color: var(--text-1); }
+.head-sub { font-size: var(--fs-caption); color: var(--text-3); font-family: var(--font-mono, monospace); }
 
 /* ===== 区块 ===== */
 .block { background: var(--card-bg, #1a1a1e); border: 1rpx solid #1f262f; border-radius: var(--radius-lg, 16rpx); padding: var(--space-2-5) var(--space-3); margin-bottom: var(--space-2); }
-.block-title { font-size: var(--fs-label); font-weight: 700; color: #f0f3f6; margin-bottom: var(--space-2); }
+.block-title { font-size: var(--fs-label); font-weight: 700; color: var(--text-1); margin-bottom: var(--space-2); }
 
 .info-row { display: flex; align-items: center; justify-content: space-between; padding: var(--space-1-5) 0; border-bottom: 1rpx solid #1a2029; }
 .info-row:last-child { border-bottom: none; }
-.info-label { font-size: var(--fs-label); color: #9aa4b2; }
-.info-value { font-size: var(--fs-label); font-weight: 600; color: #f0f3f6; font-family: var(--font-mono, monospace); }
-.info-value.muted { color: #8a8f99; font-weight: 400; }
+.info-label { font-size: var(--fs-label); color: var(--text-2); }
+.info-value { font-size: var(--fs-label); font-weight: 600; color: var(--text-1); font-family: var(--font-mono, monospace); }
+.info-value.muted { color: var(--text-2); font-weight: 400; }
 
 /* 待补充 */
 .block.pending { background: #14181f; border-style: dashed; }
-.pending-item { display: flex; align-items: flex-start; gap: 10rpx; padding: var(--space-1) 0; font-size: var(--fs-body); color: #8a8f99; line-height: var(--lh-relaxed); }
+.pending-item { display: flex; align-items: flex-start; gap: 10rpx; padding: var(--space-1) 0; font-size: var(--fs-body); color: var(--text-2); line-height: var(--lh-relaxed); }
 .pending-item t-icon { margin-top: 2rpx; flex-shrink: 0; }
 
 /* §8.3 合成组件列表 */
 .recipe-list { display: flex; flex-direction: column; gap: var(--space-1-5); }
 .recipe-item { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1-5); background: #131316; border-radius: var(--radius-md); border: 1rpx solid #1a2029; }
-.recipe-icon { width: 64rpx; height: 64rpx; border-radius: 10rpx; overflow: hidden; flex-shrink: 0; }
+.recipe-icon { width: 64rpx; height: 64rpx; border-radius: var(--radius-md); overflow: hidden; flex-shrink: 0; }
 .recipe-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-0-5); }
-.recipe-name { font-size: var(--fs-label); font-weight: 600; color: #f0f3f6; }
+.recipe-name { font-size: var(--fs-label); font-weight: 600; color: var(--text-1); }
 .recipe-cost { font-size: var(--fs-caption); color: #C8A951; font-family: var(--font-mono, monospace); }
-.recipe-cost.muted { color: #8a8f99; font-weight: 400; }
+.recipe-cost.muted { color: var(--text-2); font-weight: 400; }
 
 .detail-foot {
   font-size: var(--fs-caption);
-  color: #6b7280;
+  color: var(--text-3);
   padding: var(--space-1-5) 0 var(--space-1);
   line-height: var(--lh-relaxed);
 }

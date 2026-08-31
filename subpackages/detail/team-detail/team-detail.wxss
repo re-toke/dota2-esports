@@ -21,7 +21,7 @@
 .head-info .title {
   font-size: var(--fs-display);
   font-weight: 700;
-  color: #f0f3f6;
+  color: var(--text-1);
   line-height: var(--lh-tight);
   font-family: var(--font-display, -apple-system, sans-serif);
 }
@@ -32,7 +32,7 @@
   margin-top: var(--space-1);
   flex-wrap: wrap;
 }
-.head-meta .sub { font-size: var(--fs-body); color: #8a8f99; }
+.head-meta .sub { font-size: var(--fs-body); color: var(--text-2); }
 .tag-tag {
   font-size: var(--fs-caption);
   color: #c9d2dd;
@@ -46,7 +46,7 @@
   padding: 2rpx 10rpx;
   border-radius: var(--radius-pill, 999rpx);
   background: rgba(95, 211, 95, 0.12);
-  color: #5fd35f;
+  color: var(--radiant);
   border: 1rpx solid rgba(95, 211, 95, 0.3);
   font-family: var(--font-mono, monospace);
   letter-spacing: 1rpx;
@@ -55,7 +55,7 @@
 
 /* ===== KPI Strip 局部样式（win/lose 颜色） ===== */
 .kpi-win { color: var(--status-ongoing, #5fd35f); }
-.kpi-lose { color: #e8443b; }
+.kpi-lose { color: var(--dire); }
 
 /* ===== 数据溯源合并区（C 风格 · 与 league-detail 一致） ===== */
 .source-section {
@@ -73,7 +73,7 @@
 .source-section-title {
   font-size: var(--fs-body);
   font-weight: 600;
-  color: #8a8f99;
+  color: var(--text-2);
   text-transform: uppercase;
   letter-spacing: 1rpx;
 }
@@ -100,12 +100,12 @@
 }
 .quality-pill .q-text { font-weight: 600; }
 .quality-pill .q-src { font-size: var(--fs-caption); opacity: 0.85; }
-.quality-high { background: rgba(30, 200, 150, 0.12); color: #1ec896; }
-.quality-high .q-dot { background: #1ec896; }
+.quality-high { background: rgba(95, 211, 168, 0.12); color: var(--status-verified); }
+.quality-high .q-dot { background: var(--status-verified); }
 .quality-medium { background: rgba(255, 207, 92, 0.12); color: #ffcf5c; }
 .quality-medium .q-dot { background: #ffcf5c; }
-.quality-low { background: rgba(107, 114, 128, 0.16); color: #9aa3ad; }
-.quality-low .q-dot { background: #9aa3ad; }
+.quality-low { background: rgba(107, 114, 128, 0.16); color: var(--text-2); }
+.quality-low .q-dot { background: var(--text-2); }
 
 /* ===== 分段控件 ===== */
 .seg {
@@ -120,13 +120,13 @@
   text-align: center;
   padding: 14rpx 0;
   font-size: var(--fs-label);
-  color: #8a8f99;
+  color: var(--text-2);
   border-radius: var(--radius-sm);
   transition: background 120ms ease, color 120ms ease;
 }
 .seg-item.active {
   background: var(--card-bg-elevated, #222226);
-  color: #f0f3f6;
+  color: var(--text-1);
   font-weight: 600;
 }
 
@@ -162,7 +162,7 @@
 }
 .member-name {
   font-size: var(--fs-subhead);
-  color: #f0f3f6;
+  color: var(--text-1);
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -174,7 +174,7 @@
   font-size: var(--fs-micro);
   color: var(--status-verified, #5fd3a8);
   background: rgba(30, 200, 150, 0.14);
-  border-radius: 6rpx;
+  border-radius: var(--radius-sm);
   padding: 2rpx 10rpx;
   font-weight: 600;
   flex-shrink: 0;
@@ -187,7 +187,7 @@
   justify-content: center;
   font-size: var(--fs-body);
   font-weight: 700;
-  color: #8a8f99;
+  color: var(--text-2);
   background: var(--card-bg-inset, #131316);
   border: 1rpx solid #262628;
 }
@@ -226,7 +226,7 @@
   font-weight: 700;
   color: #5fd3a8;
   background: #131316;
-  border-radius: 6rpx;
+  border-radius: var(--radius-sm);
   padding: var(--space-0-5) var(--space-1);
   min-width: 56rpx;
   text-align: center;
@@ -247,9 +247,9 @@
   min-width: 100rpx;
   justify-content: center;
 }
-.h2h-win { color: #5fd35f; }
+.h2h-win { color: var(--radiant); }
 .h2h-lose { color: #e74c3c; }
-.h2h-sep { color: #5b626d; }
+.h2h-sep { color: var(--text-4); }
 .h2h-meta {
   display: flex;
   flex-direction: column;
@@ -257,9 +257,9 @@
   gap: var(--space-0-5);
   min-width: 90rpx;
 }
-.h2h-games { font-size: var(--fs-caption); color: #6b7280; }
+.h2h-games { font-size: var(--fs-caption); color: var(--text-3); }
 .h2h-winrate { font-size: var(--fs-body); font-weight: 600; }
-.h2h-winrate.positive { color: #5fd35f; }
+.h2h-winrate.positive { color: var(--radiant); }
 .h2h-winrate.negative { color: #e74c3c; }
 
 /* S-Tier / TI 优先级徽标（头部） */
@@ -277,9 +277,9 @@
   border: 1rpx solid rgba(255, 207, 92, 0.4);
 }
 .priority-badge.priority-s {
-  background: rgba(95, 211, 95, 0.15);
-  color: #5fd35f;
-  border: 1rpx solid rgba(95, 211, 95, 0.3);
+  background: var(--tier-s-soft);
+  color: var(--tier-s);
+  border: 1rpx solid var(--tier-s-line);
 }
 
 /* H2H 卡片优先级样式（有 S 级以上对战记录时高亮） */
@@ -289,7 +289,7 @@
 .h2h-tier-badge {
   display: inline-block;
   padding: 1rpx var(--space-1);
-  border-radius: 6rpx;
+  border-radius: var(--radius-sm);
   font-size: var(--fs-badge);
   font-weight: 600;
   margin-left: var(--space-1);

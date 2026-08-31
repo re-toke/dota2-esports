@@ -14,12 +14,12 @@
 .title {
   font-size: var(--fs-mega);
   font-weight: 700;
-  color: #5fd35f;
+  color: var(--dota-gold);
   margin-bottom: var(--space-1-5);
 }
 .meta {
   font-size: var(--fs-body);
-  color: #6b7280;
+  color: var(--text-3);
 }
 
 .section {
@@ -31,11 +31,11 @@
   color: #e6edf3;
   margin-bottom: var(--space-2);
   padding-left: var(--space-2);
-  border-left: 6rpx solid #5fd35f;
+  border-left: 6rpx solid var(--dota-gold);
 }
 .section-body {
   font-size: var(--fs-label);
-  color: #9aa4b2;
+  color: var(--text-2);
   line-height: var(--lh-loose);
   margin-bottom: var(--space-2);
 }
@@ -44,7 +44,7 @@
 }
 .list-item {
   font-size: var(--fs-label);
-  color: #7d8794;
+  color: var(--text-2);
   line-height: var(--lh-loose);
   padding-left: var(--space-2);
 }
@@ -64,7 +64,7 @@
 }
 .footer-text {
   font-size: var(--fs-caption);
-  color: #5b626d;
+  color: var(--text-4);
   line-height: var(--lh-relaxed);
   flex: 1;
 }

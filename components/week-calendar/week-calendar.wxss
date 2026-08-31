@@ -1,0 +1,123 @@
+/* components/week-calendar/week-calendar.wxss */
+/* 批次2 · PRD §4.1：周日历。今日 = 金色描边 + 金色日期数字（复核修订：不整格填充，
+   填充态留给「选中」）；选中 = 金色渐变填充 + 深色反白；角标 = 金色数字、今天格内深色。 */
+
+.wk {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1-5) var(--space-1);
+  background: var(--card-grad);
+  border: 1rpx solid var(--td-border-level-1-color, #262628);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--card-inner-shadow);
+}
+
+/* 跨周箭头 */
+.wk-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52rpx;
+  height: 88rpx;
+  border-radius: var(--radius-md);
+}
+.wk-arrow--pressed {
+  background: rgba(255, 255, 255, 0.06);
+}
+.wk-arrow-glyph {
+  font-size: 40rpx;
+  line-height: 1;
+  color: var(--text-2);
+}
+
+/* 7 格网格：等分 */
+.wk-grid {
+  flex: 1;
+  display: flex;
+}
+
+.wk-cell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6rpx;
+  padding: var(--space-1) 0;
+  border-radius: var(--radius-md);
+  transition: background 0.15s ease;
+}
+
+.wk-cell--pressed {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* 今日：金色描边（不填充，视觉权重让位 LIVE/选中） */
+.wk-cell--today {
+  border: 1rpx solid rgba(200, 169, 81, 0.55);
+}
+
+/* 选中：金色渐变填充 + 深色反白 */
+.wk-cell--selected {
+  background: linear-gradient(180deg, var(--tier-s) 0%, var(--dota-gold-strong, #b08a3e) 100%);
+  box-shadow: 0 2rpx 12rpx rgba(200, 169, 81, 0.3);
+}
+.wk-cell--selected.wk-cell--today {
+  border-color: transparent;
+}
+
+.wk-weekday {
+  font-size: var(--fs-caption);
+  color: var(--text-2);
+  line-height: 1;
+}
+.wk-cell--selected .wk-weekday {
+  color: #1f1a08;
+}
+
+.wk-datewrap {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+}
+
+.wk-date {
+  font-size: var(--fs-emphasis);
+  font-weight: 700;
+  font-feature-settings: 'tnum';
+  color: var(--text-1);
+  line-height: 1;
+}
+.wk-date--today {
+  color: var(--tier-s);
+}
+.wk-cell--selected .wk-date {
+  color: #1f1a08;
+}
+
+/* 数字角标：当日场次数 */
+.wk-badge {
+  position: absolute;
+  top: -14rpx;
+  right: -18rpx;
+  min-width: 26rpx;
+  padding: 1rpx 5rpx;
+  border-radius: var(--radius-pill, 999rpx);
+  background: rgba(200, 169, 81, 0.16);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  font-feature-settings: 'tnum';
+  color: var(--tier-s);
+  line-height: 1.3;
+  text-align: center;
+}
+/* 今天格内角标反色深色（金色日期上金色角标不可读） */
+.wk-badge--today {
+  background: rgba(31, 26, 8, 0.78);
+  color: var(--dota-gold);
+}
+.wk-cell--selected .wk-badge {
+  background: rgba(31, 26, 8, 0.78);
+  color: var(--dota-gold);
+}

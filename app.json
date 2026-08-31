@@ -73,9 +73,7 @@
     "list": [
       { "pagePath": "pages/index/index", "text": "首页" },
       { "pagePath": "pages/leagues/leagues", "text": "赛事" },
-      { "pagePath": "pages/teams/teams", "text": "战队" },
-      { "pagePath": "pages/follow/follow", "text": "我的" },
-      { "pagePath": "pages/data/data", "text": "资料库" }
+      { "pagePath": "pages/follow/follow", "text": "我的" }
     ]
   },
   "sitemapLocation": "sitemap.json"

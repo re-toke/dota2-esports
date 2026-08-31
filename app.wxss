@@ -68,12 +68,17 @@ page {
   --td-bg-color-component-disabled: #1a1a1e;
   --td-bg-color-specialcomponent: #1a1a1e;
 
-  /* 文字 */
-  --td-text-color-primary: #f0f3f6;
-  --td-text-color-secondary: #8a8f99;
-  --td-text-color-placeholder: #5b626d;
-  --td-text-color-disabled: #5b626d;
-  --td-text-color-anti: #f0f3f6;
+  /* 文字（聚光灯 + 批次1 灰阶四档化 §9.1）
+     --text-* 为语义别名，指向同值 --td-*；页面统一引用 --text-*，禁止散落字面量灰 */
+  --text-1: #f0f3f6;               /* 主文字 */
+  --text-2: #8a8f99;               /* 次要文字（收敛 #9ca3af/#9aa4b2/#7d8794/#8b949e/#98a0ab 等 5 种近似灰） */
+  --text-3: #6b7280;               /* 已结束/新鲜度/非关键装饰 */
+  --text-4: #5b626d;               /* 占位/禁用 */
+  --td-text-color-primary: var(--text-1);
+  --td-text-color-secondary: var(--text-2);
+  --td-text-color-placeholder: var(--text-4);
+  --td-text-color-disabled: var(--text-4);
+  --td-text-color-anti: var(--text-1);
 
   /* 边框/分割线（聚光灯：冷炭灰） */
   --td-border-level-1-color: #262628;
@@ -186,6 +191,10 @@ view, text { box-sizing: border-box; }
    原 132rpx 仅留 4rpx 余量，渲染/字体抖动易让最后一行被 tabBar 遮盖 → 表现"滚到底还有信息看不到"。
    leagues 页曾为此单独覆写到 148rpx；此处直接抬到 160rpx 后各页通用，leagues 覆写可一并收敛。 */
 .container.with-tab-bar { padding-bottom: calc(160rpx + env(safe-area-inset-bottom)); }
+
+/* 批次0（2026-08-30）：非 tab 页（teams/data 等退出 tabBar 的页面）容器，
+   无 custom-tab-bar，仅留常规呼吸空间 + 安全区，避免原 160rpx 底部空白断层。 */
+.container.with-safe-bottom { padding-bottom: calc(32rpx + env(safe-area-inset-bottom)); }
 
 /* 搜索栏上下间距 */
 .search-wrap { margin: 8rpx 0 20rpx; }
@@ -363,8 +372,8 @@ page {
   --radius-xl:  24rpx;
   --radius-pill: 999rpx;
 
-  /* ===== 状态色 token（统一全站语义） ===== */
-  --status-live: #1ec896;          /* 直播中：脉冲绿 */
+  /* ===== 状态色 token（统一全站语义，批次1 §9.2：LIVE 全站改红） ===== */
+  --status-live: #FF5B52;          /* 直播中：脉冲红（电竞行业惯例；与负方暗红 --dire #e8443b 拉开亮度差） */
   --status-ongoing: #5fd35f;       /* 进行中：天辉绿 */
   --status-upcoming: #f0aa28;      /* 即将到来：琥珀 */
   --status-ended: #6b7280;         /* 已结束：灰 */
@@ -399,8 +408,8 @@ page {
   --card-glow-a:   linear-gradient(90deg, var(--tier-a) 0%, var(--tier-a) 10rpx, rgba(167,119,227,0.08) 160rpx, transparent 280rpx);
   --card-glow-b:   linear-gradient(90deg, var(--tier-b) 0%, var(--tier-b) 10rpx, rgba(91,155,213,0.08) 160rpx, transparent 280rpx);
   --card-glow-c:   linear-gradient(90deg, var(--tier-c) 0%, var(--tier-c) 10rpx, rgba(122,134,150,0.06) 160rpx, transparent 280rpx);
-  /* LIVE 特殊：绿色光晕替代 Tier 色（直播永远最抢眼） */
-  --card-glow-live: linear-gradient(90deg, var(--radiant) 0%, var(--radiant) 10rpx, rgba(95,211,95,0.10) 200rpx, transparent 320rpx);
+  /* LIVE 特殊：红色光晕替代 Tier 色（直播永远最抢眼；批次1 §9.2 绿→红） */
+  --card-glow-live: linear-gradient(90deg, var(--status-live) 0%, var(--status-live) 10rpx, rgba(255, 91, 82, 0.10) 200rpx, transparent 320rpx);
 
   /* ===== 数据指挥台 KPI 色（C 风格专用，仅用于强调单个 KPI） ===== */
   --kpi-primary: #5fd35f;
@@ -924,12 +933,13 @@ page {
 }
 
 /* ① LIVE 脉冲呼吸（赛事列表/详情页进行中卡片）
-   节奏：吸气(0→35%) → 峰值保持(35→55%) → 呼气(55→90%) → 静息(90→100%)，模拟真实呼吸而非急促闪烁。 */
+   节奏：吸气(0→35%) → 峰值保持(35→55%) → 呼气(55→90%) → 静息(90→100%)，模拟真实呼吸而非急促闪烁。
+   批次1 §9.2：光晕绿→红（--status-live 同步改红）。 */
 @keyframes pulse-glow {
-  0%       { box-shadow: 0 0 4rpx  rgba(95, 211, 95, 0.2); }
-  35%, 55% { box-shadow: 0 0 14rpx rgba(95, 211, 95, 0.5); }
-  90%      { box-shadow: 0 0 4rpx  rgba(95, 211, 95, 0.2); }
-  100%     { box-shadow: 0 0 4rpx  rgba(95, 211, 95, 0.2); }
+  0%       { box-shadow: 0 0 4rpx  rgba(255, 91, 82, 0.2); }
+  35%, 55% { box-shadow: 0 0 14rpx rgba(255, 91, 82, 0.5); }
+  90%      { box-shadow: 0 0 4rpx  rgba(255, 91, 82, 0.2); }
+  100%     { box-shadow: 0 0 4rpx  rgba(255, 91, 82, 0.2); }
 }
 .live-pulse {
   animation: pulse-glow var(--dur-breath) var(--ease-in-out) infinite;

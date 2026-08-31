@@ -91,8 +91,9 @@ function buildSourceBadges(srcArr) {
 }
 
 // 状态 -> 中文标签 + 颜色（与赛事列表页 leagues.js 的 statusBadgeOf 保持一致）
+// 批次1 §9.2：LIVE/进行中统一红 --status-live
 function statusBadgeOf(status) {
-  if (status === 'ongoing') return { text: '进行中', color: '#1ec896' };
+  if (status === 'ongoing') return { text: '进行中', color: '#FF5B52' };
   if (status === 'upcoming') return { text: '即将到来', color: '#ffcf5c' };
   return { text: '已结束', color: '#6b7280' };
 }

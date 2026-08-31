@@ -20,7 +20,7 @@
 .vs-logo {
   width: 96rpx;
   height: 96rpx;
-  border-radius: 20rpx;
+  border-radius: var(--radius-lg);
   background: var(--card-bg-inset);
   border: 1rpx solid var(--td-border-level-1-color, #262628);
 }
@@ -35,7 +35,7 @@
 .vs-name {
   font-size: var(--fs-label);
   font-weight: 600;
-  color: #f0f3f6;
+  color: var(--text-1);
   text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -75,7 +75,7 @@
   font-size: var(--fs-emphasis);
   font-weight: 800;
   letter-spacing: 1rpx;
-  color: #6b7280;
+  color: var(--text-3);
 }
 
 /* ===== 胜负条形区 ===== */
@@ -94,7 +94,7 @@
 .h2h-bar-row:last-of-type { margin-bottom: 0; margin-top: 10rpx; }
 .h2h-side {
   font-size: var(--fs-body);
-  color: #9aa4b2;
+  color: var(--text-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -203,7 +203,7 @@
 .h2h-league {
   font-size: var(--fs-label);
   font-weight: 600;
-  color: #f0f3f6;
+  color: var(--text-1);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -213,7 +213,7 @@
 .h2h-league--plain { color: #c3ccd9; }
 .h2h-date {
   font-size: var(--fs-caption);
-  color: #6b7280;
+  color: var(--text-3);
   font-family: var(--font-mono, monospace);
   flex-shrink: 0;
 }
@@ -269,7 +269,7 @@
 .sk-logo {
   width: 96rpx;
   height: 96rpx;
-  border-radius: 20rpx;
+  border-radius: var(--radius-lg);
   background: var(--card-bg-elevated, #222226);
   margin: 0 auto var(--space-3);
 }
@@ -284,7 +284,7 @@
 .radar-card {
   background: var(--card-bg, #1a1a1e);
   border: 1rpx solid var(--border, rgba(255, 255, 255, 0.08));
-  border-radius: 18rpx;
+  border-radius: var(--radius-lg);
   padding: var(--space-2) var(--space-1) var(--space-1-5);
   margin-bottom: var(--space-2);
 }

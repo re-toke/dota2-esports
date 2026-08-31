@@ -1,4 +1,4 @@
-<view class="container with-tab-bar">
+<view class="container with-safe-bottom">
   <!-- 聚光灯背景图（v12）：页面级 image（fixed 相对视口，滚动不跟随） -->
   <image class="bg-page" src="/assets/bg-battlefield-dark.webp" mode="aspectFill" />
   <view class="bg-page-dim"></view>

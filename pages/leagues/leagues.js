@@ -21,26 +21,16 @@ function tagThemeOf(grade) {
 }
 
 // 状态 -> 中文标签 + 颜色（v11 品牌声音 §2.6：竞技场风格文案）
+// 批次1 §9.2：LIVE/进行中统一红 --status-live；已结束 --text-3
+// 批次3 §10.1：即将到来改琥珀 --status-upcoming #f0aa28（此前亮金与 LIVE 红难区分）
 function statusBadgeOf(status) {
-  if (status === 'ongoing') return { text: '正在交锋', color: '#1ec896' };
-  if (status === 'upcoming') return { text: '即将到来', color: '#ffcf5c' };
+  if (status === 'ongoing') return { text: '正在交锋', color: '#FF5B52' };
+  if (status === 'upcoming') return { text: '即将到来', color: '#f0aa28' };
   return { text: '战局已定', color: '#6b7280' };
 }
 
-// ===== 1.2 周轴视图工具：按「周一为界」的周聚合赛事 =====
-// 取赛事代表开赛时间（startDate > earliest > latest），归到所在周的周一，
-// 同周赛事归入一列；无日期（start=0）归入「未定档期」。
-function weekMondayOf(ts) {
-  const d = new Date(ts * 1000);
-  const dow = d.getDay();                 // 0=周日 … 6=周六
-  const diff = (dow + 6) % 7;             // 距本周一的天数
-  const mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() - diff);
-  return Math.floor(mon.getTime() / 1000);
-}
-function fmtMD(ts) {
-  const d = new Date(ts * 1000);
-  return (d.getMonth() + 1) + '/' + d.getDate();
-}
+// 批次3（2026-08-30）· PRD §10.3：周轴视图（weekMondayOf/fmtMD/groupByWeek）已移除，
+// 时间轴浏览由新首页周日历承接。
 // ===== 1.3 智能排序：关注置顶 + S级优先 + 时间 =====
 // 用于「全部 / 进行中 / 已结束 / 即将到来」列表的默认排序。
 // 排序键：① followed（关注置顶）→ ② grade rank（S>A>B>C）→ ③ 时间（近的在前）。
@@ -56,29 +46,6 @@ function sortSmart(arr) {
     const tb = b.startDate || b.latest || 0;
     return tb - ta;                                                 // 时间近的在前
   });
-}
-
-function groupByWeek(arr) {
-  const map = {};
-  const order = [];
-  const undated = [];
-  (arr || []).forEach((l) => {
-    const start = l.startDate || l.earliest || l.latest || 0;
-    if (!start) { undated.push(l); return; }
-    const mon = weekMondayOf(start);
-    if (!map[mon]) { map[mon] = []; order.push(mon); }
-    map[mon].push(Object.assign({}, l, { wkDate: fmtMD(start) }));
-  });
-  order.sort((a, b) => a - b);
-  const groups = order.map((mon) => {
-    const end = mon + 6 * 86400;
-    const leagues = map[mon].slice().sort((a, b) => (b.latest || 0) - (a.latest || 0));
-    return { key: String(mon), label: fmtMD(mon) + '–' + fmtMD(end), leagues: leagues, undated: false };
-  });
-  if (undated.length) {
-    groups.push({ key: 'undated', label: '未定档期', leagues: undated, undated: true });
-  }
-  return groups;
 }
 
 // 「全部」Tab 数据源合并（P0-1 / RC1）：
@@ -221,10 +188,8 @@ Page({
     teamLeagueIds: null,      // { [leagueid]: true } 选中战队参与过的联赛并集；null=不按战队过滤
     // ===== B 版：筛选抽屉 =====
     filterPanel: false,           // 筛选抽屉显隐
-    activeFilterCount: 0,         // 生效的非默认筛选数量（「筛选」按钮角标）
-    // ===== 1.2 视图切换：列表(list) / 周轴(week) =====
-    viewMode: 'list',
-    weekGroups: []            // 周轴分组：[{ key, label, leagues:[...], undated }]
+    activeFilterCount: 0          // 生效的非默认筛选数量（「筛选」按钮角标）
+    // 批次3（2026-08-30）§10.3：viewMode/weekGroups 已随周轴视图移除
   },
 
   onLoad() {
@@ -689,7 +654,6 @@ Page({
     let n = 0;
     if (d.gradeFilter !== 'all') n++;
     if (d.sortMode === 'smart') n++;   // 默认 time；smart 作为「高级模式」计入非默认
-    if (d.viewMode !== 'list') n++;
     n += (d.teamFilter && d.teamFilter.length) || 0;
     if (n !== d.activeFilterCount) this.setData({ activeFilterCount: n });
   },
@@ -697,25 +661,16 @@ Page({
   openFilterPanel() { this.setData({ filterPanel: true }); },
   closeFilterPanel() { this.setData({ filterPanel: false }); },
 
-  // 重置等级/排序/视图/战队筛选为默认
+  // 重置等级/排序/战队筛选为默认
   resetFilters() {
     this.teamLeagueIds = null;
     this.setData({
       filterPanel: false,
       gradeFilter: 'all',
       sortMode: 'time',
-      viewMode: 'list',
       teamFilter: [],
       teamActive: false
     });
-    this.applyAndSlice(true);
-  },
-
-  // 1.2 视图切换：列表 / 周轴（复用同一套筛选结果，仅改渲染维度）
-  onToggleView(e) {
-    const m = e.currentTarget.dataset.m;
-    if (m === this.data.viewMode) return;
-    this.setData({ viewMode: m });
     this.applyAndSlice(true);
   },
 
@@ -1395,12 +1350,6 @@ Page({
     const tl = this.teamLeagueIds;
     if (tl) {
       arr = arr.filter((x) => tl[x.leagueid]);
-    }
-
-    // 1.2 周轴视图：按周聚合（含 defunct → 未定档期），不分页
-    if (this.data.viewMode === 'week') {
-      this.setData({ weekGroups: groupByWeek(arr), hasMore: false });
-      return;
     }
 
     this.filtered = arr;

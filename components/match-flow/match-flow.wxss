@@ -1,0 +1,302 @@
+/* components/match-flow/match-flow.wxss */
+/* 批次2 · PRD §4.2：比赛卡（行式卡：头部 meta + 三段式主体）
+   状态语义：LIVE 红（--status-live 脉冲）/ 即将开始琥珀倒计时 / 已结束灰 + 胜方绿。
+   比分等宽 tnum 防抖动；闪光 keyframe 300ms 金色渐隐；reduced-motion 降级。 */
+
+.mf {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* ===== 状态筛选 chips ===== */
+.mf-chips {
+  display: flex;
+  gap: var(--space-1-5);
+  overflow-x: auto;
+  padding: var(--space-0-5) 0;
+}
+.mf-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8rpx;
+  padding: var(--space-1) var(--space-2-5);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1rpx solid var(--td-border-level-1-color, #262628);
+  border-radius: var(--radius-pill, 999rpx);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.mf-chip--pressed {
+  transform: scale(0.97);
+}
+.mf-chip--active {
+  background: rgba(200, 169, 81, 0.14);
+  border-color: rgba(200, 169, 81, 0.5);
+}
+.mf-chip--live.mf-chip--active {
+  background: rgba(255, 91, 82, 0.12);
+  border-color: rgba(255, 91, 82, 0.5);
+}
+.mf-chip-text {
+  font-size: var(--fs-caption);
+  color: var(--text-2);
+  font-feature-settings: 'tnum';
+  white-space: nowrap;
+}
+.mf-chip--active .mf-chip-text {
+  color: var(--dota-gold);
+}
+.mf-chip--live.mf-chip--active .mf-chip-text {
+  color: var(--status-live);
+}
+.mf-chip-dot--live {
+  width: 10rpx;
+  height: 10rpx;
+  border-radius: 50%;
+  background: var(--status-live);
+  animation: mf-pulse 1.6s ease-in-out infinite;
+}
+
+/* 降级提示条 */
+.mf-degraded {
+  padding: var(--space-1) var(--space-2);
+  background: rgba(240, 170, 40, 0.08);
+  border: 1rpx solid rgba(240, 170, 40, 0.25);
+  border-radius: var(--radius-md);
+}
+.mf-degraded-text {
+  font-size: var(--fs-caption);
+  color: var(--status-upcoming);
+}
+
+/* ===== 比赛卡 ===== */
+.mf-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.mf-card {
+  position: relative;
+  overflow: hidden;
+  padding: var(--space-2) var(--space-2-5);
+  background: var(--card-grad);
+  border: 1rpx solid var(--td-border-level-1-color, #262628);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--card-inner-shadow);
+  transition: transform 0.12s ease;
+}
+.mf-card--pressed {
+  transform: scale(0.98);
+}
+
+/* LIVE 卡：左侧红色光晕浸染（card-glow-live token） */
+.mf-card--live::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 100%;
+  z-index: 0;
+  background: var(--card-glow-live);
+  pointer-events: none;
+}
+.mf-card--live {
+  box-shadow: 0 2rpx 16rpx rgba(255, 91, 82, 0.12);
+}
+
+/* 关注战队卡：暗金描边（复核修订：去掉 inset 双重描边） */
+.mf-card--follow {
+  border: 1.5rpx solid rgba(200, 169, 81, 0.6);
+}
+
+/* 头部：等级标签 + 赛事名 + BO */
+.mf-head {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-bottom: var(--space-1-5);
+}
+.mf-tier {
+  flex-shrink: 0;
+  padding: 2rpx 10rpx;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  line-height: 1.4;
+}
+.mf-tier.tier-sss { background: var(--tier-sss-soft); color: var(--tier-sss); }
+.mf-tier.tier-s { background: var(--tier-s-soft); color: var(--tier-s); }
+.mf-tier.tier-a { background: var(--tier-a-soft); color: var(--tier-a); }
+.mf-tier.tier-b { background: var(--tier-b-soft); color: var(--tier-b); }
+
+.mf-league {
+  flex: 1;
+  font-size: var(--fs-body);
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mf-bo {
+  flex-shrink: 0;
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+  font-feature-settings: 'tnum';
+}
+
+/* 主体：三段式 */
+.mf-body {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+}
+.mf-team {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+}
+.mf-logo {
+  width: 88rpx;
+  height: 88rpx;
+  border-radius: var(--radius-md);
+}
+.mf-tag {
+  max-width: 100%;
+  font-size: var(--fs-body);
+  font-weight: 600;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 胜方高亮：天辉绿（沿用 --radiant 语义色） */
+.mf-tag--win {
+  color: var(--radiant);
+}
+
+/* 中段：比分/倒计时 */
+.mf-mid {
+  flex: 1.2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6rpx;
+}
+.mf-score {
+  display: flex;
+  align-items: baseline;
+  gap: 6rpx;
+  padding: 4rpx 20rpx;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.03);
+}
+.mf-score-num {
+  font-size: 40rpx;
+  font-weight: 700;
+  font-feature-settings: 'tnum';
+  color: var(--text-1);
+  line-height: 1.1;
+}
+.mf-score-num--win {
+  color: var(--radiant);
+}
+.mf-score-sep {
+  font-size: var(--fs-body);
+  color: var(--text-3);
+  font-feature-settings: 'tnum';
+}
+.mf-sub {
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+  font-feature-settings: 'tnum';
+}
+
+/* 比分闪光：300ms 金色渐隐（数据是活的） */
+.mf-score--flash {
+  animation: mf-flash 300ms ease-out;
+}
+@keyframes mf-flash {
+  0% { background: rgba(200, 169, 81, 0.35); }
+  100% { background: rgba(255, 255, 255, 0.03); }
+}
+
+/* LIVE 行：红点脉冲 + 文案 */
+.mf-live-row {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+.mf-live-dot {
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 50%;
+  background: var(--status-live);
+  box-shadow: 0 0 10rpx rgba(255, 91, 82, 0.5);
+  animation: mf-pulse 1.6s ease-in-out infinite;
+}
+.mf-live-text {
+  font-size: var(--fs-caption);
+  color: var(--status-live);
+  font-weight: 600;
+}
+
+/* 倒计时（即将开始）：琥珀 */
+.mf-countdown {
+  display: flex;
+  align-items: center;
+  padding: 4rpx 20rpx;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.03);
+}
+.mf-cd-text {
+  font-size: 30rpx;
+  font-weight: 700;
+  font-feature-settings: 'tnum';
+  color: var(--status-upcoming);
+  line-height: 1.2;
+}
+
+/* 脉冲动画（chips 红点 + LIVE 红点共用） */
+@keyframes mf-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.82); }
+}
+
+/* 动效降级：系统开启减弱动效时红点静止、闪光关闭 */
+@media (prefers-reduced-motion: reduce) {
+  .mf-live-dot,
+  .mf-chip-dot--live {
+    animation: none;
+  }
+  .mf-score--flash {
+    animation: none;
+  }
+}
+
+/* ===== 空态 ===== */
+.mf-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-3);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1rpx solid var(--td-border-level-1-color, #262628);
+  border-radius: var(--radius-lg);
+}
+.mf-empty-icon {
+  width: 72rpx;
+  height: 72rpx;
+  opacity: 0.35;
+}
+.mf-empty-text {
+  font-size: var(--fs-body);
+  color: var(--text-3);
+}

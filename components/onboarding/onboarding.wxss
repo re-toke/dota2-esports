@@ -45,12 +45,12 @@
 .ob-title {
   font-size: var(--fs-display);
   font-weight: 700;
-  color: #f0f3f6;
+  color: var(--text-1);
   margin-bottom: var(--space-2);
 }
 .ob-desc {
   font-size: var(--fs-label);
-  color: #9aa4b2;
+  color: var(--text-2);
   line-height: var(--lh-loose);
   margin-bottom: var(--space-6);
 }
@@ -64,7 +64,7 @@
   flex: 0 0 auto;
   padding: var(--space-2-5) var(--space-3-5);
   font-size: var(--fs-label);
-  color: #8a8f99;
+  color: var(--text-2);
 }
 .ob-next {
   flex: 1;

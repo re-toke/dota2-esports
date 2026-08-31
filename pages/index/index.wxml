@@ -2,22 +2,46 @@
   <!-- 聚光灯背景图（v12）：页面级 image（fixed 相对视口，滚动不跟随） -->
   <image class="bg-page" src="/assets/bg-battlefield-dark.webp" mode="aspectFill" />
   <view class="bg-page-dim"></view>
-  <!-- 品牌标识栏 + 常驻搜索入口（5.2） -->
+
+  <!-- 品牌标识栏（批次2 · PRD §4：删除右侧圆形搜索按钮，常驻搜索框为唯一搜索入口） -->
   <view class="brand-header">
     <image class="brand-logo brand-logo--sm" src="/assets/brand-logo.png" mode="aspectFill" />
     <view class="brand-text">
       <text class="brand-title">DOTA2赛事</text>
       <text class="brand-sub">赛事 · 战队 · 对战</text>
     </view>
-    <view class="brand-search" bindtap="openSearch" hover-class="tap-scale">
-      <t-icon name="search" size="40rpx" color="#c9d1d9" />
-    </view>
   </view>
 
-  <!-- 持久搜索框（5.2 常驻入口） -->
+  <!-- 持久搜索框（5.2 常驻入口，批次2 起为首页唯一搜索入口） -->
   <view class="search-bar" bindtap="openSearch">
     <t-icon name="search" size="32rpx" color="#6b7280" />
     <text class="search-placeholder">搜索赛事 / 战队 / 选手 / 物品</text>
+  </view>
+
+  <!-- ===== 批次2 · PRD §4：周日历时间轴 + 全量比赛流（首页数据中枢主体） ===== -->
+  <view class="match-section">
+    <week-calendar
+      days="{{weekDays}}"
+      selected="{{selectedDateKey}}"
+      bind:select="onDaySelect"
+      bind:weekshift="onWeekShift"
+    />
+
+    <!-- 首屏骨架（无缓存数据时的加载态） -->
+    <view wx:if="{{matchLoading && !matchCards.length}}" class="match-skeleton">
+      <skeleton type="card" count="3" />
+    </view>
+
+    <match-flow
+      wx:else
+      cards="{{matchCards}}"
+      activeFilter="{{matchFilter}}"
+      counts="{{matchCounts}}"
+      degraded="{{matchDegraded}}"
+      loading="{{matchLoading}}"
+      bind:filter="onMatchFilter"
+      bind:cardtap="onMatchCardTap"
+    />
   </view>
 
   <!-- 首页「我的关注」横向卡片流（spec C.2.1，从 leagues 迁入）：已关注战队的下一场赛事 + 实时倒计时 -->
@@ -70,41 +94,26 @@
     <view class="fg-btn">去关注</view>
   </view>
 
-  <!-- 1.3 个性化推荐位：热门 S 级赛事（排除已关注，个性化发现流） -->
-  <view wx:if="{{recLeagues.length}}" class="rec-section">
-    <view class="section-header">
-      <text class="section-title">为你推荐</text>
-      <text class="section-action">热门赛事</text>
-    </view>
-    <scroll-view scroll-x class="rec-scroll" enhanced show-scrollbar="{{false}}">
-      <view class="rec-track">
-        <view class="rec-card tier-{{item.grade}}" wx:for="{{recLeagues}}" wx:key="leagueid"
-              data-id="{{item.leagueid}}" data-name="{{item.name}}"
-              bindtap="openLeague" hover-class="tap-scale">
-          <view class="rec-card-top">
-            <text class="rec-tag rec-tag--{{item.tagTheme}}">{{item.displayLabel}}</text>
-            <text wx:if="{{item.daysToStart>0}}" class="rec-days">{{item.daysToStart}}天后</text>
-          </view>
-          <text class="rec-name">{{item.name}}</text>
-          <text class="rec-meta">{{item.dateRange}}</text>
-        </view>
-      </view>
-    </scroll-view>
-  </view>
-
-  <!-- 快捷入口 -->
+  <!-- ===== 批次2 · PRD §3.2 快捷区三格（战队/英雄库/物品库，game-icons 剪影 PNG） =====
+       「为你推荐」赛事卡已按 PRD §4 移除（赛事页焦点卡 focus-card 承接，避免双入口）。 -->
   <view class="quick-nav">
-    <view class="quick-cell" data-path="/pages/leagues/leagues" bindtap="goTab" hover-class="tap-scale">
-      <view class="qc-icon"><t-icon name="flag" size="40rpx" color="#C8A951" /></view>
-      <text class="qc-name">赛事</text>
-    </view>
     <view class="quick-cell" data-path="/pages/teams/teams" bindtap="goTab" hover-class="tap-scale">
-      <view class="qc-icon"><t-icon name="usergroup" size="40rpx" color="#58a6ff" /></view>
+      <view class="qc-icon qc-icon--gold">
+        <image class="qc-img" src="/assets/icons/gi-shield.png" mode="aspectFit" />
+      </view>
       <text class="qc-name">战队</text>
     </view>
-    <view class="quick-cell" data-path="/pages/data/data" bindtap="goTab" hover-class="tap-scale">
-      <view class="qc-icon"><t-icon name="book-open" size="40rpx" color="#3FB950" /></view>
-      <text class="qc-name">资料库</text>
+    <view class="quick-cell" data-path="/subpackages/data/hero/hero" bindtap="goTab" hover-class="tap-scale">
+      <view class="qc-icon qc-icon--green">
+        <image class="qc-img" src="/assets/icons/gi-swords.png" mode="aspectFit" />
+      </view>
+      <text class="qc-name">英雄库</text>
+    </view>
+    <view class="quick-cell" data-path="/subpackages/data/item/item" bindtap="goTab" hover-class="tap-scale">
+      <view class="qc-icon qc-icon--blue">
+        <image class="qc-img" src="/assets/icons/gi-book.png" mode="aspectFit" />
+      </view>
+      <text class="qc-name">物品库</text>
     </view>
   </view>
 

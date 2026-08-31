@@ -1,0 +1,6 @@
+{
+  "component": true,
+  "usingComponents": {
+    "image-fallback": "../image-fallback/image-fallback"
+  }
+}

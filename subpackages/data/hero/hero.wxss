@@ -6,7 +6,7 @@
 .filter-spacer { flex: 1; }
 .chip {
   font-size: var(--fs-body);
-  color: #9aa4b2;
+  color: var(--text-2);
   background: #1a1a1e;
   border: 1rpx solid #262628;
   border-radius: var(--radius-pill);
@@ -59,18 +59,18 @@
 .hero-name {
   font-size: var(--fs-subhead);
   font-weight: 600;
-  color: #f0f3f6;
+  color: var(--text-1);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .hero-tags { display: flex; align-items: center; gap: 6rpx; font-size: var(--fs-caption); }
 .hero-attr { font-weight: 600; }
-.hero-attr2 { color: #8a8f99; }
+.hero-attr2 { color: var(--text-2); }
 .hero-dot { color: #4b5563; }
 .hero-role {
   font-size: var(--fs-micro);
-  color: #6b7280;
+  color: var(--text-3);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -78,4 +78,4 @@
 
 .hero-win { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; min-width: 0; overflow: hidden; }
 .hero-win-num { font-size: var(--fs-subhead); font-weight: 700; color: var(--dota-gold, #C8A951); font-family: var(--font-mono, monospace); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 110rpx; }
-.hero-win-label { font-size: var(--fs-badge); color: #6b7280; }
+.hero-win-label { font-size: var(--fs-badge); color: var(--text-3); }

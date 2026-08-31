@@ -68,7 +68,15 @@
 
 .tab-bar__icon {
   display: block;
+  width: 44rpx;
+  height: 44rpx;
   line-height: 1;
+}
+
+/* 批次0（2026-08-30）：PNG 图标选中态放大（对应原 t-icon 52rpx 选中尺寸） */
+.tab-bar__item--active .tab-bar__icon {
+  width: 52rpx;
+  height: 52rpx;
 }
 
 .tab-bar__dot {
@@ -94,3 +102,17 @@
 }
 
 /* 安全区由 .tab-bar 的 padding-bottom 处理 */
+
+/* 批次2（2026-08-30）· PRD §5：底部安全区改不透明纯深色。
+   iOS Home 指示条区域原为半透明毛玻璃底，白色指示条对比突兀；
+   现该区域覆盖与页面背景同值的不透明 #0d0d0d，内容区保留毛玻璃视觉分层。
+   无刘海设备 env()=0，::after 零高度，无副作用。 */
+.tab-bar::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: env(safe-area-inset-bottom);
+  background: #0d0d0d;
+}
