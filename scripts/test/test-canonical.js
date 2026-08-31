@@ -119,17 +119,20 @@ check('EPL 不再含过宽别名 epl2026 / eplmasters2026（2026-07-27 修复回
 //       取代模糊别名。下面是「修复 A 比赛却影响 B 比赛」的回归场景：
 section('\n--- G10 leagueId 精确 pin + 跨游戏隔离（防"修A影响B"回归）---');
 
-check('G10: 19944（EPL Masters I 真身）经 leagueId pin + dota2 ctx 正确解析为 "EPL Masters I"', () => {
+check('G10: 19944（EPL Masters league entity）经 leagueId pin + dota2 ctx 解析为当届（II，判届窗口）', () => {
+  // 2026-08-31 P0：19944 被 Masters I/II 复用，pin 按调用时刻判届。
+  // 当前（08-31）落在 II 窗口（8/13~9/13）→ Masters II；窗口结束后回退最新届（仍 II），
+  // 因此本断言长期稳定。Masters I 的判届由下方 G10-window 专项测试用 ctx.now 锁定。
   const r = sources.canonicalLeagueName('EPL Masters 2026 ', { leagueId: 19944, game: 'dota2' });
-  assert(r === 'EPL Masters I', 'leagueId=19944 pin 应命中 EPL Masters I，实际: ' + r);
+  assert(r === 'EPL Masters II', 'leagueId=19944 pin 应判届命中 EPL Masters II，实际: ' + r);
 });
 check('G10: 19080（同名低级别联赛）经 leagueId 上下文不应被 EPL pin 命中', () => {
   const r = sources.canonicalLeagueName('EPL 2026', { leagueId: 19080, game: 'dota2' });
   assert(r === 'EPL 2026', 'leagueId=19080 不在 EPL pin 内，应原样返回，实际: ' + r);
 });
-check('G10: leagueDisplayName 自动从 league 对象抽取 leagueId → pin 命中', () => {
+check('G10: leagueDisplayName 自动从 league 对象抽取 leagueId → pin 判届命中（当届 II）', () => {
   const r = sources.leagueDisplayName({ name: 'EPL Masters 2026 ', leagueid: 19944 });
-  assert(r === 'EPL Masters I', '自动抽取 leagueid=19944 应命中 EPL Masters I，实际: ' + r);
+  assert(r === 'EPL Masters II', '自动抽取 leagueid=19944 应判届命中 EPL Masters II，实际: ' + r);
 });
 check('G10: 跨游戏隔离 — cs2 ctx 下，DOTA2 EPL 条目不得命中（pin 失败）', () => {
   const r = sources.canonicalLeagueName('EPL Masters 2026 ', { leagueId: 19944, game: 'cs2' });
@@ -159,11 +162,45 @@ check('G10: 修复 A 比赛时不影响 B 比赛 — 其它 leagueId 不会被�
 check('G10: leagueId pin 命中后会返回完整元数据（prizePool / status / tier）', () => {
   const c = remoteCuration.curatedEventFor('EPL Masters 2026 ', { leagueId: 19944, game: 'dota2' });
   assert(c, '应返回 curation entry');
-  assert(c.canonical === 'EPL Masters I', 'canonical 不对: ' + c.canonical);
+  assert(c.canonical === 'EPL Masters II', 'canonical 不对（判届当届 II）: ' + c.canonical);
   assert(c.prizePool === '$100,000', 'prizePool 应为 DOTA2 实际值 $100,000（非 CS2 $1M），实际: ' + c.prizePool);
-  assert(c.status === '已结束', 'status 应为 已结束（2026-08-14 方案 A），实际: ' + c.status);
+  assert(c.status === '进行中', 'status 应为 进行中（Masters II 2026-08-30~09-10），实际: ' + c.status);
   const t = c.tier || {};
   assert(t.grade === 'A', 'tier.grade 应为 A（非 CS2 S-Tier），实际: ' + t.grade);
+});
+
+// ===== G16：一 ID 多届判届（leagueIdWindow，2026-08-31 P0）=====
+// 背景：EPL Masters I/II 复用 OpenDota league entity 19944，LEAGUE_ID_INDEX 数组化，
+//       按调用时刻（ctx.now，缺省当前时间）落在哪届窗口解析为哪届。
+section('\n--- G16 一 ID 多届判届（leagueIdWindow）---');
+const EPL_I_WIN = { from: Math.floor(Date.UTC(2026, 6, 13) / 1000), to: Math.floor(Date.UTC(2026, 7, 13) / 1000) };
+const EPL_II_WIN = { from: Math.floor(Date.UTC(2026, 7, 13) / 1000), to: Math.floor(Date.UTC(2026, 8, 12) / 1000) };
+check('G16: ctx.now 落在 I 窗口（2026-08-01）→ 解析为 EPL Masters I', () => {
+  const c = remoteCuration.curatedEventFor('EPL Masters 2026 ', { leagueId: 19944, game: 'dota2', now: Math.floor(Date.UTC(2026, 7, 1) / 1000) });
+  assert(c && c.canonical === 'EPL Masters I', '8/1 应判届为 Masters I，实际: ' + (c && c.canonical));
+});
+check('G16: ctx.now 落在 II 窗口（2026-09-01）→ 解析为 EPL Masters II', () => {
+  const c = remoteCuration.curatedEventFor('EPL Masters 2026 ', { leagueId: 19944, game: 'dota2', now: Math.floor(Date.UTC(2026, 8, 1) / 1000) });
+  assert(c && c.canonical === 'EPL Masters II', '9/1 应判届为 Masters II，实际: ' + (c && c.canonical));
+});
+check('G16: ctx.now 早于全部窗口（2026-06-01）→ 回退窗口最早的届（I）', () => {
+  const c = remoteCuration.curatedEventFor('EPL Masters 2026 ', { leagueId: 19944, game: 'dota2', now: Math.floor(Date.UTC(2026, 5, 1) / 1000) });
+  assert(c && c.canonical === 'EPL Masters I', '6/1（两窗口前）应回退 Masters I，实际: ' + (c && c.canonical));
+});
+check('G16: ctx.now 晚于全部窗口（2026-10-01）→ 回退最新届（II）', () => {
+  const c = remoteCuration.curatedEventFor('EPL Masters 2026 ', { leagueId: 19944, game: 'dota2', now: Math.floor(Date.UTC(2026, 9, 1) / 1000) });
+  assert(c && c.canonical === 'EPL Masters II', '10/1（两窗口后）应回退最新届 Masters II，实际: ' + (c && c.canonical));
+});
+check('G16: 单届条目（20142 RES Unchained 5 EU）不受判届影响，pin 直接命中', () => {
+  const c = remoteCuration.curatedEventFor('RES Unchained - A Blast Dota Slam VIII Qualifier EU', { leagueId: 20142, game: 'dota2' });
+  assert(c && c.canonical === 'RES Unchained 5: BLAST SLAM VIII Europe Qualifier', '20142 pin 应命中 RES 5 EU canonical，实际: ' + (c && c.canonical));
+});
+check('G16: 名称碎片归一 — OpenDota 原名 "RES Unchained - A Blast Dota Slam VIII Qualifier EU" 无 ctx 原样返回（不猜）', () => {
+  const r = sources.canonicalLeagueName('RES Unchained - A Blast Dota Slam VIII Qualifier EU');
+  assert(r === 'RES Unchained - A Blast Dota Slam VIII Qualifier EU', '无 ctx 不应猜（需 pin），实际: ' + r);
+});
+check('G16: 判届窗口数据完整性 — I/II 两届 leagueIdWindow 无缝衔接（I.to == II.from）', () => {
+  assert(EPL_I_WIN.to === EPL_II_WIN.from, 'I/II 窗口应首尾衔接，不留判届空洞: I.to=' + EPL_I_WIN.to + ' II.from=' + EPL_II_WIN.from);
 });
 
 // ===== G11：子模块数据完整性（参赛队伍/对阵/排名）—— 防"修复A影响B"在子模块重现 =====
@@ -172,9 +209,9 @@ check('G11: 详情页 leagueId 纠偏 — 传入 wrong leagueId(19080)+correct n
   const c = remoteCuration.curatedEventFor('EPL Masters 2026 ', { leagueId: 19080, game: 'dota2' });
   assert(c === null, '19080 不在 EPL pin 内，不应返回 curation entry（详情页应走 openLeague 重定向到 19944）');
 });
-check('G11: 详情页 leagueId 纠偏 — 传入 correct leagueId(19944)+name 应命中 pin', () => {
+check('G11: 详情页 leagueId 纠偏 — 传入 correct leagueId(19944)+name 应命中 pin（判届当届）', () => {
   const c = remoteCuration.curatedEventFor('EPL Masters 2026 ', { leagueId: 19944, game: 'dota2' });
-  assert(c && c.canonical === 'EPL Masters I', '19944 应命中 EPL pin，实际: ' + (c && c.canonical));
+  assert(c && c.canonical === 'EPL Masters II', '19944 应判届命中 EPL Masters II，实际: ' + (c && c.canonical));
 });
 check('G11: 子模块数据来源 — 19944 的 matches 应推导出 13 支参赛队（非占位 16 队）', () => {
   // 模拟 league-detail 的 refreshMetadataDerived 逻辑：从 raw match 数据提取 team_id

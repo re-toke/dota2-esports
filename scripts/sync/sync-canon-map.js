@@ -132,25 +132,27 @@ function main() {
     process.exit(1);
   }
 
-  // EPL 覆盖自检（2026-07-27 修复后语义变更）：
-  // 现保留窄别名 'epl masters i'（normKey='eplmastersi'）+ leagueId 精确 pin（19944）。
-  // 1) canonical 自身必须映射回 'EPL Masters I'；
-  // 2) leagueId pin 必须命中 'EPL Masters I'（云函数推送文案场景）；
-  // 3) 回归防护：过宽别名 'epl2026' / 'eplmasters2026' 不得再映射到 EPL ——
-  //    它们曾把 OpenDota 低级别联赛（19080/19944）误冠为 "EPL Masters I"，造成列表重复 + 队伍错位。
-  const eplSelfOk = map['eplmastersi'] === 'EPL Masters I';
-  const eplPinOk = leagueIdMap[19944] === 'EPL Masters I';
-  const eplOverBroad = ['epl2026', 'eplmasters2026'].filter((k) => map[k] === 'EPL Masters I');
+  // EPL 覆盖自检（2026-07-27 修复后语义变更；2026-08-31 P0 判届升级）：
+  // 现保留窄别名 'epl masters i' / 'epl masters ii' + leagueId 精确 pin（19944）。
+  // 19944 被 Masters I/II 复用：leagueIdMap 采用「最新届覆盖」语义（last-write wins，
+  // 条目按时间顺序排列 → II 在后），供云函数推送文案取当届名；客户端多届判届
+  // 由 curation.js 的 leagueIdWindow（pinLookup）负责，与本静态 map 无关。
+  // 1) canonical 自映射：I / II 均必须映射回自身；
+  // 2) leagueId pin：19944 必须命中最新届（当前 = EPL Masters II）；
+  // 3) 回归防护：过宽别名 'epl2026' / 'eplmasters2026' 不得映射到任何 EPL 届。
+  const eplSelfOk = map['eplmastersi'] === 'EPL Masters I' && map['eplmastersii'] === 'EPL Masters II';
+  const eplPinOk = leagueIdMap[19944] === 'EPL Masters II';
+  const eplOverBroad = ['epl2026', 'eplmasters2026'].filter((k) => map[k] === 'EPL Masters I' || map[k] === 'EPL Masters II');
   if (!eplSelfOk) {
-    console.error('[sync-canon-map] 致命：EPL canonical 自映射缺失（eplmastersi -> EPL Masters I）');
+    console.error('[sync-canon-map] 致命：EPL canonical 自映射缺失（eplmastersi / eplmastersii）');
     process.exit(1);
   }
   if (!eplPinOk) {
-    console.error('[sync-canon-map] 致命：EPL leagueId pin 缺失（19944 -> EPL Masters I）');
+    console.error('[sync-canon-map] 致命：EPL leagueId pin 缺失（19944 -> 最新届 EPL Masters II）');
     process.exit(1);
   }
   if (eplOverBroad.length) {
-    console.error('[sync-canon-map] 致命：EPL 过宽别名回归（不应映射到 EPL Masters I）: ' + eplOverBroad.join(', '));
+    console.error('[sync-canon-map] 致命：EPL 过宽别名回归（不应映射到任何 EPL 届）: ' + eplOverBroad.join(', '));
     process.exit(1);
   }
 

@@ -1,8 +1,20 @@
 {
-  "generatedAt": 1788159082,
+  "generatedAt": 1788165115,
   "source": "liquipedia",
-  "note": "build-time snapshot, refresh via scripts/fetch-liquipedia-upcoming.js",
+  "note": "build-time snapshot (Upcoming+Ongoing, Tier1-3), refresh via scripts/sync/fetch-liquipedia-upcoming.js",
   "events": [
+    {
+      "id": -1086576,
+      "name": "EPL Masters II",
+      "grade": "B",
+      "rank": 1,
+      "label": "B级",
+      "tier": 3,
+      "start": 1788048000,
+      "end": 1789084799,
+      "date": "Aug 30 – Sep 10, 2026",
+      "source": "liquipedia"
+    },
     {
       "id": -1592769,
       "name": "RES Unchained 6: BLAST SLAM IX Europe Closed Qualifier",

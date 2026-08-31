@@ -221,6 +221,9 @@ const CURATED_EVENTS = [
   // 会导致 sortSmart 按 rank 排序时把 A 级赛事排到 TI(rank 4) 之上（收录错误）。
   { canonical: 'EPL Masters I', tier: { grade: 'A', rank: 2, label: 'A-Tier' },
     leagueId: 19944,
+    // ★ 2026-08-31 P0：19944 被 Masters I/II 两届复用，I 也必须带判届窗（见 II 条目注释）。
+    //   窗口从 OpenDota 该 league 首场比赛前一周（7/13）到官方赛期结束 + 1 天宽限（8/13）。
+    leagueIdWindow: { from: Math.floor(Date.UTC(2026, 6, 13) / 1000), to: Math.floor(Date.UTC(2026, 7, 13) / 1000) },
     game: 'dota2',
     aliases: ['epl masters i'], year: 2026,
     start: Math.floor(Date.UTC(2026, 6, 20) / 1000), end: Math.floor(Date.UTC(2026, 7, 12) / 1000),
@@ -252,6 +255,58 @@ const CURATED_EVENTS = [
     //   即使本字段未及时更新，也不会再卡死为「僵尸进行中」。
     status: '已结束', liquipediaSlug: 'EPL/Masters/1',
     valve: false, topThirdParty: true },
+
+  // ── 2026-08-31 P0 补录：EPL Masters II（19944 复用届次，时间窗判届）──
+  // EPL 两届复用同一 OpenDota league entity（leagueid 19944）：
+  //   Masters I：2026-07-20 ~ 08-12（已结束）
+  //   Masters II：2026-08-30 ~ 09-10（进行中，Liquipedia EPL/Masters/2 实锤：
+  //   sdate=2026-08-30 / edate=2026-09-10 / 16 队 / $100,000 / liquipediatier=3）
+  // LEAGUE_ID_INDEX 为「一 ID 一条目」，因此 19944 的 pin 必须带时间窗（leagueIdWindow）：
+  //   调用时刻落在哪个届次赛期内就解析为哪一届（详见 buildLookups 判届逻辑）。
+  // 名称匹配（无 leagueId ctx）不受影响——OpenDota 当届显示名 "EPL Masters 2026" 按字面走。
+  // ⚠️ 别名只留 'epl masters ii'：曾试加 'epl masters 2'（normName=eplmasters2），被
+  //   名称宽松匹配的「纯数字后缀」规则吞掉 "EPL Masters 2026"（eplmasters2026 前缀命中），
+  //   违反 2026-07-27「无 ctx 不猜」原则，测试 8 连挂——数字类短别名禁用。
+  { canonical: 'EPL Masters II', tier: { grade: 'A', rank: 2, label: 'A-Tier' },
+    leagueId: 19944,
+    leagueIdWindow: { from: Math.floor(Date.UTC(2026, 7, 13) / 1000), to: Math.floor(Date.UTC(2026, 8, 12) / 1000) },
+    game: 'dota2',
+    aliases: ['epl masters ii'], year: 2026,
+    start: Math.floor(Date.UTC(2026, 7, 30) / 1000), end: Math.floor(Date.UTC(2026, 8, 10) / 1000),
+    prizePool: '$100,000', organizer: 'EPL', region: '欧洲/CIS · 线上',
+    format: '小组赛(2×6 Bo3 循环) + 双败淘汰(Bo3)',
+    participants: 16, status: '进行中', liquipediaSlug: 'EPL/Masters/2',
+    valve: false, topThirdParty: true },
+
+  // ── 2026-08-31 P0 补录：RES Unchained 5（BLAST SLAM VIII 预选赛，一 ID 一届无复用）──
+  // 用户报告「App 显示 RES Unchained 5EU 进行中，但 Liquipedia 搜不到」根因：
+  //   OpenDota 名 "RES Unchained - A Blast Dota Slam VIII Qualifier EU"（leagueid 20142）
+  //   vs Liquipedia 页面 "BLAST/Slam/8/Europe/Open Qualifier 1"（标题 RES Unchained 5: BLAST
+  //   SLAM VIII Europe Open Qualifier 1）——三源三名的名称碎片化。
+  // 此处补 canonical + slug pin：列表显示归一名，详情页可拉 Liquipedia 元数据。
+  // SEA 预选同批补录（leagueid 20143，OpenDota 名 RES Unchained - A Blast Dota Slam VIII Qualifier SEA）。
+  // 赛期：EU 8/26~8/30（OpenDota 实际开赛 8/26，Liquipedia OQ1 页 8/26-8/27，决赛收尾 8/30）；
+  //       SEA 8/26~8/27（OQ2 页面赛期）。tierrank：预选赛按 B 级（B-Tier）收录。
+  { canonical: 'RES Unchained 5: BLAST SLAM VIII Europe Qualifier',
+    tier: { grade: 'B', rank: 1, label: 'B-Tier' },
+    leagueId: 20142,
+    game: 'dota2',
+    aliases: ['resunchained5eu', 'resunchained5europe', 'resunchainedeu', 'res unchained 5eu'], year: 2026,
+    start: Math.floor(Date.UTC(2026, 7, 26) / 1000), end: Math.floor(Date.UTC(2026, 7, 30) / 1000),
+    prizePool: '', organizer: 'Relog Media', region: '欧洲 · 线上',
+    format: '公开预选（Bo3）',
+    participants: 8, status: '进行中', liquipediaSlug: 'BLAST/SLAM/8/Europe',
+    valve: false, topThirdParty: false },
+  { canonical: 'RES Unchained 5: BLAST SLAM VIII SEA Qualifier',
+    tier: { grade: 'B', rank: 1, label: 'B-Tier' },
+    leagueId: 20143,
+    game: 'dota2',
+    aliases: ['resunchained5sea', 'resunchained5southeastasia', 'res unchained 5sea'], year: 2026,
+    start: Math.floor(Date.UTC(2026, 7, 26) / 1000), end: Math.floor(Date.UTC(2026, 7, 30) / 1000),
+    prizePool: '', organizer: 'Relog Media', region: '东南亚 · 线上',
+    format: '公开预选（Bo3）',
+    participants: 8, status: '进行中', liquipediaSlug: 'BLAST/SLAM/8/Southeast Asia',
+    valve: false, topThirdParty: false },
 
   // ── 2026 下半年即将到来（Tier 1，来源：Liquipedia Tournaments，已核实日期）──
   // 这些赛事在 OpenDota /leagues 中尚无比赛记录（未开赛），只能靠 curation 进入"即将到来" tab。
@@ -605,14 +660,39 @@ function isTIContestantTeam(teamId) {
 function buildLookups(events, teams) {
   // 赛事名 -> 事件对象（按规范名/别名归一匹配）
   const EVENT_INDEX = {};
-  // leagueId -> 事件对象（显式 pin，绕过别名漂移；2026-07-27 加）
+  // leagueId -> 事件对象数组（显式 pin，绕过别名漂移；2026-07-27 加）
+  // ★ 2026-08-31 P0 判届升级：数组化支持「一 ID 多届」（如 EPL Masters I/II 复用 19944）。
+  //   单届条目（无 leagueIdWindow）→ [该条目]，行为与旧版单对象完全一致；
+  //   多届条目 → 按 leagueIdWindow {from,to} 判届：调用时刻（ctx.now 或当前时间）落在
+  //   窗口内即命中该届。多届均未命中窗口时回退最后一条（宁可错配也不空手——
+  //   名称匹配兜底仍可纠正；空手会让「修复 A 影响 B」防线整体失效）。
   const LEAGUE_ID_INDEX = {};
   (events || []).forEach((ev) => {
     if (!ev || !ev.canonical) return;
     EVENT_INDEX[consensus.normName(ev.canonical)] = ev;
     (ev.aliases || []).forEach((a) => { EVENT_INDEX[consensus.normName(a)] = ev; });
-    if (ev.leagueId != null) LEAGUE_ID_INDEX[ev.leagueId] = ev;
+    if (ev.leagueId != null) {
+      (LEAGUE_ID_INDEX[ev.leagueId] = LEAGUE_ID_INDEX[ev.leagueId] || []).push(ev);
+    }
   });
+  // leagueId 判届命中：时间窗命中返回该届。未命中窗时的回退策略：
+  //   now 早于首届窗口（历史上该 league 尚无第二届数据）→ 回退首届（最早届）；
+  //   其余（now 晚于末届窗 / 窗数据缺失）→ 回退末条（最新届）。
+  const pinLookup = (leagueId, now) => {
+    const arr = LEAGUE_ID_INDEX[leagueId];
+    if (!arr || !arr.length) return null;
+    if (arr.length === 1) return arr[0];
+    const withWin = arr.filter((e) => e && e.leagueIdWindow);
+    for (let i = 0; i < arr.length; i++) {
+      const w = arr[i].leagueIdWindow;
+      if (w && w.from != null && w.to != null && now != null && now >= w.from && now <= w.to) return arr[i];
+    }
+    if (now != null && withWin.length) {
+      const firstWin = withWin[0].leagueIdWindow;
+      if (firstWin.from != null && now < firstWin.from) return arr[0];
+    }
+    return arr[arr.length - 1];
+  };
   // 战队名 -> id 反向索引（用于按名查询）
   const NAME_INDEX = {};
   Object.keys(teams || {}).forEach((id) => {
@@ -638,8 +718,10 @@ function buildLookups(events, teams) {
     };
     // 1. 显式 leagueId 匹配（最高优先级，绕过别名漂移；name 为空也可命中——关注页只传 id）
     //    仅当调用方提供了 leagueId 且确实有对应 pin 时返回；其余情况走名称匹配。
-    if (ctx && ctx.leagueId != null && LEAGUE_ID_INDEX[ctx.leagueId]) {
-      return validGame(LEAGUE_ID_INDEX[ctx.leagueId]);
+    //    ★ 2026-08-31 P0：一 ID 多届时按 leagueIdWindow 判届（ctx.now 缺省用当前时间）。
+    if (ctx && ctx.leagueId != null) {
+      const pinned = pinLookup(ctx.leagueId, ctx.now != null ? ctx.now : Date.now() / 1000);
+      if (pinned) return validGame(pinned);
     }
     if (!name) return null;
     // 2. 名称匹配（精确 + 模糊）

@@ -77,34 +77,79 @@ function fetchParse() {
 
 async function main() {
   const html = await fetchParse();
-  const startIdx = html.indexOf('id="Upcoming"');
-  const nextHead = html.indexOf('class="mw-headline"', startIdx + 10);
-  const section = html.slice(startIdx, nextHead > 0 ? nextHead : html.length);
 
+  // ★ 2026-08-31 P1：双段抓取（Upcoming + Ongoing），对齐云函数 fetchLiquipediaUpcoming 行为。
+  //   此前只读 Upcoming 段：Liquipedia 把开赛赛事移入 Ongoing 段后，本地快照漏采进行中赛事
+  //   （云函数 2026-07-30 已修复同样的问题，本地脚本一直没跟上）。
+  //   抓取顺序 Upcoming 在前：先把完整赛期记入内存，供 Ongoing 段同名条目（日期常被截断为
+  //   仅开始日）回填；回填不出时再查旧快照。同名 hashId 去重，两段重叠不重复输出。
+  //   ★ tier 过滤同步放宽：1/2 → 1/2/3（tier3=B级，如 EPL Masters II、ExitLag ChampZ。
+  //   此前 tier3 全被滤掉，是 EPL Masters II 从「即将到来/进行中」消失的第二根因）。
   const nowSec = Math.floor(Date.now() / 1000);
   const out = [];
+  const seen = {};               // hashId -> true（Upcoming/Ongoing 同名去重）
+  const fullDateMem = {};        // hashId -> {start,end}（Upcoming 完整赛期，供 Ongoing 回填）
+  let prevSnap = null;           // 旧快照（Ongoing 截断日期的兜底回填源）
+  try {
+    prevSnap = require(path.join(__dirname, '..', '..', 'utils', 'upcoming-local.json'));
+  } catch (_e) { /* 首次生成无旧文件，跳过 */ }
+
   const rowRe = /<tr class="table2&#95;&#95;row--(body|highlighted)">(.*?)<\/tr>/gs;
-  let m;
-  while ((m = rowRe.exec(section)) !== null) {
-    const row = m[2];
-    const tm = row.match(/Tier_(\d+)_Tournaments/);
-    const liqTier = tm ? parseInt(tm[1], 10) : 0;
-    if (liqTier > 2) continue; // 只取 Tier 1/2
-    const nm = row.match(/column&#95;&#95;tournament[^>]*><a[^>]*>([^<]+)<\/a>/);
-    const name = nm ? nm[1].trim() : null;
-    if (!name) continue;
-    const dm = row.match(/<td class="" data-nowrap="">([^<]+)<\/td>/);
-    const dr = dm ? parseLiquipediaDate(dm[1]) : null;
-    if (!dr || dr.end < nowSec) continue; // 过滤已结束
-    const g = gradeOf(liqTier);
-    out.push({ id: hashId(name), name, grade: g.grade, rank: g.rank, label: g.label, tier: liqTier, start: dr.start, end: dr.end, date: dm[1].trim(), source: 'liquipedia' });
-  }
+  const SECTIONS = ['Upcoming', 'Ongoing'];
+  SECTIONS.forEach((secId) => {
+    const startIdx = html.indexOf('id="' + secId + '"');
+    if (startIdx < 0) return; // 该段不存在则跳过
+    const nextHead = html.indexOf('class="mw-headline"', startIdx + 10);
+    const section = html.slice(startIdx, nextHead > 0 ? nextHead : html.length);
+    let m;
+    rowRe.lastIndex = 0;
+    while ((m = rowRe.exec(section)) !== null) {
+      const row = m[2];
+      const tm = row.match(/Tier_(\d+)_Tournaments/);
+      const liqTier = tm ? parseInt(tm[1], 10) : 0;
+      if (liqTier > 3) continue; // ★ P1：只取 Tier 1/2/3（tier3 映射 B级）
+      const nm = row.match(/column&#95;&#95;tournament[^>]*><a[^>]*>([^<]+)<\/a>/);
+      const name = nm ? nm[1].trim() : null;
+      if (!name) continue;
+      const dm = row.match(/<td class="" data-nowrap="">([^<]+)<\/td>/);
+      const dr = dm ? parseLiquipediaDate(dm[1]) : null;
+      if (!dr) continue; // 日期解析失败（非日期单元格）跳过
+      const id = hashId(name);
+      if (secId === 'Upcoming') {
+        // Upcoming 段通常含完整日期范围 → 记入内存，供同赛事 Ongoing 行回填
+        if (dr.end > dr.start) fullDateMem[id] = { start: dr.start, end: dr.end };
+      } else if (dr.end <= dr.start) {
+        // Ongoing 段日期单元格可能仅显示开始日（end==start 截断）→ 回填完整赛期
+        let full = fullDateMem[id];
+        if ((!full || full.end <= full.start) && prevSnap && prevSnap.events) {
+          const dn = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+          const hit = prevSnap.events.find((e) => {
+            const en = (e.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            return en && (en === dn || dn.indexOf(en) >= 0 || en.indexOf(dn) >= 0);
+          });
+          if (hit && hit.end > hit.start) full = { start: hit.start, end: hit.end };
+        }
+        if (full && full.end > full.start) { dr.start = full.start; dr.end = full.end; }
+      }
+      if (dr.end < nowSec) continue; // 已结束不进快照（回填后 end 为真实结束日）
+      if (seen[id]) return;          // 同名去重（Ongoing 与 Upcoming 重叠）
+      seen[id] = true;
+      const g = gradeOf(liqTier);
+      out.push({ id: id, name, grade: g.grade, rank: g.rank, label: g.label, tier: liqTier, start: dr.start, end: dr.end, date: dm[1].trim(), source: 'liquipedia' });
+    }
+  });
   out.sort((a, b) => a.start - b.start);
 
-  const payload = { generatedAt: Math.floor(Date.now() / 1000), source: 'liquipedia', note: 'build-time snapshot, refresh via scripts/fetch-liquipedia-upcoming.js', events: out };
+  const payload = { generatedAt: Math.floor(Date.now() / 1000), source: 'liquipedia', note: 'build-time snapshot (Upcoming+Ongoing, Tier1-3), refresh via scripts/sync/fetch-liquipedia-upcoming.js', events: out };
   const jsonPath = path.join(__dirname, '..', '..', 'utils', 'upcoming-local.json');
   fs.writeFileSync(jsonPath, JSON.stringify(payload, null, 2), 'utf8');
-  console.log('Wrote', out.length, 'upcoming events ->', jsonPath);
+  console.log('Wrote', out.length, 'events (Upcoming+Ongoing) ->', jsonPath);
+
+  // ★ 2026-08-31 P1：镜像 JSON 到云函数目录（fetchLiquipediaUpcoming 的 Ongoing 回填兜底源）。
+  //   此前靠手动复制，云侧镜像曾陈旧到 07-25（8 条）而本地已 08-31（6 条）。
+  const cloudPath = path.join(__dirname, '..', '..', 'cloudfunctions', 'aggregation', 'upcoming-local.json');
+  fs.writeFileSync(cloudPath, JSON.stringify(payload, null, 2), 'utf8');
+  console.log('Mirrored ->', cloudPath);
 
   // ★ 2026-07-30 同步生成 JS 包装模块（upcoming-local-data.js）
   //   微信小程序分包对 require JSON 存在兼容性问题，JS 模块在主包/分包中 require 均稳定可靠。
