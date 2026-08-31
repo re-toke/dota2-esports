@@ -55,12 +55,16 @@ function editDistance(a, b) {
   return dp[m][n];
 }
 
-// 当搜索无结果时，从已知词（热门战队名/标签 + 历史）中找出编辑距离 ≤2 的近似词作为纠错建议。
-function buildSuggestion(kw) {
+// 当搜索无结果时，从已知词（热门战队名/标签 + 历史 + 当前动态热门榜）中找出编辑距离 ≤2 的近似词作为纠错建议。
+// extra（可选）：页面当前 hot 列表（P2 动态化后含 explorer 实时强队，语料比硬编码更全）。
+function buildSuggestion(kw, extra) {
   const k = (kw || '').trim().toLowerCase();
   if (k.length < 2) return '';
   const candidates = [];
   HOT_TEAMS.forEach((t) => { candidates.push(t.name); if (t.tag) candidates.push(t.tag); });
+  (extra || []).forEach((t) => {
+    if (t && t.name) { candidates.push(t.name); if (t.tag) candidates.push(t.tag); }
+  });
   (searchHistory.get('teams') || []).forEach((h) => candidates.push(h));
   const seen = {};
   const uniq = [];
@@ -172,20 +176,65 @@ Page({
 
   // 批量补全热门队伍详情：优先读云端预热共享缓存 teams_hot（命中 id 则免一次 OpenDota /teams/{id}），
   // 未命中则回退逐队 api.getTeam。二次增强（curation + Steam）照常进行。任一失败被隔离。
+  // P2（2026-08-31）：动态化热门榜 —— 先拉 OpenDota explorer 活跃高分队（一次请求），
+  // 与硬编码骨架合并去重；动态队自带统计字段（跳过逐队 getTeam），硬编码降级为动态榜失败时的兜底。
   enrichHot() {
     this.setData({ hotEnriching: true });
     const list = this.data.hot.slice();
     cloudCache.getTeamsHot()
       .then((hotCache) => {
         const cacheMap = (hotCache && typeof hotCache === 'object') ? hotCache : {};
-        this.buildHotTasks(list, cacheMap);
+        return api.getTopTeams(20)
+          .then((topTeams) => this.buildHotTasks(this.mergeDynamicHot(list, topTeams), cacheMap))
+          .catch(() => this.buildHotTasks(list, cacheMap));   // 动态榜失败：保持原硬编码路径
       })
       .catch(() => this.buildHotTasks(list, {})); // 云端极端不可用：直接逐队拉取（原路径）
   },
 
-  // 构建补全任务：cacheMap 命中 id 复用云端详情，否则 api.getTeam；完成后做二次增强 + 评分排序。
+  // P2 动态热门合并：explorer 动态榜（rating 降序、行内已带统计字段）在前，
+  // 硬编码骨架（无统计字段，仍走 getTeam 补全）去重后接尾，总上限 12。
+  // 动态队失败/为空时返回原列表（= 硬编码兜底）。
+  mergeDynamicHot(list, topTeams) {
+    if (!Array.isArray(topTeams) || !topTeams.length) return list;
+    const dynamic = topTeams.map((t) => {
+      const wins = t.wins || 0;
+      const losses = t.losses || 0;
+      const total = wins + losses;
+      const wr = total ? Math.round((wins / total) * 100) : 0;
+      return {
+        team_id: t.team_id,
+        id: t.team_id,
+        name: t.name,
+        tag: t.tag || (t.name || '').slice(0, 3).toUpperCase(),
+        followed: follow.isFollowed('teams', t.team_id),
+        rating: t.rating || 0,
+        wins: wins,
+        losses: losses,
+        winRate: wr,
+        winRateClass: wr >= 60 ? 'wr-high' : (wr >= 40 ? 'wr-mid' : 'wr-low'),
+        lastMatchTime: t.last_match_time || 0,
+        lastMatchLabel: t.last_match_time ? util.formatAgo(t.last_match_time * 1000) : '',
+        hasStats: !!(t.rating || total),
+        sourceKey: 'opendota',
+        sourceLabel: SOURCE_BADGES.opendota
+      };
+    });
+    const seen = {};
+    dynamic.forEach((t) => { seen[t.id] = true; });
+    const rest = list.filter((t) => !seen[t.id]);
+    return dynamic.concat(rest).slice(0, 12);
+  },
+
+  // 构建补全任务：动态榜队伍（hasStats=true）跳过逐队请求；其余 cacheMap 命中复用云端详情，
+  // 否则 api.getTeam；完成后做二次增强（logo/规范名）+ 评分排序。
   buildHotTasks(list, cacheMap) {
     const tasks = list.map((item) => {
+      // P2：explorer 动态行已带全统计字段，直接复用，省去逐队 getTeam（一次榜单=一次请求）
+      if (item.hasStats) {
+        return sources.enrichTeamInfo({ id: item.id, name: item.name })
+          .then((info) => applyExtra(item, info))
+          .catch(() => item);
+      }
       const cached = cacheMap[item.id];
       const primary = cached ? Promise.resolve(cached) : api.getTeam(item.id);
       return primary
@@ -358,8 +407,8 @@ Page({
         const slice = all.slice(0, pageSize);
         // 仅成功返回才写入历史
         const history = searchHistory.add('teams', kw);
-        // 无结果时计算纠错建议（编辑距离 ≤2）
-        const suggestion = slice.length === 0 ? buildSuggestion(kw) : '';
+        // 无结果时计算纠错建议（编辑距离 ≤2，语料含当前动态热门榜）
+        const suggestion = slice.length === 0 ? buildSuggestion(kw, this.data.hot) : '';
         this.setData({
           loading: false,
           page: 0,

@@ -562,6 +562,37 @@ function getItemTimings(itemName) {
   return cached('/scenarios/itemTimings?item=' + encodeURIComponent(itemName), null, 12 * 3600);
 }
 
+// P2 热门战队动态化（2026-08-31）：OpenDota /explorer 查询「近 N 天活跃 + 总场次达标 + rating 最高」的职业队。
+// 相比 /teams 端点（全量 ~250KB），explorer 只返回 limit 行小 payload，且已带 name/tag/rating/wins/losses/last_match_time，
+// 调用方无需再逐队 getTeam。注意：explorer 的 teams 表没有 rating 列（rating 在 team_rating 表），必须 join。
+// cutoff 按天取整：同一天内缓存 key 稳定，避免跨请求缓存碎片化。
+function getTopTeams(limit, activeDays) {
+  limit = limit || 20;
+  activeDays = activeDays || 90;
+  const dayStart = Math.floor(Date.now() / 1000 / 86400) * 86400;
+  const cutoff = dayStart - activeDays * 86400;
+  const sql = 'SELECT t.team_id, t.name, t.tag, r.rating, r.wins, r.losses, r.last_match_time ' +
+    'FROM team_rating r JOIN teams t ON t.team_id = r.team_id ' +
+    'WHERE r.last_match_time >= ' + cutoff + ' AND t.name IS NOT NULL AND t.name <> \'\' ' +
+    'AND (r.wins + r.losses) >= 100 ' +
+    'ORDER BY r.rating DESC NULLS LAST LIMIT ' + limit;
+  const path = '/explorer?sql=' + encodeURIComponent(sql);
+  return cached(path, null, 6 * 3600).then((data) => {
+    const rows = (data && data.rows) || [];
+    return rows
+      .map((r) => ({
+        team_id: r.team_id,
+        name: (r.name || '').trim(),
+        tag: (r.tag || '').trim(),
+        rating: r.rating || 0,
+        wins: r.wins || 0,
+        losses: r.losses || 0,
+        last_match_time: r.last_match_time || 0
+      }))
+      .filter((t) => t.team_id > 0 && t.name);
+  });
+}
+
 // 批量查询队伍名（team_id -> name）。
 // 用途：OpenDota /leagues/{id}/matches 直连端点返回的 radiant_team_name / dire_team_name
 // 普遍为 null（matches 表未存队名），需用 team_id 反查 teams 表补全，否则联赛比赛列表
@@ -656,6 +687,7 @@ module.exports = {
   getTeam: getTeam,
   getTeamPlayers: getTeamPlayers,
   getTeamMatches: getTeamMatches,
+  getTopTeams: getTopTeams,
   getHeroes: getHeroes,
   getHeroStats: getHeroStats,
   getHeroMatchups: getHeroMatchups,
