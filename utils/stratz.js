@@ -279,19 +279,25 @@ function getLeagueTier(name) {
 // 单赛事比赛列表（可用于补充 OpenDota 的对阵数据）
 // 字段与 OpenDota /leagues/{id}/matches 直连接口对齐，确保 incremental.mergeMatches
 // 跨源合并时不会因字段名/结构差异而错位。
+//
+// ★ 2026-08-24 schema 变更适配（实测确认，Cloudflare 拦截已解除）：
+//   - matches 端点新增必填 request 参数（LeagueMatchesRequestType!，含 take/skip 都是 NON_NULL）
+//   - radiantWin → didRadiantWin
+//   - duration → durationSeconds
+//   - radiantScore/direScore 已删除（只有 radiantKills/direKills，含义不同，不映射）
 function getLeagueMatches(leagueId) {
   if (!ENABLED) return Promise.resolve([]);
-  const q = `query ($id: Int!) { league(id: $id) { id matches { id radiantWin startDateTime duration radiantScore direScore radiantTeam { id name } direTeam { id name } } } }`;
+  const q = `query ($id: Int!) { league(id: $id) { id matches(request: {take: 200, skip: 0}) { id didRadiantWin startDateTime durationSeconds radiantTeam { id name } direTeam { id name } } } }`;
   return gql(q, { id: Number(leagueId) }).then((d) => {
     const ms = (d && d.league && d.league.matches) || [];
     return ms.map((m) => ({
       match_id: m.id,
-      radiant_win: m.radiantWin,
+      radiant_win: m.didRadiantWin,
       start_time: Math.floor((m.startDateTime || 0) / 1000),
-      duration: m.duration,
+      duration: m.durationSeconds,
       leagueid: Number(leagueId),
-      radiant_score: m.radiantScore || 0,
-      dire_score: m.direScore || 0,
+      radiant_score: 0,   // 新 schema 已删除 radiantScore，置 0 保持字段形状兼容
+      dire_score: 0,
       radiant_team_id: (m.radiantTeam && m.radiantTeam.id) || 0,
       radiant_team_name: (m.radiantTeam && m.radiantTeam.name) || '',
       dire_team_id: (m.direTeam && m.direTeam.id) || 0,
@@ -329,30 +335,37 @@ function getLeagueWindow(name) {
 }
 
 // 战队名册（交叉验证队伍成员用）：返回 [{ account_id, name }]
+//
+// ★ 2026-08-24 schema 变更适配：
+//   - team(id:) → team(teamId:)
+//   - team.players → team.members（成员类型由 PlayerType 变为 SteamAccountTeamMemberType）
+//   - 旧 players[].steamAccount.personaname → 新 members[].steamAccount.name
 function getTeamRoster(teamId) {
   if (!ENABLED || !teamId) return Promise.resolve([]);
-  const q = `query ($id: Int!) { team(id: $id) { players { steamAccount { id personaname name } } } }`;
+  const q = `query ($id: Int!) { team(teamId: $id) { members { steamAccountId steamAccount { id name } } } }`;
   return gql(q, { id: Number(teamId) }).then((d) => {
-    const ps = (d && d.team && d.team.players) || [];
-    return ps
-      .filter((p) => p && p.steamAccount && p.steamAccount.id)
-      .map((p) => ({
-        account_id: p.steamAccount.id,
-        name: p.steamAccount.personaname || p.steamAccount.name || ''
+    const members = (d && d.team && d.team.members) || [];
+    return members
+      .filter((m) => m && m.steamAccount && m.steamAccount.id)
+      .map((m) => ({
+        account_id: m.steamAccount.id,
+        name: m.steamAccount.name || ''
       }));
   }).catch(() => []);
 }
 
 // 战队 logo（STRATZ 图床，通常比 OpenDota 稳定）
+// ★ 2026-08-24 schema 变更：team.logoUrl → team.logo
 function getTeamLogo(teamId) {
   if (!ENABLED) return Promise.resolve(null);
-  const q = `query ($id: Int!) { team(id: $id) { id logoUrl } }`;
+  const q = `query ($id: Int!) { team(teamId: $id) { id logo } }`;
   return gql(q, { id: Number(teamId) }).then((d) => {
-    return (d && d.team && d.team.logoUrl) || null;
+    return (d && d.team && d.team.logo) || null;
   }).catch(() => null);
 }
 
 // 队员头像（Steam avatar，通常比 OpenDota 的 profile.avatarfull 更稳定）
+// ★ 2026-08-24 schema 变更：SteamAccountType.avatarfull 已删除，统一用 avatar
 function getPlayerAvatar(accountId) {
   if (!ENABLED) return Promise.resolve(null);
   const q = `query ($id: Long!) { player(steamAccountId: $id) { steamAccount { id avatar } } }`;

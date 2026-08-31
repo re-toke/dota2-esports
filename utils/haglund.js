@@ -7,7 +7,7 @@
 //   并自带 3 小时缓存。对小程序而言，它的关键价值在于：
 //     1. 无需设置 User-Agent（绕开 wx.request 禁设 UA 的根本限制）；
 //     2. 返回的 JSON 结构与项目 normalizeScheduled 兼容（含 matchType/teams/startsAt）；
-//     3. 完全免费、无需 API key、无明确速率限制。
+//     3. 完全免费、无需 API key。
 //
 // 数据契约：
 //   GET https://dota.haglund.dev/v1/matches
@@ -19,21 +19,107 @@
 //   自动回退到本模块。返回的 { matches, boFormat } 形状与 Liquipedia 路径完全一致，
 //   下游 BO 判定引擎、absorbSettledGames、客户端缓存等逻辑零改动。
 //
+// ★★ 2026-08-24 容灾强化（方案 A）★★
+//   实测发现 haglund 存在 IP/UA 级限流（间歇 403）。引入三层容灾：
+//     1. 熔断器（CIRCUIT）：连续失败 ≥3 次进入 OPEN（熔断），冷却 10 分钟内不实际发请求，
+//        直接返回缓存（即使过期）；冷却结束进入 HALF_OPEN 放一次探测，成功则复位 CLOSED。
+//     2. SWR（stale-while-revalidate）：缓存 TTL 拉长到 60 分钟；硬过期后仍允许返回 stale
+//        数据作为兜底（仅当熔断 OPEN 或请求失败时启用）。
+//     3. 浏览器请求头：补 Referer + Accept-Language，降低被 403 的概率。
+//   设计目标：haglund 哪怕限流，用户也能看到「上一次成功拉取的赛程」，而不是空白。
+//
 // 风险与降级：
 //   - 这是第三方个人项目，稳定性弱于 Liquipedia 官方 API；
 //   - 数据本身派生自 Liquipedia，若 Liquipedia 真被全站封禁，本源也会失效；
 //   - 本模块所有失败均 resolve 空对象（错误隔离，不影响其它源）。
-//
-// ★ 2026-08-22 新增（Liquipedia 故障期间的临时方案）★
 
 var cache = require('./cache.js');
 
-// 端点与缓存策略
+// ============== 配置 ==============
 var BASE = 'https://dota.haglund.dev/v1/matches';
 var CACHE_KEY = 'haglund_upcoming_v1';
-// 缓存 30 分钟：与服务端 3h 缓存错开，既能降低对外部稳定性的依赖，
-// 又能在 Liquipedia 恢复后较快切换回主源。
-var CACHE_TTL = 30 * 60;
+
+// 缓存 60 分钟（2026-08-24 从 30→60）：
+//   haglund 上游自带 3h 缓存，本地拉长到 60min 既降低对外部稳定性的依赖，
+//   又能在限流期间充分利用已缓存数据。配合 SWR，硬过期后仍可兜底。
+var CACHE_TTL = 60 * 60;
+
+// 过期缓存兜底窗口：硬过期后仍允许作为 stale 返回的最大时长（4 小时）。
+// 超出此窗口的缓存视为彻底失效，宁可不显示也不显示严重过时数据。
+var STALE_MAX_AGE_SEC = 4 * 3600;
+
+// ============== 熔断器（CIRCUIT BREAKER）==============
+// 状态机：CLOSED（正常）→ 连续失败≥3 → OPEN（熔断，冷却 10 分钟）→ 冷却结束 →
+//        HALF_OPEN（放一次探测）→ 成功则 CLOSED / 失败则回到 OPEN
+//
+// 全部状态存 wx.localStorage，保证小程序冷启动后仍记得 haglund 当前是否可用。
+var CB_KEY = 'haglund_circuit_v1';
+var CB_FAIL_THRESHOLD = 3;          // 连续失败次数阈值
+var CB_COOLDOWN_SEC = 10 * 60;      // OPEN 冷却时长（10 分钟）
+var CB_HALF_OPEN_PROBE_SEC = 60;    // HALF_OPEN 单次探测保护窗口
+
+function cbLoad() {
+  try {
+    var raw = wx.getStorageSync('dota2_' + CB_KEY);
+    if (!raw) return null;
+    if (typeof raw === 'object') return raw;
+    return JSON.parse(raw);
+  } catch (e) { return null; }
+}
+
+function cbSave(state) {
+  try {
+    wx.setStorageSync('dota2_' + CB_KEY, JSON.stringify(state));
+  } catch (e) {}
+}
+
+// 返回 'closed' | 'open' | 'half_open'
+function cbStatus(nowSec) {
+  var s = cbLoad();
+  if (!s) return 'closed';
+  nowSec = nowSec || Math.floor(Date.now() / 1000);
+  if (s.status === 'open') {
+    // 冷却结束 → 转 half_open
+    if (nowSec - (s.openedAt || 0) >= CB_COOLDOWN_SEC) {
+      s.status = 'half_open';
+      s.lastProbeAt = nowSec;
+      cbSave(s);
+      return 'half_open';
+    }
+    return 'open';
+  }
+  if (s.status === 'half_open') {
+    // 探测窗口保护：60s 内只允许一次真实请求
+    return 'half_open';
+  }
+  return 'closed';
+}
+
+// 成功反馈：状态复位到 closed，清零失败计数
+function cbOnSuccess() {
+  cbSave({ status: 'closed', failCount: 0, openedAt: 0, lastProbeAt: 0 });
+}
+
+// 失败反馈：累加失败计数，达阈值转 open
+function cbOnFail() {
+  var s = cbLoad() || { status: 'closed', failCount: 0, openedAt: 0, lastProbeAt: 0 };
+  if (s.status === 'half_open') {
+    // 探测失败 → 立即回到 open
+    s.status = 'open';
+    s.openedAt = Math.floor(Date.now() / 1000);
+    s.failCount = CB_FAIL_THRESHOLD;
+    cbSave(s);
+    return;
+  }
+  s.failCount = (s.failCount || 0) + 1;
+  if (s.failCount >= CB_FAIL_THRESHOLD) {
+    s.status = 'open';
+    s.openedAt = Math.floor(Date.now() / 1000);
+  }
+  cbSave(s);
+}
+
+// ============== 数据归一化 ==============
 
 // haglund 的 matchType 字段（如 "Bo3"）→ 项目内部统一 BO 字符串（如 "BO3"）
 // 与 liquipedia-parse.js parseMatchFields 的 boType 产出形状对齐：
@@ -100,56 +186,47 @@ function normalizeMatch(raw, nowSec) {
   //   未来时间（含 5min 缓冲，防时钟漂移）→ upcoming
   //   已开赛但 < 6h → live（保守，避免短暂状态切换误判）
   //   超过 6h → recent（绝大多数比赛 < 6h）
-  //   ★ 原 24h 阈值太宽松，导致已结束但缓存陈旧的对局被推为 live → 「进行中误判已开始」
   //   ★ 2026-08-22 根因 J（顺延误判修复·方案 A 上游侧）：
   //     顺延场景下规划时间到了但实际未开赛。haglund 无 map/score 信息，
   //     走「兜底证据 E4：规划时间过后 15min 才视为真正 LIVE」。
-  //     该 15min 容忍窗覆盖：① 准点开赛但数据源延迟回填 ② 与下游 league-detail.js 二次过滤口径一致。
   var PROVISIONAL_GRACE_SEC = 15 * 60;
   var phase = 'upcoming';
-  if (start && start <= nowSec - 5 * 60 - PROVISIONAL_GRACE_SEC) {  // 已开赛超过 5min + 15min 顺延容忍才算非 upcoming
+  if (start && start <= nowSec - 5 * 60 - PROVISIONAL_GRACE_SEC) {
     var elapsed = nowSec - start;
     phase = (elapsed < 6 * 3600) ? 'live' : 'recent';
   }
 
   return {
-    // —— 下游 groupLiquipediaMatches + buildSeriesFromSources 依赖字段 ——
-    team1Name: nameA,           // ★ 对齐 Liquipedia 字段名（下游取 m.team1Name）
+    team1Name: nameA,
     team2Name: nameB,
-    team1Short: '',             // haglund 无缩写
+    team1Short: '',
     team2Short: '',
-    score1: 0,                  // 未开赛无比分
+    score1: 0,
     score2: 0,
     walkover: 0,
-    startTime: start,           // ★ groupLiquipediaMatches 通过 _liqStartOf 取此字段
-    start_time: start,          // 双字段兼容
-    boType: normalizeBoType(raw.matchType),  // ★ 字符串（'BO3'），不是对象
-    boDeclared: !!(raw.matchType && /^bo\s*[1-9]$/i.test(raw.matchType)),  // 结构化字段视为显式声明
+    startTime: start,
+    start_time: start,
+    boType: normalizeBoType(raw.matchType),
+    boDeclared: !!(raw.matchType && /^bo\s*[1-9]$/i.test(raw.matchType)),
     finished: false,
-    phase: phase,               // ★ 下游 PHASE_RANK 消费
-    matchIds: [],               // haglund 用自研 id（非 Valve match_id），不填入 matchIds（避免误关联 OpenDota）
-    mapSlots: 0,                // 无此字段
-    // —— haglund 元数据（调试用，下游不依赖）——
+    phase: phase,
+    matchIds: [],
+    mapSlots: 0,
     _haglundId: raw.id,
     _leagueName: raw.leagueName || null,
     _leagueUrl: raw.leagueUrl || null,
     _streamUrl: raw.streamUrl || null,
     _team1Url: tA.url || null,
     _team2Url: tB.url || null,
-    _series_id: null,           // haglund 不返回 series_id
+    _series_id: null,
     _source: 'haglund'
   };
 }
 
-// 按赛事名（leagueName）过滤；不传则返回全部
-// 用于让客户端按当前赛事详情页的 leagueName 筛选对阵
-// ★ 匹配策略（三路，任一命中即保留）：
-//   ① 双向子串包含（原策略，处理 "TI 2026" 包含于 "TI 2026 - Main Event"）
-//   ② 数字年份核心词匹配（"The International 2026" 与 "TI 2026 - Main Event" 共享 "2026" + 前缀缩写）
-//   ③ 已知缩写映射（TI ↔ The International，供 haglund leagueName 与 curation canonical 对齐）
+// ============== 按赛事名过滤 ==============
 var LEAGUE_ALIASES = [
-  { re: /^the international\b/i, short: 'ti' },
   { re: /^the international\s+china\b/i, short: 'ti china' },
+  { re: /^the international\b/i, short: 'ti' },
   { re: /^esl one\b/i, short: 'esl one' },
   { re: /^dreamleague\b/i, short: 'dreamleague' },
   { re: /^pgl\b/i, short: 'pgl' },
@@ -164,7 +241,6 @@ function filterByLeague(matches, leagueName) {
   if (!leagueName || !matches || !matches.length) return matches || [];
   var target = String(leagueName).toLowerCase();
   var targetYear = extractYear(target);
-  // 查找目标名的缩写（如 "the international 2026" → "ti"）
   var targetShort = '';
   LEAGUE_ALIASES.forEach(function (a) {
     if (a.re.test(String(leagueName))) targetShort = a.short;
@@ -173,99 +249,192 @@ function filterByLeague(matches, leagueName) {
     var ln = (m._leagueName || m.leagueName || '');
     if (!ln) return false;
     var low = String(ln).toLowerCase();
-    // ① 双向子串包含
     if (low.indexOf(target) !== -1 || target.indexOf(low) !== -1) return true;
-    // ② 年份 + 缩写匹配（如 "ti 2026" 包含于 "ti 2026 - main event"）
     if (targetYear && targetShort) {
       var lowYear = extractYear(low);
-      // 查 leagueName 缩写（如 "TI 2026 - Main Event" → "ti"）
       var lnShort = '';
       LEAGUE_ALIASES.forEach(function (a) {
         if (a.re.test(ln)) lnShort = a.short;
       });
       if (targetYear === lowYear && targetShort && lnShort && targetShort === lnShort) return true;
-      // 单边有缩写时也宽松匹配（haglund 的 leagueName 是 "TI 2026"，curation canonical 可能不含缩写模式）
       if (targetYear === lowYear && (targetShort === lnShort ||
           (targetShort && low.indexOf(targetShort) !== -1) ||
           (lnShort && target.indexOf(lnShort) !== -1))) return true;
     }
-    // ③ 仅年份匹配（兜底，如两个来源都含 "2026" 且当前赛事是 TI 类 → 保留）
-    //    注意：这可能误命中同年的其他赛事，但 haglund 通常按赛事分页返回，影响有限
     return false;
   });
 }
 
-// 主入口：返回 { matches: [...], boFormat: {...}|null }
+// ============== 主入口 ==============
+// 返回 { matches: [...], boFormat: {...}|null, _source: 'live'|'cache'|'stale'|'none' }
 //   - opts.leagueName：可选，传入则按 leagueName 过滤；不传返回全部 UPCOMING 对阵
-//   - opts.force：跳过本地缓存
+//   - opts.force：跳过本地缓存与熔断器，强制真实请求（调试/手动刷新用）
 //   - opts.now：内部测试注入用
-// 任何失败 resolve { matches: [], boFormat: null }，绝不 reject。
+// 任何失败 resolve { matches: [], boFormat: null, _source: 'none' }，绝不 reject。
 function fetchUpcoming(opts) {
   opts = opts || {};
   var force = !!opts.force;
   var leagueName = opts.leagueName || null;
+  var nowSec = opts.now || Math.floor(Date.now() / 1000);
 
-  // 1) 本地缓存命中直接返回
+  // 1) 本地新鲜缓存命中 → 直接返回（最快路径）
+  //    ★ 用 peek 而非 get：peek 不会删除过期条目，保留给 loadStaleAsFallback 兜底用
+  //    （get 会在过期时调 removeStorageSync 把数据彻底删掉，导致 stale 兜底失效）
   if (!force) {
-    var cached = cache.get(CACHE_KEY, CACHE_TTL);
-    if (cached) {
-      return Promise.resolve({
-        matches: filterByLeague(cached.matches || [], leagueName),
-        boFormat: cached.boFormat || null
-      });
+    var peeked = cache.peek(CACHE_KEY);
+    if (peeked && peeked.value) {
+      var ageSecFresh = Math.floor((Date.now() - (peeked.fetchedAt || 0)) / 1000);
+      if (ageSecFresh <= CACHE_TTL) {
+        return Promise.resolve({
+          matches: filterByLeague(peeked.value.matches || [], leagueName),
+          boFormat: peeked.value.boFormat || null,
+          _source: 'cache'
+        });
+      }
     }
   }
 
-  // 2) wx.request 拉取
+  // 2) 熔断器判定
+  var status = force ? 'closed' : cbStatus(nowSec);
+  if (status === 'open') {
+    // 熔断中：不发请求，尝试 stale 缓存兜底
+    var staleResult = loadStaleAsFallback(leagueName, nowSec);
+    return Promise.resolve(staleResult);
+  }
+
+  // 3) wx.request 拉取（status === 'closed' 或 'half_open'）
   return new Promise(function (resolve) {
     if (typeof wx === 'undefined' || !wx.request) {
-      return resolve({ matches: [], boFormat: null });
+      var empty = { matches: [], boFormat: null, _source: 'none' };
+      // 无 wx.request 时也尝试 stale 兜底
+      var staleOnly = loadStaleAsFallback(leagueName, nowSec);
+      resolve(staleOnly.matches.length ? staleOnly : empty);
+      return;
     }
     wx.request({
       url: BASE,
       method: 'GET',
       timeout: 8000,
+      // 2026-08-24 容灾强化：补浏览器请求头降低 403 概率
+      // 注意 wx.request 支持 header 但禁止设置 User-Agent（违反微信规范），
+      // 因此只用 Referer + Accept-* 等允许的字段。
+      header: {
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': 'https://liquipedia.net/'
+      },
       success: function (res) {
         var data = res && res.data;
         if (res.statusCode !== 200 || !Array.isArray(data)) {
-          return resolve({ matches: [], boFormat: null });
+          // 请求失败（403/500/超时等）→ 计入熔断器
+          cbOnFail();
+          var stale = loadStaleAsFallback(leagueName, nowSec);
+          resolve(stale);
+          return;
         }
-        // 归一化 + 过滤已开赛/已过期（start_time 已过且已有比分的视为已结算，留给 OpenDota 段）
-        var now = (opts.now || Math.floor(Date.now() / 1000));
+        // 归一化 + 过滤已开赛/已过期
         var normalized = [];
         data.forEach(function (raw) {
-          var m = normalizeMatch(raw, now);
+          var m = normalizeMatch(raw, nowSec);
           if (!m) return;
-          // 保留所有未来场 + 当前 24h 内的场（可能刚开赛但还没结算，留给下游 phase 判定）
-          if (m.startTime && m.startTime < now - 24 * 3600) return;
+          if (m.startTime && m.startTime < nowSec - 24 * 3600) return;
           normalized.push(m);
         });
 
-        // 推断整页主导 BO 格式（出现次数最多的 boType 字符串）
         var boFormat = inferPageBoFormat(normalized);
-
         var result = { matches: normalized, boFormat: boFormat };
-        // 写缓存（保存全量，过滤在每次读取时做，避免一次拉取只服务单个 leagueName）
+        // 写缓存（保存全量，过滤在每次读取时做）
         try { cache.set(CACHE_KEY, result, CACHE_TTL); } catch (e) {}
+
+        // 成功反馈熔断器
+        cbOnSuccess();
 
         resolve({
           matches: filterByLeague(normalized, leagueName),
-          boFormat: boFormat
+          boFormat: boFormat,
+          _source: 'live'
         });
       },
       fail: function () {
-        resolve({ matches: [], boFormat: null });
+        // 网络层失败 → 计入熔断器
+        cbOnFail();
+        var stale = loadStaleAsFallback(leagueName, nowSec);
+        resolve(stale);
       }
     });
   });
 }
 
+// 从过期缓存读取 stale 数据作为兜底
+// 返回 { matches, boFormat, _source: 'stale' } 或 { matches: [], boFormat: null, _source: 'none' }
+function loadStaleAsFallback(leagueName, nowSec) {
+  try {
+    var peeked = cache.peek(CACHE_KEY);
+    if (!peeked || !peeked.value) {
+      return { matches: [], boFormat: null, _source: 'none' };
+    }
+    // 判定是否仍在 stale 兜底窗口内
+    var ageSec = Math.floor((Date.now() - (peeked.fetchedAt || 0)) / 1000);
+    if (ageSec > CACHE_TTL + STALE_MAX_AGE_SEC) {
+      // 超出兜底窗口，宁可不显示也不显示严重过时数据
+      return { matches: [], boFormat: null, _source: 'none' };
+    }
+    var v = peeked.value;
+    return {
+      matches: filterByLeague(v.matches || [], leagueName),
+      boFormat: v.boFormat || null,
+      _source: 'stale',
+      _staleAgeSec: ageSec
+    };
+  } catch (e) {
+    return { matches: [], boFormat: null, _source: 'none' };
+  }
+}
+
+// ============== 调试 API ==============
+// 返回当前熔断器状态 + 缓存概况，供设置页或日志展示
+function getStatus() {
+  var nowSec = Math.floor(Date.now() / 1000);
+  var s = cbLoad() || { status: 'closed', failCount: 0, openedAt: 0, lastProbeAt: 0 };
+  var cachePeek = cache.peek(CACHE_KEY);
+  return {
+    circuit: {
+      status: cbStatus(nowSec),
+      failCount: s.failCount || 0,
+      openedAt: s.openedAt || 0,
+      secondsSinceOpened: s.openedAt ? (nowSec - s.openedAt) : 0,
+      cooldownSec: CB_COOLDOWN_SEC
+    },
+    cache: {
+      hasData: !!(cachePeek && cachePeek.value),
+      fetchedAt: (cachePeek && cachePeek.fetchedAt) || 0,
+      ageSec: cachePeek ? Math.floor((Date.now() - cachePeek.fetchedAt) / 1000) : 0,
+      ttlSec: CACHE_TTL,
+      staleMaxAgeSec: STALE_MAX_AGE_SEC,
+      isFresh: cachePeek ? (Date.now() <= cachePeek.expire) : false
+    }
+  };
+}
+
+// 手动重置熔断器（设置页"刷新赛程"按钮用）
+function resetCircuit() {
+  cbSave({ status: 'closed', failCount: 0, openedAt: 0, lastProbeAt: 0 });
+}
+
 module.exports = {
   fetchUpcoming: fetchUpcoming,
+  getStatus: getStatus,
+  resetCircuit: resetCircuit,
   // 导出测试辅助函数
   _normalizeMatch: normalizeMatch,
   _normalizeBoType: normalizeBoType,
   _isoToUnix: isoToUnix,
   _filterByLeague: filterByLeague,
-  _inferPageBoFormat: inferPageBoFormat
+  _inferPageBoFormat: inferPageBoFormat,
+  // 熔断器内部函数（测试用）
+  _cbStatus: cbStatus,
+  _cbOnSuccess: cbOnSuccess,
+  _cbOnFail: cbOnFail,
+  _cbLoad: cbLoad,
+  _cbSave: cbSave
 };

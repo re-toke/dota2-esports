@@ -1258,7 +1258,8 @@ async function handleSteamProxy(event) {
 
 // ===== Steam 联赛 LIVE 对阵聚合（2026-08-21，LIVE 主源）=====
 // 背景：Liquipedia 2026 把对阵数据搬进了 LPDB（需 API key，且审批不确定）；
-//       STRATZ GraphQL 仍被 Cloudflare 反爬虫挑战页拦截（2026-07-30 起未解封）。
+//       2026-08-24 起确认 STRATZ GraphQL Cloudflare 拦截已解除并恢复启用，
+//       但 STRATZ 不提供独立的赛程表（只有已生成的 matches），UPCOMING 段仍需 Steam/他源补充。
 //       Steam Web API 项目已配 STEAM_API_KEY 且云函数环境已知可达，作为 LIVE 主源最稳。
 //
 // 数据来源（2026-08-21 实测确认）：

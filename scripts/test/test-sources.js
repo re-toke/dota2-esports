@@ -63,7 +63,7 @@ const V = ((cshared && cshared.dataVersion) || '0') + ':';
 
 // ===== 4. 导出结构检查 =====
 section('\n--- 模块导出结构 ---');
-check('stratz.ENABLED (2026-07-30 起因 Cloudflare 拦截关闭)', () => assert(stratz.ENABLED === false));
+check('stratz.ENABLED 是布尔（2026-08-24 恢复启用，断言改为属性稳定性）', () => assert(typeof stratz.ENABLED === 'boolean'));
 check('stratz.getLeagues exists', () => assert(typeof stratz.getLeagues === 'function'));
 check('stratz.getLeagueTier exists', () => assert(typeof stratz.getLeagueTier === 'function'));
 check('stratz.getTeamLogo exists', () => assert(typeof stratz.getTeamLogo === 'function'));
@@ -122,10 +122,13 @@ check('无可用窗口源 -> 返回 null', async () => {
 
 // ===== 7. STRATZ / Steam 禁用时返回空 =====
 section('\n--- STRATZ / Steam 禁用时行为 ---');
-check('stratz.ENABLED === false (2026-07-30 起关闭)', () => assert(stratz.ENABLED === false));
-check('stratz.getLeagueTier 禁用时返回 null', async () => {
+// 2026-08-24：STRATZ 已恢复启用（Cloudflare 拦截解除 + schema 适配）。
+// ENABLED 布尔断言已在 §4 覆盖，此处改为「未启用时返回 null」的契约测试：
+// 当 ENABLED=true 时此测试自动通过（mock 网络不可达 → 返回 null 也成立）。
+check('stratz.ENABLED 状态稳定（启用/停用都应是布尔）', () => assert(typeof stratz.ENABLED === 'boolean'));
+check('stratz.getLeagueTier 禁用/网络不可达时返回 null', async () => {
   const r = await stratz.getLeagueTier('Any');
-  assert(r === null, '禁用时应返回 null');
+  assert(r === null, '禁用/不可达时应返回 null');
 });
 check('stratz.getLeagues 禁用时返回空数组', async () => {
   const r = await stratz.getLeagues();
@@ -241,11 +244,11 @@ check('cached() 拒绝列表端点返回非数组（错误对象）', async () =
 // ===== 12. STRATZ 精确名匹配（findLeagueByName 经 getLeagueTier）=====
 // findLeagueByName 未导出，但可通过 stratz.getLeagueTier(name) + mock wx.request 间接验证：
 // 返回包含两个名称相近的联赛，查询精确名应命中对应赛事（证明归一等值匹配优于子串匹配）。
-// ★ 2026-07-30：STRATZ 因 Cloudflare 拦截已关闭（config.stratz.enabled=false），
-//   本测试需临时启用 STRATZ 才能验证其内部模块逻辑（与生产环境配置无关）。
+// ★ 2026-08-24：STRATZ 已恢复启用（Cloudflare 解除 + schema 适配完成）。
+//   本测试仍临时显式启用 + 注入 mock apiKey，确保不依赖云函数环境变量。
 section('\n--- STRATZ 精确名匹配（精确归一 > 子串）---');
 check('stratz.getLeagueTier 精确名命中 DPC_MAJOR→S（非子串误命中）', async () => {
-  // 临时启用 STRATZ 模块以测试其内部逻辑（不受生产 config.stratz.enabled=false 影响）
+  // 显式注入 mock apiKey，确保走直连路径（不依赖云函数环境变量）
   const origStratzEnabled = config.stratz.enabled;
   const origStratzApiKey = config.stratz.apiKey;
   config.stratz.enabled = true;
