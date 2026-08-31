@@ -399,7 +399,7 @@
 }
 
 /* 来源高亮徽标（Valve 官方，信任信号保留） */
-/* 批次3（2026-08-30）§10.1：hl-tp（顶级第三方）/defunct-tag/archive-*/is-defunct 样式已移除
+/* 批次3（2026-08-30）§10.1：hl-tp（顶级第三方）、defunct-tag、archive-x、is-defunct 样式已移除
    （徽章信息移入详情页；defunct 赛事在 applyAndSlice 已过滤不渲染）。 */
 .hl-badge {
   font-size: var(--fs-micro);
