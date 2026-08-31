@@ -13,6 +13,7 @@
 const api = require('../../utils/api.js');
 const itemZh = require('../../utils/itemZh.js');
 const neutralItems = require('../../utils/neutralItems.js');
+const heroes = require('../../utils/heroes.js');
 
 // Steam CDN 源站（物品图标绝对地址基址，与英雄头像一致）
 const ITEM_CDN_ORIGIN = 'https://cdn.cloudflare.steamstatic.com';
@@ -126,4 +127,69 @@ function getRecipeTree(id) {
   });
 }
 
-module.exports = { getItems, getItem, getRecipeTree };
+// P1 数据缺口补齐（2026-08-31）：物品出装统计（适用英雄 + 常见购买时间窗）。
+// 数据源：OpenDota /scenarios/itemTimings（全量对局样本，仅统计价格 >= 1400 金的物品；
+// 低价物品端点返回空数组 → 返回 null，由页面展示「暂无统计」说明）。
+// 聚合逻辑：
+//   - heroes：按 hero_id 累计 games/wins → 过滤样本 <100 场（噪声大）→ 按场次降序取 TOP 8；
+//     名称用 heroes.nameOf（官方中文），头像由 internalNameMap 拼 Steam CDN 地址。
+//   - timings：按购买时刻（秒→分钟）累计 games → 取占比最高的 5 个时间窗（按时间升序展示）。
+// 失败降级：统计数据获取失败不阻塞详情页主内容（catch → null）。
+function getItemUsage(nameEn) {
+  if (!nameEn) return Promise.resolve(null);
+  // 先确保英雄库就绪（nameOf / internalNameMap 依赖 loadAll 完成后的内存映射）
+  return heroes.getHeroes()
+    .catch(() => null)   // 英雄库失败不阻塞统计（名称降级为「英雄#id」）
+    .then(() => api.getItemTimings(nameEn))
+    .then((rows) => {
+      if (!Array.isArray(rows) || rows.length === 0) return null;
+      const heroAgg = {};
+      const timeAgg = {};
+      let totalGames = 0;
+      (rows || []).forEach((r) => {
+        if (!r || r.hero_id == null) return;
+        const g = Number(r.games) || 0;
+        const w = Number(r.wins) || 0;   // OpenDota 返回字符串数字，必须显式转换
+        if (g <= 0) return;
+        totalGames += g;
+        const ha = heroAgg[r.hero_id] || (heroAgg[r.hero_id] = { games: 0, wins: 0 });
+        ha.games += g;
+        ha.wins += w;
+        const tMin = Math.round((Number(r.time) || 0) / 60);
+        const ta = timeAgg[tMin] || (timeAgg[tMin] = { games: 0 });
+        ta.games += g;
+      });
+      if (!totalGames) return null;
+      const internal = heroes.internalNameMap();
+      const HERO_CDN_ORIGIN = 'https://cdn.cloudflare.steamstatic.com';
+      const heroRows = Object.keys(heroAgg)
+        .map((hid) => {
+          const a = heroAgg[hid];
+          const idNum = Number(hid);
+          const inner = internal[idNum] || '';
+          return {
+            heroId: idNum,
+            name: heroes.nameOf(idNum) || ('英雄#' + hid),
+            avatar: inner ? HERO_CDN_ORIGIN + '/apps/dota2/images/heroes/' + inner + '_full.png' : '',
+            games: a.games,
+            winRate: a.games ? Math.round((a.wins / a.games) * 1000) / 10 : 0
+          };
+        })
+        .filter((h) => h.games >= 100)
+        .sort((a, b) => b.games - a.games)
+        .slice(0, 8);
+      const timingRows = Object.keys(timeAgg)
+        .map((t) => ({
+          minute: Number(t),
+          games: timeAgg[t].games,
+          share: totalGames ? Math.round((timeAgg[t].games / totalGames) * 1000) / 10 : 0
+        }))
+        .sort((a, b) => b.games - a.games)
+        .slice(0, 5)
+        .sort((a, b) => a.minute - b.minute);
+      return { totalGames: totalGames, heroes: heroRows, timings: timingRows };
+    })
+    .catch(() => null);
+}
+
+module.exports = { getItems, getItem, getRecipeTree, getItemUsage };

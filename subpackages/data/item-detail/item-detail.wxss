@@ -31,6 +31,22 @@
 .recipe-cost { font-size: var(--fs-caption); color: #C8A951; font-family: var(--font-mono, monospace); }
 .recipe-cost.muted { color: var(--text-2); font-weight: 400; }
 
+/* P1 缺口补齐（2026-08-31）：出装统计 */
+.usage-hero { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1-5) 0; border-bottom: 1rpx solid #1a2029; }
+.usage-hero:last-of-type { border-bottom: none; }
+.usage-avatar { width: 64rpx; height: 64rpx; border-radius: 50%; overflow: hidden; flex-shrink: 0; }
+.usage-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-0-5); }
+.usage-name { font-size: var(--fs-label); font-weight: 600; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.usage-meta { font-size: var(--fs-caption); color: var(--text-3); font-family: var(--font-mono, monospace); }
+.usage-win-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-0-5); flex-shrink: 0; }
+.usage-win { font-size: var(--fs-label); font-weight: 700; color: #C8A951; font-family: var(--font-mono, monospace); }
+.usage-win-label { font-size: var(--fs-caption); color: var(--text-3); }
+.timing-chips { display: flex; flex-wrap: wrap; gap: var(--space-1-5); }
+.timing-chip { display: flex; flex-direction: column; align-items: center; gap: var(--space-0-5); padding: var(--space-1-5) var(--space-2-5); background: #131316; border: 1rpx solid #1a2029; border-radius: var(--radius-md); }
+.timing-min { font-size: var(--fs-caption); color: var(--text-2); }
+.timing-share { font-size: var(--fs-label); font-weight: 700; color: var(--text-1); font-family: var(--font-mono, monospace); }
+.usage-note { margin-top: var(--space-1-5); font-size: var(--fs-caption); color: var(--text-3); line-height: var(--lh-relaxed); }
+
 .detail-foot {
   font-size: var(--fs-caption);
   color: var(--text-3);

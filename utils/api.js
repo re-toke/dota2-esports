@@ -146,6 +146,7 @@ function validateResponse(path, data) {
   if (path === '/leagues' || path === '/search' || path === '/heroes' ||
       path === '/heroStats' || path === '/items' || path === '/proMatches' || path === '/live' ||
       /^\/heroes\/\d+\/matchups$/.test(path) ||
+      /^\/scenarios\/itemTimings/.test(path) ||
       /^\/teams\/\d+\/matches$/.test(path) || /^\/teams\/\d+\/players$/.test(path) ||
       /^\/leagues\/\d+\/matches$/.test(path) || /^\/players\/\d+\/matches$/.test(path)) {
     return Array.isArray(data);
@@ -553,6 +554,14 @@ function getHeroMatchups(id) {
   return cached('/heroes/' + id + '/matchups', null, config.cacheTTL.heroes);
 }
 
+// 物品出装统计（P1 缺口补齐，2026-08-31）：OpenDota /scenarios/itemTimings?item={内部名}。
+// 返回按「英雄 × 购买时间窗」聚合的全量对局样本数组：[{ hero_id, item, time, games, wins }]。
+// 注意：games/wins 为字符串需 Number() 转换；time 为购买时刻（秒）；
+// 该端点仅统计价格 >= 1400 金的物品，低价物品返回空数组（调用方据此展示「暂无统计」）。
+function getItemTimings(itemName) {
+  return cached('/scenarios/itemTimings?item=' + encodeURIComponent(itemName), null, 12 * 3600);
+}
+
 // 批量查询队伍名（team_id -> name）。
 // 用途：OpenDota /leagues/{id}/matches 直连端点返回的 radiant_team_name / dire_team_name
 // 普遍为 null（matches 表未存队名），需用 team_id 反查 teams 表补全，否则联赛比赛列表
@@ -652,5 +661,6 @@ module.exports = {
   getHeroMatchups: getHeroMatchups,
   getTeamNames: getTeamNames,
   getItems: getItems,
-  getItemsList: getItemsList
+  getItemsList: getItemsList,
+  getItemTimings: getItemTimings
 };

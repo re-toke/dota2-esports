@@ -59,12 +59,42 @@
       </view>
     </view>
 
-    <!-- 深度数据：待补充 -->
-    <view class="block pending">
-      <view class="block-title">深度数据（待补充）</view>
+    <!-- P1 缺口补齐（2026-08-31）：出装统计（OpenDota /scenarios/itemTimings，全量对局口径） -->
+    <view class="block" wx:if="{{usage && usage.heroes.length > 0}}">
+      <view class="block-title">适用英雄 TOP（{{usage.totalGames}} 场样本）</view>
+      <view class="usage-hero" wx:for="{{usage.heroes}}" wx:for-item="hu" wx:key="heroId">
+        <view class="usage-avatar">
+          <image-fallback src="{{hu.avatar}}" placeholder="{{hu.name}}" round="{{true}}" />
+        </view>
+        <view class="usage-info">
+          <text class="usage-name">{{hu.name}}</text>
+          <text class="usage-meta">{{hu.games}} 场</text>
+        </view>
+        <view class="usage-win-wrap">
+          <text class="usage-win">{{hu.winRate}}%</text>
+          <text class="usage-win-label">胜率</text>
+        </view>
+      </view>
+      <view class="usage-note">按购买场次排序，仅展示样本 ≥ 100 场的英雄；胜率为该英雄购买此物品后的对局胜率。</view>
+    </view>
+
+    <view class="block" wx:if="{{usage && usage.timings.length > 0}}">
+      <view class="block-title">常见购买时间</view>
+      <view class="timing-chips">
+        <view class="timing-chip" wx:for="{{usage.timings}}" wx:for-item="tw" wx:key="minute">
+          <text class="timing-min">约 {{tw.minute}} 分钟</text>
+          <text class="timing-share">{{tw.share}}%</text>
+        </view>
+      </view>
+      <view class="usage-note">各时间窗内的购买场次占比（TOP 5）。</view>
+    </view>
+
+    <!-- 深度数据补充说明：无统计样本 / 合成树说明 -->
+    <view class="block pending" wx:if="{{usageState !== 'ready' || recipeTree.length === 0}}">
+      <view class="block-title">数据说明</view>
+      <view class="pending-item" wx:if="{{usageState === 'loading'}}"><t-icon name="loading" size="28rpx" color="#6b7280" /><text>出装统计加载中…</text></view>
+      <view class="pending-item" wx:elif="{{usageState === 'empty'}}"><t-icon name="info-circle" size="28rpx" color="#6b7280" /><text>该物品暂无出装统计样本（OpenDota 仅统计价格 ≥ 1400 金物品的购买时间数据）</text></view>
       <view class="pending-item" wx:if="{{recipeTree.length === 0}}"><t-icon name="info-circle" size="28rpx" color="#6b7280" /><text>合成树：该物品无组件或为基础物品</text></view>
-      <view class="pending-item"><t-icon name="info-circle" size="28rpx" color="#6b7280" /><text>适用英雄：需赛后出装样本分析</text></view>
-      <view class="pending-item"><t-icon name="info-circle" size="28rpx" color="#6b7280" /><text>赛事出装率：需职业比赛物品统计</text></view>
     </view>
 
     <view class="detail-foot muted">物品图标来自 Steam CDN；如需显示，请在小程序后台将 cdn.cloudflare.steamstatic.com 加入 downloadFile 合法域名（图片组件走「下载域名」白名单，非 request 域名）。未配置时图标自动回退为文字占位，不影响功能。</view>

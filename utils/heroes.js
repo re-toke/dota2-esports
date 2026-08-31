@@ -34,8 +34,7 @@ function stripNpcPrefix(n) {
 
 // 英雄中文展示名：Valve 官方简体中文客户端名，按内部名（剥离 npc_dota_hero_ 前缀）索引。
 // 仅用于展示 localizedName；内部名(name)与头像(avatar)均不受影响。
-// 注：lone_druid / kez / largo 暂未收录（与 Ursa 中文名存在歧义 / 为最新英雄，待客户端核对），
-// 缺失时回退英文 localized_name，不会显示错误中文。
+// 2026-08-31：lone_druid 已收录（德鲁伊），现全量英雄均已覆盖；缺失时回退英文 localized_name。
 const CN_HERO_NAMES = {
   antimage: '敌法师',
   axe: '斧王',
@@ -161,6 +160,7 @@ const CN_HERO_NAMES = {
   marci: '玛西',
   primal_beast: '原始巨兽',
   muerta: '死亡女神',
+  lone_druid: '德鲁伊',
   kez: '凯',
   largo: '朗戈'
 };
