@@ -61,6 +61,11 @@
     </view>
   </view>
 
+  <!-- P2-2（2026-09-01）：快照提示条——build-time 快照秒开后显示，实时数据到位自动清除；刷新失败时保留并提示 -->
+  <view wx:if="{{leaguesAsOfText}}" class="upcoming-asof-bar">
+    <text class="asof-text">{{leaguesAsOfText}}</text>
+  </view>
+
   <!-- B-1 筛选抽屉：等级 / 排序 / 战队 收拢于此
        批次3（2026-08-30）· PRD §10.3：「视图」区块移除（周轴视图下线，时间轴由新首页周日历承接）。 -->
   <view wx:if="{{filterPanel}}" class="fp-mask" bindtap="closeFilterPanel">

@@ -79,6 +79,11 @@ var RATE_GAP_MS = (config.liquipedia && config.liquipedia.rateLimitMs) || 2200;
 var CACHE_TTL = (config.liquipedia && config.liquipedia.cacheTTL) || (6 * 3600);
 // 2026-07-29 差异化 TTL（Phase 1-②）：赛程变化敏感，30min 短缓存（与云函数对齐）
 var CACHE_TTL_SCHEDULE = (config.liquipedia && config.liquipedia.cacheTtlSchedule) || (30 * 60);
+// ★ 2026-09-01（P1-1 SWR）：赛程 stale-while-revalidate 硬 TTL —— 30min 新鲜窗口内直接返回；
+//   30min ~ 6h 之间返回旧值（附加 _stale: true 标记）供页面秒开，调用方（详情页轮询首刷
+//   refreshSchedule force）立即后台拉新替换；超 6h 才走完整网络链路。
+//   写入侧同步用本值延长硬 TTL（getStale 的硬过期以写入 expire 为准）。
+var STALE_TTL_SCHEDULE = (config.liquipedia && config.liquipedia.cacheStaleTtlSchedule) || (6 * 3600);
 
 // 启动日志：在开发者工具 Console 中一眼确认配置是否生效
 if (ENABLED) {
@@ -458,9 +463,16 @@ function getScheduledMatches(name, opts) {
   if (!ENABLED) return Promise.resolve({ matches: [], boFormat: null });
   if (!name) return Promise.resolve({ matches: [], boFormat: null });
 
-  // 强制清空三类会话级缓存：模拟器可能缓存旧状态
+  // ★ 2026-09-01（P0-2 配套）：熔断状态不再无条件清零 —— 原实现每次进详情页都把
+  //   cloudBreaker 的 10 分钟熔断窗口强行复位，熔断器对详情页近似失效（云函数真挂时
+  //   每次请求都先失败一次再回退直连的额外开销）。现改为：
+  //     - LIQ_FAILURES / slugMapCache（本模块会话级）保持每次清零（模拟器旧状态兜底，原行为）；
+  //     - cloudBreaker 熔断状态仅在 force（用户显式刷新/轮询主动重试）时复位——
+  //       属「明确想再试一次云」的语义，与 breaker 10 分钟自动过期互补。
   LIQ_FAILURES = 0;
-  try { wx.setStorageSync('dota2_cloud_cb', { broken: false, fails: 0 }); } catch (e) {}
+  if (!!(opts && opts.force)) {
+    try { wx.setStorageSync('dota2_cloud_cb', { broken: false, fails: 0 }); } catch (e) {}
+  }
   slugMapCache = null;
 
   // ★ 2026-08-11：多页面赛事（如 TI）的主页面可能不含 {{Match}} 模板（对阵在 Group_Stage 子页面）。
@@ -472,8 +484,26 @@ function getScheduledMatches(name, opts) {
   var slug = (curationEvent && curationEvent.scheduledMatchesSlug) || liquipediaSlugFor(name);
   var cacheKey = 'liquipedia_schedule_' + consensus.normName(slug);
   var force = !!(opts && opts.force);
-  var cached = cache.get(cacheKey, CACHE_TTL_SCHEDULE);
-  if (cached && !force) return Promise.resolve(cached);
+  // ★ 2026-09-01（P1-1 SWR）：读取改 getStale ——
+  //   fresh（≤30min）：直接返回（原行为）；
+  //   stale（30min~6h）：立即返回旧值 + _stale 标记（调用方秒开渲染，后台刷新由
+  //     详情页轮询首刷 refreshSchedule(force) 承担——load 完成后 startSchedulePolling
+  //     本就立即 force 拉新并 diff setData，无需额外刷新任务）；
+  //   expired（>6h / 无缓存）：走完整网络链路（原行为）。
+  //   force（轮询/下拉刷新）：一律跳过缓存走网络（原行为，不受 SWR 影响）。
+  var cachedMeta = cache.getStale(cacheKey, CACHE_TTL_SCHEDULE, STALE_TTL_SCHEDULE);
+  if (cachedMeta && cachedMeta.value && !force) {
+    if (cachedMeta.fresh) {
+      return Promise.resolve(cachedMeta.value);
+    }
+    console.log('[liquipedia] SWR: 赛程缓存 ' + Math.round((Date.now() - (cachedMeta.fetchedAt || 0)) / 60000) +
+                'min 前拉取，先返回旧值（' + ((cachedMeta.value.matches) || []).length + ' 场），轮询首刷将拉新');
+    // 浅拷贝附加 _stale（不污染缓存存储的内存对象引用语义）；
+    // 兼容旧数组 shape（normalizeScheduled 的同款归一化，防 Object.assign 摊平数组）
+    var base = Array.isArray(cachedMeta.value) ? { matches: cachedMeta.value, boFormat: null } : cachedMeta.value;
+    var staleVal = Object.assign({}, base, { _stale: true });
+    return Promise.resolve(staleVal);
+  }
 
   // ★ 2026-08-04：统一返回 { matches, boFormat }（BO 判定引擎 S2 信号）。
   //   boFormat = parseBoFormat 的 Format 段赛制映射（云函数端解析，或本地兜底解析）。
@@ -583,7 +613,9 @@ function getScheduledMatches(name, opts) {
       var boFormat = steam.boFormat || liq.boFormat || null;
       var combined = { matches: merged, boFormat: boFormat };
       if (merged.length) {
-        try { cache.set(cacheKey, combined, CACHE_TTL_SCHEDULE); } catch (e) {}
+        // ★ 2026-09-01（P1-1 SWR）：写入 TTL 延长至 6h（stale 窗口）；新鲜度由读取侧
+        //   getStale(freshSec=30min) 判定，不再靠写入 TTL 表达「30min 内有效」
+        try { cache.set(cacheKey, combined, STALE_TTL_SCHEDULE); } catch (e) {}
       }
       console.log('[liquipedia] 合并完成: steam=' + (steam.matches || []).length +
                   ' liquipedia/haglund=' + (liq.matches || []).length +
@@ -607,8 +639,9 @@ function tryHaglundFallback(name, force, cacheKey) {
   return haglund.fetchUpcoming({ leagueName: name, force: force }).then(function (res) {
     if (res && res.matches && res.matches.length) {
       // 命中则写入与 Liquipedia 相同的 cache key，下次走缓存（与主源缓存策略一致）
+      // ★ 2026-09-01（P1-1 SWR）：同主源延长至 6h stale 窗口
       if (cacheKey) {
-        try { cache.set(cacheKey, res, CACHE_TTL_SCHEDULE); } catch (e) {}
+        try { cache.set(cacheKey, res, STALE_TTL_SCHEDULE); } catch (e) {}
       }
       console.log('[liquipedia] haglund 兜底命中, matches=' + res.matches.length +
                   ' league=' + name + ' boFormat=' + (res.boFormat ? res.boFormat.format : 'null'));
@@ -632,7 +665,8 @@ function fetchScheduledLocal(slug, cacheKey) {
       // ★ 2026-08-04：本地兜底路径同样解析 Format 段赛制（S2 信号）
       var boFormat = LiquiParse.parseBoFormat(wikitext);
       var norm = { matches: scheduled, boFormat: boFormat };
-      cache.set(cacheKey, norm, CACHE_TTL_SCHEDULE);
+      // ★ 2026-09-01（P1-1 SWR）：同主源延长至 6h stale 窗口
+      cache.set(cacheKey, norm, STALE_TTL_SCHEDULE);
       return norm;
     })
     .catch(function () { return { matches: [], boFormat: null }; });

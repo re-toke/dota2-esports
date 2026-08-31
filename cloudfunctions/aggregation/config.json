@@ -1,10 +1,15 @@
 {
-  "timeout": 30,
+  "timeout": 60,
   "triggers": [
     {
       "name": "cacheRefresh",
       "type": "timer",
       "config": "0 0 */6 * * *"
+    },
+    {
+      "name": "schedulePreheat",
+      "type": "timer",
+      "config": "0 */30 * * * *"
     }
   ]
 }

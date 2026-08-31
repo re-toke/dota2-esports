@@ -384,6 +384,9 @@ function getUpcomingFromCuration(now) {
       // （下游 mergeCurationUpcoming 的 cardStatus 判定要求 startDate && endDate 都存在，
       //   缺 end 会落到 'upcoming'，导致已开赛赛事误进「即将到来」tab）。
       if (ev.start <= now && !ev.end) return;
+      // F4（2026-08-31）：补 region/prizePool 透传，供首页赛事级卡片渲染赛区/奖金池。
+      //   ev 源自 buildEffective 返回的合并事件对象（含 CURATED_EVENTS 全字段），
+      //   旧版只透传基础字段，首页无法展示赛区/奖金池。
       list.push({
         name: ev.canonical,
         startDate: ev.start,
@@ -391,6 +394,8 @@ function getUpcomingFromCuration(now) {
         tier: ev.tier || { grade: 'S', rank: 3, label: 'S级' },
         year: ev.year || null,
         leagueId: (ev.leagueId != null) ? ev.leagueId : null,  // 方案 E：透传真实 id
+        region: ev.region || '',           // F4：赛区（如「中国上海」「欧洲/CIS · 线上」）
+        prizePool: ev.prizePool || '',     // F4：奖金池（如「$1,600,000」）
         source: 'curation'
       });
     }
@@ -791,10 +796,25 @@ function getLeagueStandings(leagueId) {
 // ★ 2026-08-12 强化版：获取 match 的分组键。
 //   优先用软关联字段 _patchedSeriesKey（patchNullSeriesId 写入，不动原 series_id），
 //   无则回退到原 series_id；无 series_id 则用 match_id 独立成组。
+// ★ 2026-09-01 根因 H6 修复：无 series_id 且 match_id 无效（0/null）的 upcoming 排期赛，
+//   旧实现一律返回 'm0' → 所有 match_id=0 的排期赛（不同战队对）塌缩进同一组，
+//   首页「即将开始」段多队 upcoming 被合并成 1 张卡（v5 series 化的回归，
+//   v4.2 _cardFromTeamMatch 用 leagueid+start_time 独立成卡无此问题）。
+//   改为「队ID对(升序) + start_time」合成唯一键：同一场（同队对同时刻）仍合并；
+//   不同场各自独立成卡。同队对同日的 BO 多局（BO3 局1/局2 均未开赛）由
+//   _orphanPairMerge 先行合并（series_type>=1 才参与），此处不重复处理。
 function getSeriesKey(m) {
   if (m._patchedSeriesKey) return m._patchedSeriesKey;
   const sid = m.series_id;
-  return (sid != null && sid !== 0) ? ('s' + sid) : ('m' + m.match_id);
+  if (sid != null && sid !== 0) return 's' + sid;
+  if (m.match_id && m.match_id > 0) return 'm' + m.match_id;
+  const a = m.radiant_team_id, b = m.dire_team_id;
+  if (a != null && a > 0 && b != null && b > 0 && m.start_time) {
+    const lo = a < b ? a : b;
+    const hi = a < b ? b : a;
+    return 'up_' + lo + '_' + hi + '_' + m.start_time;
+  }
+  return 'm' + (m.match_id || 0);
 }
 
 // ★ 2026-08-22 修复根因 F：孤儿互并段提取为独立函数
@@ -1764,6 +1784,127 @@ function resolveTeamIdName(id, idNameMap, curatedTeams, rawIdMap) {
   return (rawIdMap && rawIdMap[id]) || null;
 }
 
+// ★ 2026-09-01（v8.4 Fix-A）：一 ID 多届原始比赛时间窗过滤（纯函数）。
+//   根因：OpenDota league id 跨届复用（实证：19944 = EPL Masters I+II 两届 249 场混杂），
+//   详情页 load() 拉全量 → RECENT 段混入旧届比赛卡 + participantsList 混入两届 31 支队伍。
+//   修复：按 curation 的届次窗口（leagueIdWindow 优先，回退 start/end ±48h）裁剪 raw。
+//   防御：① 无时间戳的 match 保守保留；② 过滤后为空（窗口错配）返回原数组，不清空页面。
+function filterMatchesByWindow(raw, win) {
+  if (!Array.isArray(raw) || !raw.length || !win || !win.from || !win.to) return raw;
+  var filtered = raw.filter(function (m) {
+    var st = m && m.start_time;
+    if (!st) return true;
+    return st >= win.from && st <= win.to;
+  });
+  return filtered.length ? filtered : raw;
+}
+
+// ★ 2026-09-01（v8.4 Fix-D）：LIVE 段同系列多卡兜底去重（纯函数）。
+//   根因：absorbSettledGames 方向解析依赖 explorer 队名 resolver，resolver 失败（限流/未收录）
+//   时吸收被跳过（R3/R4 已文档化边界）→ 同一对局同时存在 LP/Steam live 卡 + OpenDota live 系列卡，
+//   LIVE 段双卡重叠（用户实测：EPL Masters II「4ikibamboni vs Inner Circle」+「天辉 vs 夜魇 1:0」并存）。
+//   判定同系列证据（任一命中）：
+//     ① 归一化队名对相同（双方均为真名；占位 天辉/夜魇/TBD 不参与，防全部 OD 卡撞同一键）
+//     ② matchIds 有交集（LP 卡 matchIds ↔ OpenDota 卡 games 的 match_id）
+//     ③ series_id 相同（非 0/null，Steam live 与 OpenDota 同系列天然同 id）
+//   保留优先级：真名卡 > 占位名卡 → games 多者 → 系列比分和高者 → 先出现者。
+function dedupeLiveSeries(seriesList) {
+  if (!Array.isArray(seriesList) || seriesList.length < 2) return seriesList;
+  var PLACEHOLDER_RE = /^(天辉|夜魇|tbd|tba|unknown|待定|待公布)$/i;
+  function _norm(s) {
+    var n = String(s || '').toLowerCase().trim();
+    n = n.replace(/\s*(esports|e-sports|gaming|team|club)\s*$/g, '');
+    n = n.replace(/[^a-z0-9一-鿿а-яё]/g, '');
+    return n;
+  }
+  function _pairKey(s) {
+    var a = _norm(s.radiantName || s.team1Name);
+    var b = _norm(s.direName || s.team2Name);
+    if (!a || !b || PLACEHOLDER_RE.test(a) || PLACEHOLDER_RE.test(b)) return null;
+    return a < b ? (a + '|' + b) : (b + '|' + a);
+  }
+  function _midSet(s) {
+    var set = {};
+    if (Array.isArray(s.matchIds)) s.matchIds.forEach(function (id) { if (id) set[String(id)] = true; });
+    (s.games || []).forEach(function (g) { if (g && g.match_id) set[String(g.match_id)] = true; });
+    return set;
+  }
+  var live = seriesList.filter(function (s) { return s && s.phase === 'live'; });
+  if (live.length < 2) return seriesList;
+  var cards = live.map(function (s) {
+    var sid = (s.series_id != null) ? String(s.series_id) : '';
+    return {
+      s: s,
+      pair: _pairKey(s),
+      mids: _midSet(s),
+      sid: (sid && sid !== '0' && sid !== 'null') ? sid : null
+    };
+  });
+  function _sameMatch(a, b) {
+    if (a.pair && a.pair === b.pair) return true;
+    if (a.sid && a.sid === b.sid) return true;
+    var ka = Object.keys(a.mids);
+    for (var i = 0; i < ka.length; i++) { if (b.mids[ka[i]]) return true; }
+    return false;
+  }
+  function _keep(a, b) {
+    // ① 一方占位名一方真名 → 保留真名卡（用户可见正确队伍名）
+    var aReal = a.pair ? 1 : 0, bReal = b.pair ? 1 : 0;
+    if (aReal !== bReal) return aReal > bReal ? a : b;
+    // ② games 已注入/直连数量多者（比分可信度高）
+    var ag = (a.s.games || []).length, bg = (b.s.games || []).length;
+    if (ag !== bg) return ag > bg ? a : b;
+    // ③ 系列比分总和更高者
+    var asc = (a.s.scoreA || 0) + (a.s.scoreB || 0);
+    var bsc = (b.s.scoreA || 0) + (b.s.scoreB || 0);
+    if (asc !== bsc) return asc > bsc ? a : b;
+    return a;  // ④ 先出现者
+  }
+  var drop = [];
+  for (var i = 0; i < cards.length; i++) {
+    if (drop.indexOf(cards[i].s) >= 0) continue;
+    for (var j = i + 1; j < cards.length; j++) {
+      if (drop.indexOf(cards[j].s) >= 0) continue;
+      if (_sameMatch(cards[i], cards[j])) {
+        var keeper = _keep(cards[i], cards[j]);
+        var loser = (keeper === cards[i]) ? cards[j] : cards[i];
+        drop.push(loser.s);
+      }
+    }
+  }
+  if (!drop.length) return seriesList;
+  return seriesList.filter(function (s) { return drop.indexOf(s) < 0; });
+}
+
+// ★ 2026-09-01（v8.4 Fix-E）：参赛队伍同名多 id 去重（纯函数）。
+//   根因：同一战队跨届/重注册会持有多个 OpenDota team_id（实证：19944 中 Zero Tenacity
+//   9600141 与 10208035、Team Syntax 10213108 与 10232570 并存），refreshMetadataDerived
+//   按 team_id 去重 → 同一队伍在参赛队伍列表出现两条（「相同数据重叠」）。
+//   修复：按「小写+去非字母数字」归一化队名聚合，保留出场次数多的 id（更权威的注册条目），
+//   返回应丢弃的 id 数组（无重复返回 null）。
+function dropDuplicateNameIds(teamMap, teamCount) {
+  if (!teamMap) return null;
+  function _norm(s) {
+    return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+  var best = {};
+  Object.keys(teamMap).forEach(function (id) {
+    var n = _norm(teamMap[id]);
+    if (!n) return;
+    if (best[n] == null || ((teamCount && teamCount[id]) || 0) > ((teamCount && teamCount[best[n]]) || 0)) {
+      best[n] = id;
+    }
+  });
+  var drop = [];
+  Object.keys(teamMap).forEach(function (id) {
+    var n = _norm(teamMap[id]);
+    if (!n) return;
+    var b = best[n];
+    if (b != null && String(b) !== String(id)) drop.push(Number(id));
+  });
+  return drop.length ? drop : null;
+}
+
 // ★ 2026-08-20：Liquipedia 来源的系列赛聚合（修复「一场 BO3 被拆成多张 BO1 卡」）
 // 根因：Liquipedia v3 / wikitext 对阵中，同一 BO 系列的每一局是独立 match 记录；
 //   buildSeriesFromSources 的 Liquipedia 合并段原本直接 .map 每个 match 成一张独立 series 卡，
@@ -2035,15 +2176,76 @@ function mergeLiquipediaGroup(group) {
     walkover: base.walkover || 0,
     boDeclared: base.boDeclared || false,
     pagename: base.pagename || '',
+    // ★ 2026-09-01（首页 v5.1）：聚合透传联赛名 —— buildLpUpcomingSeries 消费聚合对象时
+    //   需要 leagueName 渲染首页 LP 卡头（缺省会退化「职业赛事」）。原实现聚合后丢失。
+    leagueName: base.leagueName || base._leagueName || '',
+    _leagueName: base.leagueName || base._leagueName || '',
     // 标记：由聚合产生，供调试 / 可选渲染小场（各局原始记录）
     _aggregated: true,
     _games: group
   };
 }
 
+// ★ 2026-09-01（首页 v5.1）：Liquipedia/Steam/haglund 排期对局 → 首页「对局级 upcoming」系列。
+//   背景：首页此前无对局级 upcoming 数据源 —— OpenDota /teams/{id}/matches 实测只返回历史比赛
+//   （1922 条、未来 0 条），proMatches//live 均为已开赛，curation 仅有赛事级卡（无对阵）。
+//   本函数消费 liquipedia.getScheduledMatches 返回的 LP 形状 matches（team1Name/team2Name/
+//   startTime/phase/boType/series_type/mapSlots），过滤出「未开赛 + 双方确定队名」的 upcoming，
+//   经 groupLiquipediaMatches 聚合（防 BO3 各局拆成多张卡），映射为与 groupSeries 输出兼容的
+//   系列对象（radiantName/direName/lastTime/phase/boType…），供首页 _cardFromSeries 直接消费。
+//   纯函数（不依赖 wx/云），可单测。
+function buildLpUpcomingSeries(lpMatches, now) {
+  if (!Array.isArray(lpMatches) || !lpMatches.length) return [];
+  now = now || Math.floor(Date.now() / 1000);
+  var TBD_RE = /^(tbd|tba|待定|待公布|unknown)$/i;
+  // ① 过滤：未开赛（start 在未来）且双方均为确定队名（TBD/TBA 不渲染——无法展示对阵且参与
+  //    聚合会误并「TBD vs A」「TBD vs B」，与详情页 §9 P0-D2 同口径）
+  var upcoming = lpMatches.filter(function (m) {
+    if (!m) return false;
+    var st = m.startTime || m.start_time || 0;
+    if (!st || st <= now) return false;
+    var n1 = String(m.team1Name || '').trim();
+    var n2 = String(m.team2Name || '').trim();
+    if (!n1 || !n2 || TBD_RE.test(n1) || TBD_RE.test(n2)) return false;
+    return true;
+  });
+  if (!upcoming.length) return [];
+  // ② 聚合：同队名对 + 同日（≤6h 链式聚类）合并为一项，防 BO3 各局拆卡
+  var grouped = groupLiquipediaMatches(upcoming);
+  // ③ 映射为 series 形状（对齐 groupSeries 输出，_cardFromSeries 兼容）
+  return grouped.map(function (m, idx) {
+    var st = m.startTime || m.start_time || 0;
+    return {
+      key: 'lpup_' + idx + '_' + Math.floor(st / 60),   // 分钟桶稳定键（数据源轮询间 startTime 抖动容忍）
+      games: [],
+      phase: 'upcoming',
+      isUpcoming: true,
+      isLive: false,
+      isMulti: false,
+      scoreA: 0,
+      scoreB: 0,
+      boType: m.boType || 'BO1',
+      seriesType: (m.series_type != null ? m.series_type : null),   // applyBo S3 信号
+      declaredBo: m.boDeclared ? (m.boType || null) : null,          // applyBo S1 信号
+      mapSlots: m.mapSlots || 0,                                     // applyBo S4.5 信号
+      radiantName: m.team1Name,
+      direName: m.team2Name,
+      radiantTeamId: 0,
+      direTeamId: 0,
+      firstTime: st,
+      lastTime: st,
+      leagueName: m._leagueName || m.leagueName || '',
+      leagueId: m.leagueId || 0,
+      matchIds: m.matchIds || [],
+      series_id: m.series_id || null
+    };
+  });
+}
+
 module.exports = {
   SOURCE_LABEL: SOURCE_LABEL,
   groupLiquipediaMatches: groupLiquipediaMatches,
+  buildLpUpcomingSeries: buildLpUpcomingSeries,
   getLeagueTier: getLeagueTier,
   voteLeagueNameForMatch: voteLeagueNameForMatch,
   getLeagueWindow: getLeagueWindow,
@@ -2062,6 +2264,10 @@ module.exports = {
   shouldRefreshOpenDota: shouldRefreshOpenDota,
   allMatchIdsInSet: allMatchIdsInSet,
   resolveTeamIdName: resolveTeamIdName,
+  // ★ 2026-09-01（v8.4）：赛事详情页数据重叠修复三件套（纯函数，可单测）
+  filterMatchesByWindow: filterMatchesByWindow,
+  dedupeLiveSeries: dedupeLiveSeries,
+  dropDuplicateNameIds: dropDuplicateNameIds,
   classifyStage: classifyStage,
   enrichTeamLogo: enrichTeamLogo,
   enrichPlayerAvatar: enrichPlayerAvatar,

@@ -2158,6 +2158,94 @@ async function handleSendSmartReminders(event) {
   return { ok: true, sent: sent, skipped: skipped, failed: failed };
 }
 
+// ===== P0-3③（2026-09-01）：赛事详情页聚合 bundle =====
+// 一次 callFunction 返回「OD league matches + explorer teamNames」—— 把客户端 load() 的
+// D1 串行段（raw 到达后才能发起的 explorer teamNames 直连，国内跨网 1-3s + 占客户端
+// 60req/min 配额）搬进云端：od 结果在云函数内提取 team_id → 内网 explorer 查询。
+// 与客户端并行段的 getScheduledMatches（steam+liquipedia 两个 action）互不重叠。
+// 部分成功契约：matches / teamNames 任一失败不拖垮整体（[] / {} 降级），
+// 两者皆空时客户端 catch 回退既有旧链（getLeagueMatches direct + curation 队名）。
+// 体积防护：teamNames 仅 team_id → name 映射（每条 ~30B），matches 与单 action
+// getLeagueMatches 同体量，返回体不放大。
+// 缓存：matches 复用通用路径同 key（/leagues/{id}/matches，TTL.leagueMatches），
+//   names 的 explorer SQL 与客户端 api.getTeamNames 同 key 同 6h TTL（同赛事同 id 集合 → 高命中）。
+async function getLeagueDetailBundle(params, force) {
+  const p = params || {};
+  const leagueId = Number(p.leagueId) || 0;
+  const hasValidId = leagueId > 0;
+  const odPath = '/leagues/' + leagueId + '/matches';
+
+  // 子任务：OD league matches（缓存 → 现抓 → 过期缓存兜底，与通用路径同语义）
+  async function loadOd() {
+    if (!hasValidId) return [];
+    if (!force) {
+      const cached = await getCache(odPath);
+      if (cached) return cached;
+    }
+    try {
+      const data = await fetch(odPath);
+      setCache(odPath, data, TTL.leagueMatches).catch(() => {});
+      return data || [];
+    } catch (e) {
+      const fallback = await getCache(odPath);
+      return fallback || [];
+    }
+  }
+
+  // 子任务：explorer teamNames（team_id 集合从 od 结果提取，云端内网 RTT）
+  async function loadNames(odList) {
+    const ids = [];
+    const seen = {};
+    (Array.isArray(odList) ? odList : []).forEach(function (m) {
+      if (m && m.radiant_team_id && !seen[m.radiant_team_id]) {
+        seen[m.radiant_team_id] = 1;
+        const n = Number(m.radiant_team_id);
+        if (n > 0) ids.push(n);
+      }
+      if (m && m.dire_team_id && !seen[m.dire_team_id]) {
+        seen[m.dire_team_id] = 1;
+        const n = Number(m.dire_team_id);
+        if (n > 0) ids.push(n);
+      }
+    });
+    if (!ids.length) return {};
+    // SQL 只含数字 id（上方已过滤），无注入风险（与客户端 api.getTeamNames 同构造）
+    const sqlPath = '/explorer?sql=' + encodeURIComponent(
+      'SELECT team_id, name FROM teams WHERE team_id IN (' + ids.join(',') + ')');
+    let data = null;
+    const cached = await getCache(sqlPath);
+    if (cached) {
+      data = cached;
+    } else {
+      try {
+        data = await fetch(sqlPath);
+        setCache(sqlPath, data, 6 * 3600 * 1000).catch(() => {});
+      } catch (e) {
+        data = await getCache(sqlPath).catch(() => null);   // 失败 → 过期缓存兜底
+      }
+    }
+    const map = {};
+    ((data && data.rows) || []).forEach(function (r) {
+      if (r && r.team_id != null) map[r.team_id] = r.name || '';
+    });
+    return map;
+  }
+
+  const od = await loadOd();
+  const names = await loadNames(od);
+  const odOk = Array.isArray(od) && od.length > 0;
+  const namesOk = Object.keys(names).length > 0;
+  console.log('[LeagueDetailBundle] leagueId=' + leagueId +
+    ' matches=' + (Array.isArray(od) ? od.length : 0) +
+    ' teamNames=' + Object.keys(names).length +
+    (odOk ? '' : ' (od empty→client fallback)'));
+  // 两者皆空视为整体失败（客户端回退旧链）；任一成功即部分成功
+  if (!odOk && !namesOk) {
+    return { error: makeError(ERROR_CODES.UPSTREAM_ERROR, 'league detail bundle empty') };
+  }
+  return { data: { matches: od, teamNames: names }, source: 'bundle' };
+}
+
 // ===== B2 核心：Action → Handler 路由表（O(1) 查找，替代 if-else 链）=====
 const HANDLERS = new Map([
   // 数据源健康检查（2026-08-11 长期架构改进落地）
@@ -2177,6 +2265,8 @@ const HANDLERS = new Map([
   ['liquipediaPrewarm', (e) => liquipediaPrewarm(e.params, e.force)],
   // 赛程
   ['getUpcomingSchedule', handleGetUpcomingSchedule],
+  // 赛事详情页聚合 bundle（P0-3③，2026-09-01）
+  ['getLeagueDetailBundle', (e) => getLeagueDetailBundle(e.params, e.force)],
   // 实验
   ['getExperiments', handleGetExperiments],
   // 订阅消息
@@ -2350,6 +2440,48 @@ async function handleTimer() {
   return { ok: true, results };
 }
 
+// ===== P2-1（2026-09-01）：30min 轻量预热 handler（schedulePreheat timer 专用）=====
+// 与 6h 重任务 handleTimer 分离——搜索索引 / 战队刷新等慢变数据无需高频跑；
+// 本 handler 只预热「分钟级时效」的赛程类缓存：
+//   ① preheatUpcoming      → upcoming_schedule（6h TTL，列表页「即将」tab + 首页秒开）
+//   ② preheatScheduledMatches → SCHEDULED_MATCHES_SLUG_OVERRIDE 页缓存（详情页秒开）
+// Liquipedia 配额核算（30min 一跑 × 48 跑/天）：① notable 过滤后 ~10-25 页 + ② ~N 页，
+//   约 15-30 请求/跑 ≈ 720-1440 请求/天，处于安全区间（复核红线 ~3000/天）。
+// 退避：复用 preheatShouldRun / preheatMarkResult（失败指数退避至 4h，防故障时打爆）。
+async function handleSchedulePreheat() {
+  const results = [];
+  if (preheatShouldRun('preheatUpcoming')) {
+    try {
+      const r = await preheatUpcoming();
+      preheatMarkResult('preheatUpcoming', !!(r && r.ok));
+      results.push({ preheatUpcoming: r });
+    } catch (e) {
+      preheatMarkResult('preheatUpcoming', false);
+      results.push({ preheatUpcoming: { ok: false, error: e.message } });
+    }
+  } else {
+    results.push({ preheatUpcoming: { ok: false, skipped: 'backoff' } });
+  }
+  if (preheatShouldRun('preheatScheduledMatches')) {
+    const preheatTargets = Object.keys(SCHEDULED_MATCHES_SLUG_OVERRIDE);
+    let preheatOk = true;
+    for (const name of preheatTargets) {
+      try {
+        const r = await liquipediaScheduledMatches({ name: name });
+        preheatOk = preheatOk && !!(r && r.data);
+        await new Promise((res) => setTimeout(res, 2300));   // 2.2s 限流留间隔
+      } catch (e) {
+        preheatOk = false;
+      }
+    }
+    preheatMarkResult('preheatScheduledMatches', preheatOk);
+    results.push({ preheatScheduledMatches: { ok: preheatOk, count: preheatTargets.length } });
+  } else {
+    results.push({ preheatScheduledMatches: { ok: false, skipped: 'backoff' } });
+  }
+  return { ok: true, results };
+}
+
 // ===== 主入口 =====
 exports.main = async (event, context) => {
   // §5.4 冷启动探测：首次请求触发 L2→L1 回填（非阻塞）
@@ -2375,14 +2507,24 @@ exports.main = async (event, context) => {
     }));
   };
 
-  // 定时触发
-  if (event.TriggerName === 'cron') {
-    const r = await handleTimer();
+  // ★ 2026-09-01（P2-1）：定时触发路由修复 + 双 timer 分流。
+  //   原实现的两个 bug：
+  //     ① TriggerName 误判为 'cron'，而 config.json 触发器名是 'cacheRefresh' →
+  //        timer 事件实际走进下方 !action 分支返回 error，handleTimer 从未被 timer 执行
+  //        （预热全靠 getUpcomingSchedule 冷启动时的 fire-and-forget 兜底）；
+  //     ② timer 分支在 const { action } 解构之前调用 __logEnd（闭包引用 action）→
+  //        TDZ ReferenceError，即使 TriggerName 匹配也会崩。
+  //   现按微信云函数 timer 事件标准形状（event.Type === 'Timer'）分流：
+  //     - schedulePreheat（30min 轻量：赛程类缓存）→ handleSchedulePreheat
+  //     - cacheRefresh（6h 重任务：热端点/索引/战队）→ handleTimer
+  //   并保留 action='__cron__' 内置指令兼容路径（云端手动触发/调试）。
+  const { action, params, force } = event;
+  if (event.Type === 'Timer' || event.TriggerName === 'cron') {
+    const isLight = event.TriggerName === 'schedulePreheat';
+    const r = isLight ? await handleSchedulePreheat() : await handleTimer();
     __logEnd(r);
     return r;
   }
-
-  const { action, params, force } = event;
   if (!action) {
     const r = { error: makeError(ERROR_CODES.BAD_REQUEST, 'action required') };
     __logEnd(r);

@@ -387,3 +387,19 @@
 **批次 4 我的页改版（2026-08-30 完成）**：§11.1 三段式（用户卡+统计行合并紧凑头部卡；sub-card+reminder-card 合并单卡：卡头状态徽章+开关 pill、卡身 chips 仅已订阅展开、重新授权降为链接；send-log 折叠默认收起；分区标签收敛 3 个；subReady=false 降级单行引导）；§11.2 chooseAvatar 方案（96rpx 头像+2rpx 暗金描边环、saveFile 持久化用户目录、type=nickname 昵称失焦存 user_profile、默认龙首 tab-me-off.png；旧登录态用户卡移除，openid 登录保留订阅前置）；§11.3 统计行徽章化（前两格 tnum 数字、第三格红脉冲/灰静态圆点徽章，点击 pageScrollTo 锚点 #sec-reminder）；§11.4 验收5 系统配置新增「图标素材 · game-icons.net · CC BY 3.0」条目。验收：node --check 通过、userInfo/旧样式零残留；chooseAvatar/昵称填充留真机（§12.3）。
 
 **批次 5 回归（2026-08-30 静态审计完成，真机回归待执行）**：静态审计通过项——① 导航链路：wx.switchTab 3 处目标均为 tab 页（app.js/index/follow），wx.navigateTo 22 处目标全部存在于 app.json；② 事件绑定：index/leagues/follow 全部 bind/catch 处理器在 JS 中在位（含批次2 新增 onDaySelect/onWeekShift/onMatchFilter/onMatchCardTap、批次4 新增 onChooseAvatar/onNicknameBlur/toggleSendLog/scrollToReminder/onToggleReminder）；③ 组件事件：week-calendar（select/weekshift）、match-flow（filter/cardtap）triggerEvent 与页面接收一致；④ 资源：9 张 PNG（6 tab + 3 gi）全部存在；⑤ 语法：node --check 全通过；⑥ eslint：代码级 0 error（2 条 rule-not-found 为本地 eslint 安装缺自定义插件的环境问题，对全部历史文件同样报告）；顺手修复 index.js fmtCountdown prefer-const 一处。真机回归清单待需求方执行（§12.2 批次 5 范围 + §12.3 补充验收）。
+
+**批次 v8.4（2026-09-01 完成 · 赛事详情页修复 + 加载优化 + 预热提频 + 列表快照）**：
+- **P0 数据修复**（赛事详情页「对阵重叠 + 参赛队伍错误/重复」）：
+  - 跨源同对局重叠 → `dedupeLiveSeries` 归一化队名对 + matchIds 交集 + series_id 跨源去重，优先保留真名卡；
+  - 参赛队伍重复 → `dropDuplicateNameIds` 按归一化队名聚合，保留出场次数多的 team_id；
+  - OpenDota 队名恒空 → `buildSeriesFromSources` 把解析到的真实队名写回 radiantName/direName；
+  - 一 ID 多届混杂 → `filterMatchesByWindow` 按 curation 届次时间窗过滤（19944 = EPL Masters I/II）。
+- **P1 加载优化**：
+  - cloudProxy 客户端超时（按 action 分类 8s/12s，超时 `isTimeout` 不计熔断，防冷启动抖动误熔断）；
+  - liquipedia 赛程 SWR（30min 新鲜窗口 + 30min~6h 旧值秒开 `_stale` + 详情页轮询首刷后台拉新）；
+  - logo 快照化（`scripts/sync/fetch-team-logos.js` build-time 快照 + 可视域优先 + 云端增量兜底）；
+  - 详情页聚合 bundle（cloudProxy `leagueDetailBundle` 一次 callFunction 返回 matches + teamNames）。
+- **P2 性能**：
+  - 云函数预热提频（aggregation 新增 `schedulePreheat` 30min 轻量 timer 预热赛程缓存 + 修复 timer 路由 bug 按 TriggerName 分流 + timeout 60s）；
+  - 列表页 build-time 快照秒开（`scripts/sync/fetch-leagues-snapshot.js` + `utils/leagues-local-data.js`，加载先渲染快照跳过骨架屏，网络数据到达全量替换；快照/刷新失败顶部提示条）。
+- **验收**：check-syntax 122 文件 0 失败；eslint 0 error；`test:all` 全套通过（canonical 65 + bo 120 + home-series 42 + sources 37 + incremental 15 + remote-curation 11 + search-history 8，0 失败）。**提交范围仅本会话 P0-P2**，另一会话首页 series 化（v5）/去红（v4.3）/精修（v4.1）保留工作树待其自行提交。

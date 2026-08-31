@@ -9,6 +9,7 @@ const tiers = require('../../utils/tiers.js');
 const remoteCuration = require('../../utils/remoteCuration.js');
 const curation = require('../../utils/curation.js');
 const haglund = require('../../utils/haglund.js');   // ★ 2026-08-22 列表 tab 即将到来兜底源
+const dataHealth = require('../../utils/dataHealth.js');   // ★ 2026-09-01 第0步：error 空态细化失败原因
 
 // 跨页状态持久化键（I5）：离开页面时保存筛选/关键词/滚动位置，返回时还原
 const VIEW_KEY = 'leagues_view_state';
@@ -181,6 +182,8 @@ Page({
     upcomingProgress: '',
     // v8.1 P1-4：快照过期时的数据截至提示（''=不显示；格式「8月20日」）
     upcomingDataAsOf: '',
+    // P2-2（2026-09-01）：列表快照提示条（''=不显示；快照秒开/刷新失败时设置，实时数据到位清除）
+    leaguesAsOfText: '',
     // STRATZ 是否启用（赛程数据主要来源）：未启用且即将到来为空时，据此提示用户
     stratzEnabled: !!stratz.ENABLED,
     updatedAt: 0,
@@ -409,18 +412,72 @@ Page({
   },
 
   loadLeagues(cb) {
-    this.setData({ loading: true, error: '' });
-    // 2026-08-07（v1.1，B 层渲染分阶段优化）：
+    // ★ 2026-09-01（P2-2）：loading 骨架置位移到快照判定之后 —— 快照命中时直接出列表，
+    //   跳过骨架闪帧；快照未命中/二次刷新时保持原行为（loading 骨架 + error 清零）。
+    let _skipSkeleton = false;
     //   新一轮拉取前递增代际，让上一轮阶段 2 的 setTimeout 链自动放弃。
     //   _normalizeDone 置 false 表示阶段 2 还未完成（守卫用）。
     this._normalizeGen = (this._normalizeGen || 0) + 1;
     const gen = this._normalizeGen;
     this._normalizeDone = false;
 
+    // ★ 2026-09-01（P2-2）：build-time 快照秒开 —— 网络数据到达前先渲染快照列表。
+    //   快照（utils/leagues-local-data.js，npm run fetch:leagues 产出，build-time 裁剪
+    //   近 90 天活跃 + curation 60 天赛事，~5KB）走与网络数据完全相同的阶段 1 lite 管线
+    //   （normalizeLite + updateGradeCounts + applyAndSlice），视觉零跳变；
+    //   网络数据到达后同代际 gen 全量替换（_leagueMap 重建 → 阶段 1/2 照常覆盖）。
+    //   网络失败且快照已渲染 → 保留快照列表 + 顶部「实时刷新失败」提示（见 catch 分支），
+    //   不再退回整页 error 骨架。快照未生成（require 失败）→ 行为与旧版完全一致。
+    //   不占 storage 配额（复核否决 storage 方案：同步 IO jank + 6MB LRU 挤占）。
+    if (!this._leaguesSnapChecked) {
+      this._leaguesSnapChecked = true;   // 只 require 一次（成功或失败均不重试）
+      try { this._leaguesSnap = require('../../utils/leagues-local-data.js'); }
+      catch (e) { this._leaguesSnap = null; }
+    }
+    const snap = this._leaguesSnap;
+    if (snap && Array.isArray(snap.leagues) && snap.leagues.length &&
+        !(this.allLeagues && this.allLeagues.length)) {
+      try {
+        this._leagueMap = {};
+        this.allLeagues = snap.leagues
+          .map((l) => this.normalizeLite(l, (snap.windows || {})[l.leagueid]))
+          .filter((x) => x && x.rank >= 1);
+        this.allLeagues.forEach((x) => { this._leagueMap[x.leagueid] = x; });
+        if (this.allLeagues.length) {
+          this._snapshotRendered = true;
+          _skipSkeleton = true;
+          this.updateGradeCounts();
+          this.applyAndSlice(true);
+          this.setData({
+            loading: false,
+            error: '',
+            leaguesAsOfText: '本地数据截至 ' + this._formatSnapshotDate(snap.generatedAt) + '，正在后台刷新实时数据…'
+          });
+          console.info('[leagues][perf] P2-2 快照秒开：' + this.allLeagues.length + ' 个联赛先上');
+        }
+      } catch (e) {
+        // 快照渲染失败静默：走原 loading → 网络链路，无半状态残留
+        console.info('[leagues][perf] P2-2 快照渲染跳过：', (e && e.message) || e);
+      }
+    }
+    // 快照未命中（无快照 / 二次刷新 / 快照渲染失败）→ 原行为：loading 骨架
+    if (!_skipSkeleton) this.setData({ loading: true, error: '' });
+
     // 并行拉赛事元数据 + 时间窗口（explorer 一条 SQL 拿全部）
-    Promise.all([api.getLeagues(), api.getLeagueWindows()])
+    // ★ 2026-09-01（P0-1）：拆解 Promise.all 失败耦合 —— leagueWindows 仅影响日期范围，
+    //   失败降级为空对象（normalize/normalizeLite 已容忍 undefined windows），
+    //   不再拖垮整页进 error 态。leagues 主请求失败才走整页 catch。
+    // ★ 2026-09-01（第0步埋点）：分段耗时打点，定位慢源/失败源（P2-3 前移）。
+    const t0 = Date.now();
+    const leaguesP = api.getLeagues();
+    const windowsP = api.getLeagueWindows().catch((e) => {
+      console.info('[leagues][perf] leagueWindows 失败（日期范围降级混合窗口）:', (e && e.message) || e);
+      return {};
+    });
+    Promise.all([leaguesP, windowsP])
       .then((res) => {
         if (gen !== this._normalizeGen) return;   // 已被新一轮拉取取代，放弃
+        console.info('[leagues][perf] loadLeagues 网络段耗时 ' + (Date.now() - t0) + 'ms');
         const list = res[0] || [];
         const windows = res[1] || {};
 
@@ -438,7 +495,8 @@ Page({
         this.updateGradeCounts();
         this.applyAndSlice(true);
         const at = api.fetchedAtOf('leagueWindows') || api.fetchedAtOf('leagues');
-        this.setData({ loading: false, updatedAt: at, updatedLabel: util.formatAgo(at) });
+        // P2-2：网络数据已全量替换快照 → 清除「数据截至」提示条
+        this.setData({ loading: false, updatedAt: at, updatedLabel: util.formatAgo(at), leaguesAsOfText: '' });
         cb && cb();
 
         // ===== 阶段 2 · 后台补全（setTimeout 让出主线程，分批 normalizeFull）=====
@@ -478,9 +536,40 @@ Page({
         setTimeout(next, 0);
       })
       .catch(() => {
+        console.info('[leagues][perf] loadLeagues 失败（leagues 主请求），总耗时 ' + (Date.now() - t0) + 'ms');
+        // ★ 2026-09-01（P2-2）：快照已渲染 → 保留快照列表 + 顶部「实时刷新失败」提示，
+        //   不退回整页 error 骨架（用户仍有可用数据可浏览，下拉/重试可再触发网络刷新）。
+        if (this._snapshotRendered && this.allLeagues && this.allLeagues.length) {
+          const _asOf = this._formatSnapshotDate((this._leaguesSnap && this._leaguesSnap.generatedAt) || 0);
+          this.setData({
+            loading: false,
+            error: '',
+            leaguesAsOfText: '实时数据刷新失败，当前展示 ' + (_asOf || '本地') + '快照，可下拉重试'
+          });
+          this._normalizeDone = true;
+          cb && cb();
+          return;
+        }
         this.setData({ loading: false, error: '加载失败，请检查网络或域名配置（开发阶段可勾选「不校验合法域名」）' });
         this._normalizeDone = true;   // 出错也算「完成」，避免守卫永久拦截
         cb && cb();
+        // ★ 2026-09-01（第0步）：健康探测把泛化「加载失败」细化为具体数据源状态
+        //   （复用详情页 dataHealth.check，一次探测双源；unknown 不打扰用户）
+        if (!this._healthCheckedOnce) {
+          this._healthCheckedOnce = true;
+          dataHealth.check().then((status) => {
+            const st = status && status.sources;
+            if (!st) return;
+            const down = [];
+            if (st.liquipedia && st.liquipedia.status === 'down') down.push('Liquipedia');
+            if (st.opendota && st.opendota.status === 'down') down.push('OpenDota');
+            if (down.length) {
+              this.setData({ error: down.join('/') + ' 数据源暂不可用，其余功能可能受影响，请稍后重试' });
+            } else if (st.opendota && st.opendota.status === 'up') {
+              // 双源在线但请求仍失败 → 大概率是本机网络/域名配置问题，保留原文案
+            }
+          }).catch(function () { /* 健康探测失败静默 */ });
+        }
       });
   },
 

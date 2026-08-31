@@ -23,6 +23,34 @@ function isAvailable() {
 // 2026-08-03 优化（A3 force 链路）：call 增加可选 extra 参数，
 // 透传云函数顶层字段（如 { force: true }，云函数入口读 e.force）。
 // 现有调用不传 extra，行为完全不变（向后兼容）。
+//
+// ★ 2026-09-01（P0-2）：客户端超时兜底 —— wx.cloud.callFunction 无原生 abort 且默认超时很长，
+//   云函数冷启动/排队时页面会无限白屏。按 action 分类设客户端超时：
+//   - 读缓存/轻量 action（getLeagues 等）：8s
+//   - 实时抓取 action（liquipediaScheduledMatches / steamLeagueScheduled）：12s
+//   超时后 reject（err.isTimeout=true）走既有 direct 回退链；callFunction 本身无法 abort，
+//   晚到的结果因 Promise 已 settle 被自然丢弃（调用方 gen 代际已是第二道防线）。
+//   ★ 超时 ≠ 源故障：不计 breaker.markFailure —— 冷启动慢是正常抖动，
+//   计入会把 3 次慢启动误判成熔断 10 分钟全量回退直连（比慢更糟）。
+//   端到端预算：超时后 direct 侧还有 12s 请求超时 + 退避重试，最坏 ~25s 落 stale 兜底，
+//   与列表页/「即将」tab 的 8s 超时口径统一。
+var ACTION_TIMEOUT_MS = {
+  _default: 8000,
+  // 云端需现场抓 Liquipedia wikitext（2-4s）或 Steam 签名转发的实时 action
+  liquipediaScheduledMatches: 12000,
+  steamLeagueScheduled: 12000,
+  liquipediaLeagueMeta: 12000,
+  liquipediaTeamLogo: 12000,
+  liquipediaFetchRawWikitext: 12000,
+  // P0-3③（2026-09-01）：详情页聚合 bundle —— 云端含 OD 现抓（重试最坏 ~10s）+ explorer，
+  // 归实时类 12s；超时/失败客户端回退旧链（getLeagueMatches direct）
+  getLeagueDetailBundle: 12000
+};
+
+function timeoutFor(action) {
+  return (ACTION_TIMEOUT_MS[action] != null) ? ACTION_TIMEOUT_MS[action] : ACTION_TIMEOUT_MS._default;
+}
+
 function call(action, params, extra) {
   if (!isAvailable()) {
     return Promise.reject(new Error('cloud proxy unavailable'));
@@ -31,10 +59,23 @@ function call(action, params, extra) {
   if (extra && typeof extra === 'object') {
     Object.keys(extra).forEach(function (k) { payload[k] = extra[k]; });
   }
-  return wx.cloud.callFunction({
+  var timeoutMs = timeoutFor(action);
+  var cloud = wx.cloud.callFunction({
     name: 'aggregation',
     data: payload
-  }).then((res) => {
+  });
+  // Promise.race：超时先到则提前 reject（isTimeout 标记）；正常返回则透传
+  var timed = Promise.race([
+    cloud,
+    new Promise(function (_, reject) {
+      setTimeout(function () {
+        var e = new Error('cloud call timeout (' + timeoutMs + 'ms): ' + action);
+        e.isTimeout = true;
+        reject(e);
+      }, timeoutMs);
+    })
+  ]);
+  return timed.then((res) => {
     const r = res && res.result;
     if (r && !r.error && r.data !== undefined) {
       breaker.markSuccess();
@@ -43,7 +84,12 @@ function call(action, params, extra) {
     breaker.markFailure(THRESHOLD);
     throw new Error((r && r.error) || 'cloud proxy empty');
   }).catch((err) => {
-    if (isAvailable()) breaker.markFailure(THRESHOLD);
+    // 超时不计熔断（冷启动抖动 ≠ 源故障）；仅真实失败（业务 error/网络 reject）计入
+    if (!(err && err.isTimeout)) {
+      if (isAvailable()) breaker.markFailure(THRESHOLD);
+    } else {
+      console.info('[cloudProxy] ' + (err && err.message) + ' → 回退 direct（不计熔断）');
+    }
     throw err;
   });
 }
@@ -134,6 +180,14 @@ proxy.liquipediaListTournamentsProxy = function () {
 // 云函数侧仅做合规抓取（设 UA+gzip），不解析，减少云函数负担。
 proxy.liquipediaFetchRawWikitextProxy = function (pageName) {
   return call('liquipediaFetchRawWikitext', { pageName: pageName });
+};
+
+// P0-3③（2026-09-01）：赛事详情页聚合 bundle —— 一次 callFunction 返回
+// { matches: [...], teamNames: { team_id: name } }（云端 OD matches + explorer 内网查询）。
+// 失败/超时 reject（isTimeout 不计熔断），调用方（league-detail.load）回退旧链
+// api.getLeagueMatches + 事后 getTeamNames。
+proxy.leagueDetailBundle = function (leagueId, force) {
+  return call('getLeagueDetailBundle', { leagueId: leagueId }, force ? { force: true } : null);
 };
 
 // 数据源健康检查（2026-08-11 长期架构改进落地）：

@@ -12,6 +12,8 @@
     "sync:slugmap": "node scripts/sync/sync-slugmap.js",
     "prewarm:liquipedia": "node scripts/sync/prewarm-liquipedia.js",
     "fetch:upcoming": "node scripts/sync/fetch-liquipedia-upcoming.js",
+    "fetch:logos": "node scripts/sync/fetch-team-logos.js",
+    "fetch:leagues": "node scripts/sync/fetch-leagues-snapshot.js",
     "migrate:curation": "node scripts/sync/migrate-curation-to-db.js",
     "migrate:curation:dry": "node scripts/sync/migrate-curation-to-db.js --dry-run",
     "migrate:curation:export": "node scripts/sync/migrate-curation-to-db.js --export",
