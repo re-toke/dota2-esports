@@ -238,6 +238,20 @@
 .progress-text { font-size: var(--fs-subhead); color: #e6edf3; margin-bottom: var(--space-1-5); }
 .progress-tip { font-size: var(--fs-caption); color: var(--text-3); text-align: center; }
 
+/* ===== v8.1 P1-4：过期快照「数据截至」提示条（非模态、不打断浏览）===== */
+.upcoming-asof-bar {
+  margin: 0 var(--space-2) var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  background: var(--bg-2);
+  border-radius: var(--radius-sm);
+  text-align: center;
+}
+.asof-text {
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+  line-height: 1.5;
+}
+
 /* 即将到来为空且 STRATZ 未启用时的引导卡片 */
 .empty-hint {
   display: flex;

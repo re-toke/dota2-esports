@@ -1,5 +1,41 @@
 .container { padding: var(--space-3); }
 
+/* ===== v4.1：品牌行内联搜索胶囊（合并 brand-header 为一行，搜索框右置） =====
+   覆盖 app.wxss 的 .search-bar 通用样式：去底部 margin、收窄高度为胶囊、右对齐 flex:1 */
+.search-bar--inline {
+  flex: 1;
+  min-width: 0;
+  height: 64rpx;
+  margin-bottom: 0;
+  margin-left: auto;
+  padding: 0 24rpx;
+  border-radius: 32rpx;
+  border-color: var(--td-border-level-2-color, #2e2e30);
+}
+.search-bar--inline .search-placeholder {
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.search-bar--pressed {
+  opacity: 0.82;
+  transform: scale(0.98);
+}
+
+/* ===== v4.1：快捷入口分区（从页面底部上移，常驻入口带） ===== */
+.quick-section {
+  margin: var(--space-2-5) 0 var(--space-0-5);
+}
+.quick-section-label {
+  display: block;
+  font-size: var(--fs-caption);
+  color: var(--text-2);
+  margin: 0 var(--space-1) var(--space-1-5);
+  letter-spacing: 1rpx;
+}
+
 /* ===== 关注卡片流（2.1，从 leagues 迁入） ===== */
 .follow-flow {
   margin: var(--space-2-5) 0 var(--space-0-5);
@@ -187,11 +223,11 @@
   padding: var(--space-0-5) 0;
 }
 
-/* ===== 快捷入口（批次2 · PRD §3.2：三格 = 战队/英雄库/物品库，game-icons 剪影 PNG） ===== */
+/* ===== 快捷入口（v4.1：上移至搜索框下方，margin 由 .quick-section 控制） ===== */
 .quick-nav {
   display: flex;
   gap: 18rpx;
-  margin: var(--space-3-5) 0 var(--space-1);
+  margin: 0 0 var(--space-1);
 }
 .quick-cell {
   flex: 1;

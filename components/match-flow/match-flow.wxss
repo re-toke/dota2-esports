@@ -246,6 +246,12 @@
   color: var(--status-live);
   font-weight: 600;
 }
+/* v8.2：LIVE 行补充信息（进行时长 · 观赛人数）——弱化层级，不与红色主文案抢焦点 */
+.mf-live-sub {
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+  font-feature-settings: 'tnum';
+}
 
 /* 倒计时（即将开始）：琥珀 */
 .mf-countdown {

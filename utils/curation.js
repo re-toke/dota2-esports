@@ -285,6 +285,33 @@ const CURATED_EVENTS = [
     participants: 12, status: '即将到来', liquipediaSlug: 'BLAST/Slam/9',
     valve: false, topThirdParty: false },
 
+  // ── 2026-08-31 新增：BLAST SLAM IX 三大赛区封闭预选赛（来源：Liquipedia Tournaments Upcoming，
+  //    fetch:upcoming 告警触发人工 curation，防止详情页赛期截断。日期为 UTC。）──
+  // RES Unchained 6: BLAST SLAM IX 欧洲封闭预选：9月12-13日
+  { canonical: 'RES Unchained 6: BLAST SLAM IX Europe Closed Qualifier',
+    tier: { grade: 'S', rank: 3, label: 'S级' },
+    aliases: ['resunchained6blastslamixeurope', 'resunchained6eu', 'resblastslamixeuq'], year: 2026,
+    start: 1789171200, end: 1789257599,
+    prizePool: '$25,000', organizer: 'RES Esports', region: '欧洲', format: '封闭预选',
+    participants: 8, status: '即将到来', liquipediaSlug: 'RES_Unchained/6/BLAST_SLAM_IX/Europe',
+    valve: false, topThirdParty: false },
+  // RES Unchained 6: BLAST SLAM IX 东南亚封闭预选：9月12-13日
+  { canonical: 'RES Unchained 6: BLAST SLAM IX Southeast Asia Closed Qualifier',
+    tier: { grade: 'S', rank: 3, label: 'S级' },
+    aliases: ['resunchained6blastslamixsea', 'resunchained6sea', 'resblastslamixseq'], year: 2026,
+    start: 1789171200, end: 1789257599,
+    prizePool: '$25,000', organizer: 'RES Esports', region: '东南亚', format: '封闭预选',
+    participants: 8, status: '即将到来', liquipediaSlug: 'RES_Unchained/6/BLAST_SLAM_IX/Southeast_Asia',
+    valve: false, topThirdParty: false },
+  // BLAST SLAM IX 中国封闭预选：9月19-20日
+  { canonical: 'BLAST SLAM IX China Closed Qualifier',
+    tier: { grade: 'S', rank: 3, label: 'S级' },
+    aliases: ['blastslamixchina', 'blastslamixcn', 'blastslamixchinaq'], year: 2026,
+    start: 1789776000, end: 1789862399,
+    prizePool: '$25,000', organizer: 'BLAST', region: '中国', format: '封闭预选',
+    participants: 8, status: '即将到来', liquipediaSlug: 'BLAST/Slam/9/China',
+    valve: false, topThirdParty: false },
+
   // ── B 级（B-Tier 区域联赛 + 次级国际赛）──
   { canonical: 'Games of the Future 2024', tier: { grade: 'B', rank: 1, label: 'B级' },
     aliases: ['gamesofthefuture2024', 'gof2024'], year: 2024,

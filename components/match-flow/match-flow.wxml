@@ -50,7 +50,7 @@
         </view>
 
         <view class="mf-mid">
-          <!-- LIVE：红点脉冲 + 实时比分 -->
+          <!-- LIVE：红点脉冲 + 实时比分 + v8.2 补全（BO/系列比分见卡头 mf-bo；时长/观赛见本行） -->
           <block wx:if="{{item.status === 'live'}}">
             <view class="mf-score {{item.flash ? 'mf-score--flash' : ''}}">
               <text class="mf-score-num {{item.winA ? 'mf-score-num--win' : ''}}">{{item.scoreA}}</text>
@@ -60,6 +60,7 @@
             <view class="mf-live-row">
               <view class="mf-live-dot"></view>
               <text class="mf-live-text">正在交锋</text>
+              <text wx:if="{{item.liveSubText}}" class="mf-live-sub">{{item.liveSubText}}</text>
             </view>
           </block>
           <!-- 即将开始：开赛倒计时 -->

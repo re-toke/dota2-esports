@@ -125,6 +125,11 @@
     </view>
   </block>
 
+  <!-- P1-4（v8.1）：过期快照提示——数据截至日期（仅本地快照 >7 天时显示，串行实时数据到位前提醒） -->
+  <view wx:if="{{filter==='upcoming' && !upcomingLoading && upcomingDataAsOf}}" class="upcoming-asof-bar">
+    <text class="asof-text">本地赛程数据截至 {{upcomingDataAsOf}}，正在后台刷新实时数据…</text>
+  </view>
+
   <!-- 即将到来为空：赛程来自 STRATZ / Liquipedia（云端代理），本地精选兜底 -->
   <view wx:elif="{{filter==='upcoming' && list.length === 0}}" class="empty-hint">
     <t-empty icon="info-circle" description="即将到来的赛程暂时为空" />

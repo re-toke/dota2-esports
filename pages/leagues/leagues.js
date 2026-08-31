@@ -13,6 +13,11 @@ const haglund = require('../../utils/haglund.js');   // ★ 2026-08-22 列表 ta
 // 跨页状态持久化键（I5）：离开页面时保存筛选/关键词/滚动位置，返回时还原
 const VIEW_KEY = 'leagues_view_state';
 
+// ★ v8.1（2026-08-31）：本地快照最大可用「主源」年龄（秒）。超过则降权为兜底渲染，
+//   放行串行实时查询（详见 tryLocalUpcoming 注释）。7 天对齐「即将到来」数据源的
+//   周级刷新节奏（fetch:upcoming SOP）。
+const SNAPSHOT_MAX_AGE_SEC = 7 * 86400;
+
 // 等级 -> TDesign Tag 主题/变体
 function tagThemeOf(grade) {
   if (grade === 'SSS' || grade === 'S') return { theme: 'danger', variant: 'light' };
@@ -174,6 +179,8 @@ Page({
     armedMore: false,      // 2026-08-07（v1.4）：触底确认态（ARMED）——提示条高亮，点击才真正加载
     upcomingLoading: false,
     upcomingProgress: '',
+    // v8.1 P1-4：快照过期时的数据截至提示（''=不显示；格式「8月20日」）
+    upcomingDataAsOf: '',
     // STRATZ 是否启用（赛程数据主要来源）：未启用且即将到来为空时，据此提示用户
     stratzEnabled: !!stratz.ENABLED,
     updatedAt: 0,
@@ -878,6 +885,13 @@ Page({
   // 数据为「运行抓取脚本那一刻」的快照，非实时；刷新需重跑脚本并重新构建发布：
   //   node scripts/fetch-liquipedia-upcoming.js
   // 与云端缓存共用 buildUpcomingCard，字段形状一致；同样经 mergeCurationUpcoming 去重/补充。
+  // ★ 2026-08-31（快照过期降权，v8.1）：快照 generatedAt 距今 > SNAPSHOT_MAX_AGE_SEC（7 天）时，
+  //   不再作为「命中主源」直接 return true（旧快照仅剩 1 条有效数据也会屏蔽串行 OpenDota 路径，
+  //   导致列表停在抓取当天的世界状态）。降权规则：
+  //     - 新鲜（≤7 天）：行为不变，命中即停（云函数与串行查询之间的高速通道）
+  //     - 过期（>7 天）：立即渲染快照+curation 数据（保首屏有内容），但返回 false
+  //       放行串行查询，由 loadUpcomingSerial 的实时数据（OpenDota earliest）重排序覆盖；
+  //       串行查询有结果时会整体替换 upcomingList，无结果时保留快照渲染不闪空。
   tryLocalUpcoming() {
     let data;
     try {
@@ -889,6 +903,11 @@ Page({
     }
     const events = (data && data.events) || [];
     if (!events.length) return Promise.resolve(false);
+
+    // 快照新鲜度判定（generatedAt 缺失按过期处理，倒逼快照携带时间戳）
+    const genAt = (data && data.generatedAt) || 0;
+    const snapshotAgeSec = genAt ? (util.nowSec() - genAt) : Infinity;
+    const isStale = snapshotAgeSec > SNAPSHOT_MAX_AGE_SEC;
 
     const now = util.nowSec();
     const horizon = now + config.leagueWindow.upcomingRangeSec;
@@ -902,7 +921,12 @@ Page({
     this.mergeCurationUpcoming(results, null);
     results.sort((a, b) => (a.startDate || 0) - (b.startDate || 0));
     this.upcomingList = results;
-    this.setData({ upcomingLoading: false, upcomingProgress: '' });
+    this.setData({
+      upcomingLoading: false,
+      upcomingProgress: '',
+      // P1-4：快照路径命中时透出数据截至日期（新快照不显示，过期快照提示用户数据陈旧）
+      upcomingDataAsOf: isStale ? this._formatSnapshotDate(genAt) : ''
+    });
     this.applyAndSlice(true);
     // ★ 2026-08-22：异步合并 haglund 源（本地快照可能过时，haglund 提供实时赛事补充）
     //   先把已有数据立即渲染，haglund 合并完成后再次刷新列表
@@ -913,7 +937,17 @@ Page({
       this.upcomingList = results;
       this.applyAndSlice(true);
     });
-    return Promise.resolve(true);
+    // 过期快照：渲染兜底内容后放行串行查询（返回 false 让 loadUpcoming 继续 loadUpcomingSerial）
+    return Promise.resolve(!isStale);
+  },
+
+  // P1-4：快照 generatedAt（unix 秒）→「MM-DD」显示用日期（本地时区）
+  _formatSnapshotDate(genAt) {
+    if (!genAt) return '';
+    const d = new Date(genAt * 1000);
+    const mo = d.getMonth() + 1;
+    const da = d.getDate();
+    return mo + '月' + da + '日';
   },
 
   // 串行查询回退：逐个赛事查赛程（STRATZ 2s 限流，首次较慢）

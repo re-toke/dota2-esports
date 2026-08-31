@@ -3,19 +3,43 @@
   <image class="bg-page" src="/assets/bg-battlefield-dark.webp" mode="aspectFill" />
   <view class="bg-page-dim"></view>
 
-  <!-- 品牌标识栏（批次2 · PRD §4：删除右侧圆形搜索按钮，常驻搜索框为唯一搜索入口） -->
+  <!-- 品牌标识栏 + 搜索框（v4.1：合并为一行，logo+标题左置、搜索胶囊右置，首屏上移 ~80rpx） -->
   <view class="brand-header">
     <image class="brand-logo brand-logo--sm" src="/assets/brand-logo.png" mode="aspectFill" />
     <view class="brand-text">
       <text class="brand-title">DOTA2赛事</text>
       <text class="brand-sub">赛事 · 战队 · 对战</text>
     </view>
+    <view class="search-bar search-bar--inline" bindtap="openSearch" hover-class="search-bar--pressed">
+      <t-icon name="search" size="26rpx" color="#6b7280" />
+      <text class="search-placeholder">搜索赛事/战队/选手</text>
+    </view>
   </view>
 
-  <!-- 持久搜索框（5.2 常驻入口，批次2 起为首页唯一搜索入口） -->
-  <view class="search-bar" bindtap="openSearch">
-    <t-icon name="search" size="32rpx" color="#6b7280" />
-    <text class="search-placeholder">搜索赛事 / 战队 / 选手 / 物品</text>
+  <!-- ===== v4.1：快捷入口三格（从页面底部上移到搜索框下方，常驻入口带） =====
+       game-icons 剪影 PNG：战队=盾 / 英雄库=剑 / 物品库=书 -->
+  <view class="quick-section">
+    <text class="quick-section-label">快捷入口</text>
+    <view class="quick-nav">
+      <view class="quick-cell" data-path="/pages/teams/teams" bindtap="goTab" hover-class="tap-scale">
+        <view class="qc-icon qc-icon--gold">
+          <image class="qc-img" src="/assets/icons/gi-shield.png" mode="aspectFit" />
+        </view>
+        <text class="qc-name">战队</text>
+      </view>
+      <view class="quick-cell" data-path="/subpackages/data/hero/hero" bindtap="goTab" hover-class="tap-scale">
+        <view class="qc-icon qc-icon--green">
+          <image class="qc-img" src="/assets/icons/gi-swords.png" mode="aspectFit" />
+        </view>
+        <text class="qc-name">英雄库</text>
+      </view>
+      <view class="quick-cell" data-path="/subpackages/data/item/item" bindtap="goTab" hover-class="tap-scale">
+        <view class="qc-icon qc-icon--blue">
+          <image class="qc-img" src="/assets/icons/gi-book.png" mode="aspectFit" />
+        </view>
+        <text class="qc-name">物品库</text>
+      </view>
+    </view>
   </view>
 
   <!-- ===== 批次2 · PRD §4：周日历时间轴 + 全量比赛流（首页数据中枢主体） ===== -->
@@ -92,29 +116,6 @@
       <text class="fg-sub">关注你支持的战队，赛前不错过</text>
     </view>
     <view class="fg-btn">去关注</view>
-  </view>
-
-  <!-- ===== 批次2 · PRD §3.2 快捷区三格（战队/英雄库/物品库，game-icons 剪影 PNG） =====
-       「为你推荐」赛事卡已按 PRD §4 移除（赛事页焦点卡 focus-card 承接，避免双入口）。 -->
-  <view class="quick-nav">
-    <view class="quick-cell" data-path="/pages/teams/teams" bindtap="goTab" hover-class="tap-scale">
-      <view class="qc-icon qc-icon--gold">
-        <image class="qc-img" src="/assets/icons/gi-shield.png" mode="aspectFit" />
-      </view>
-      <text class="qc-name">战队</text>
-    </view>
-    <view class="quick-cell" data-path="/subpackages/data/hero/hero" bindtap="goTab" hover-class="tap-scale">
-      <view class="qc-icon qc-icon--green">
-        <image class="qc-img" src="/assets/icons/gi-swords.png" mode="aspectFit" />
-      </view>
-      <text class="qc-name">英雄库</text>
-    </view>
-    <view class="quick-cell" data-path="/subpackages/data/item/item" bindtap="goTab" hover-class="tap-scale">
-      <view class="qc-icon qc-icon--blue">
-        <image class="qc-img" src="/assets/icons/gi-book.png" mode="aspectFit" />
-      </view>
-      <text class="qc-name">物品库</text>
-    </view>
   </view>
 
   <!-- 聚光灯背景遮罩（v11）：顶部/底部渐变暗化，只作用于背景不遮挡内容 -->

@@ -288,6 +288,28 @@ Page({
       if (card) byKey[card.key] = card;
     });
 
+    // v8.2（2026-08-31）：供 LIVE 卡回查的两个映射（从已结束流提取，零额外请求）
+    //   _liveLeagueNames：leagueid → league_name（/live 的 league_name 常为空，借用 pro 流映射）
+    //   _liveSeriesMap：league + 两队 → { bo, wins }（12h 窗口内同系列已结束局，
+    //     推导 LIVE 卡的 BO 标签与系列比分，如「BO3 1-1」；/live 无 series_type 字段）
+    const liveLeagueNames = {};
+    const liveSeriesMap = {};
+    (pro || []).forEach((m) => {
+      if (!m || !m.start_time || !m.leagueid) return;
+      if (m.league_name) liveLeagueNames[m.leagueid] = m.league_name;
+      if (!m.radiant_team_id || !m.dire_team_id) return;
+      if (m.start_time < now - 12 * 3600) return;   // 窗口：防跨天/跨系列误聚合
+      const k = m.leagueid + '|' + Math.min(m.radiant_team_id, m.dire_team_id) + '|' + Math.max(m.radiant_team_id, m.dire_team_id);
+      const s = liveSeriesMap[k] || (liveSeriesMap[k] = { bo: 0, wins: {} });
+      if ((m.series_type || 0) > s.bo) s.bo = m.series_type;   // 取系列内最大 BO 标记
+      if (m.radiant_win === true || m.radiant_win === false) {
+        const w = m.radiant_win ? m.radiant_team_id : m.dire_team_id;
+        s.wins[w] = (s.wins[w] || 0) + 1;
+      }
+    });
+    this._liveLeagueNames = liveLeagueNames;
+    this._liveSeriesMap = liveSeriesMap;
+
     // ② /live 职业场：进行中（league_id > 0；含实时比分）
     (live || []).forEach((m) => {
       if (!m || !m.league_id || m.league_id <= 0) return;
@@ -358,16 +380,37 @@ Page({
   },
 
   // /live 职业场 → 进行中卡（实时比分）
+  // v8.2（2026-08-31）数据补全：
+  //   ① 联赛名/等级：/live 的 league_name 常为空 → 回查 _liveLeagueNames（pro 流映射）+ curation 分级
+  //   ② BO/系列比分：/live 无 series_type → 查 _liveSeriesMap（同联赛同两队 12h 内已结束局推导）
+  //   ③ duration/spectators 为 /live 原生字段，此前未消费 → liveSubText（进行时长 · 观赛人数，60s 轮询自动刷新）
   _cardFromLive(m) {
     const tagOf = (name) => (name || '?').slice(0, 4).toUpperCase();
+    const leagueName = sources.leagueDisplayName(m) ||
+      (this._liveLeagueNames && this._liveLeagueNames[m.league_id]) || '职业赛事';
+    const tier = sources.getMatchTier(leagueName || '');
+    let boLabel = '';
+    if (this._liveSeriesMap && m.team_id_radiant && m.team_id_dire) {
+      const k = m.league_id + '|' + Math.min(m.team_id_radiant, m.team_id_dire) + '|' + Math.max(m.team_id_radiant, m.team_id_dire);
+      const s = this._liveSeriesMap[k];
+      if (s && s.bo > 0) {
+        boLabel = (s.bo === 1 ? 'BO3' : 'BO5');
+        const wa = s.wins[m.team_id_radiant] || 0;
+        const wb = s.wins[m.team_id_dire] || 0;
+        if (wa + wb > 0) boLabel += ' ' + wa + '-' + wb;
+      }
+    }
+    const parts = [];
+    if (m.duration) parts.push(util.formatDuration(m.duration));
+    if (m.spectators) parts.push(this._fmtSpectators(m.spectators));
     return {
       key: String(m.match_id),
       matchId: m.match_id,
       leagueId: m.league_id,
-      leagueName: m.league_name || '职业赛事',
-      tierLabel: '',
-      tierClass: '',
-      boLabel: '',
+      leagueName: leagueName,
+      tierLabel: tier ? tier.label : '',
+      tierClass: tier ? 'tier-' + tier.grade.toLowerCase() : '',
+      boLabel: boLabel,
       teamA: { id: m.team_id_radiant, tag: tagOf(m.team_name_radiant), logo: '' },
       teamB: { id: m.team_id_dire, tag: tagOf(m.team_name_dire), logo: '' },
       scoreA: m.radiant_score || 0,
@@ -378,10 +421,21 @@ Page({
       dateKey: this._dateKeyOf(Math.floor(Date.now() / 1000)),
       start: util.nowSec(),
       timeText: '',
+      liveSubText: parts.join(' · '),   // v8.2：进行时长 · 观赛人数
       countdownText: '',
       isFollow: false,
       flash: false
     };
+  },
+
+  // v8.2：观赛人数格式化（856 → '856人'；12345 → '1.2万人'）
+  _fmtSpectators(n) {
+    if (!n || n <= 0) return '';
+    if (n >= 10000) {
+      const w = (n / 10000).toFixed(1);
+      return (w.endsWith('.0') ? w.slice(0, -2) : w) + '万人';
+    }
+    return n + '人';
   },
 
   // 关注战队比赛 → upcoming / 正在交锋卡
@@ -445,6 +499,24 @@ Page({
         flashTimers.push(c.key);
       } else if (p) {
         c.flash = false;
+      }
+    });
+
+    // v4.1 UI：局间色点（BO3/BO5 按已完成局数渲染：A胜=金 / B胜=红 / LIVE当前局=脉冲 / 未打=灰空心）
+    // 仅 live/ended 渲染；upcoming 无比分不画。boLabel 形如 'BO3 1-0'，正则提取 BO 类型。
+    list.forEach((c) => {
+      c.dots = [];
+      if (c.status === 'upcoming') return;
+      const bm = /BO(\d)/.exec(c.boLabel || '');
+      const bo = bm ? parseInt(bm[1], 10) : 0;
+      if (bo < 2) return;
+      const sa = c.scoreA || 0;
+      const sb = c.scoreB || 0;
+      for (let i = 0; i < bo; i++) {
+        if (i < sa) c.dots.push('a');
+        else if (i < sa + sb) c.dots.push('b');
+        else if (c.status === 'live' && i === sa + sb) c.dots.push('now');
+        else c.dots.push('tbd');
       }
     });
 
