@@ -378,5 +378,51 @@
         <text class="col-num {{item.winRate >= 60 ? 'wr-high' : (item.winRate >= 40 ? 'wr-mid' : 'wr-low')}}">{{item.winRate}}%</text>
       </view>
     </view>
+
+    <!-- ===== P3（2026-08-31）：Liquipedia 小组积分（排名+晋级状态） ===== -->
+    <block wx:if="{{lpGroups.length > 0}}">
+      <view class="lp-section-title">小组积分（Liquipedia）</view>
+      <view class="lp-group-card" wx:for="{{lpGroups}}" wx:for-item="grp" wx:key="name">
+        <view class="lp-group-name">{{grp.name}}</view>
+        <view class="lp-team-row" wx:for="{{grp.teams}}" wx:for-item="t" wx:key="rank">
+          <text class="lp-team-rank">{{t.rank}}</text>
+          <text class="lp-team-name">{{t.name}}</text>
+          <text class="lp-team-placement {{t.placement === '晋级' ? 'up' : (t.placement === '淘汰' ? 'down' : '')}}" wx:if="{{t.placement}}">{{t.placement}}</text>
+        </view>
+      </view>
+    </block>
+
+    <!-- ===== P3（2026-08-31）：Liquipedia 淘汰赛对阵树 ===== -->
+    <block wx:if="{{lpBrackets.length > 0}}">
+      <view class="lp-section-title">淘汰赛对阵（Liquipedia）</view>
+      <view class="lp-bracket-card" wx:for="{{lpBrackets}}" wx:for-item="bk" wx:for-index="bi" wx:key="bi">
+        <view class="lp-round" wx:for="{{bk.rounds}}" wx:for-item="rd" wx:for-index="ri" wx:key="ri">
+          <view class="lp-round-label">{{rd.label}}</view>
+          <view class="lp-match" wx:for="{{rd.matches}}" wx:for-item="m" wx:for-index="mi" wx:key="mi">
+            <view class="lp-match-teams">
+              <view class="lp-match-team {{m.finished && m.score1 > m.score2 ? 'winner' : ''}}">
+                <text class="lp-match-team-name">{{m.team1Name}}</text>
+                <text class="lp-match-score {{m.finished && m.score1 > m.score2 ? 'winner' : ''}}">{{m.score1}}</text>
+              </view>
+              <view class="lp-match-team {{m.finished && m.score2 > m.score1 ? 'winner' : ''}}">
+                <text class="lp-match-team-name">{{m.team2Name}}</text>
+                <text class="lp-match-score {{m.finished && m.score2 > m.score1 ? 'winner' : ''}}">{{m.score2}}</text>
+              </view>
+            </view>
+            <view class="lp-match-meta">
+              <text wx:if="{{m.boType}}">{{m.boType}}</text>
+              <text wx:if="{{m.timeLabel}}"> · {{m.timeLabel}}</text>
+              <text wx:if="{{m.finished}}"> · 已结束</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </block>
+
+    <!-- P3 结构加载中 / 结构与聚合排名皆空时的说明 -->
+    <view wx:if="{{lpStructureLoading}}" class="loading-row">Liquipedia 小组/对阵解析中…</view>
+    <view wx:if="{{!lpStructureLoading && lpStructureLoaded && lpGroups.length === 0 && lpBrackets.length === 0 && standings.length === 0}}" class="hint-card-enhanced">
+      <view class="hint-desc">该赛事在 Liquipedia 上暂无结构化小组/对阵数据</view>
+    </view>
   </block>
 </view>

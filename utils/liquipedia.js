@@ -638,6 +638,40 @@ function fetchScheduledLocal(slug, cacheKey) {
     .catch(function () { return { matches: [], boFormat: null }; });
 }
 
+// ===== P3（2026-08-31）：小组积分表 + 淘汰赛对阵结构 =====
+// 抓取赛事结构页 wikitext，解析 {{GroupTableLeague}}/{{SwissStandings}}（小组排名+晋级状态）
+// 与 {{Bracket}}（淘汰赛对阵树）。与 getScheduledMatches 的差异：
+//   - scheduledMatchesSlug 指向对阵子页面（如 /Group_Stage，61 场 Match）；结构模板
+//     （GroupTableLeague/Bracket）通常在**主页面**。故 slug 解析优先级：
+//     curation.structureSlug（新增可选字段）→ curation.scheduledMatchesSlug → 主 slug。
+//     curation 未配 structureSlug 且 scheduledMatchesSlug 是子页面时解析结果可能为空 —— 空即不展示，无副作用。
+// 解析在客户端本地进行（fetchPageWikitext 自带云代理抓取路径），不新增云函数端点。
+// 返回 { groups: [{ name, teams: [{rank,name,placement}] }], brackets: [{ id, type, section, rounds }] }
+function getLeagueStructure(name, opts) {
+  if (!ENABLED || !name) return Promise.resolve({ groups: [], brackets: [] });
+  var curationEvent = null;
+  try { curationEvent = require('./curation').curatedEventFor(name, { game: 'dota2' }); } catch (e) {}
+  var slug = (curationEvent && (curationEvent.structureSlug || curationEvent.scheduledMatchesSlug)) ||
+             liquipediaSlugFor(name);
+  var cacheKey = 'liquipedia_structure_' + consensus.normName(slug);
+  var force = !!(opts && opts.force);
+  var cached = cache.get(cacheKey, CACHE_TTL_SCHEDULE);
+  if (cached && !force) return Promise.resolve(cached);
+  return fetchPageWikitext(slug)
+    .then(function (wikitext) {
+      if (!wikitext) return { groups: [], brackets: [] };
+      var structure = {
+        groups: LiquiParse.parseGroupStandings(wikitext),
+        brackets: LiquiParse.parseBrackets(wikitext)
+      };
+      if (structure.groups.length || structure.brackets.length) {
+        try { cache.set(cacheKey, structure, CACHE_TTL_SCHEDULE); } catch (e) {}
+      }
+      return structure;
+    })
+    .catch(function () { return { groups: [], brackets: [] }; });
+}
+
 // §8.3 战队 Logo（2026-07-29）：OpenDota logo_url 为空 + STRATZ 无数据时的兜底源。
 // Liquipedia 是独立人工策展源，与 Valve 数据链路无关，可覆盖 OpenDota 无 logo 的队伍。
 //
@@ -690,6 +724,7 @@ module.exports = {
   getLeagueTier: getLeagueTier,
   getTeamRoster: getTeamRoster,
   getScheduledMatches: getScheduledMatches,
+  getLeagueStructure: getLeagueStructure,   // P3（2026-08-31）：小组积分 + 淘汰赛对阵结构
   getTeamLogo: getTeamLogo,
   parseParticipants: LiquiParse.parseParticipants  // 2026-07-28 导出供单元测试直接调用（单一来源：liquipedia-parse.js）
 };

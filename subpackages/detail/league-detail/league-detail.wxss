@@ -1126,3 +1126,112 @@
   margin-left: auto;
 }
 
+
+/* ===== P3（2026-08-31）：Liquipedia 小组积分 + 淘汰赛对阵 ===== */
+.lp-section-title {
+  font-size: var(--fs-title, 30rpx);
+  font-weight: 700;
+  color: var(--text-1);
+  margin: var(--space-3) 0 var(--space-2);
+}
+.lp-group-card {
+  background: var(--card-bg, #1a1a1e);
+  border: 1rpx solid #1f262f;
+  border-radius: var(--radius-lg, 16rpx);
+  padding: var(--space-2-5) var(--space-3);
+  margin-bottom: var(--space-2);
+}
+.lp-group-name {
+  font-size: var(--fs-label);
+  font-weight: 700;
+  color: var(--text-2);
+  margin-bottom: var(--space-1-5);
+}
+.lp-team-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+  border-bottom: 1rpx solid #1a2029;
+}
+.lp-team-row:last-child { border-bottom: none; }
+.lp-team-rank {
+  width: 40rpx;
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+  font-family: var(--font-mono, monospace);
+  text-align: center;
+  flex-shrink: 0;
+}
+.lp-team-name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-label);
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lp-team-placement {
+  flex-shrink: 0;
+  font-size: var(--fs-caption);
+  padding: 2rpx 10rpx;
+  border-radius: var(--radius-sm);
+  color: var(--text-3);
+}
+.lp-team-placement.up { color: #7ee787; background: rgba(126, 231, 135, 0.12); }
+.lp-team-placement.down { color: #ff7b72; background: rgba(255, 123, 114, 0.12); }
+
+.lp-bracket-card {
+  background: var(--card-bg, #1a1a1e);
+  border: 1rpx solid #1f262f;
+  border-radius: var(--radius-lg, 16rpx);
+  padding: var(--space-2-5) var(--space-3);
+  margin-bottom: var(--space-2);
+}
+.lp-round { margin-bottom: var(--space-2); }
+.lp-round:last-child { margin-bottom: 0; }
+.lp-round-label {
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  color: var(--text-2);
+  margin-bottom: var(--space-1);
+}
+.lp-match {
+  padding: var(--space-1-5) var(--space-2);
+  background: #131316;
+  border: 1rpx solid #1a2029;
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-1-5);
+}
+.lp-match:last-child { margin-bottom: 0; }
+.lp-match-teams { display: flex; flex-direction: column; gap: var(--space-0-5); }
+.lp-match-team {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.lp-match-team-name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-label);
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lp-match-team.winner .lp-match-team-name { font-weight: 700; color: #ffd15c; }
+.lp-match-score {
+  flex-shrink: 0;
+  font-size: var(--fs-label);
+  font-weight: 600;
+  color: var(--text-2);
+  font-family: var(--font-mono, monospace);
+}
+.lp-match-score.winner { color: #ffd15c; }
+.lp-match-meta {
+  margin-top: var(--space-0-5);
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+}

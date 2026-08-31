@@ -5,9 +5,9 @@
 // cannot load .json directly).
 module.exports = {
   "version": 3,
-  "generatedAt": "2026-07-30T03:29:58.999Z",
+  "generatedAt": "2026-08-31T06:38:22.832Z",
   "source": "utils/curation.js#CURATED_EVENTS",
-  "eventCount": 220,
+  "eventCount": 228,
   "map": {
     "theinternational2025": "The International 2025",
     "ti2025": "The International 2025",
@@ -174,10 +174,18 @@ module.exports = {
     "mdldisneylandparismajor": "MDL Disneyland Paris Major",
     "parismajor2019": "MDL Disneyland Paris Major",
     "epicentermajor": "EPICENTER Major",
-    "epicenter2019": "EPICENTER Major"
+    "epicenter2019": "EPICENTER Major",
+    "1winessenceii": "1win Essence II",
+    "1winessence2": "1win Essence II",
+    "1winessence": "1win Essence II",
+    "gamesofthefuture2026": "Games of the Future 2026",
+    "gamesofthefuture": "Games of the Future 2026",
+    "future2026": "Games of the Future 2026",
+    "gotf2026": "Games of the Future 2026"
   },
   "leagueIdMap": {
+    "19719": "The International 2026",
     "19944": "EPL Masters I"
   },
-  "dataVersion": "1785382198996"
+  "dataVersion": "1788158302824"
 };

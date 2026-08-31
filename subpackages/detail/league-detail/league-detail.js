@@ -199,7 +199,12 @@ Page({
     standingsLoading: false,
     standingsLoaded: false,
     // 参赛队伍（从比赛数据推导）
-    participantsList: []
+    participantsList: [],
+    // ===== P3（2026-08-31）：Liquipedia 小组积分表 + 淘汰赛对阵（排名 Tab 内懒加载） =====
+    lpGroups: [],            // [{ name, teams: [{rank,name,placement}] }]
+    lpBrackets: [],          // [{ id, type, section, rounds: [{label, matches}] }]
+    lpStructureLoading: false,
+    lpStructureLoaded: false
   },
 
   onLoad(options) {
@@ -2327,6 +2332,36 @@ Page({
     if (key === 'standings' && !this.data.standingsLoaded) {
       this.loadStandings();
     }
+    // P3（2026-08-31）：懒加载 Liquipedia 小组积分/淘汰赛对阵（与 OpenDota 聚合排名互补）
+    if (key === 'standings' && !this.data.lpStructureLoaded && !this.data.lpStructureLoading) {
+      this.loadStructure();
+    }
+  },
+
+  // P3：拉取 Liquipedia 结构页（小组积分 + 淘汰赛对阵），失败静默（排名 Tab 仍有 OpenDota 聚合）
+  loadStructure() {
+    this.setData({ lpStructureLoading: true });
+    liquipedia.getLeagueStructure(this.data.name).then((structure) => {
+      const groups = (structure && structure.groups) || [];
+      const brackets = (structure && structure.brackets) || [];
+      // 淘汰赛 match 预格式化时间（formatTime → 'YYYY-MM-DD'，UTC 口径与赛程页一致）
+      brackets.forEach((b) => {
+        (b.rounds || []).forEach((r) => {
+          (r.matches || []).forEach((m) => {
+            m.timeLabel = m.startTime ? util.formatTime(m.startTime) : '';
+            m.hasScore = (m.score1 > 0 || m.score2 > 0 || m.finished);
+          });
+        });
+      });
+      this.setData({
+        lpGroups: groups,
+        lpBrackets: brackets,
+        lpStructureLoading: false,
+        lpStructureLoaded: true
+      });
+    }).catch(() => {
+      this.setData({ lpStructureLoading: false, lpStructureLoaded: true });
+    });
   },
 
   // Tab 2: 赛事排名（按已结束比赛聚合队伍胜负）

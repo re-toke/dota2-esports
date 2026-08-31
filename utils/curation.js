@@ -94,6 +94,9 @@ const CURATED_EVENTS = [
     //   多阶段赛事后续可改为数组（如 ['The_International/2026/Group_Stage', '.../Playoff']）。
     status: '即将到来', liquipediaSlug: 'The_International/2026',
     scheduledMatchesSlug: 'The_International/2026/Group_Stage',
+    // ★ P3（2026-08-31）：结构页 slug —— TI2026 排名数据在 /Swiss_Standings 子页
+    //   （{{SwissStandings}} 模板，16 队排名顺序），供 getLeagueStructure 解析小组积分。
+    structureSlug: 'The_International/2026/Swiss_Standings',
     // ★ 2026-08-12 方案 B（BO 判定引擎 S2 权威信号）：TI 2026 实为 16 队 Swiss BO3（5 源交叉验证：
     //   sportsbrackets/winio/umggaming/bo3.gg/Liquipedia Format 段），Grand Final BO5。
     //   供 resolveBoType S2 按 stageKey 取值（group/playoff/grandFinal），早于比分反推生效。

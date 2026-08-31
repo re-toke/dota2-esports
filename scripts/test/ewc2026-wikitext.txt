@@ -1,0 +1,817 @@
+{{DISPLAYTITLE:Esports World Cup 2026}}{{Liquipedia links/Esports World Cup 2026}}
+{{EsportsWorldCup2026Tabs|mt}}
+{{Infobox league
+|name=Esports World Cup 2026
+|shortname=EWC 2026
+|tickername=EWC 2026
+|image=Esports World Cup 2026 Paris lightmode.png
+|imagedark=Esports World Cup 2026 Paris darkmode.png
+|icon=Esports World Cup 2024 icon lightmode.png
+|icondark=Esports World Cup 2024 icon darkmode.png
+|series=Esports World Cup
+|organizer1=Esports Foundation
+|organizer1-link=https://esportsworldcup.com/
+|organizer2=ESL Gaming|organizer2-name=ESL FACEIT Group
+|sponsor=[https://www.stc.com.sa/ stc]
+|sponsor2=[https://qiddiya.com/ Qiddiya]
+|sponsor3=[https://www.lenovo.com/my/en/legion Lenovo Legion]
+|sponsor4=[https://www.sony-mea.com/ Sony]
+|sponsor5=[https://www.allianz.com/en.html Allianz]
+|sponsor6=[https://www.aramco.com/ Aramco]
+|sponsor7=[https://www.saudia.com/ Saudia]
+|sponsor8=[https://www.hilton.com/en Hilton]
+|sponsor9=[https://www.obsbot.com/ OBSBOT]
+|sponsor10=[https://www.albaik.com/ Albaik]
+|sponsor11=[https://secretlab.eu/ Secretlab]
+|patch=7.41d
+|type=Offline
+|country=France
+|city=Paris
+|venue=Paris Expo Porte de Versailles
+|venuelink=https://www.viparis.com/en/our-venues/paris-expo-porte-de-versailles-en
+|team_number=24
+|format=Round-robin group stage<br>Single-elimination playoffs
+|sdate=2026-07-07
+|edate=2026-07-19
+|prizepoolusd=2000000
+|liquipediatier=1
+|leagueid=19785
+|website=https://esportsworldcup.com/en/competitions/2026/dota2
+|facebook=EsportsWorldCup
+|instagram=ewc_en
+|instagram2=ewc_extra
+|tiktok=ewc_en
+|twitch=ewc_legiongauntlet_en
+|twitter=EWC_EN
+|twitter2=EWC_Extra
+|weibo=7924870125
+|bilibili=3546635007167111
+|youtube=channel/UCENNtCRTPTdH_IGXs42LuHQ
+|bracket=https://esportsworldcup.com/en/schedule
+|bracket2=https://docs.google.com/spreadsheets/d/1LdCbhuSNon4dJafkBnTIMASi4_HhG8juds0RKAC54_k/edit?gid=1859997944
+|rulebook=https://esportsworldcup.com/en/rules-and-regulations
+|rulebook2=https://cdn.esportsworldcup.com/resources/uploads/Dota_2_at_2026_Esports_World_Cup_Rulebook_dec2d6e169.pdf
+|headtohead=true
+|previous=Esports World Cup/2025{{!}}2025
+|next=
+}}
+
+'''Esports World Cup 2026''' serves as the final championship of the fourth season of the [[ESL Pro Tour]].  It was originally planned to be hosted in Riyadh, Saudi Arabia, but was moved to Paris, France on May 20.<ref>{{cite web|url=https://x.com/EWC_EN/status/2057121960623006162|title=Esports World Cup 2026 is coming to Paris|author=Esports World Cup|author-link=Esports World Cup|date=2026-05-20}}</ref>
+
+:''See [[esports:Esports_World_Cup/2026|here]] to read about the Esports World Cup 2026, the Calendar, the Club Standings and more.''
+
+==Format==
+*'''Stage 1: Group Stage''' ''(July 7 - July 12)''
+**Four groups of six teams each in round-robin
+**All series consist of two games
+**{{bgctext|up|Top team}} from each group advance to playoff
+**{{bgctext|stayup|2nd,}} {{bgctext|stay|3rd and 4th place teams}} from each group qualify to survival
+**{{bgctext|down|Remaining teams}} are eliminated
+
+*'''Stage 2: Survival''' ''(July 14 - July 15)''
+**Single-elimination
+**4th vs 3rd from groups → winner vs 2nd
+**All matches are {{Abbr/Bo3}}
+**Four teams advance to playoff
+
+*'''Stage 3: Playoffs''' ''(July 16 - July 19)''
+**Single-elimination bracket
+**Grand Final is {{Abbr/Bo5}}, all other matches are {{Abbr/Bo3}}
+
+==Prize Pool==
+$2,000,000 {{Abbr/USD}} and 3,550 [[esports:Esports World Cup/2026#Club Championship|Club Points]] are spread among the participants as seen below;
+{{box|start|padding=0.1em}}
+{{TeamPrizePool|import=true|prizesummary=no|percentage=true|points=ewc2026|cutafter=8
+|tournament1=#Group Stage
+|tournament2=#Survival
+|tournament3=#Playoffs
+|{{Slot|usdprize=750,000|percentage=37.5%|points=1000}}
+|{{Slot|usdprize=340,000|percentage=17%|points=750}}
+|{{Slot|place=3|usdprize=200,000|percentage=10%|points=500}}
+|{{Slot|place=4|usdprize=120,000|percentage=6%|points=300}}
+|{{Slot|place=5-8|usdprize=70,000|percentage=3.5%|points=200}}
+|{{Slot|place=9-12|usdprize=40,000|percentage=2%}}
+|{{Slot|place=13-16|usdprize=20,000|percentage=1%}}
+|{{Slot|place=17-20|usdprize=10,000|percentage=0.5%}}
+|{{Slot|place=21-24|usdprize=7,500|percentage=0.375%}}
+}}
+{{box|break}}
+{{AwardPrizePool|
+{{Slot|award=MVP|usdprize=25,000|{{Opponent|flag=ru|Noticed|team=PVISION}}}}
+}}
+<gallery mode=packed-hover heights=250px style="text-align:center;">
+PVISION win Esports World Cup 2026 Dota 2.jpg|PVISION (from left to right):<br>[[Noticed]], [[9Class]], [[Satanic (Russian player)|Satanic]], [[Dukalis]], [[Puppey]] (Coach), [[PHILadelphia]] (Manager) and [[Noone|No[o]ne-]]
+</gallery>
+{{box|end}}
+
+==Participants==
+{{TeamParticipants|showplayerinfo=true
+|{{Opponent|Team Spirit
+|players={{Persons
+|{{Person|role=1|Yatoro|trophies=2}}
+|{{Person|role=2|LarI|trophies=2}}
+|{{Person|role=3|Collapse|trophies=2}}
+|{{Person|role=4|not me}}
+|{{Person|role=5|rue|trophies=1}}
+|{{Person|role=coach|Miposhka|trophies=2}}
+}}
+|qualification={{Qualification|method=invite|page=Esports_World_Cup/2025|text=EWC Title Defender}}
+}}
+|{{Opponent|1w team
+|players={{Persons
+|{{Person|role=1|Pure|link=Pure (Russian player)}}
+|{{Person|role=2|bzm}}
+|{{Person|role=3|33}}
+|{{Person|role=4|Ari}}
+|{{Person|role=5|Whitemon}}
+|{{Person|role=coach|MoonMeander}}
+}}
+|qualification={{Qualification|method=invite|page=ESL Pro Tour/Leaderboard/2025-2026|text=EPT Leaderboard|placement=1}}
+|notes={{Notes|{{Notes|The roster of [[Tundra Esports]] was transferred to [[1w Team]].<ref>{{cite web|url=https://x.com/TundraEsports/status/2061387436022755343|title=We have something important to tell you!|author=TUNDRA|date=2026-06-01}}</ref><ref>{{cite web|url=https://x.com/1winesports/status/2061393809242460421|title=A new chapter begins.|author=1win Team|date=2026-06-01}}</ref>}}}}
+}}
+|{{Opponent|PARIVISION
+|players={{Persons
+|{{Person|role=1|Satanic|link=Satanic (Russian player)}}
+|{{Person|role=2|No[o]ne-|link=Noone}}
+|{{Person|role=3|Noticed}}
+|{{Person|role=4|9Class}}
+|{{Person|role=5|Dukalis}}
+|{{Person|role=coach|Puppey}}
+}}
+|qualification={{Qualification|method=invite|page=ESL Pro Tour/Leaderboard/2025-2026|text=EPT Leaderboard|placement=2}}
+}}
+|{{Opponent|Aurora Gaming
+|players={{Persons
+|{{Person|role=1|Nightfall}}
+|{{Person|role=2|Mikoto}}
+|{{Person|role=3|Ws}}
+|{{Person|role=4|Mira|trophies=1}}
+|{{Person|role=5|kaori}}
+|{{Person|role=coach|kpii}}
+}}
+|qualification={{Qualification|method=invite|page=ESL Pro Tour/Leaderboard/2025-2026|text=EPT Leaderboard|placement=3}}
+}}
+|{{Opponent|Xtreme Gaming
+|players={{Persons
+|{{Person|role=1|Ame|trophies=1}}
+|{{Person|role=2|NothingToSay|trophies=1}}
+|{{Person|role=3|Xxs}}
+|{{Person|role=4|fy}}
+|{{Person|role=5|xNova}}
+|{{Person|role=coach|Maps}}
+}}
+|qualification={{Qualification|method=invite|page=ESL Pro Tour/Leaderboard/2025-2026|text=EPT Leaderboard|placement=4}}
+}}
+|{{Opponent|Team Yandex
+|players={{Persons
+|{{Person|role=1|watson}}
+|{{Person|role=2|CHIRA_JUNIOR}}
+|{{Person|role=3|DM}}
+|{{Person|role=4|Saksa}}
+|{{Person|role=5|Malady}}
+|{{Person|role=coach|Accell}}
+}}
+|qualification={{Qualification|method=invite|page=ESL Pro Tour/Leaderboard/2025-2026|text=EPT Leaderboard|placement=5}}
+}}
+|{{Opponent|Team Falcons
+|players={{Persons
+|{{Person|role=1|skiter}}
+|{{Person|role=2|Malr1ne}}
+|{{Person|role=3|ATF}}
+|{{Person|role=4|Cr1t-}}
+|{{Person|role=5|Sneyking}}
+|{{Person|role=coach|Aui_2000}}
+}}
+|qualification={{Qualification|method=invite|page=ESL Pro Tour/Leaderboard/2025-2026|text=EPT Leaderboard|placement=7}}
+}}
+|{{Opponent|Team Liquid
+|players={{Persons
+|{{Person|role=1|m1CKe}}
+|{{Person|role=2|Nisha}}
+|{{Person|role=3|Ace|trophies=1}}
+|{{Person|role=4|Boxi}}
+|{{Person|role=5|tOfu|trophies=1}}
+|{{Person|role=coach|Blitz}}
+}}
+|qualification={{Qualification|method=invite|page=ESL Pro Tour/Leaderboard/2025-2026|text=EPT Leaderboard|placement=8}}
+}}
+|{{Opponent|BetBoom Team
+|players={{Persons
+|{{Person|role=1|Kiritych~}}
+|{{Person|role=2|gpk~}}
+|{{Person|role=3|MieRo}}
+|{{Person|role=4|Save-}}
+|{{Person|role=5|Kataomi`}}
+|{{Person|role=coach|boolk}}
+}}
+|qualification={{Qualification|method=invite|page=ESL Pro Tour/Leaderboard/2025-2026|text=EPT Leaderboard|placement=9}}
+}}
+|{{Opponent|MOUZ
+|players={{Persons
+|{{Person|role=1|Crystallis}}
+|{{Person|role=2|MidOne}}
+|{{Person|role=3|BOOM}}
+|{{Person|role=4|yamich}}
+|{{Person|role=5|panto}}
+|{{Person|role=coach|ImmortalFaith}}
+}}
+|qualification={{Qualification|method=invite|page=ESL Pro Tour/Leaderboard/2025-2026|text=EPT Leaderboard|placement=10}}
+}}
+|{{Opponent|PlayTime
+|players={{Persons
+|{{Person|role=1|Wits}}
+|{{Person|role=2|DarkMago}}
+|{{Person|role=3|Frank}}
+|{{Person|role=4|Scofield}}
+|{{Person|role=5|Elmisho}}
+|{{Person|role=coach|Vintage}}
+}}
+|qualification={{Qualification|method=invite|page=ESL Pro Tour/Leaderboard/2025-2026|text=EPT Leaderboard|placement=11}}
+|notes={{Notes
+|{{Notes|June 14: {{Player|flag=pe|DarkMago}} and coach {{Player|flag=pe|Vintage}} are provisionally suspended by [[ESIC]] on July 14 onwards pending an integrity investigation.<ref>{{cite web|url=https://x.com/ESIC_Official/status/2077175521910382942|title=ESIC has provisionally suspended Juan “Vintage” Angulo and Oswaldo “DarkMago” Herrera from EWC26 and all ESIC Member events pending an ongoing integrity investigation.|author=ESIC|author-link=ESIC|date=2026-07-14}}</ref>}}
+|{{Notes|June 15: [[PTime]] were removed from the competition due to not being able to satisfy eligibility requirements.  No determination of misconduct has been made; ESIC's investigation remains ongoing.<ref>{{cite web|url=https://x.com/EWC_Extra/status/2077309931879866800|title=The Esports Foundation confirms that PTime has been removed from the Dota 2 competition at the 2026 Esports World Cup.|author=Esports Foundation|author-link=Esports Foundation|date=2026-07-14}}</ref>}}
+}}
+}}
+|{{Opponent|OG
+|players={{Persons
+|{{Person|role=1|Natsumi}}
+|{{Person|role=2|Yopaj}}
+|{{Person|role=3|Raven}}
+|{{Person|role=4|TIMS}}
+|{{Person|role=5|skem}}
+|{{Person|role=coach|343}}
+}}
+|qualification={{Qualification|method=invite|page=ESL Pro Tour/Leaderboard/2025-2026|text=EPT Leaderboard|placement=12}}
+}}
+|{{Opponent|Virtus.pro
+|players={{Persons
+|{{Person|role=1|Timado}}
+|{{Person|role=2|Abed}}
+|{{Person|role=3|SaberLight}}
+|{{Person|role=4|Hellscream}}
+|{{Person|role=5|Fly}}
+|{{Person|role=coach|BuLba}}
+}}
+|qualification={{Qualification|method=invite|page=ESL Pro Tour/Leaderboard/2025-2026|text=EPT Leaderboard|placement=13}}
+}}
+|{{Opponent|LGD Gaming
+|players={{Persons
+|{{Person|role=1|Yuma}}
+|{{Person|role=2|TaiLung}}
+|{{Person|role=3|Wisper}}
+|{{Person|role=4|Thiolicor}}
+|{{Person|role=5|KJ}}
+|{{Person|role=coach|kaffs}}
+}}
+|qualification={{Qualification|method=qual|page=Esports_World_Cup/2026/Western Europe|text=Western Europe|placement=1}}
+}}
+|{{Opponent|Rune Eaters
+|players={{Persons
+|{{Person|role=1|Darklord^}}
+|{{Person|role=2|Copy}}
+|{{Person|role=3|Malik}}
+|{{Person|role=4|Ekki}}
+|{{Person|role=5|aik}}
+|{{Person|role=coach|Mag~}}
+}}
+|qualification={{Qualification|method=qual|page=Esports_World_Cup/2026/Western Europe|text=Western Europe|placement=2}}
+|notes={{Notes|{{Notes|The roster of [[Pipsqueak+4]] is signed by [[Rune Eaters]].<ref>{{cite web|url=https://t.me/runeeaters/96|title=Rune Eaters квалифицировались на Esports World Cup 2026|author=Rune Eaters Esports|date=2026-06-07}}</ref>}}}}
+}}
+|{{Opponent|Level UP
+|players={{Persons
+|{{Person|role=1|WoE}}
+|{{Person|role=2|Ainkrad}}
+|{{Person|role=3|bb3px}}
+|{{Person|role=4|queezy}}
+|{{Person|role=5|Htrd|id=340421206}}
+|{{Person|role=coach|Sbdush}}
+}}
+|qualification={{Qualification|method=qual|page=Esports_World_Cup/2026/Eastern Europe|text=Eastern Europe|placement=1-2}}
+|notes={{Notes|{{Notes|The roster of [[Two Move]] is signed by [[Level UP]].<ref>{{cite web|url=https://www.facebook.com/reel/2077025276559972|title=A new chapter begins for us.|author=Level UP|date=2026-06-08}}</ref>}}}}
+}}
+|{{Opponent|Poor Rangers
+|players={{Persons
+|{{Person|role=1|TA2000}}
+|{{Person|role=2|Nicky`Cool}}
+|{{Person|role=3|alberkaaa}}
+|{{Person|role=4|Immersion}}
+|{{Person|role=5|Hduo}}
+|{{Person|role=coach|j4}}
+}}
+|qualification={{Qualification|method=qual|page=Esports_World_Cup/2026/Eastern Europe|text=Eastern Europe|placement=1-2}}
+}}
+|{{Opponent|L1 TEAM
+|players={{Persons
+|{{Person|role=1|ssnovv1}}
+|{{Person|role=2|Mirage`}}
+|{{Person|role=3|Vazya}}
+|{{Person|role=4|Zayac}}
+|{{Person|role=5|RESPECT}}
+|{{Person|role=coach|TheChosenOne}}
+}}
+|qualification={{Qualification|method=qual|page=Esports_World_Cup/2026/Eastern Europe|text=Eastern Europe|placement=3-4}}
+|notes={{Notes|{{Notes|{{Player|flag=kg|Zayac}} stand-in for {{Player|flag=ru|sayuw}} due to health issue.<ref>{{cite web|url=https://t.me/L1GATEAM/3584|title=Бакыт «Zayac» Эмилжанов выступит за L1GA TEAM на EWC 2026 вместо Олега «sayuw» Каленбета.|author=L1GA TEAM|date=2026-07-03}}</ref>}}}}
+}}
+|{{Opponent|Inner Circle
+|players={{Persons
+|{{Person|role=1|423}}
+|{{Person|role=2|Stojkov}}
+|{{Person|role=3|laise}}
+|{{Person|role=4|Fernans}}
+|{{Person|role=5|Se}}
+|{{Person|role=coach|Artstyle}}
+}}
+|qualification={{Qualification|method=qual|page=Esports_World_Cup/2026/Eastern Europe|text=Eastern Europe|placement=3-4}}
+}}
+|{{Opponent|Vici Gaming
+|players={{Persons
+|{{Person|role=1|shiro}}
+|{{Person|role=2|Xm}}
+|{{Person|role=3|Bach|trophies=1}}
+|{{Person|role=4|XinQ|trophies=1}}
+|{{Person|role=5|y`|trophies=1}}
+|{{Person|role=coach|Yao}}
+}}
+|qualification={{Qualification|method=qual|page=ESL/Challenger_China/3|text=China|placement=1}}
+}}
+|{{Opponent|REKONIX
+|players={{Persons
+|{{Person|role=1|Jikroy}}
+|{{Person|role=2|inYourdreaM}}
+|{{Person|role=3|Fbz}}
+|{{Person|role=4|dalul}}
+|{{Person|role=5|Varizh}}
+|{{Person|role=coach|MinD_ContRoL}}
+}}
+|qualification={{Qualification|method=qual|page=Esports_World_Cup/2026/Southeast Asia|text=Southeast Asia|placement=1}}
+}}
+|{{Opponent|GamerLegion
+|players={{Persons
+|{{Person|role=1|Ghost|link=Ghost (Daniel Chan)}}
+|{{Person|role=2|RCY}}
+|{{Person|role=3|Fayde}}
+|{{Person|role=4|Bignum}}
+|{{Person|role=5|Speeed}}
+|{{Person|role=coach|Mangusu}}
+}}
+|qualification={{Qualification|method=qual|page=Esports_World_Cup/2026/North America|text=North America|placement=1}}
+}}
+|{{Opponent|Team Nemesis
+|players={{Persons
+|{{Person|role=1|rubikon155|id=968545762}}
+|{{Person|role=2|4nalog}}
+|{{Person|role=3|Jabz}}
+|{{Person|role=4|Lelis}}
+|{{Person|role=5|Yamsun}}
+|{{Person|role=coach|Astini}}
+}}
+|qualification={{Qualification|method=qual|page=Esports_World_Cup/2026/South America|text=South America|placement=1}}
+}}
+|{{Opponent|Nigma Galaxy
+|players={{Persons
+|{{Person|role=1|SumaiL}}
+|{{Person|role=2|lorenof}}
+|{{Person|role=3|Davai}}
+|{{Person|role=4|OmaR}}
+|{{Person|role=5|GH}}
+|{{Person|role=coach|KuroKy}}
+}}
+|qualification={{Qualification|method=qual|page=Esports_World_Cup/2026/MESWA|text=MESWA|placement=1}}
+|notes={{Notes|{{Notes|June 8: {{Player|rincyq|flag=ua}} and {{Player|No!ob|flag=lb}} are replaced by {{Player|SumaiL|flag=pk}} and {{Player|lorenof|flag=ua}}.<ref>{{cite web|url=https://x.com/NigmaGalaxy/status/2063939095160606827|title=Our time with rincyq has come to an end.|author=Nigma Galaxy|date=2026-06-08}}</ref><ref>{{cite web|url=https://x.com/NigmaGalaxy/status/2063932601761513603|title=Today we part ways with @no1obdota.|author=Nigma Galaxy|date=2026-06-08}}</ref><ref>{{cite web|url=https://x.com/NigmaGalaxy/status/2063954255975698485|title=Third time's the charm|author=Nigma Galaxy|date=2026-06-08}}</ref><ref>{{cite web|url=https://x.com/NigmaGalaxy/status/2063946793352655195|title=Join us in welcoming lorenof to our Mid Lane|author=Nigma Galaxy|date=2026-06-08}}</ref>}}}}
+}}
+}}<!--
+|notes={{Notes|{{Notes|{{Player|flag=world|Kano}}<ref>{{cite web|url=|title=|author=|date=2026-07-00}}</ref>}}}}
+-->
+
+=={{Stage|Group Stage}}==
+<section begin="GroupStage" />
+{{box|start|padding=2em}}
+===Group A===
+{{GroupTableLeague|title=Standings|width=340px|ties=true|show_g=true|diff=false|show_p=false|walkover_win=2|win_p=2
+|pbg1=up|pbg2=stayup|pbg3=stay|pbg4=stay|pbg5=down|pbg6=down
+|bg1=stay|team1=Xtreme Gaming
+|bg2=up|team2=Team Falcons
+|bg3=stayup|team3=BetBoom Team
+|bg4=down|team4=GamerLegion
+|bg5=stay|team5=Rune Eaters
+|bg6=down|team6=Poor Rangers
+|tournament=Esports World Cup/2026/Group Stage
+|edate=July 11, 2026 - 16:00 {{Abbr/CEST}}
+}}
+{{box|break|padding=2em}}
+
+===Group B===
+{{GroupTableLeague|title=Standings|width=340px|ties=true|show_g=true|diff=false|show_p=false|walkover_win=2|win_p=2
+|pbg1=up|pbg2=stayup|pbg3=stay|pbg4=stay|pbg5=down|pbg6=down
+|bg1=stayup|team1=Aurora Gaming
+|bg2=stay|team2=Team Liquid
+|bg3=stay|team3=PlayTime
+|bg4=up|team4=Nigma Galaxy
+|bg5=down|team5=Level UP
+|bg6=down|team6=L1 TEAM
+|tournament=Esports World Cup/2026/Group Stage
+|edate=July 11, 2026 - 16:00 {{Abbr/CEST}}
+}}
+{{box|break|padding=2em}}
+
+===Group C===
+{{GroupTableLeague|title=Standings|width=340px|ties=true|show_g=true|diff=false|show_p=false|walkover_win=2|win_p=2
+|pbg1=up|pbg2=stayup|pbg3=stay|pbg4=stay|pbg5=down|pbg6=down
+|bg1=stayup|team1=Team Spirit
+|bg2=up|team2=PARIVISION
+|bg3=stay|team3=MOUZ
+|bg4=stay|team4=Vici Gaming
+|bg5=down|team5=REKONIX
+|bg6=down|team6=Team Nemesis
+|tournament=Esports World Cup/2026/Group Stage
+|edate=July 12, 2026 - 16:00 {{Abbr/CEST}}
+}}
+{{box|break|padding=2em}}
+
+===Group D===
+{{GroupTableLeague|title=Standings|width=340px|ties=true|show_g=true|diff=false|show_p=false|walkover_win=2|win_p=2
+|pbg1=up|pbg2=stayup|pbg3=stay|pbg4=stay|pbg5=down|pbg6=down
+|bg1=stayup|team1=1w team
+|bg2=up|team2=Team Yandex
+|bg3=down|team3=OG
+|bg4=stay|team4=Virtus.pro
+|bg5=stay|team5=LGD Gaming|temp_tie5=1
+|bg6=down|team6=IC x Insanity
+|tournament=Esports World Cup/2026/Group Stage
+|edate=July 12, 2026 - 16:00 {{Abbr/CEST}}
+}}
+{{box|end}}<section end="GroupStage" />
+*<small>''For detailed match results, click [[{{#var:home}}/Group_Stage#Matches|'''HERE''']].''</small>
+
+=={{Stage|Survival}}==
+{{Toggle bracket start|sdate=2026-07-14|edate=2026-07-15 23:00}}
+{{Bracket|Bracket/8L4D-4Q|id=dDT0eP25nc
+|R1M1header=R1 (3<sup>rd</sup> vs 4<sup>th</sup>)
+|R2M1header=R2 (2<sup>nd</sup> vs R1 winner)
+|qualifiedHeader=To Playoffs
+
+<!-- Round 1 -->
+|R1M1={{Match}}
+|R1M2={{Match
+|opponent1={{TeamOpponent|Vici Gaming|score=W}}
+|opponent2={{TeamOpponent|PTime|score=FF}}
+|date=July 15, 2026 - 13:00 {{Abbr/CEST}}
+|comment=July 14: The series was [https://x.com/ewc_extra/status/2077057541188600177 initially rescheduled] due to an undisclosed integrity issue.  Later, [[ESIC]] [https://x.com/ESIC_Official/status/2077175521910382942 provisionally suspended] [[PTime]]'s {{Player|DarkMago|flag=pe}} and coach {{Player|Vintage|flag=pe}} from the tournament and all other ESIC member events.<br/>July 15: [[PTime]] were [https://x.com/EWC_Extra/status/2077309931879866800 removed from the tournament] due to not being able to satisfy the eligibility requirements to continue.  No final determination of misconduct has been made; ESIC's investigation remains ongoing.
+}}
+|R1M3={{Match}}
+|R1M4={{Match}}
+
+<!-- Round 2 -->
+|R2M1={{Match}}
+|R2M2={{Match}}
+|R2M3={{Match}}
+|R2M4={{Match}}
+}}
+{{Toggle bracket end}}
+
+=={{Stage|Playoffs}}==
+{{Toggle bracket start|sdate=2026-07-16|edate=2026-07-19 23:00}}
+{{Bracket|Bracket/8|id=Vx9d4v00PV|matchsection=Playoffs
+
+<!-- Quarterfinals -->
+|R1M1={{Match}}
+|R1M2={{Match}}
+|R1M3={{Match}}
+|R1M4={{Match}}
+
+<!-- Semifinals -->
+|R2M1={{Match}}
+|R2M2={{Match}}
+
+<!-- Third Place Match -->
+|RxMTP={{Match}}
+
+<!-- Grand Final -->
+|R3M1={{Match}}
+}}
+{{Toggle bracket end}}
+
+==Additional Content==
+===Broadcast===
+====Streams====
+<section begin="Streams"/>
+{{box|start|padding=2em}}
+{{Streams|title=Primary
+|lang1=englishspeaking|twitch1=EWC_LegionGauntlet_EN|youtube1=@ewc|stream1=https://esportsworldcup.com/en
+|lang2=russianspeaking|twitch2=betboom_dota_ru|youtube2=@BetBoomEsports|stream2=https://vkvideo.ru/@betboom_esports|2stream2=https://okko.sport/tournament/dota-2-esports-world-cup-2026
+|lang3=cn|bilibili3=13|douyu3=30
+|lang4=arabicspeaking|twitch4=EWC_LegionGauntlet_AR|youtube4=@EWC_ar
+|lang5=ua|twitch5=dota2_maincast|youtube5=@Dota2_maincast
+|lang6=spanishspeaking|twitch6=americaesportsdota2|youtube6=@americaesportsdota2|kick6=americaesportsdota2
+|lang7=id|youtube7=Dota2TVIndonesia
+}}
+{{box|break|padding=2em}}
+{{Streams|title=Secondary
+|lang1=englishspeaking|twitch1=EWC_LegionGauntlet_EN2|youtube1=@ewc|ytmultiple1=true
+|lang2=russianspeaking|twitch2=betboom_dota_ru2|youtube2=@BetBoomEsports|ytmultiple2=true|stream2=https://okko.tv/s/1197
+|lang3=cn|bilibili3=14|douyu3=3811559
+|lang4=ua|twitch4=dota2_maincast2|youtube4=@Dota2_maincast
+}}
+{{box|break|padding=2em}}
+{{Streams|title=Tertiary
+|lang1=englishspeaking|twitch1=EWC_LegionGauntlet_EN3|youtube1=@ewc|ytmultiple1=true
+|lang2=russianspeaking|twitch2=betboom_dota_ru3|youtube2=@BetBoomEsports|ytmultiple2=true|stream2=https://okko.tv/s/1198
+|lang3=cn|bilibili3=19|douyu3=3987014
+}}
+{{box|end}}<section end="Streams"/>
+
+====Talent====
+{{Tabs dynamic|name1=English|name2=Russian|name3=Chinese|name4=Arabic|name5=Ukrainian|name6=Spanish|name7=Indonesian}}
+{{Tabs dynamic/tab|1}}<!-- English -->
+The English broadcast talent was revealed on July 3.<ref>{{cite web|url=https://x.com/EWC_Extra/status/2072976194698346888|title=We're not kidding when we say that Dota 2 at EWC 26 has a STACKED talent lineup |author=Esports World Cup|date=2026-07-03}}</ref><ref>{{cite web|url=https://x.com/EWC_Extra/status/2072976198016041116|title=Stream B Lineup|author=Esports World Cup|date=2026-07-03}}</ref><ref>{{cite web|url=https://x.com/EWC_Extra/status/2072976201279312105|title=Stream C Lineup|author=Esports World Cup|date=2026-07-03}}</ref>
+{{box|start|padding=2em}}
+{{BroadcasterCard
+|position=Desk Host|lang=English
+|b1=Sheever
+|b2flag=us|b2=Raynday|b2link=apexlegends:Raynday|b2name=Evan Raynr
+}}
+{{BroadcasterCard
+|position=Stage Host|lang=English
+|b1flag=lb|b1=Milosh|b1link=rainbowsix:Milosh|b1name=Ghassan Finge
+|b2=Slacks
+}}
+{{BroadcasterCard
+|position=Reporter
+|b1=Purge|b1link=Purge (Kevin Godec)
+}}
+{{BroadcasterCard
+|position=Analyst|lang=English
+|b1=Ephey
+|b2=BSJ
+|b3=Lacoste
+|b4=Ceb
+}}
+{{box|break|padding=2em}}
+{{BroadcasterCard
+|position=Caster|lang=English
+|b1=SVG
+|b2=SUNSfan
+|b3=KheZu
+|b4=Cap
+|b5=MLPDotA
+|b6=johnxfire
+|b7=rkryptic
+|b8=ZQuixotix
+|b9=malibujesus
+|b10=Otomo
+|b11=permasneeze
+|b12=WinteR
+}}
+{{box|break}}
+{{BroadcasterCard
+|position=Observer|lang=English
+|b1=skrff
+|b2=Leo Fika<!--194457423-->
+|b3=Weppas
+|b4=PTP
+|b5=Breathe<!--158093379-->
+|b6=Shaolin
+}}
+{{BroadcasterCard
+|position=Mandarin Intepreter|lang=English
+|b1=Jin
+}}
+{{box|end}}
+
+{{Tabs dynamic/tab|2}}<!-- Russian -->
+'''BetBoom'''
+<br/>
+The Russian BetBoom broadcast talent was revealed on July 3.<ref>{{cite web|url=https://t.me/blast_betboom/3939|title=Все картины и таланты тоже здесь|author=EWC & BLAST by BetBoom|date=2026-07-03}}</ref>
+{{box|start|padding=2em}}
+{{BroadcasterCard
+|position=Caster|lang=Russian
+|b1=633
+|b2=ArsZeeqq
+|b3=Adekvat
+|b4=нексюша
+|b5=Artem1da
+|b6=BLACKARXANGEL
+|b7=Fishman
+|b8=fng
+|b9=Ahilles
+|b10=Double D
+|b11=Autodestruction
+|b12=gexsun
+|b13=Inmate
+|b14=Grayne
+|b15=G
+|b16=Lasthero
+|b17=PGG
+|b18=PIVOVAR
+|b19=Vasilisa
+|b20=RodjER
+|b21=WYHM
+|b22=Shachlo
+|b23=Sheyl
+|b24flag=ru|b24=StreamRoSS|b24name=Danila Vanyukov
+|b25=Whotherolly
+|b26=Belka
+|b27=Mortalles
+|b28=Misha
+|b29=Leamare
+|b30=aferaTV
+}}
+{{box|break}}
+{{BroadcasterCard
+|position=Observer|lang=Russian
+|b1=VladYaR
+|b2=Tech Cyber<!--744148484-->
+|b3=devvy
+}}
+{{box|end}}
+<hr>
+'''Okko'''
+<br/>
+The Russian Okko broadcast talent was revealed on July 6.<ref>{{cite web|url=https://t.me/okkodota2/1874|title=Алло? Можно представить талантов на Esports World Cup 2026?|trans_title=Hello? Can we introduce the talent for the Esports World Cup 2026?|language={{Flag|ru}} Russian|author=Okko|author-link=Okko|date=2026-07-06}}</ref>
+{{box|start|padding=2em}}
+{{BroadcasterCard
+|position=Host|lang=Russian
+|b1=Zais
+|b2=1ceN1ce
+}}
+{{BroadcasterCard
+|position=Analyst|lang=Russian
+|b1=Ahilles
+|b2=LighTofHeaveN
+|b3=Petushara
+|b4=Smile
+|b5=y0nd
+}}
+{{box|break|padding=2em}}
+{{BroadcasterCard
+|position=Commentator|lang=Russian
+|b1=Adekvat
+|b2=Cloud Fox
+|b3=DedOk
+|b4=Faster
+|b5=gexsun
+|b6=LanigirO
+|b7=PIVOVAR
+|b8=sulen
+|b9=Taroom
+|b10=VANSKOR
+}}
+{{box|end}}
+
+{{Tabs dynamic/tab|3}}<!-- Chinese -->
+The Chinese broadcast talent was revealed on July 9.<ref>{{cite web|url=https://weibo.com/7924870125/R7TSFxhYZ|title=DOTA2 解说主持阵容集结完毕|author=EWC电竞世俱杯|date=2026-07-09}}</ref>
+{{box|start|padding=2em}}
+<small>'''(Onsite)'''</small>
+{{BroadcasterCard
+|position=Caster|lang=Chinese
+|b1=Luna|b1link=Luna_(Wang_Miqi)
+|b2=Yuno
+|b3=Wind
+|b4=M4
+}}
+{{BroadcasterCard
+|position=Chinese Interviewer|lang=Chinese
+|b1=Dove
+}}
+{{box|break|padding=2em}}
+<small>'''(Remote)'''</small>
+{{BroadcasterCard
+|position=Host|lang=Chinese
+|b1=璨璨cc
+|b2=蛋糕
+}}
+{{BroadcasterCard
+|position=Analyst/Commentators|lang=Chinese
+|b1=杰出
+|b2=Mad
+|b3=78
+|b4=小雪人
+|b5=AA|b5link=AA_(Li_Qiming)
+|b6=Ero
+|b7=朔月
+|b8=Dy
+|b9=FreeAgain
+|b10=Ori
+|b11=Mashall
+}}
+{{box|end}}
+
+{{Tabs dynamic/tab|4}}<!-- Arabic -->
+The Arabic broadcast talent was revealed on July 2.<ref>{{cite web|url=https://x.com/EWC_Extra_AR/status/2072621462339367367|title=أصوات أسطورية، لبطولة استثنائية! تعرفوا على تشكيلة مواهب التعليق والمحاورة لبطولة دوتا 2|trans_title=Legendary voices for an exceptional championship! Get to know the lineup of commentary and hosting talents for the Dota 2 Championship|language={{Flag|sa}} Arabic|author=EWC Extra Arabic|date=2026-07-02}}</ref>
+{{BroadcasterCard
+|position=Caster|lang=Arabic
+|b1=Asimco007
+|b2flag=ps|b2=Sandstorm|b2link=pubgmobile:Sandstorm|b2name=Dawoud Dawoud
+|b3=Stupid_Cat
+|b4=SilenceDota
+|b5=TheVeryFamous.ar3a
+}}
+
+{{Tabs dynamic/tab|5}}<!-- Ukrainian -->
+{{box|start|padding=2em}}
+{{BroadcasterCard
+|position=Host|lang=Ukrainian
+|b1=Kraken|b1link=Kraken (Andriy Shtangret)
+|b2=Aelnis
+}}
+{{BroadcasterCard
+|position=Analyst|lang=Ukrainian
+|b1flag=ua|b1=Daed|b1name=Nikita Kochubii
+|b2=IHTL
+|b3=tony|b3link=tony (Oleksandr Vyhovskyi)
+|b4=Goblak
+|b5=Connor
+|b6=Sm1ley
+|b7=Rakuzan
+}}
+{{box|break|padding=2em}}
+{{BroadcasterCard
+|position=Commentator|lang=Ukrainian
+|b1=Totus
+|b2=DoubleE7presso
+|b3=f3nRir
+|b4=Bafik
+|b5=BromKet
+|b6=GodHunt
+|b7=Droog
+|b8=CaspeRRR
+|b9=FlunkyFlame
+}}
+{{box|end}}
+
+{{Tabs dynamic/tab|6}}<!-- Spanish -->
+{{BroadcasterCard
+|position=Host|lang=Spanish
+|b1=Tio Inka
+}}
+{{BroadcasterCard
+|position=Commentator/Analyst|lang=Spanish
+|b1=Tio Inka
+|b2=FalcoStyle
+|b3=Maverick
+|b4=D1smar
+|b5=YoloSergio
+|b6=Luckysor
+}}
+
+{{Tabs dynamic/tab|7}}<!-- Indonesian -->
+The Indonesian broadcast talent was revealed on June 26, 2026.<ref>{{cite web|url=https://www.instagram.com/dota2tvindonesia/p/DaCs1vCzj1D/|title=EWC 26 Dota 2 akan dimulai tanggal 7 Juli 2026. Kalian akan ditemani oleh para talenta ini. Jangan sampai ketinggalan!! |author=DTVI|date=2026-06-26}}</ref>
+{{BroadcasterCard
+|position=Commentator|lang=Indonesian
+|b1=justincase
+|b2=Dejet
+}}
+{{BroadcasterCard
+|position=Analyst|lang=Indonesian
+|b1=Ucing
+|b2=Faiq
+}}
+{{BroadcasterCard
+|position=Guest Analyst|lang=Indonesian
+|b1=You_K
+|b2=Vlaicu
+}}
+{{box|end}}
+
+{{Tabs dynamic/end}}
+
+===Miscellaneous===
+{{Tabs dynamic|name1=Interview|name2=Preview|name3=Conclusion|name4=Miscellaneous|This=2}}
+{{Tabs dynamic/tab|1}}
+{{ExternalMediaList|event={{PAGENAME}}|type=interview|dynamic=false|show_usuk=true}}
+{{Tabs dynamic/tab|2}}
+{{ExternalMediaList|event={{PAGENAME}}|type=preview|dynamic=false|show_usuk=true}}
+{{Tabs dynamic/tab|3}}
+{{ExternalMediaList|event={{PAGENAME}}|type=conclusion|dynamic=false|show_usuk=true}}
+{{Tabs dynamic/tab|4}}
+{{ExternalMediaList|event={{PAGENAME}}|type=miscellaneous|dynamic=false|show_usuk=true}}
+{{Tabs dynamic/end}}
+*Welcome letters: [https://x.com/onewin_dota2/status/2074078117442818131 1w] • [https://t.me/L1GATEAM/3592 L1 TEAM] • [https://t.me/lvlupggwp/1195 Level UP] • [https://weibo.com/2157471171/R7zk0whBa LGD Gaming] • [https://x.com/OGesports/status/2074066900884042054 OG] • [https://x.com/PARIVISIONdota2/status/2074169735051174398 PVISION] • [https://x.com/rekonixofficial/status/2074161128922632654 REKONIX] • [https://t.me/runeeaters/105 Rune Eaters] • [https://t.me/ammarthefucker6/306 Team Falcons] • [https://x.com/teamliquiddota/status/2074203043378209133 Team Liquid] • [https://x.com/TSpirit_Dota2/status/2074078814108373490 Team Spirit] • [https://t.me/team_yandex_dota_2/2053 Team Yandex] • [https://weibo.com/7720945580/R7pPpqcnP Xtreme Gaming]
+'''Spotlights'''
+{{ExternalMediaList|event={{PAGENAME}}|type=Spotlight|dynamic=false|show_usuk=true}}
+
+===Statistics Overview===
+====Hero Statistics====
+{{Hero statistics
+|statspage={{PAGENAME}}/Statistics
+|tournament={{PAGENAME}}
+|tournament2={{PAGENAME}}/Group Stage
+}}
+
+====Country Representation====
+{{Country representation}}
+
+====EWC Appearances====
+{{Tabs dynamic|name1=Player|hide-showall=true}}
+{{Tabs dynamic/tab|1}}
+{{Tabs dynamic|name1=By team|name2=By Placement}}
+{{Tabs dynamic/tab|1}}
+{{Player tournament appearances|pages=Riyadh Masters/2022,Riyadh Masters/2023,Riyadh Masters/2024,Esports World Cup/2025,Esports World Cup/2026|limit=61|playerspage=Esports_World_Cup/2026}}
+{{Tabs dynamic/tab|2}}
+{{Player tournament appearances|pages=Riyadh Masters/2022,Riyadh Masters/2023,Riyadh Masters/2024,Esports World Cup/2025,Esports World Cup/2026|limit=61|playerspage=Esports_World_Cup/2026|showPlacementInsteadOfTeam=true}}
+
+{{Tabs dynamic/end}}
+:''See [[Esports_World_Cup/Player tournament appearances|here]] for the complete list.''
+
+==References==
+{{Reflist}}

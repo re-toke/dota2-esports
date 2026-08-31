@@ -1,0 +1,28 @@
+{{SwissStandings
+|tiebreakers={{Json|matchdiff|manual}}
+|bg=1-3=up,4-8=stay,9-13=staydown,14-16=down
+|placements=1;2-3;4-8;9-13;14-15;16
+
+|round1={{Round|started=true|finished=true|matchgroups=mfiWqjJT5A}}
+|round2={{Round|started=true|finished=true|matchgroups=mfiWqjJT5B}}
+|round3={{Round|started=true|finished=true|matchgroups=mfiWqjJT5C}}
+|round4={{Round|started=true|finished=true|matchgroups=mfiWqjJT5D}}
+|round5={{Round|started=true|finished=true|matchgroups=mfiWqjJT5E}}
+
+|{{TeamOpponent|TEAM VISION|tiebreaker=16}}
+|{{TeamOpponent|Team Liquid|tiebreaker=15}}
+|{{TeamOpponent|Nigma Galaxy|tiebreaker=14}}
+|{{TeamOpponent|Team Spirit|tiebreaker=13}}
+|{{TeamOpponent|Iron Wing|tiebreaker=12}}
+|{{TeamOpponent|Team Falcons|tiebreaker=11}}
+|{{TeamOpponent|Aurora Gaming|tiebreaker=10}}
+|{{TeamOpponent|LGD Gaming|tiebreaker=9}}
+|{{TeamOpponent|BoomBoys|tiebreaker=8}}
+|{{TeamOpponent|Vici Gaming|tiebreaker=7}}
+|{{TeamOpponent|Team Yandex|tiebreaker=6}}
+|{{TeamOpponent|Team Resilience|tiebreaker=5}}
+|{{TeamOpponent|GamerLegion|tiebreaker=4}}
+|{{TeamOpponent|Xtreme Gaming|tiebreaker=3}}
+|{{TeamOpponent|OG|tiebreaker=2}}
+|{{TeamOpponent|HULIGANI|tiebreaker=1}}
+}}

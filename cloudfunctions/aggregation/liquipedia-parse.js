@@ -905,6 +905,271 @@ function parseBoFormat(wikitext) {
   return out;
 }
 
+// ===== P3（2026-08-31）：小组积分表 / 淘汰赛对阵解析 =====
+// 注意：新版 {{GroupTableLeague}} / {{SwissStandings}} 的 W/L/积分由 LPDB 服务端渲染，
+// wikitext 里只有「排名顺序 + 晋级状态色标」。W/L 数字由调用方与 OpenDota 本地聚合
+// （sources.getLeagueStandings）互补合并；本解析器输出排名与晋级状态。
+
+// bg 色标 → 中文晋级状态。up/stayup=晋级，down/staydown=淘汰，stay/其它=空。
+function _placementOf(bg) {
+  var v = (bg || '').toLowerCase();
+  if (v === 'up' || v === 'stayup') return '晋级';
+  if (v === 'down' || v === 'staydown') return '淘汰';
+  return '';
+}
+
+// 解析 {{GroupTableLeague|team1=..|bg1=..|title=..|tournament=..}} 与 {{SwissStandings|...}}。
+// 页面惯例：{{GroupTableLeague}} 前有 ===Group X=== 三级标题 → 组名；缺失时回退 title。
+// {{SwissStandings}}（如 TI2026 瑞士轮）：{{TeamOpponent|队名}} 按排名列出，无 W/L，placement 空。
+// 返回 [{ name, teams: [{ rank, name, placement }] }]，无数据返回 []。
+function parseGroupStandings(wikitext) {
+  if (!wikitext) return [];
+  var groups = [];
+  // ① {{GroupTableLeague}}：按出现位置扫描，回溯最近的三级标题作组名
+  var idx = wikitext.indexOf('{{GroupTableLeague');
+  while (idx >= 0) {
+    var end = findTemplateEnd(wikitext, idx);
+    if (end < 0) break;
+    var body = wikitext.substring(idx + 2, end);
+    var params = _topLevelParams(body);
+    var teams = _orderedPlacementTeams(params);
+    if (teams.length) {
+      // 回溯最近的三级标题：必须用整行正则匹配（lastIndexOf('===') 会命中
+      // '===Group B===' 行的**闭合** ===，导致组名恒为空 → 回退 title='Standings'）
+      var before = wikitext.substring(0, idx);
+      var groupName = _lastHeader(before, 3);
+      if (!groupName) groupName = params.title || '小组';
+      groups.push({ name: groupName, teams: teams });
+    }
+    idx = wikitext.indexOf('{{GroupTableLeague', end);
+  }
+  // ② {{SwissStandings}}：{{TeamOpponent|队名}} 按排名列出（无 W/L，placement 空）
+  var sIdx = wikitext.indexOf('{{SwissStandings');
+  if (sIdx >= 0) {
+    var sEnd = findTemplateEnd(wikitext, sIdx);
+    if (sEnd > 0) {
+      var sBody = wikitext.substring(sIdx + 2, sEnd);
+      var swissTeams = [];
+      var tPos = sBody.indexOf('{{TeamOpponent');
+      while (tPos >= 0) {
+        var tEnd = findTemplateEnd(sBody, tPos);
+        if (tEnd < 0) break;
+        // extractTeamOpponent 的正则要求完整 '{{TeamOpponent|...}}' 包裹，须传含大括号的整段；
+        // tiebreaker=N（瑞士轮排名辅助参数）不属于队名，剥离防混入显示名
+        var tFull = sBody.substring(tPos, tEnd + 2).replace(/\|\s*tiebreaker\s*=\s*\d+\s*/gi, '');
+        var opp = extractTeamOpponent(tFull);
+        if (opp && opp.name) {
+          swissTeams.push({ rank: swissTeams.length + 1, name: opp.name, placement: '' });
+        }
+        tPos = sBody.indexOf('{{TeamOpponent', tEnd);
+      }
+      if (swissTeams.length) {
+        groups.push({ name: '瑞士轮', teams: swissTeams });
+      }
+    }
+  }
+  return groups;
+}
+
+// 把模板 body 按 | 顶层分割并解析 key=value（复用 splitTopLevel，保留原始值不剥内层模板）。
+function _topLevelParams(body) {
+  var params = {};
+  var cleaned = body.replace(/^[A-Za-z_]*\s*\|/, '');   // 去掉模板名前缀（如 'GroupTableLeague|'）
+  var parts = splitTopLevel(cleaned, '|');
+  for (var i = 0; i < parts.length; i++) {
+    var part = parts[i].trim();
+    if (!part) continue;
+    var eq = part.indexOf('=');
+    if (eq < 0) continue;
+    var key = part.substring(0, eq).trim().toLowerCase();
+    if (key) params[key] = part.substring(eq + 1).trim();
+  }
+  return params;
+}
+
+// 在 wikitext 片段中找最后一个指定层级的标题文本（整行匹配，防 lastIndexOf 误中闭合符）。
+// {{Stage|X}} 内层模板解析为其第一个参数文本（如 Survival）。
+function _lastHeader(text, level) {
+  if (!text) return '';
+  var lines = text.split('\n');
+  var out = '';
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].replace(/\r$/, '');
+    var re = level >= 3
+      ? /^===\s*([^=].*?)\s*===\s*$/
+      : /^==\s*([^=].*?)\s*==\s*$/;
+    var m = line.match(re);
+    if (m) {
+      var t = m[1].trim();
+      var stageM = t.match(/^\{\{\s*Stage\s*\|([^}]+)\}\}$/i);
+      if (stageM) t = stageM[1].trim();
+      if (t) out = t;
+    }
+  }
+  return out;
+}
+
+// 从 params 提取 team1..teamN（含 bgN/pbgN 晋级状态），按 rank 升序。
+// 晋级状态优先级：pbgN（槽位色带，页面实际渲染的着色，呈连贯阶梯）存在时**严格采用**
+// （值为 '' 就是无徽标，不回退 bgN —— 实测 EWC2026 的 bg 值零散过时，
+//   如 rank4=down 但实际该队进入 Survival 阶段并未淘汰）；仅当整表无 pbg 时回退 bgN。
+function _orderedPlacementTeams(params) {
+  var teams = [];
+  var rank = 1;
+  while (params['team' + rank] != null) {
+    var raw = params['team' + rank];
+    var name = stripWikitextMarkup(raw || '').trim();
+    // 去掉 [[..|显示名]] 之外的残片（stripWikitextMarkup 已处理常见包裹）
+    if (name) {
+      var placement = '';
+      if (params['pbg' + rank] != null) {
+        placement = _placementOf(params['pbg' + rank]);
+      } else {
+        placement = _placementOf(params['bg' + rank]) || _placementOf(params['pbg' + rank]);
+      }
+      teams.push({ rank: rank, name: name, placement: placement });
+    }
+    rank++;
+    if (rank > 30) break;   // 防御：异常页面最多 30 行
+  }
+  return teams;
+}
+
+// 解析 {{Bracket|<类型>|id=..|R#M#header=..|R#M#={{Match...}}}} 淘汰赛对阵树。
+// 复用 parseMatchFields 解析每个 {{Match}}（返回元素与 parseScheduledMatches 同构，
+// 额外注入 matchHeader / roundNo）。轮次标签取 HTML 注释（<!-- Quarterfinals -->），
+// 缺失时用 'R#'；RxMTP（季军赛）单列。返回 [{ id, type, section, rounds: [{ label, matches }] }]。
+function parseBrackets(wikitext) {
+  if (!wikitext) return [];
+  var brackets = [];
+  var idx = wikitext.indexOf('{{Bracket|');
+  while (idx >= 0) {
+    var end = findTemplateEnd(wikitext, idx);
+    if (end < 0) break;
+    var body = wikitext.substring(idx + 2, end);   // 'Bracket|Bracket/8|id=..|R1M1=...'
+    // 真实类型（如 Bracket/8L4D-4Q）是首个**位置参数**（无 '='），不在模板名位置
+    var type = '';
+    var pipe = body.indexOf('|');
+    if (pipe < 0) { body = ''; }
+    else {
+      body = body.substring(pipe + 1);   // 去掉模板名 token
+      var eqPos = body.indexOf('=');
+      var pipePos = body.indexOf('|');
+      if (pipePos < 0) type = eqPos < 0 ? body.trim() : '';
+      else if (eqPos < 0 || pipePos < eqPos) type = body.substring(0, pipePos).trim();
+    }
+
+    // 所在 H2 段（整行正则回溯，{{Stage|X}} 解析为参数文本）
+    var section = _lastHeader(wikitext.substring(0, idx), 2);
+
+    // 扫描 body：顶层 | 参数，抓 R#M#header / R#M# / RxMTP / HTML 注释（轮次标签）
+    var headers = {};      // 'R1M1' -> header 文本
+    var comments = [];     // [{ pos, text }]（注释在 body 中的位置）
+    var roundsMap = {};    // roundNo -> [{ matchFields, header, pos }]
+    var mtpMatch = null;   // 季军赛
+    var depth = 0;
+    var i = 0;
+    var lastComment = '';
+    var commentEndPos = 0;
+    while (i < body.length - 1) {
+      // HTML 注释捕获（作轮次标签）
+      if (body.substr(i, 4) === '<!--') {
+        var cEnd = body.indexOf('-->', i);
+        if (cEnd < 0) break;
+        lastComment = body.substring(i + 4, cEnd).trim();
+        commentEndPos = cEnd + 3;
+        i = cEnd + 3;
+        continue;
+      }
+      if (body[i] === '{' && body[i + 1] === '{') { depth++; i += 2; continue; }
+      if (body[i] === '}' && body[i + 1] === '}') { depth = Math.max(0, depth - 1); i += 2; continue; }
+      if (body[i] === '|' && depth === 0) {
+        // 读参数 key
+        var eq = body.indexOf('=', i);
+        var nextPipe = body.indexOf('|', i + 1);
+        if (eq < 0 || (nextPipe >= 0 && nextPipe < eq)) { i++; continue; }
+        var key = body.substring(i + 1, eq).trim().toLowerCase();
+        var valStart = eq + 1;
+        // 跳过值前空白
+        while (valStart < body.length && /\s/.test(body[valStart])) valStart++;
+        var mh = key.match(/^r(\d+)m(\d+)header$/);
+        if (mh) {
+          var hEnd2 = body.indexOf('\n', valStart);
+          headers['R' + mh[1] + 'M' + mh[2]] = stripTags(body.substring(valStart, hEnd2 < 0 ? body.length : hEnd2)).trim();
+          i = valStart;
+          continue;
+        }
+        var mm = key.match(/^r(\d+)m(\d+)$/);
+        var isMtp = key === 'rxmtp';
+        if (mm || isMtp) {
+          if (body.substr(valStart, 2) !== '{{') { i = valStart; continue; }
+          var mEnd = findTemplateEnd(body, valStart);
+          if (mEnd < 0) break;
+          var mBody = body.substring(valStart + 2, mEnd);
+          var fields = parseMatchFields(mBody);
+          if (fields) {
+            fields._slotNo = isMtp ? 'TP' : mm[2];
+            fields._comment = lastComment;
+            if (isMtp) {
+              mtpMatch = fields;
+            } else {
+              var rno = parseInt(mm[1], 10);
+              if (!roundsMap[rno]) roundsMap[rno] = [];
+              roundsMap[rno].push({ fields: fields, pos: valStart });
+            }
+          }
+          i = mEnd;
+          continue;
+        }
+        i = valStart;
+        continue;
+      }
+      i++;
+    }
+    // 组装 rounds：每轮标签 = 该轮第一个 match 的 header（去轮次前缀）→ 最近注释 → '第N轮'
+    var roundNos = Object.keys(roundsMap).map(Number).sort(function (a, b) { return a - b; });
+    var rounds = [];
+    for (var r = 0; r < roundNos.length; r++) {
+      var no = roundNos[r];
+      var list = roundsMap[no].sort(function (a, b) { return a.pos - b.pos; });
+      // 轮标签：本轮首个 match 的显式 header（R#M#header=）→ match 前最近的注释 → '第N轮'
+      var label = '';
+      for (var mi = 0; mi < list.length; mi++) {
+        var h = headers['R' + no + 'M' + list[mi].fields._slotNo] || '';
+        if (h) { label = h; break; }
+      }
+      // 退化：用 match 前最近的注释（扫描时同步记录每个 match pos 前的 lastComment）
+      if (!label && list.length && list[0].fields._comment) label = list[0].fields._comment;
+      if (!label) label = '第' + no + '轮';
+      rounds.push({
+        label: label,
+        matches: list.map(function (it) {
+          var f = Object.assign({}, it.fields);
+          delete f._slotNo;      // 内部簿记字段不外泄
+          delete f._comment;
+          f.roundNo = no;
+          f.bracketType = type;
+          return f;
+        })
+      });
+    }
+    // 季军赛单列一轮
+    if (mtpMatch) {
+      var mtp = Object.assign({}, mtpMatch);
+      delete mtp._slotNo;
+      delete mtp._comment;
+      mtp.roundNo = 99;
+      mtp.bracketType = type;
+      rounds.push({ label: '季军赛', matches: [mtp] });
+    }
+    if (rounds.length) {
+      brackets.push({ id: (body.match(/id=([A-Za-z0-9]+)/) || [])[1] || '', type: type, section: section, rounds: rounds });
+    }
+    idx = wikitext.indexOf('{{Bracket|', end);
+  }
+  return brackets;
+}
+
 module.exports = {
   parseTemplate: parseTemplate,
   splitTopLevel: splitTopLevel,
@@ -919,6 +1184,8 @@ module.exports = {
   parseParticipants: parseParticipants,
   parseLeagueMetadata: parseLeagueMetadata,
   parseScheduledMatches: parseScheduledMatches,
+  parseGroupStandings: parseGroupStandings,   // P3（2026-08-31）：小组积分表（排名+晋级状态）
+  parseBrackets: parseBrackets,               // P3（2026-08-31）：淘汰赛对阵树
   parseBoFormat: parseBoFormat,   // ★ 2026-08-04：Format 段 BO 声明解析（BO 判定引擎 S2）
   parseTeamLogo: parseTeamLogo,
   parseLeagueTier: parseLeagueTier,
