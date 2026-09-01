@@ -118,6 +118,32 @@ function normName(s) {
     process.exit(1);
   }
 
+  // ★ 2026-09-01（v8.6 Fix-G2）：活跃赛事缺 logo 队逐个 /teams/{id} 补全。
+  //   根因：/api/teams 只返回 rating 前 1000 队，低 rating 新队（如 EPL II 的
+  //   4ikibamboni 10233067 / DYNASTY 10225542 / Team Spirit Academy 9948367）不在列表
+  //   → findTeamByName 网络链永远找不到 → upcoming 对局/参赛队伍队标缺失。
+  //   /teams/{id} 单队端点不受前 1000 限制，实测全部可拿 logo。
+  //   补全：对 activeTeamIds 中「/api/teams 未覆盖」的 id 逐个请求（限流 700ms 间隔），
+  //   成功且有 logo 则并入 teams 供 ④ 组装（活跃队必收，不受 TOP_RATED 限制）。
+  const coveredById = {};
+  (teams || []).forEach((t) => { if (t && t.team_id) coveredById[t.team_id] = 1; });
+  const missingActive = Object.keys(activeTeamIds).filter((tid) => !coveredById[tid]);
+  if (missingActive.length) {
+    console.log('[fetch:logos] 活跃赛事队中 /api/teams 未覆盖 ' + missingActive.length + ' 个，逐个补全…');
+    let got = 0;
+    for (const tid of missingActive) {
+      try {
+        const t = await getJson(OD_BASE + '/teams/' + tid);
+        if (t && t.team_id && t.logo_url) {
+          teams.push({ team_id: Number(t.team_id), name: t.name || '', logo_url: t.logo_url, tag: t.tag || '' });
+          got++;
+        }
+      } catch (e) { /* 单队失败跳过（负缓存语义交给运行时） */ }
+      await sleep(REQ_GAP_MS);
+    }
+    console.log('[fetch:logos] 补全 ' + got + ' 个 /teams/{id} logo（剩余无 logo 跳过）');
+  }
+
   // ④ 组装：活跃赛事队（精确，必收）+ rating 前 TOP_RATED（广覆盖）
   //    /api/teams 已按 rating 降序返回 → 顺序遍历中先遇到的非活跃队即高排名队
   // ★ 2026-09-01（v8.5 Fix-G）：写入前 URL 规范化（image.js normalizeLogoUrl 同规则）——
@@ -141,16 +167,27 @@ function normName(s) {
   });
 
   // byName：归一化队名 → logo（同名多 id：活跃队优先，其次 matchCount 多者）
+  // ★ 2026-09-01（v8.6 Fix-G2）：额外写入「去后缀别名键」——"Level UP esports" 同时挂
+  //   levelupesports + levelup 两个键，LP 简称 "Level UP"（norm levelup）运行时精确命中，
+  //   不必每次走运行时前缀模糊兜底。同队多 id 评分取最高者。
+  function stripSuffix(n) {
+    return String(n || '').replace(/(esports|esport|gaming|team|club|dota)$/g, '');
+  }
   const byName = {};
   Object.keys(finalById).forEach((tid) => {
-    const norm = normName(finalById[tid].name);
-    if (!norm) return;
-    const cur = byName[norm];
+    const fullNorm = normName(finalById[tid].name);
+    if (!fullNorm) return;
     const score = (activeTeamIds[tid] ? 1000 : 0) + (matchCount[tid] || 0);
-    const curScore = cur ? cur._score : -1;
-    if (!cur || score > curScore) {
-      byName[norm] = { logo: finalById[tid].logo, _score: score };
-    }
+    const keys = [fullNorm];
+    const stripped = stripSuffix(fullNorm);
+    if (stripped && stripped !== fullNorm) keys.push(stripped);
+    keys.forEach((k) => {
+      const cur = byName[k];
+      const curScore = cur ? cur._score : -1;
+      if (!cur || score > curScore) {
+        byName[k] = { logo: finalById[tid].logo, _score: score };
+      }
+    });
   });
   Object.keys(byName).forEach((k) => { delete byName[k]._score; });
 

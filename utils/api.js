@@ -491,31 +491,53 @@ function findTeamByName(name) {
   if (!name) return Promise.resolve(null);
   return cached('/teams', null, 24 * 3600).then(function (list) {
     if (!Array.isArray(list) || !list.length) return null;
-    var q = (name || '').toLowerCase().replace(/\s+/g, '');
+    // ★ 2026-09-01（v8.6 Fix-G2）：归一化统一为「去非字母数字」——
+    //   与快照 byName 键 / 详情页 nameTeams 的 normName 完全一致。
+    //   原实现 replace(/\s+/g,'') 保留 + 号（"Pipsqueak+4"→pipsqueak+4），
+    //   /teams 里 "Pipsqueak + 4" → pipsqueak4 → 精确键 miss 走模糊误配。
+    //   同时剥离常见后缀（esports/gaming/team/club）提升简称命中率：
+    //   "Level UP esports" 剥离后 = "levelup"，可直接精确命中 LP 简称 "Level UP"。
+    function _norm(s) {
+      return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    }
+    function _stripSuffix(s) {
+      return _norm(s).replace(/(esports|esport|gaming|team|club|dota)$/g, '');
+    }
+    var q = _norm(name);
+    var qs = _stripSuffix(name);
     if (!q) return null;
     var best = null;
-    var i, t, tn, tag;
-    // 第一轮：精确匹配（去除空格后完全相同）
+    var bestSuffix = null;
+    var i, t, tn, tns, tag;
+    // 第一轮：精确匹配（去非字母数字后完全相同；含后缀剥离双键）
     for (i = 0; i < list.length; i++) {
       t = list[i];
-      tn = (t.name || '').toLowerCase().replace(/\s+/g, '');
-      if (tn === q) return { team_id: t.team_id, name: t.name, logo_url: t.logo_url || '' };
+      tn = _norm(t.name || '');
+      if (tn && tn === q) return { team_id: t.team_id, name: t.name, logo_url: t.logo_url || '' };
+      if (qs && tn && tn === qs) return { team_id: t.team_id, name: t.name, logo_url: t.logo_url || '' };
     }
     // 第二轮：tag 精确匹配
     for (i = 0; i < list.length; i++) {
       t = list[i];
-      tag = (t.tag || '').toLowerCase().replace(/\s+/g, '');
-      if (tag === q) return { team_id: t.team_id, name: t.name, logo_url: t.logo_url || '' };
+      tag = _norm(t.tag || '');
+      if (tag && (tag === q || (qs && tag === qs))) return { team_id: t.team_id, name: t.name, logo_url: t.logo_url || '' };
     }
-    // 第三轮：包含匹配（较长名称包含较短名称，长度 >= 3 防误配）
+    // 第三轮：前缀匹配（LP 简称 → OpenDota 全名，如 levelup → levelupesports）
+    //   仅「查询名是队名前缀」才匹配，防 "Team Spirit Academy" 误配到 "Team Spirit"
+    //   （q=teamspiritacademy，tn=teamspirit 是 q 的前缀——方向反了，不再命中）。
     for (i = 0; i < list.length; i++) {
       t = list[i];
-      tn = (t.name || '').toLowerCase().replace(/\s+/g, '');
-      if (tn.length >= 3 && q.length >= 3 && (tn.indexOf(q) >= 0 || q.indexOf(tn) >= 0)) {
+      tn = _norm(t.name || '');
+      if (!tn || tn.length < q.length + 3) continue;  // 需比查询名至少长 3（防过度扩展）
+      if (tn.indexOf(q) === 0) {
         if (!best || tn.length < (best.name || '').length) best = { team_id: t.team_id, name: t.name, logo_url: t.logo_url || '' };
+      } else if (qs && qs.length >= 3 && tn.indexOf(qs) === 0) {
+        if (!bestSuffix || tn.length < (bestSuffix.name || '').length) bestSuffix = { team_id: t.team_id, name: t.name, logo_url: t.logo_url || '' };
       }
     }
-    return best || null;
+    if (best) return best;
+    if (bestSuffix) return bestSuffix;
+    return null;
   });
 }
 
@@ -612,6 +634,30 @@ function getTeamNames(teamIds) {
   });
 }
 
+// F6（2026-08-31）：批量查询队伍 logo（team_id -> { name, logo_url }）。
+// 用途：首页比赛流 LOGO 懒加载把「16 次 getTeam 单发」降为「1 次 explorer 批量」，
+//   再配合 logoCache 批量写，显著减少 OpenDota 请求次数与限流风险。
+// explorer 的 teams 表有 logo_url 字段（实测返回 steamcdn 地址），长缓存（6h）降低重复查询。
+function getTeamLogos(teamIds) {
+  const ids = (teamIds || [])
+    .map((x) => Number(x))
+    .filter((x) => !isNaN(x) && x > 0);
+  if (!ids.length) return Promise.resolve({});
+  // 注意：SQL 只允许数字 id（上面已过滤），无注入风险
+  const sql = 'SELECT team_id, name, logo_url FROM teams WHERE team_id IN (' + ids.join(',') + ')';
+  const path = '/explorer?sql=' + encodeURIComponent(sql);
+  return cached(path, null, 6 * 3600).then((data) => {
+    const rows = (data && data.rows) || [];
+    const map = {};
+    rows.forEach((r) => {
+      if (r && r.team_id != null) {
+        map[r.team_id] = { name: r.name || '', logo_url: r.logo_url || '' };
+      }
+    });
+    return map;
+  });
+}
+
 // 物品表（id -> { name, img, dname }）：OpenDota /constants/items 返回 { name: { id, img, dname } }，
 // 反转为 id 索引便于比赛详情页按 item_0~5 数字 id 查物品名/图标。长缓存（物品几乎不变）。
 // 注意：OpenDota 的 img 是相对路径 /apps/dota2/images/dota_react/items/{name}.png?t=xxx，
@@ -692,6 +738,7 @@ module.exports = {
   getHeroStats: getHeroStats,
   getHeroMatchups: getHeroMatchups,
   getTeamNames: getTeamNames,
+  getTeamLogos: getTeamLogos,
   getItems: getItems,
   getItemsList: getItemsList,
   getItemTimings: getItemTimings

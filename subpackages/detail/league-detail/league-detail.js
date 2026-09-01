@@ -1710,7 +1710,12 @@ Page({
     //   同一战队在 RECENT 段已有 OpenDota team_id 时，跳过 Liquipedia 查询，
     //   直接走 ID 路径拿 OpenDota logo（cdn.opendota.com 已在微信白名单）。
     //   ⚠️ 必须在「负 id 占位队伍收集」之前声明，否则 TDZ 报错（nameTeams 未初始化）。
-    function normName(s) { return String(s || '').toLowerCase().replace(/\s+/g, ''); }
+    // ★ 2026-09-01（v8.6 Fix-G2）：归一化规则统一为「去非字母数字」——
+    //   与快照 team-logo-local-data.js byName 键（fetch-team-logos.js normName：
+    //   replace(/[^a-z0-9]/g,'')）完全一致，消除「两边规则不同 → 精确键永远 miss」。
+    //   原实现 replace(/\s+/g,'') 保留 + 号（"Pipsqueak+4"→pipsqueak+4），
+    //   快照键是 pipsqueak4 → 永远不匹配（P0，实测 Level UP/Pipsqueak+4 等全 miss）。
+    function normName(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
     const teamNameToId = {};
     Object.keys(teamIds).forEach((tid) => {
       const t = teamIds[tid];
@@ -1792,6 +1797,25 @@ Page({
     //   网络查询链（findTeamByName → OpenDota CDN logo）。快照文件本身也随 fetch:logos 规范化。
     const imageUtil2 = require('../../../utils/image.js');
     const _normSnapLogo = function (logo) { return imageUtil2.normalizeLogoUrl(logo); };
+    // ★ 2026-09-01（v8.6 Fix-G2）：快照 byName 模糊匹配 —— LP 队名是简称（"Level UP"），
+    //   快照 byName 键基于 OpenDota 全名（"Level UP esports" → levelupesports）。
+    //   精确键 miss 时按「前缀包含」兜底（levelup 命中 levelupesports）：
+    //   短键在前缀命中时取最长全名键对应的 logo（同队多 id 时 OpenDota 全名最全）。
+    //   守卫：候选键长度 ≥ 键长 + 3（防 "mouz" 命中 "mouzesports" 之类过度扩展误配）。
+    const _snapByNameFuzzy = function (norm) {
+      if (!snap || !snap.byName || !norm) return null;
+      const exact = snap.byName[norm];
+      if (exact && /^https?:\/\//i.test(exact.logo)) return exact;
+      // 前缀包含匹配：快照键以 norm 开头（简称→全名），取最短键（最接近原队名）
+      let bestKey = null;
+      Object.keys(snap.byName).forEach((k) => {
+        if (k.length >= norm.length + 3 && k.indexOf(norm) === 0) {
+          if (!bestKey || k.length < bestKey.length) bestKey = k;
+        }
+      });
+      if (bestKey && /^https?:\/\//i.test(snap.byName[bestKey].logo)) return snap.byName[bestKey];
+      return null;
+    };
     if (snap && (snap.byId || snap.byName)) {
       needQueryIds = needQueryIds.filter((tid) => {
         const hit = snap.byId && snap.byId[tid];
@@ -1805,7 +1829,7 @@ Page({
         return true;
       });
       needQueryNames = needQueryNames.filter((norm) => {
-        const hit = snap.byName && snap.byName[norm];
+        const hit = _snapByNameFuzzy(norm);
         if (hit && /^https?:\/\//i.test(hit.logo)) {
           const nlogo = _normSnapLogo(hit.logo);
           if (nlogo) {
