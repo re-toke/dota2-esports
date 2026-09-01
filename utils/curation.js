@@ -275,7 +275,33 @@ const CURATED_EVENTS = [
     start: Math.floor(Date.UTC(2026, 7, 30) / 1000), end: Math.floor(Date.UTC(2026, 8, 10) / 1000),
     prizePool: '$100,000', organizer: 'EPL', region: '欧洲/CIS · 线上',
     format: '小组赛(2×6 Bo3 循环) + 双败淘汰(Bo3)',
-    participants: 16, status: '进行中', liquipediaSlug: 'EPL/Masters/2',
+    // ★ 2026-09-01（v8.4 Fix-F）：participants 由数字 16 升级为 16 队数组（Liquipedia EPL/Masters/2
+    //   官方名单实锤）。根因：19944 被 Masters I/II 复用，OpenDota /leagues/19944/matches 返回两届
+    //   混合数据，详情页按判届窗口过滤后仍混入 Masters I 季后赛残留（Nemiga/RE ARISE/Syntax）+
+    //   Masters II 预选赛队伍（FTS/Summer Bear）+ 跨届同名双 id（Zero Tenacity）→ 推导出 19 队。
+    //   提供人工策展数组后，详情页「策展数组优先重建」（league-detail.js Fix-F）以 16 队为准，
+    //   不再被推导的 19 覆盖。region 为预估值（非官方字段），group 按官方 Group Stage Seed 分组。
+    participants: [
+      // ── Group Stage Seed（Liquipedia 官方分组）──
+      { name: 'Level UP', region: '欧洲/俄罗斯', group: 'A' },
+      { name: 'Pipsqueak+4', region: '欧洲/多国', group: 'A' },
+      { name: 'Power Rangers', region: '欧洲/俄罗斯', group: 'A' },
+      { name: 'Zero Tenacity', region: 'CIS/多国', group: 'A' },
+      { name: 'Klim Sani4', region: 'CIS/乌克兰', group: 'A' },
+      { name: 'Team Lynx', region: '欧洲/俄罗斯', group: 'A' },
+      { name: '4ikibamboni', region: '欧洲/多国', group: 'B' },
+      { name: 'PuckChamp', region: '欧洲/多国', group: 'B' },
+      { name: 'Team Spirit Academy', region: '欧洲/俄罗斯', group: 'B' },
+      { name: 'Team Synapse', region: '欧洲/多国', group: 'B' },
+      { name: 'Inner Circle', region: '欧洲/多国', group: 'B' },
+      { name: 'DYNASTY', region: 'CIS/多国', group: 'B' },
+      // ── Playoff Seed（邀请制，8/26~30 陆续官宣）──
+      { name: 'HULIGANI', region: 'CIS/多国', group: 'Playoff' },
+      { name: 'MOUZ', region: '欧洲/德国', group: 'Playoff' },
+      { name: 'Natus Vincere', region: '欧洲/乌克兰', group: 'Playoff' },
+      { name: 'Yellow Submarine', region: '欧洲/俄罗斯', group: 'Playoff' }
+    ],
+    status: '进行中', liquipediaSlug: 'EPL/Masters/2',
     valve: false, topThirdParty: true },
 
   // ── 2026-08-31 P0 补录：RES Unchained 5（BLAST SLAM VIII 预选赛，一 ID 一届无复用）──

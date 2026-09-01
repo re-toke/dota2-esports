@@ -236,6 +236,49 @@ check('G11: 子模块队名补全 — api.getTeamNames 导出为函数', () => {
   assert(typeof api.getTeamNames === 'function', 'getTeamNames 应导出为函数，实际: ' + typeof api.getTeamNames);
 });
 
+// ===== Fix-F：一 ID 多届参赛队「策展数组优先」（2026-09-01 v8.4 Fix-F）=====
+// 背景：EPL Masters II 详情页显示 19 队 / 实际 16 队。根因：19944 被 I/II 复用，
+//       OpenDota 返回两届混合比赛，窗口过滤后仍混入 Masters I 季后赛残留（Nemiga/RE ARISE/
+//       Syntax）+ Masters II 预选赛（FTS/Summer Bear）+ 跨届同名双 id（Zero Tenacity）→
+//       推导 actualCount=19 > meta=16 → 旧分支①「以实际为准」覆盖为 19。
+//       修复：curation 提供人工策展 participants 数组（16 队）时，详情页以数组为准重建，
+//       不再被推导数据覆盖（league-detail.js refreshMetadataDerived Fix-F）。
+section('\n--- Fix-F EPL Masters II 策展数组优先（防 19 队回归）---');
+check('Fix-F: Masters II 的 participants 是 16 队数组（非数字），可作策展权威源', () => {
+  const c = remoteCuration.curatedEventFor('EPL Masters 2026 ', { leagueId: 19944, game: 'dota2', now: Math.floor(Date.UTC(2026, 8, 1) / 1000) });
+  assert(c, '应命中 EPL Masters II 条目');
+  assert(Array.isArray(c.participants), 'participants 应为数组（16 队），实际: ' + typeof c.participants);
+  assert(c.participants.length === 16, 'participants 应为 16 队（Liquipedia 官方），实际: ' + c.participants.length);
+});
+check('Fix-F: 策展 16 队与 Liquipedia 官方名单一致（含 Playoff 邀请队）', () => {
+  const c = remoteCuration.curatedEventFor('EPL Masters 2026 ', { leagueId: 19944, game: 'dota2', now: Math.floor(Date.UTC(2026, 8, 1) / 1000) });
+  const names = c.participants.map((p) => p.name);
+  ['HULIGANI', 'MOUZ', 'Natus Vincere', 'Level UP', 'Pipsqueak+4', 'Power Rangers',
+    'Zero Tenacity', 'Inner Circle', 'Klim Sani4', 'DYNASTY', 'Team Lynx', 'Team Synapse',
+    'Team Spirit Academy', 'PuckChamp', '4ikibamboni', 'Yellow Submarine'].forEach((n) => {
+    assert(names.indexOf(n) >= 0, '策展名单应含 ' + n + '，实际: ' + names.join(', '));
+  });
+});
+check('Fix-F: 策展名单不含 Masters I 残留（Nemiga/RE ARISE/Syntax）与预选赛队（FTS/Summer Bear）', () => {
+  const c = remoteCuration.curatedEventFor('EPL Masters 2026 ', { leagueId: 19944, game: 'dota2', now: Math.floor(Date.UTC(2026, 8, 1) / 1000) });
+  const names = c.participants.map((p) => p.name.toLowerCase());
+  ['nemiga', 're arise', 'syntax', 'fts', 'summer bear'].forEach((bad) => {
+    assert(names.indexOf(bad) < 0, '策展名单不应含 Masters I/预选赛队 ' + bad + '，实际: ' + names.join(', '));
+  });
+});
+check('Fix-F: 策展名单唯一性 — Zero Tenacity 只出现一次（跨届双 id 已归一）', () => {
+  const c = remoteCuration.curatedEventFor('EPL Masters 2026 ', { leagueId: 19944, game: 'dota2', now: Math.floor(Date.UTC(2026, 8, 1) / 1000) });
+  const cnt = c.participants.filter((p) => /zero tenacity/i.test(p.name)).length;
+  assert(cnt === 1, 'Zero Tenacity 应只出现 1 次，实际: ' + cnt);
+});
+check('Fix-F: 每队带 group/region（WXML 赛区标签/分组徽标可渲染）', () => {
+  const c = remoteCuration.curatedEventFor('EPL Masters 2026 ', { leagueId: 19944, game: 'dota2', now: Math.floor(Date.UTC(2026, 8, 1) / 1000) });
+  c.participants.forEach((p, i) => {
+    assert(p.name, '第 ' + (i + 1) + ' 队缺 name');
+    assert(p.group, '第 ' + (i + 1) + ' 队 ' + p.name + ' 缺 group（A/B/Playoff）');
+  });
+});
+
 // ===== G12：云函数缓存版本戳（"部署即缓存失效"） + Roster 完成逻辑 =====
 section('\n--- G12 缓存版本戳 + Roster 完成（"云函数部署即刷新数据"）---');
 

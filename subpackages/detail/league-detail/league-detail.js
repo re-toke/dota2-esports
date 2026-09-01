@@ -2231,7 +2231,72 @@ Page({
     const metaParticipants = liqParticipantsArr ? liqParticipantsArr.length : (Number(meta.participants) || 0);
     const actualCount = participantsList.length;
 
-    if (actualCount > 0 && actualCount > metaParticipants && metaParticipants > 0) {
+    // ★ 2026-09-01（v8.4 Fix-F）：策展数组优先重建 —— 一 ID 多届场景的参赛队「权威源」修正。
+    //   根因（用户实测 EPL Masters II 显示 19 / 实际 16）：leagueid 19944 被 Masters I/II 两届复用，
+    //   OpenDota /leagues/19944/matches 返回两届混合的 254 场比赛（Masters I 季后赛拖到 8/29 +
+    //   Masters II 预选赛 8/24~29 + Masters II 正赛）。即使 filterMatchesByWindow 按 curation 判届
+    //   窗口（8/13~9/12）过滤后仍剩 19 个 team_id：含 Masters I 残留（Nemiga/RE ARISE/Syntax）、
+    //   Masters II 预选赛队（FTS/Summer Bear）、跨届同名双 id（Zero Tenacity 9600141/10208035）。
+    //   原一致性策略分支①（actual 19 > meta 16 → 以实际为准覆盖 meta）误判 curation 过时，
+    //   把 19 当权威 → 重复显示 + 错误显示。
+    //   修复：curation/Liquipedia 提供了人工策展的 participants 数组（本赛事 16 队）时，
+    //   它比「OpenDota 推导 team_id 集合」更权威（后者混入跨届杂质无法用时间窗干净切分）——
+    //   只要 liqParticipantsArr 非空，一律以策展数组为基础重建 participantsList（关联真实
+    //   team_id 保留跳转/统计），不再让推导的 actualCount 覆盖。数组为空时走旧分支①~④。
+    if (liqParticipantsArr && liqParticipantsArr.length) {
+      // —— 以策展数组为基础重建（复用 2026-07-28 分支②的匹配逻辑）——
+      const nameToId = {};
+      const normList = [];
+      participantsList.forEach((t) => {
+        if (!t || !t.name || t.id == null || t.id < 0) return;
+        if (/^Team \d+$/.test(t.name)) return;
+        nameToId[t.name.toLowerCase()] = t.id;
+        normList.push({ name: t.name, id: t.id });
+      });
+      const normalize = function (s) {
+        return (s || '').toLowerCase()
+          .replace(/\s*(esports|eports?|gaming|team|dota)\s*/gi, '')
+          .replace(/[^a-z0-9]/g, '');
+      };
+      const normIndexed = normList.map((it) => ({ norm: normalize(it.name), id: it.id, name: it.name }));
+      participantsList = liqParticipantsArr.map((t, i) => {
+        const liqName = (t && t.name) || '';
+        const isTBD = !liqName || liqName === 'TBD';
+        let matchedId = null;
+        if (!isTBD) {
+          matchedId = nameToId[liqName.toLowerCase()];
+          if (matchedId == null) {
+            const liqNorm = normalize(liqName);
+            if (liqNorm) {
+              for (let j = 0; j < normIndexed.length; j++) {
+                const it = normIndexed[j];
+                if (!it.norm) continue;
+                if (it.norm === liqNorm ||
+                    (it.norm.length >= 3 && (it.norm.indexOf(liqNorm) >= 0 || liqNorm.indexOf(it.norm) >= 0))) {
+                  matchedId = it.id;
+                  break;
+                }
+              }
+            }
+          }
+        }
+        return {
+          id: matchedId != null ? matchedId : -1 - i,
+          name: isTBD ? '待公布' : liqName,
+          status: (t && t.status) || 'TBD',
+          liquipediaSlug: (t && t.liquipediaSlug) || null,
+          region: (t && t.region) || null,
+          group: (t && t.group) || null
+        };
+      });
+      // 策展数组为准 → meta 计数与列表长度对齐（KPI Strip 显示 16 而非 19）
+      meta.participants = participantsList.length;
+      // 诊断日志：捕获「策展重建后仍比 meta 少」的场景（策展数组覆盖不全时提示）
+      if (typeof console !== 'undefined' && console.info) {
+        console.info('[league-detail] 参赛队伍以策展数组为准重建：' + participantsList.length +
+          ' 队（推导实际 ' + actualCount + '，含跨届/预选赛杂质被排除）');
+      }
+    } else if (actualCount > 0 && actualCount > metaParticipants && metaParticipants > 0) {
       // ① 实际 > meta（且 meta > 0）：curation/Liquipedia 过时，以实际为准
       // 2026-07-28：增加 metaParticipants > 0 守卫，避免 meta=0（Liquipedia 尚未返回）
       //   的加载中间态误报"curation 过时"。meta=0 时仅静默更新 meta.participants，
