@@ -120,12 +120,18 @@ function normName(s) {
 
   // ④ 组装：活跃赛事队（精确，必收）+ rating 前 TOP_RATED（广覆盖）
   //    /api/teams 已按 rating 降序返回 → 顺序遍历中先遇到的非活跃队即高排名队
+  // ★ 2026-09-01（v8.5 Fix-G）：写入前 URL 规范化（image.js normalizeLogoUrl 同规则）——
+  //   ① http:// → https://（微信强制 https，cloud-3.steamusercontent.com 等 http 必挂）
+  //   ② steamcdn-a.akamaihd.net → cdn.cloudflare.steamstatic.com（已白名单，实测 100% 同文件镜像）
+  //   ③ steamusercontent-a.akamaihd.net（实测 100% 404 死域）与 cloud-3 剔除 → 不收录
+  //   ④ cdn.steamusercontent.com（UGC 主力，URL 有效）原样保留 —— 微信白名单待用户补配
+  const imageUtil = require('../../utils/image.js');
   const finalById = {};
   let topCount = 0;
   teams.forEach((t) => {
     if (!t || !t.team_id) return;
-    const logo = t.logo_url || '';
-    if (!logo || !/^https?:\/\//i.test(logo)) return;   // 无有效 logo 不收录（负缓存语义交给运行时）
+    const logo = imageUtil.normalizeLogoUrl(t.logo_url || '');
+    if (!logo) return;   // 无有效 logo（含死域剔除）不收录（负缓存语义交给运行时）
     if (activeTeamIds[t.team_id]) {
       finalById[t.team_id] = { name: t.name || '', logo: logo };
     } else if (topCount < TOP_RATED) {

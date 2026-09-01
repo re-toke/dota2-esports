@@ -1784,20 +1784,34 @@ Page({
     }
     const snap = this._logoSnap;
     const snapResults = [];
+    // ★ 2026-09-01（v8.5 Fix-G）：快照 URL 规范化 —— 快照由 fetch-team-logos.js 生成时
+    //   存的是 OpenDota 原始 logo_url（含 steamcdn-a.akamaihd.net / steamusercontent-a 死域 /
+    //   http:// 等）。toLogoUrl 出口已统一规范化（image.js normalizeLogoUrl），但快照命中
+    //   路径绕过 toLogoUrl 直接取 hit.logo → 死域/http URL 仍会进视图被微信拦截/加载失败。
+    //   修复：命中时先 normalizeLogoUrl，规范化为空（死域剔除）则该队视为未命中，回落到
+    //   网络查询链（findTeamByName → OpenDota CDN logo）。快照文件本身也随 fetch:logos 规范化。
+    const imageUtil2 = require('../../../utils/image.js');
+    const _normSnapLogo = function (logo) { return imageUtil2.normalizeLogoUrl(logo); };
     if (snap && (snap.byId || snap.byName)) {
       needQueryIds = needQueryIds.filter((tid) => {
         const hit = snap.byId && snap.byId[tid];
         if (hit && /^https?:\/\//i.test(hit.logo)) {
-          snapResults.push({ id: Number(tid), logo: hit.logo, source: 'snapshot' });
-          return false;
+          const nlogo = _normSnapLogo(hit.logo);
+          if (nlogo) {
+            snapResults.push({ id: Number(tid), logo: nlogo, source: 'snapshot' });
+            return false;
+          }
         }
         return true;
       });
       needQueryNames = needQueryNames.filter((norm) => {
         const hit = snap.byName && snap.byName[norm];
         if (hit && /^https?:\/\//i.test(hit.logo)) {
-          snapResults.push({ normName: norm, logo: hit.logo, source: 'snapshot' });
-          return false;
+          const nlogo = _normSnapLogo(hit.logo);
+          if (nlogo) {
+            snapResults.push({ normName: norm, logo: nlogo, source: 'snapshot' });
+            return false;
+          }
         }
         return true;
       });
