@@ -42,9 +42,13 @@ var ACTION_TIMEOUT_MS = {
   liquipediaLeagueMeta: 12000,
   liquipediaTeamLogo: 12000,
   liquipediaFetchRawWikitext: 12000,
-  // P0-3③（2026-09-01）：详情页聚合 bundle —— 云端含 OD 现抓（重试最坏 ~10s）+ explorer，
-  // 归实时类 12s；超时/失败客户端回退旧链（getLeagueMatches direct）
-  getLeagueDetailBundle: 12000
+  // P0-C1（2026-09-01）：haglund 云代理 —— 云端现场拉 Cloudflare Workers（1-3s），归实时类 12s
+  haglundUpcoming: 12000,
+  // P0-3③（2026-09-01）：详情页聚合 bundle —— 云端含 OD 现抓 + explorer。
+  // ★ 2026-09-01（详情页 13s 修复）：12s → 8s。云函数端 OD 子任务已改短超时单次尝试
+  //   （最坏 6s 快速失败），bundle 整体 8s 内必回；超时回退旧链（getLeagueMatches direct
+  //   有 30min cachedFresh 缓存，比干等 bundle 更快拿数据）。
+  getLeagueDetailBundle: 8000
 };
 
 function timeoutFor(action) {
@@ -140,6 +144,15 @@ proxy.steamProxy = function (path, params) {
 // 未命中 / 云函数未部署 / STEAM_API_KEY 未配 → 调用方回退到 Liquipedia 路径。
 proxy.steamLeagueScheduledProxy = function (leagueId, force) {
   return call('steamLeagueScheduled', { leagueId: leagueId }, force ? { force: true } : null);
+};
+
+// haglund 第三方兜底源云代理（P0-C1，2026-09-01）：
+// 云函数 aggregation 的 haglundUpcoming action 服务端拉取 dota.haglund.dev（10min 云端缓存），
+// 返回**原始数组**（归一化在客户端 haglund.js 完成，单一实现零漂移）。
+// 背景：客户端 wx.request 直连该域在正式版必被域名白名单拦截（海外未备案不可配）。
+// 调用方（haglund.fetchUpcoming）已对 wx.cloud + 熔断器做前置守卫，此处仅封装 action。
+proxy.haglundUpcomingProxy = function (force) {
+  return call('haglundUpcoming', {}, force ? { force: true } : null);
 };
 
 // Liquipedia 赛事元数据代理（A+B 双源）：客户端走云函数（Node.js 可设 UA），

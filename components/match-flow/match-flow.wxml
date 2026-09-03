@@ -23,70 +23,120 @@
     <text class="mf-degraded-text">实时数据暂不可用，展示最近获取的数据</text>
   </view>
 
-  <!-- 比赛卡片列表 -->
-  <view wx:if="{{cards.length}}" class="mf-list">
-    <view
-      wx:for="{{cards}}"
+  <!-- 比赛卡片列表（★ v5：三段式分段标题，对齐详情页 phase-divider。
+       仅「全部」视图下显示；chips 单状态视图列表只有一种状态，跳过。列表段序由页面保证） -->
+  <view wx:if="{{viewCards.length}}" class="mf-list">
+    <block
+      wx:for="{{viewCards}}"
       wx:key="key"
-      class="mf-card {{item.status === 'live' ? 'mf-card--live' : ''}} {{item.isFollow ? 'mf-card--follow' : ''}}"
-      data-key="{{item.key}}"
-      data-matchid="{{item.matchId}}"
-      data-leagueid="{{item.leagueId}}"
-      bindtap="onCardTap"
-      hover-class="mf-card--pressed"
     >
-      <!-- 头部：等级标签 + 赛事名（纯文字）+ BO -->
+      <!-- 分段标题（进行中 / 即将开始 / 已结束 + 段计数） -->
+      <view wx:if="{{dividerMap[index]}}" class="mf-divider {{dividerMap[index].cls}}">
+        <view class="mf-divider-bar"></view>
+        <text class="mf-divider-text">{{dividerMap[index].text}}</text>
+      </view>
+      <view
+        class="mf-card {{item.status === 'live' ? 'mf-card--live' : ''}} {{item.status === 'ended' ? 'mf-card--ended' : ''}} {{item.isFollow ? 'mf-card--follow' : ''}}"
+        data-key="{{item.key}}"
+        data-matchid="{{item.matchId}}"
+        data-leagueid="{{item.leagueId}}"
+        bindtap="onCardTap"
+        hover-class="mf-card--pressed"
+      >
+      <!-- 卡头（v4.2）：赛事名提为主角；赛制 + 等级降为第二行小字 -->
       <view class="mf-head">
+        <text class="mf-league">{{item.leagueName || '未命名赛事'}}</text>
+      </view>
+      <view wx:if="{{item.boText || item.tierLabel}}" class="mf-subhead">
+        <text wx:if="{{item.boText}}" class="mf-bo">{{item.boText}}</text>
         <text wx:if="{{item.tierLabel}}" class="mf-tier {{item.tierClass}}">{{item.tierLabel}}</text>
-        <text class="mf-league">{{item.leagueName}}</text>
-        <text wx:if="{{item.boLabel}}" class="mf-bo">{{item.boLabel}}</text>
       </view>
 
-      <!-- 主体：队标 A | 比分/倒计时/状态 | 队标 B -->
-      <view class="mf-body">
-        <view class="mf-team">
+      <!-- 主体（v4.2 徽上名下横向对称）：队徽在上、完整队名在下 -->
+      <!--   旧实现队名与队徽同行 + 截断为 4 字符大写（Team Spirit/Team Liquid 皆成 "TEAM"），
+             改为队名独占一行后可放约 19 字符，长队名基本不截断 -->
+      <view wx:if="{{item.kind !== 'event'}}" class="mf-body">
+        <!-- v4.2：左右两侧结构完全一致（居中竖排），靠 DOM 顺序定左右，
+             不再需要 .mf-side--left / --right 修饰符（v4.1 的镜像对齐样式已废弃） -->
+        <view class="mf-side">
           <image-fallback class="mf-logo" src="{{item.teamA.logo}}" placeholder="{{item.teamA.tag}}" mode="aspectFill" />
-          <text class="mf-tag {{item.winA ? 'mf-tag--win' : ''}}">{{item.teamA.tag}}</text>
+          <text class="mf-name {{item.winA ? 'mf-name--win' : ''}}">{{item.teamA.name}}</text>
         </view>
 
         <view class="mf-mid">
-          <!-- LIVE：红点脉冲 + 实时比分 + v8.2 补全（BO/系列比分见卡头 mf-bo；时长/观赛见本行） -->
-          <block wx:if="{{item.status === 'live'}}">
-            <view class="mf-score {{item.flash ? 'mf-score--flash' : ''}}">
-              <text class="mf-score-num {{item.winA ? 'mf-score-num--win' : ''}}">{{item.scoreA}}</text>
-              <text class="mf-score-sep">:</text>
-              <text class="mf-score-num {{item.winB ? 'mf-score-num--win' : ''}}">{{item.scoreB}}</text>
+          <!-- ★ 2026-09-01 v2：upcoming 卡中央改「VS + 开赛时间」（对齐详情页：
+               series-scheduled-time 金色开赛时间，替代原倒计时）。
+               倒计时已移除；开赛时间同时在底部行承载（日期「今天」+ 时间「20:30」）。 -->
+          <block wx:if="{{item.status === 'upcoming'}}">
+            <view class="mf-vs">
+              <text class="mf-vs-text">VS</text>
             </view>
-            <view class="mf-live-row">
-              <view class="mf-live-dot"></view>
-              <text class="mf-live-text">正在交锋</text>
-              <text wx:if="{{item.liveSubText}}" class="mf-live-sub">{{item.liveSubText}}</text>
-            </view>
+            <text class="mf-scheduled">{{item.dayText}} {{item.timeText}}</text>
           </block>
-          <!-- 即将开始：开赛倒计时 -->
-          <block wx:elif="{{item.status === 'upcoming'}}">
-            <view class="mf-countdown {{item.flash ? 'mf-score--flash' : ''}}">
-              <text class="mf-cd-text">{{item.countdownText}}</text>
-            </view>
-            <text class="mf-sub">{{item.timeText}}</text>
-          </block>
-          <!-- 已结束：终局比分 + 胜方高亮 -->
           <block wx:else>
             <view class="mf-score {{item.flash ? 'mf-score--flash' : ''}}">
               <text class="mf-score-num {{item.winA ? 'mf-score-num--win' : ''}}">{{item.scoreA}}</text>
               <text class="mf-score-sep">:</text>
               <text class="mf-score-num {{item.winB ? 'mf-score-num--win' : ''}}">{{item.scoreB}}</text>
             </view>
-            <text class="mf-sub">{{item.timeText}}</text>
+            <!-- v4.3：比分下方状态行（第2局进行中 / 已结束）——
+                 让中央「1 : 0」自解释为系列胜局，而不是击杀数或单局分 -->
+            <text wx:if="{{item.statusText}}" class="mf-status">{{item.statusText}}</text>
           </block>
+          <!-- 击杀标注（v4.3：仅进行中展示；标签前置「击杀 23-18」，与系列比分区分） -->
+          <text wx:if="{{item.status === 'live' && item.subScoreText}}" class="mf-sub">{{item.subScoreText}}</text>
         </view>
 
-        <view class="mf-team">
+        <view class="mf-side">
           <image-fallback class="mf-logo" src="{{item.teamB.logo}}" placeholder="{{item.teamB.tag}}" mode="aspectFill" />
-          <text class="mf-tag {{item.winB ? 'mf-tag--win' : ''}}">{{item.teamB.tag}}</text>
+          <text class="mf-name {{item.winB ? 'mf-name--win' : ''}}">{{item.teamB.name}}</text>
+        </view>
+      </view>
+
+      <!-- F4（2026-08-31）：赛事级主体（无队伍，中央展示开赛信息） -->
+      <view wx:else class="mf-body mf-body--event">
+        <view class="mf-event-mid">
+          <block wx:if="{{item.status === 'upcoming'}}">
+            <!-- ★ 2026-09-01：移除倒计时（与对局卡一致），只保留开赛时间 -->
+            <text class="mf-event-time">{{item.dayText}} {{item.timeText}}</text>
+          </block>
+          <block wx:elif="{{item.status === 'live'}}">
+            <!-- v4.2：原实现这里把「赛事进行中」输出了两遍（文案 + 下方时间位），
+                 且时间位本该显示开赛时间。开赛时间已统一由底部 mf-time 承载，此处只留状态行 -->
+            <view class="mf-event-live">
+              <view class="mf-live-dot"></view>
+              <text class="mf-event-live-text">赛事进行中</text>
+            </view>
+          </block>
+          <block wx:else>
+            <text class="mf-event-ended">赛事已结束</text>
+          </block>
+        </view>
+      </view>
+
+      <!-- 底部行（v4.2）：开赛时间 + 局间色点（左）| LIVE 状态（右）。
+           ★ 2026-09-01：对局卡 upcoming 中央已显示「今天 20:30」，底部时间隐藏防重复；
+             live/ended 仍有比分位无时间 → 底部时间保留；event 卡底部只有 meta 行无时间。 -->
+      <view wx:if="{{(item.kind !== 'event' && item.status !== 'upcoming' && (item.timeText || item.dots.length || item.status === 'live')) || (item.kind === 'event' && (item.eventRegion || item.eventPrizePool))}}" class="mf-foot">
+        <view class="mf-foot-l">
+          <text wx:if="{{item.timeText && item.kind !== 'event'}}" class="mf-time">{{item.dayText}} {{item.timeText}}</text>
+          <view wx:if="{{item.dots.length}}" class="mf-dots">
+            <view wx:for="{{item.dots}}" wx:key="k" class="mf-dot mf-dot--{{item.t}}"></view>
+          </view>
+        </view>
+        <view wx:if="{{item.status === 'live' && item.kind !== 'event'}}" class="mf-live-row">
+          <view class="mf-live-dot"></view>
+          <text class="mf-live-text">进行中</text>
+          <text wx:if="{{item.liveSubText}}" class="mf-live-sub">{{item.liveSubText}}</text>
+        </view>
+        <!-- F4（2026-08-31）：赛事级卡片的赛区/奖金池元数据 -->
+        <view wx:if="{{item.kind === 'event'}}" class="mf-event-meta-row">
+          <text wx:if="{{item.eventRegion}}" class="mf-event-meta">{{item.eventRegion}}</text>
+          <text wx:if="{{item.eventPrizePool}}" class="mf-event-meta mf-event-meta--prize">{{item.eventPrizePool}}</text>
         </view>
       </view>
     </view>
+    </block>
   </view>
 
   <!-- 空态：选中日期无比赛 -->

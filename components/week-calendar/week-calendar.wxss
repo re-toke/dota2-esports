@@ -1,6 +1,7 @@
 /* components/week-calendar/week-calendar.wxss */
 /* 批次2 · PRD §4.1：周日历。今日 = 金色描边 + 金色日期数字（复核修订：不整格填充，
-   填充态留给「选中」）；选中 = 金色渐变填充 + 深色反白；角标 = 金色数字、今天格内深色。 */
+   填充态留给「选中」）；选中 = 浅金填充 + 金色描边（v4.1 克制版）；
+   角标 = 日期右侧内联小胶囊（v4.1 修位：不再绝对定位遮挡日期），今天/选中格内深色反白。 */
 
 .wk {
   display: flex;
@@ -57,13 +58,14 @@
   border: 1rpx solid rgba(200, 169, 81, 0.55);
 }
 
-/* 选中：金色渐变填充 + 深色反白 */
+/* 选中（v4.1 细节精修）：浅金微填充 + 金色描边（不再整格金色渐变重填充，视觉更克制） */
 .wk-cell--selected {
-  background: linear-gradient(180deg, var(--tier-s) 0%, var(--dota-gold-strong, #b08a3e) 100%);
-  box-shadow: 0 2rpx 12rpx rgba(200, 169, 81, 0.3);
+  background: rgba(200, 169, 81, 0.12);
+  border: 1rpx solid rgba(200, 169, 81, 0.55);
+  box-shadow: none;
 }
 .wk-cell--selected.wk-cell--today {
-  border-color: transparent;
+  border-color: rgba(200, 169, 81, 0.55);
 }
 
 .wk-weekday {
@@ -72,14 +74,16 @@
   line-height: 1;
 }
 .wk-cell--selected .wk-weekday {
-  color: #1f1a08;
+  color: var(--tier-s);
 }
 
+/* 数字角标（v4.1 修位：从绝对定位右上角改为日期右侧内联横排，不再遮挡日期数字） */
 .wk-datewrap {
   position: relative;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: center;
+  gap: 4rpx;
 }
 
 .wk-date {
@@ -93,23 +97,20 @@
   color: var(--tier-s);
 }
 .wk-cell--selected .wk-date {
-  color: #1f1a08;
+  color: var(--tier-sss);
 }
 
-/* 数字角标：当日场次数 */
 .wk-badge {
-  position: absolute;
-  top: -14rpx;
-  right: -18rpx;
-  min-width: 26rpx;
-  padding: 1rpx 5rpx;
+  flex-shrink: 0;
+  min-width: 22rpx;
+  padding: 0 6rpx;
   border-radius: var(--radius-pill, 999rpx);
   background: rgba(200, 169, 81, 0.16);
-  font-size: var(--fs-caption);
+  font-size: var(--fs-badge);
   font-weight: 600;
   font-feature-settings: 'tnum';
   color: var(--tier-s);
-  line-height: 1.3;
+  line-height: 1.4;
   text-align: center;
 }
 /* 今天格内角标反色深色（金色日期上金色角标不可读） */

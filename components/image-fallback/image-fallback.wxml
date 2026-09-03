@@ -8,8 +8,12 @@
   <view wx:if="{{!src || failed}}" class="imgfb-ph">
     <text class="imgfb-ph-text">{{placeholder}}</text>
   </view>
-  <!-- 真实图片：仅当存在地址且未失败时渲染，加载完成覆盖占位 -->
-  <image
+  <!-- 真实图片：仅当存在地址且未失败时渲染，加载完成覆盖占位
+     2026-09-01 修复：src 可能被上层误传对象（微信渲染层序列化成 __pageframe__ 路径报错）。
+     wxml 无法 typeof，但 wx:if 用「src 为字符串且非空」兜底——对象 truthy 但会被
+     src 属性绑定序列化，故这里用 filter 不现实；真正的防护在数据层（_cardFromSeries
+     logoUrlOf + buildLpLiveSeries 类型净化）。此处保留原条件。 -->
+<image
     wx:if="{{src && !failed}}"
     class="imgfb-img {{loaded ? 'imgfb-img--loaded' : ''}}"
     src="{{src}}"

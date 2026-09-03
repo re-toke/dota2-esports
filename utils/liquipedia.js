@@ -578,9 +578,13 @@ function getScheduledMatches(name, opts) {
       var seenTeams = {};      // 队名对归一化键（顺序无关）→ 'steam-live'（跨源同对局去重主键）
       var merged = [];
       // 队名归一化（小写+去空格+去常见后缀，与 league-detail normalizeTeamNameForDedup 同口径）
+      // ★ 2026-09-01（三卡修复）：剥离「 x 赞助商」后缀（Valve 全名 'Team x Sponsor' → 'Team'），
+      //   与 sources.buildLpLiveSeries._normTeamX 同口径 —— 修复 Steam 全名 vs Liquipedia 简称
+      //   同对局跨源去重失效（Inner Circle x Insanity vs Inner Circle → 同一队）。
       function _normTeam(s) {
         if (!s) return '';
         var n = String(s).toLowerCase().trim();
+        n = n.replace(/\s*[x×]\s+\S+.*$/i, '');
         n = n.replace(/\s*(esports|e-sports|gaming|team|club)\s*$/g, '');
         n = n.replace(/[^a-z0-9一-鿿а-яё]/g, '');
         return n;

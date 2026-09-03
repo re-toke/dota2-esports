@@ -6,7 +6,7 @@
     "lint": "eslint --rulesdir scripts/eslint-rules utils/ pages/ subpackages/ cloudfunctions/ scripts/ --ext .js",
     "lint:fix": "eslint --rulesdir scripts/eslint-rules utils/ pages/ subpackages/ cloudfunctions/ scripts/ --ext .js --fix",
     "test": "node scripts/test/test-canonical.js && node scripts/test/test-bo.js",
-    "test:all": "node scripts/test/test-sources.js && node scripts/test/test-consensus.js && node scripts/test/test-canonical.js && node scripts/test/test-bo.js && node scripts/test/test-formatters.js && node scripts/test/test-incremental.js && node scripts/test/test-remote-curation.js && node scripts/test/test-search-history.js && node scripts/test/test-haglund-circuit.js && node scripts/test/test-image.js",
+    "test:all": "node scripts/test/test-sources.js && node scripts/test/test-consensus.js && node scripts/test/test-canonical.js && node scripts/test/test-bo.js && node scripts/test/test-formatters.js && node scripts/test/test-incremental.js && node scripts/test/test-remote-curation.js && node scripts/test/test-search-history.js && node scripts/test/test-bo3-merge-split.js && node scripts/test/test-haglund-circuit.js && node scripts/test/test-image.js",
     "sync:canon": "node scripts/sync/sync-canon-map.js",
     "sync:parse": "node scripts/sync/sync-liquipedia-parse.js",
     "sync:slugmap": "node scripts/sync/sync-slugmap.js",

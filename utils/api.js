@@ -310,6 +310,19 @@ function cachedFreshIncremental(resPath, resource, id, freshSec, ttlSec) {
 // 2026-08-04（LIVE 比分刷新 v1.1，R3）：新增 force 透传 —— 云函数入口解构 event.force，
 // 通用 OpenDota handler `if (!force)` 跳过缓存（云函数已支持，缺客户端通道）。
 // 仅透传 truthy，未传时保持原形状（向后兼容）。
+
+// 云调用超时（ms）：与 utils/cloudProxy.js 的 ACTION_TIMEOUT_MS 对齐（单一事实来源）。
+// 读缓存/轻量 action 8s；实时抓取（云端需现场拉 Liquipedia/Steam/OpenDota 大端点）12s。
+// ★ 2026-09-01（loadLeagues 12s 性能修复）：原 cloudFetch 无超时，云函数冷启动/回源慢时
+//   页面 Promise.all 卡死（实测 12029ms）。超时 reject → tryCloudOrDirect 回退直连。
+const CLOUD_ACTION_TIMEOUT = {
+  _default: 8000,
+  getLeagueMatches: 12000,
+  getTeamMatches: 12000,
+  getProMatches: 12000,
+  getLiveMatches: 12000
+};
+
 function cloudFetch(action, params, force) {
   const threshold = (config.cloudProxy && config.cloudProxy.circuitBreakerThreshold) || 0;
   // 防御：wx.cloud 未初始化（测试环境 / 未开通云开发 / 用户拒绝授权）时直接 reject，
@@ -319,10 +332,27 @@ function cloudFetch(action, params, force) {
   }
   const data = { action: action, params: params || {} };
   if (force) data.force = true;
-  return wx.cloud.callFunction({
+  // ★ 2026-09-01（loadLeagues 12s 性能修复）：云调用超时守卫（与 cloudProxy.call 同款）。
+  //   原实现 wx.cloud.callFunction 裸调无限等待——云函数冷启动 / 云端 OpenDota 回源慢时，
+  //   loadLeagues 的 Promise.all 卡死（实测 12029ms），用户首屏空白。
+  //   读缓存/轻量 action 8s，实时抓取 action 12s（与 cloudProxy.ACTION_TIMEOUT_MS 对齐）。
+  //   超时 reject（err.isTimeout=true）→ tryCloudOrDirect 回退直连；不计熔断（冷启动抖动 ≠ 源故障）。
+  const timeoutMs = (CLOUD_ACTION_TIMEOUT[action] != null) ? CLOUD_ACTION_TIMEOUT[action] : CLOUD_ACTION_TIMEOUT._default;
+  const cloud = wx.cloud.callFunction({
     name: 'aggregation',
     data: data
-  }).then((res) => {
+  });
+  const timed = Promise.race([
+    cloud,
+    new Promise((_, reject) => {
+      setTimeout(() => {
+        const e = new Error('cloud call timeout (' + timeoutMs + 'ms): ' + action);
+        e.isTimeout = true;
+        reject(e);
+      }, timeoutMs);
+    })
+  ]);
+  return timed.then((res) => {
     const r = res && res.result;
     if (r && !r.error && r.data) {
       breaker.markSuccess();
@@ -331,7 +361,8 @@ function cloudFetch(action, params, force) {
     breaker.markFailure(threshold);
     throw new Error((r && r.error) || 'cloud proxy error');
   }).catch((err) => {
-    breaker.markFailure(threshold);
+    // 超时不计熔断（冷启动抖动 ≠ 源故障）；仅真实失败（业务 error/网络 reject）计入
+    if (!(err && err.isTimeout)) breaker.markFailure(threshold);
     throw err;
   });
 }
@@ -356,7 +387,12 @@ const ACTION_MAP = {
   getTeam: function (id) { return { action: 'getTeam', params: { teamId: id }, path: '/teams/' + id, ttlKey: 'team' }; },
   getTeamPlayers: function (id) { return { action: 'getTeamPlayers', params: { teamId: id }, path: '/teams/' + id + '/players', ttlKey: 'teamPlayers' }; },
   getTeamMatches: function (id) { return { action: 'getTeamMatches', params: { teamId: id }, path: '/teams/' + id + '/matches', ttlKey: 'teamMatches' }; },
-  getHeroes: function () { return { action: 'getHeroes', params: {}, path: '/heroes', ttlKey: 'heroes' }; }
+  getHeroes: function () { return { action: 'getHeroes', params: {}, path: '/heroes', ttlKey: 'heroes' }; },
+  // ★ 2026-09-01（P0-1）：首页比赛流两大数据源接入云代理（国内加速 + 云端共享缓存）。
+  //   path 与 direct 侧 cached 写入 key 逐字符一致（/proMatches|{}、/live|{}），
+  //   writeThrough 写穿后断网/云熔断回退直连可命中本地缓存（O-4 机制自动生效）。
+  getProMatches: function () { return { action: 'getProMatches', params: {}, path: '/proMatches', ttlKey: 'proMatches' }; },
+  getLiveMatches: function () { return { action: 'getLiveMatches', params: {}, path: '/live', ttlKey: 'liveMatches' }; }
 };
 
 // C1 高阶函数（2026-07-29）：统一「云代理优先 → 失败回退直连」模式。
@@ -395,21 +431,31 @@ function tryCloudOrDirect(methodName, args, directFn, transform, force) {
 
 function getLeagues() {
   return tryCloudOrDirect('getLeagues', [],
-    function () { return cached('/leagues', null, config.cacheTTL.leagues); });
+    // ★ 2026-09-01（loadLeagues 12s 性能修复）：direct 兜底改用 cachedFresh（stale-while-revalidate）。
+    //   原 cached() 硬 TTL 6h 过期即删，云函数慢 + 缓存过期时只能干等（实测 12029ms）。
+    //   cachedFresh：1h 新鲜直接返回；1h~6h 返回旧值 + 后台刷新（秒开，stale 语义）；
+    //   超 6h 硬 TTL 才拉网络。云端 TTL 6h 不变（writeThrough 仍写本地）。
+    //   赛事列表变化慢（S 级赛事排期以周计），1h 新鲜窗口足够，6h 硬 TTL 兜底。
+    function () { return cachedFresh('/leagues', null, 60 * 60, config.cacheTTL.leagues); });
 }
 
-// ===== 批次2（2026-08-30）：首页全量比赛流数据源（直连 + 缓存，暂不接入云代理） =====
+// ===== 批次2（2026-08-30）：首页全量比赛流数据源 =====
+// ★ 2026-09-01（P0-1）：接入云代理（国内加速 + 云端共享缓存）——与其余 10 个方法统一。
+//   direct 兜底保持 cached()（TTL 对齐 config.cacheTTL），云失败/熔断时回退直连，
+//   断网时命中 writeThrough 写穿的本地缓存（O-4 机制自动生效）。
 // OpenDota /proMatches：最近约 100 场职业赛（含双方队名/比分/胜负/series_type），
 // 覆盖「已结束」主体。字段为平铺形态（radiant_name/dire_name 为字符串）。
 function getProMatches() {
-  return cached('/proMatches', null, config.cacheTTL.proMatches);
+  return tryCloudOrDirect('getProMatches', [],
+    function () { return cached('/proMatches', null, config.cacheTTL.proMatches); });
 }
 
 // OpenDota /live：当前所有进行中的公开对局（含路人局）。
 // 职业场判定：league_id > 0（注意字段名是 league_id，与 proMatches 的 leagueid 不同）。
 // 该端点天然含 radiant_score/dire_score 实时比分，供 LIVE 卡 60s 轮询刷新。
 function getLiveMatches() {
-  return cached('/live', null, config.cacheTTL.liveMatches);
+  return tryCloudOrDirect('getLiveMatches', [],
+    function () { return cached('/live', null, config.cacheTTL.liveMatches); });
 }
 
 // 一次 SQL 拿所有赛事近半年的时间窗口：{ leagueid -> { earliest, latest, count } }

@@ -9,10 +9,16 @@ const tiers = require('../../utils/tiers.js');
 const remoteCuration = require('../../utils/remoteCuration.js');
 const curation = require('../../utils/curation.js');
 const haglund = require('../../utils/haglund.js');   // ★ 2026-08-22 列表 tab 即将到来兜底源
-const dataHealth = require('../../utils/dataHealth.js');   // ★ 2026-09-01 第0步：error 空态细化失败原因
 
 // 跨页状态持久化键（I5）：离开页面时保存筛选/关键词/滚动位置，返回时还原
 const VIEW_KEY = 'leagues_view_state';
+
+// ★ 2026-09-01（P2-L5）：curatedEventFor 结果缓存（leagueid → curation event）。
+//   阶段 2 normalize 全量 300 条逐条调用（单条 1-3ms ≈ 300-900ms 主线程分批占用），
+//   同 leagueid 输入恒定 → 结果可缓存。模块级（跨页面实例共享），列表数据不变时零重算。
+//   注意：缓存对象引用，下游 normalize 只读不写；remoteCuration 热更新后旧缓存
+//   可能短暂过期（极端场景），但列表刷新会重建 allLeagues，可接受（30 天量级不敏感）。
+const _curatedEventCache = {};
 
 // ★ v8.1（2026-08-31）：本地快照最大可用「主源」年龄（秒）。超过则降权为兜底渲染，
 //   放行串行实时查询（详见 tryLocalUpcoming 注释）。7 天对齐「即将到来」数据源的
@@ -83,10 +89,20 @@ function mergeAllWithUpcoming(allLeagues, upcomingList) {
 // 同一规范名时（如 "EPL Masters 2026" + 另一变体 → 都是 "EPL Masters I"），
 // 只保留数据最完整的一条（matchCount 最高 > 有 curation 覆盖 > 任意）。
 // 用途：进行中 / 已结束 Tab 的去重（全部 Tab 已有 mergeAllWithUpcoming 按 leagueid 去重）。
+// ★ 2026-09-01（B3）：dedupe 键加入「开始年份」维度——跨年同名赛事（如 EPL Masters 2026
+//   与 EPL Masters 2027，规范名归一后相同）不应被合并，否则日期错误（保留 matchCount 高者
+//   可能混两届数据）。有 startDate/earliest 时键为 displayName_YYYY，无日期时回退纯 displayName。
 function dedupeByDisplayName(arr) {
   const groups = Object.create(null);
+  const yearOf = (x) => {
+    const st = x.startDate || x.earliest || 0;
+    if (st) return new Date(st * 1000).getFullYear();
+    return 0;
+  };
   (arr || []).forEach((x) => {
-    const key = x.displayName || x.name || ('' + x.leagueid);
+    const base = x.displayName || x.name || ('' + x.leagueid);
+    const y = yearOf(x);
+    const key = y ? (base + '_' + y) : base;
     const prev = groups[key];
     if (!prev) { groups[key] = x; return; }
     // 选优：matchCount 高者优先；平局则选有 curation 元数据更丰富的（有 dateRange 说明赛期已解析）
@@ -553,23 +569,6 @@ Page({
         this.setData({ loading: false, error: '加载失败，请检查网络或域名配置（开发阶段可勾选「不校验合法域名」）' });
         this._normalizeDone = true;   // 出错也算「完成」，避免守卫永久拦截
         cb && cb();
-        // ★ 2026-09-01（第0步）：健康探测把泛化「加载失败」细化为具体数据源状态
-        //   （复用详情页 dataHealth.check，一次探测双源；unknown 不打扰用户）
-        if (!this._healthCheckedOnce) {
-          this._healthCheckedOnce = true;
-          dataHealth.check().then((status) => {
-            const st = status && status.sources;
-            if (!st) return;
-            const down = [];
-            if (st.liquipedia && st.liquipedia.status === 'down') down.push('Liquipedia');
-            if (st.opendota && st.opendota.status === 'down') down.push('OpenDota');
-            if (down.length) {
-              this.setData({ error: down.join('/') + ' 数据源暂不可用，其余功能可能受影响，请稍后重试' });
-            } else if (st.opendota && st.opendota.status === 'up') {
-              // 双源在线但请求仍失败 → 大概率是本机网络/域名配置问题，保留原文案
-            }
-          }).catch(function () { /* 健康探测失败静默 */ });
-        }
       });
   },
 
@@ -594,7 +593,16 @@ Page({
     // 2026-07-27：传入 leagueId + game 上下文，启用 curation 引擎的
     //   ① leagueId 精确 pin（绕过别名漂移，避免把 CS2/低级别联赛误关联）
     //   ② game 跨游戏隔离（DOTA2 条目只能命中 DOTA2 联赛）
-    const cur = remoteCuration.curatedEventFor(l.name, { leagueId: l.leagueid, game: 'dota2' });
+    // ★ 2026-09-01（P2-L5）：curatedEventFor 结果缓存 —— 阶段 2 normalize 对全量 300 条
+    //   逐条调用（单条 1-3ms × 300 ≈ 300-900ms 主线程分批占用），且同联赛在列表/详情页
+    //   多次 normalize 重复计算。以 leagueid 为键缓存结果（同一 leagueid 的 curatedEventFor
+    //   输入恒定，结果确定）；列表数据不变时零重算。注意：缓存的是返回对象引用，
+    //   下游只读不写（normalize 内不修改 cur），安全。
+    let cur = _curatedEventCache[String(l.leagueid)];
+    if (cur === undefined) {
+      cur = remoteCuration.curatedEventFor(l.name, { leagueId: l.leagueid, game: 'dota2' });
+      _curatedEventCache[String(l.leagueid)] = cur;
+    }
     // 分级优先取 curation.tier（与详情页 sources.getLeagueTier 的 curation 输入一致），
     // 未配置时回退 util.unifiedTier（OpenDota tier 映射），保证列表与详情"赛段"一致。
     const curTier = (cur && cur.tier) ? cur.tier : null;
@@ -1063,16 +1071,22 @@ Page({
         //   loadLeagueEntry 的回退分支一致，避免列表赛期少算最后一场 duration。
         //   数据校验：lastEnd 为 0 时回退 latest（纯未来赛未打 duration=0，lastEnd=latest）。
         const endT = (item._win && (item._win.lastEnd || item._win.latest)) || null;
+        // ★ 2026-09-01（B4）：状态判定改用 upcomingCardStatus（与 tryCloudUpcoming /
+        //   mergeLocalSnapshot 口径一致）——原硬编码 'upcoming'，赛事实际已开赛时
+        //   （earliest 在未来窗口但比赛已开始）仍标「即将到来」，用户困惑。
+        //   upcomingCardStatus：start<=now<=end+1天 → ongoing；否则 upcoming。
+        const cardStatus = upcomingCardStatus({ start: er, end: endT }, nowSec);
+        const cardBadge = statusBadgeOf(cardStatus);
         const daysToStart = Math.ceil((er - nowSec) / 86400);
         results.push(Object.assign({}, item, {
           startDate: er,
           endDate: endT,
-          status: 'upcoming',
-          statusText: '即将到来',
-          statusColor: statusBadgeOf('upcoming').color,
+          status: cardStatus,
+          statusText: cardBadge.text,
+          statusColor: cardBadge.color,
           dateRange: util.formatDateRange(er, endT),
           daysToStart: daysToStart,
-          countdownText: util.countdownTextOf(daysToStart, false)
+          countdownText: util.countdownTextOf(daysToStart, cardStatus === 'ongoing')
         }));
         diag.explorerHit++;
       } else {
@@ -1104,7 +1118,13 @@ Page({
 
     // 3. 串行查询剩余赛事（earliest 不在未来的），作为后台补充
     //    优先查知名赛事；同优先级下按最近比赛时间倒序（近期活跃的优先）
-    const candidates = needQuery.sort((a, b) => {
+    // ★ 2026-09-01（P0-L1）：候选过滤 + 降量——
+    //   - 只保留 rank>=2（S/A 级）或 isKnownEvent（知名赛事关键词）的候选；
+    //     B/C 级赛事 curation/快照已覆盖大部分，不值得消耗 Liquipedia 串行限流配额。
+    //   - 配合 config.upcomingQueryLimit 40→15，最坏等待 88s → 33s（本地源命中后 0-3 个）。
+    const candidates = needQuery.filter((item) =>
+      (item.rank != null && item.rank >= 2) || isKnownEvent(item.name || '')
+    ).sort((a, b) => {
       const ka = isKnownEvent(a.name) ? 0 : 1;
       const kb = isKnownEvent(b.name) ? 0 : 1;
       if (ka !== kb) return ka - kb;
@@ -1295,6 +1315,15 @@ Page({
   // 调用方（tryCloudUpcoming / tryLocalUpcoming / loadUpcomingSerial）须在
   // mergeCurationUpcoming 之后链式调用，完成后才会 setData 刷新列表。
   mergeHaglundUpcoming(results, now, gen) {
+    // ★ 2026-09-01（P1-L3）：合并节流 —— haglund 数据 60min TTL 内不变（云端缓存），
+    //   但 loadUpcoming 的每条调用链（tryCloudUpcoming / tryLocalUpcoming /
+    //   loadUpcomingSerial）都会触发 mergeHaglundUpcoming → 重复跑「拉取+聚合」纯浪费。
+    //   距上次成功合并 < 60s 直接跳过（数据不可能变，且上次结果已写入 results）。
+    //   非会话级永久标记：超过 60s 仍会重跑（保下拉刷新拉新语义，与 haglund TTL 同量级）。
+    const nowMs = Date.now();
+    if (this._lastHaglundMergeAt && (nowMs - this._lastHaglundMergeAt) < 60 * 1000) {
+      return Promise.resolve();
+    }
     return haglund.fetchUpcoming({ force: false }).then(function (res) {
       // gen 校验：调用方传入当前代际，若过时则丢弃（防止晚到的 haglund 响应污染新链路）
       if (gen != null && gen !== this._upcomingGen) return;
@@ -1303,6 +1332,7 @@ Page({
         console.log('[leagues] mergeHaglundUpcoming: haglund 无数据');
         return;
       }
+      this._lastHaglundMergeAt = Date.now();   // 成功合并后记录节流时间戳
       console.log('[leagues] mergeHaglundUpcoming: haglund 返回', matches.length, '场对阵');
 
       // 1) 按 _leagueName 聚合成赛事级（同一 leagueName 下所有场取最早/最晚 startTime）
@@ -1353,27 +1383,45 @@ Page({
           hash = ((hash << 5) - hash + k.charCodeAt(j)) | 0;
         }
         const fakeId = -(Math.abs(hash) % 1000000 + 2000000);  // -2999999..-2000000 区间（与 curation 区隔）
-        // tier 默认 S（haglund 不返回分级，主流对局通常 S 级；下游展示侧已有兜底）
+        // ★ 2026-09-01（B1）：haglund 分级修正 —— 原硬编码 S 级（rank:3）导致低级别赛事
+        //   误标 S 级。改为：curation 命中用 curation tier（权威分级），未命中降级为 A 级
+        //   （rank:2，比误标 S 更诚实——haglund 主流对局多为 S/A 级，取保守侧）。
+        //   ★ 2026-09-01（B2）：顺带反查 curation 真实 leagueId（方案 E 同款）——
+        //   haglund 不返回 leagueId，负哈希 fakeId 点击进详情依赖 legacyFakeId 兼容层，
+        //   命中 curation 后可用真实 leagueId（详情页跳转更可靠）。
+        let _curTier = null;
+        let _curLeagueId = null;
+        try {
+          const curHit = curation.curatedEventFor(ev.name, { game: 'dota2' });
+          if (curHit) {
+            _curTier = curHit.tier || null;
+            _curLeagueId = (curHit.leagueId != null) ? curHit.leagueId : null;
+          }
+        } catch (e) { /* curation 查询失败静默 */ }
+        const grade = (_curTier && _curTier.grade) ? _curTier.grade : 'A';
+        const rank = (_curTier && _curTier.rank != null) ? _curTier.rank : 2;
+        const label = (_curTier && _curTier.label) ? _curTier.label : 'A级';
         const cardStatus = upcomingCardStatus({ start: ev.start, end: ev.end }, now);
         const cardBadge = statusBadgeOf(cardStatus);
         const daysToStart = Math.ceil((ev.start - now) / 86400);
-        const t = tagThemeOf('S');
+        const t = tagThemeOf(grade);
+        const cardId = (_curLeagueId != null) ? _curLeagueId : fakeId;
         results.push({
-          leagueid: fakeId,
+          leagueid: cardId,
           legacyFakeId: fakeId,
           name: ev.name,
-          grade: 'S',
-          rank: 3,
-          tierClass: 'tier-s',
-          label: 'S级',
-          displayLabel: tiers.displayOf('S'),
+          grade: grade,
+          rank: rank,
+          tierClass: 'tier-' + grade.toLowerCase(),
+          label: label,
+          displayLabel: tiers.displayOf(grade),
           valve: tiers.flagValve(ev.name),
           topThirdParty: tiers.flagTopThirdParty(ev.name),
           defunct: false,
           source: 'haglund',
           tagTheme: t.theme,
           tagVariant: t.variant,
-          followed: follow.isFollowed('leagues', fakeId),
+          followed: follow.isFollowed('leagues', cardId),
           startDate: ev.start,
           endDate: ev.end,
           status: cardStatus,
@@ -1692,6 +1740,11 @@ Page({
   // curation 未覆盖的赛事（_metaEnriched===false）逐个调 Liquipedia 获取元数据。
   // 串行执行（2.2s 间隔尊重 Liquipedia 限流），最多增强前 N 个可见赛事，
   // 成功后只更新对应索引的字段（路径 setData，最小化渲染范围）。
+  // ★ 2026-09-01（P2-L4）：_metaEnriched 持久化 —— 元数据（奖金池/主办方/地点/赛制）
+  //   变化极慢（以月计），但原实现只存内存（会话级），每次冷启动都重新逐个查 Liquipedia
+  //   （10 条 × 2.2s 限流 ≈ 22s 后台持续）。改为：增强成功后写入本地缓存
+  //   （dota2_meta_enriched_{leagueid}，30 天 TTL），冷启动时命中缓存直接跳过网络。
+  //   缓存值仅作「已增强」标记，字段本身仍在 list 对象上（避免从缓存读字段的同步 IO）。
   enhanceListMetadata() {
     // P1-1：并发防重（检查在前、gen+1 在后——避免误杀运行中链导致 _metaEnriching 残留死锁）
     if (this._metaEnriching) return;   // 已有链在跑，跳过本次（不递增代际，运行中链继续）
@@ -1706,8 +1759,8 @@ Page({
 
     var next = function () {
       if (gen !== this._metaGen) return;            // 本链已被更新的调用/离开页面取代，直接放弃
-      // 找下一个需要增强的赛事
-      while (i < list.length && list[i]._metaEnriched) i++;
+      // 找下一个需要增强的赛事（跳过已增强 + 已持久化标记的）
+      while (i < list.length && (list[i]._metaEnriched || this._metaPersistedHit(list[i].leagueid))) i++;
       if (i >= list.length || count >= MAX_ENRICH) { this._metaEnriching = false; return; }
 
       var item = list[i];
@@ -1720,6 +1773,8 @@ Page({
         sources.getLeagueMetadata({ name: item.name, leagueid: item.leagueid }).then(function (meta) {
           if (gen !== this._metaGen) return;        // 返回时链已取消，不写 setData
           if (!meta) { next(); return; }
+          // ★ P2-L4：成功后持久化「已增强」标记（30 天 TTL）
+          this._metaPersist(item.leagueid);
           // 索引校验：当前 list[idx] 仍指向同一赛事才写入，防筛选/翻页后错位
           var cur = this.data.list && this.data.list[idx];
           if (!cur || cur.leagueid !== item.leagueid) { next(); return; }
@@ -1735,5 +1790,27 @@ Page({
       }.bind(this), 100);  // 首项立即，后续靠递归
     }.bind(this);
     next();
+  },
+
+  // ★ P2-L4（2026-09-01）：本地「已增强」标记读写（30 天 TTL）。
+  //   值仅存 leagueid 标记，不存字段（避免冷启动从缓存读字段的同步 IO 开销）。
+  _META_PERSIST_KEY: 'dota2_meta_persisted_v1',
+  _metaPersist(leagueid) {
+    if (!leagueid) return;
+    try {
+      const map = wx.getStorageSync(this._META_PERSIST_KEY) || {};
+      map[String(leagueid)] = Date.now() + 30 * 86400 * 1000;  // 30 天后过期
+      wx.setStorageSync(this._META_PERSIST_KEY, map);
+    } catch (e) { /* 存储不可用静默 */ }
+  },
+  _metaPersistedHit(leagueid) {
+    if (!leagueid) return false;
+    try {
+      const map = wx.getStorageSync(this._META_PERSIST_KEY) || {};
+      const exp = map[String(leagueid)];
+      if (!exp) return false;
+      if (Date.now() > exp) { delete map[String(leagueid)]; wx.setStorageSync(this._META_PERSIST_KEY, map); return false; }
+      return true;
+    } catch (e) { return false; }
   }
 });

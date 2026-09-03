@@ -63,6 +63,7 @@
       counts="{{matchCounts}}"
       degraded="{{matchDegraded}}"
       loading="{{matchLoading}}"
+      empty-text="{{matchEmptyText}}"
       bind:filter="onMatchFilter"
       bind:cardtap="onMatchCardTap"
     />

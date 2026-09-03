@@ -504,17 +504,14 @@ Page({
     // ★ 2026-09-01（P0-3③）：OD matches + teamNames 优先走云端聚合 bundle（一次 callFunction，
     //   消除原「raw 到达后才能发起的 explorer 直连」串行段）；失败/超时/旧版云函数未部署
     //   → 回退旧链 api.getLeagueMatches（bundle 失败时 teamNames 由下方 direct 兜底补）。
+    // ★ 2026-09-01（详情页 13s 修复 v2）：OD 数据链路改「缓存优先，bundle 后台刷新」。
+    //   原实现：bundle（8s 超时）→ 失败才回退 getLeagueMatches —— 冷缓存时 bundle 现抓
+    //   OpenDota 慢（5-10s+），详情页内容 13s 才到。
+    //   现实现：odTask 直接走 api.getLeagueMatches（cachedFreshIncremental：10min 新鲜 /
+    //   30min 硬 TTL stale 秒回 / 游标增量），**本地有缓存（含 stale）立即上屏**；
+    //   bundle 降级为「后台刷新」（见下方 odTask.then 内触发）——不阻塞主渲染，仅补 teamNames。
     const odTask = hasValidId
-      ? cloudProxy.leagueDetailBundle(this.data.leagueId)
-          .then((bundle) => {
-            const matches = (bundle && bundle.matches) || [];
-            const names = (bundle && bundle.teamNames) || {};
-            if (Object.keys(names).length) {
-              this._teamIdNameMap = Object.assign({}, this._teamIdNameMap, names);
-            }
-            return matches;
-          })
-          .catch(() => api.getLeagueMatches(this.data.leagueId))
+      ? api.getLeagueMatches(this.data.leagueId)
       : Promise.resolve([]);
     const lpTask = liquipedia.getScheduledMatches(this.data.name, { leagueId: hasValidId ? this.data.leagueId : null });
     const tasks = [
@@ -523,23 +520,39 @@ Page({
     ];
     // ★ 2026-09-01（P1-2）：OD 先到先渲染 —— 仅 RECENT 段（复核修正版）。
     //   触发条件（全部满足，防双卡/占位名回归）：
-    //     ① OD（bundle）已到且队名已备（_teamIdNameMap 非空 —— bundle 命中路径），
-    //        direct 回退路径队名未备 → 不快渲染（避免「天辉 vs 夜魇」占位名闪现，复核已删方案①）；
+    //     ① OD（bundle）已到（不论 _teamIdNameMap 是否备齐 —— 见下 P1 放宽说明）；
     //     ② LP 1.5s 宽限期后仍未到达（两源都快时不做双份渲染）；
     //     ③ 本轮 load 未被新一轮取代（token 代际守卫）。
     //   快渲染内容：仅 RECENT 段（纯 OD 已结算数据，不涉 LIVE/UPCOMING——
     //   跨源合并 + absorbSettledGames + Fix-D 去重均需 LP 输入，先渲染会复发「LIVE 双卡」）。
-    //   LP 到达后主链路全量重建（骨架步骤1/2 全字段覆盖），最终态与无快渲染完全一致。
+    //   ★ 2026-09-03（加载优化 P1）：放宽守卫①——原要求 _teamIdNameMap 非空（bundle 命中），
+    //     现允许为空（direct 兜底路径）。resolveTeamIdName 三级回退（teamIdNameMap → curation →
+    //     raw _rawIdMap），OpenDota 比赛自带 radiant/dire_team_name → 真实队名照常显示；
+    //     raw 无队名 → 「天辉/夜魇」占位名（LP 到达后主链路全量覆盖，无半状态残留）。
     const loadToken = this._loadToken = (this._loadToken || 0) + 1;
     this._lpResolved = false;
     this._fastRendered = false;
     // LP 到达（成功或失败）即取消快渲染：成功 → 主链路马上全量渲染；失败 → 走 catch 错误态
     lpTask.then(() => { this._lpResolved = true; }, () => { this._lpResolved = true; });
     odTask.then((list) => {
+      // ★ 2026-09-01（详情页 13s 修复 v2）：bundle 后台刷新（不阻塞主渲染）——
+      //   命中后仅补 _teamIdNameMap（吸收方向解析用，getLeagueMatches 数据已足够渲染）。
+      //   token 已定义，闭包捕获本轮代际；bundle 8s 超时静默，不影响主流程。
+      const bundleToken = loadToken;
+      cloudProxy.leagueDetailBundle(this.data.leagueId).then((bundle) => {
+        const names = (bundle && bundle.teamNames) || {};
+        if (Object.keys(names).length && bundleToken === this._loadToken) {
+          this._teamIdNameMap = Object.assign({}, this._teamIdNameMap, names);
+        }
+      }).catch(() => { /* bundle 失败静默——getLeagueMatches 数据已足够 */ });
       setTimeout(() => {
         if (loadToken !== this._loadToken) return;          // 新一轮 load 取代
         if (this._lpResolved || this._fastRendered) return; // LP 已到 / 已快渲染
-        if (!this._teamIdNameMap || !Object.keys(this._teamIdNameMap).length) return;
+        // ★ 2026-09-03（加载优化 P1）：放宽快渲染守卫——不再硬要求 _teamIdNameMap 非空。
+        //   resolveTeamIdName 三级回退（teamIdNameMap → curation → raw _rawIdMap）中，
+        //   OpenDota 比赛记录自带 radiant/dire_team_name，所以即便 _teamIdNameMap 为空
+        //   （bundle 未命中 / direct explorer 尚未返回），只要 raw 自带队名仍能渲染真实队名。
+        //   raw 也无队名时回退为「天辉/夜魇」占位名（LP 到达后主链路全量覆盖，无半状态残留）。
         this._renderRecentOnly(list);
       }, 1500);
     });
@@ -1225,6 +1238,25 @@ Page({
         //   证据链：归一化队名对 / matchIds 交集 / series_id，保留信息量最大的卡。
         allSeries = sources.dedupeLiveSeries(allSeries);
 
+        // ★ 2026-09-02（v8.8 A'）：RECENT 段「OpenDota 拆裂 BO3」合并修复。
+        //   现象：EPL Masters II 等赛事部分 BO3 被 OpenDota 拆成多个独立 series_id
+        //   （同一真实 BO3 三局各带不同 sid，甚至同队多 team_id），详情页显示为多张 BO1。
+        //   判定仅基于「已解名的真实队名 + 时间窗」，不受 series_id / team_id 分裂影响。
+        //   守卫（防误并）：
+        //     ① 仅 phase='recent'（已结束）且 games=1（单局卡）参与
+        //     ② 同归一化队名对 + start_time 链式间隔 ≤6h → 聚簇
+        //     ③ 完整终局守卫：簇内 A/B 累计胜局 max≥2（BO3 终局 2:0/2:1；1:1 中断/双 BO1 不并）
+        //     ④ 单局卡已含 sid 且 phase=recent（正常聚合的 BO3 games=3 不受影响）
+        //   v8.8b：逻辑已上移 sources.mergeSplittedBo3Series（首页共用），此处仅调用。
+        allSeries = sources.mergeSplittedBo3Series(allSeries);
+
+        // ★ 2026-09-02（v8.8c）：参赛队白名单过滤 —— 剔除「跨联赛误标」对局。
+        //   实证：EPL World Series: SEA（leagueid=18865）的 BO3 前两局被 OpenDota 误标到
+        //   league 19944（EPL Masters 2026），Yangon Galacticos / Team Kinetix 并非本赛事
+        //   参赛队，却被窗口过滤收进详情页 RECENT（用户核实 Liquipedia 无此对局）。
+        //   v8.8c：逻辑已上移 sources.filterMisattributedRecentSeries（首页共用），此处仅调用。
+        allSeries = sources.filterMisattributedRecentSeries(allSeries, this.data.leagueId);
+
         // ★ 三段式分段排序（2026-07-28 新增，v3 增强）
         //   LIVE：进行中，按 lastTime desc —— 最近开赛的在前
         //   UPCOMING：未开赛，按 dateGroup asc → lastTime asc —— 最早开赛的在前，按日期分组
@@ -1393,6 +1425,7 @@ Page({
       isLive: isLive
     };
   },
+
 
   // B4 定时刷新（2026-08-03）：详情页对阵 LIVE/UPCOMING 近实时。
   // 只重拉 Liquipedia 赛程（force 跳过缓存；云函数有 30s 最小间隔节流），
@@ -1706,39 +1739,32 @@ Page({
       }
     });
 
-    // ★ 方案C Step A：从 teamIds 建立 队名→ID 反向映射（2026-08-01）
-    //   同一战队在 RECENT 段已有 OpenDota team_id 时，跳过 Liquipedia 查询，
-    //   直接走 ID 路径拿 OpenDota logo（cdn.opendota.com 已在微信白名单）。
-    //   ⚠️ 必须在「负 id 占位队伍收集」之前声明，否则 TDZ 报错（nameTeams 未初始化）。
     // ★ 2026-09-01（v8.6 Fix-G2）：归一化规则统一为「去非字母数字」——
     //   与快照 team-logo-local-data.js byName 键（fetch-team-logos.js normName：
     //   replace(/[^a-z0-9]/g,'')）完全一致，消除「两边规则不同 → 精确键永远 miss」。
     //   原实现 replace(/\s+/g,'') 保留 + 号（"Pipsqueak+4"→pipsqueak+4），
     //   快照键是 pipsqueak4 → 永远不匹配（P0，实测 Level UP/Pipsqueak+4 等全 miss）。
     function normName(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
-    const teamNameToId = {};
-    Object.keys(teamIds).forEach((tid) => {
-      const t = teamIds[tid];
-      if (t && t.name) teamNameToId[normName(t.name)] = parseInt(tid, 10);
-    });
 
     // ★ §8.3 名称兜底（2026-07-29）：Liquipedia 赛程补充的 upcoming/live 对阵
-    //   team_id=0（{{Match}} 模板不提供 OpenDota team_id），按队名收集。
-    //   方案C Step A：若该队已在 teamIds 中（来自 RECENT 段），skip=true 跳过 Liquipedia 查询。
+    //   team_id=0（{{Match}} 模板不提供 OpenDota team_id），按队名走 name 三级链路
+    //   （快照 byName → findTeamByName → 负缓存）。
+    //   ⚠️ 2026-09-02 修复：不可因「同队在 recent 段有 team_id」就设 skip=true。
+    //      写 series logo 时 upcoming 段 team_id=0 只查 nameLogoMap[norm]（L2056-2073），
+    //      不走 logoMap[team_id] → skip=true 的队 logo 永远空白（曾致 8/9 队 upcoming 不显示）。
+    //      skip 仅保留单条件：该队 series 自身已带有效 logo URL（避免覆盖已有）。
     const nameTeams = {};  // 归一化队名 → { name, skip }
     this.allSeries.forEach((s) => {
       if ((!s.radiantTeamId || s.radiantTeamId <= 0) && s.radiantName) {
         const norm = normName(s.radiantName);
         if (norm && !nameTeams[norm]) {
-          const alreadyInTeamIds = !!teamNameToId[norm];
-          nameTeams[norm] = { name: s.radiantName, skip: alreadyInTeamIds || !!(s.radiantLogo && /^https?:\/\//i.test(s.radiantLogo)) };
+          nameTeams[norm] = { name: s.radiantName, skip: !!(s.radiantLogo && /^https?:\/\//i.test(s.radiantLogo)) };
         }
       }
       if ((!s.direTeamId || s.direTeamId <= 0) && s.direName) {
         const norm = normName(s.direName);
         if (norm && !nameTeams[norm]) {
-          const alreadyInTeamIds = !!teamNameToId[norm];
-          nameTeams[norm] = { name: s.direName, skip: alreadyInTeamIds || !!(s.direLogo && /^https?:\/\//i.test(s.direLogo)) };
+          nameTeams[norm] = { name: s.direName, skip: !!(s.direLogo && /^https?:\/\//i.test(s.direLogo)) };
         }
       }
     });
@@ -1752,6 +1778,9 @@ Page({
     //        与 allSeries 中 team_id=0 的 Liquipedia 对阵共用同一名称兜底链路。
     //   守卫：跳过占位名（"待定队伍 N"/"待公布"）、已有 logo 的、已在 allSeries 收集过的、
     //        30min 内失败的（复用 _logoFailNames 负缓存，避免轮询空跑）。
+    //   ⚠️ 2026-09-02 修复：移除「已在 teamIds → skip 已生效」守卫——占位队 id 是负数，
+    //      写 participantsList 时（L2134+）不命中 logoMap[team_id]，必须走 nameLogoMap。
+    //      同 §8.3 upcoming series BUG：skip 该队会让它永远不进 nameLogoMap → logo 空白。
     (this.data.participantsList || []).forEach((t) => {
       if (!t || t.id > 0) return;                // 仅处理负数占位 id
       if (t.logo && /^https?:\/\//i.test(t.logo)) return; // 已有 logo 跳过
@@ -1760,7 +1789,6 @@ Page({
       const norm = normName(nm);
       if (!norm) return;
       if (nameTeams[norm]) return;               // allSeries 已收集 → 不覆盖
-      if (teamNameToId[norm]) return;            // 已在 teamIds → skip 已生效
       if (this._logoFailNames && this._logoFailNames[norm] &&
           (Date.now() - this._logoFailNames[norm]) < 30 * 60 * 1000) return; // 30min 负缓存
       nameTeams[norm] = { name: nm, skip: false };
@@ -1802,6 +1830,12 @@ Page({
     //   精确键 miss 时按「前缀包含」兜底（levelup 命中 levelupesports）：
     //   短键在前缀命中时取最长全名键对应的 logo（同队多 id 时 OpenDota 全名最全）。
     //   守卫：候选键长度 ≥ 键长 + 3（防 "mouz" 命中 "mouzesports" 之类过度扩展误配）。
+    // ★ 2026-09-01（v8.7 C 补强）：反向前缀匹配 —— LP 队名可能带修饰后缀，归一化后比
+    //   快照键更长（"DYNASTY (stack)" → dynastystack vs 快照键 dynasty）。
+    //   此时 norm 以快照键开头且剩余部分为常见修饰词（stack/academy/gg…）才命中，
+    //   取最长键（最接近全名）。守卫修饰词集合防误配（如 Team Spirit Academy 精确键
+    //   teamspiritacademy 存在时优先，不触发 teamspirit 反向匹配）。
+    const _NAME_MODIFIERS = ['stack', 'academy', 'esports', 'esport', 'gaming', 'team', 'club', 'gg', 'division', 'x'];
     const _snapByNameFuzzy = function (norm) {
       if (!snap || !snap.byName || !norm) return null;
       const exact = snap.byName[norm];
@@ -1814,6 +1848,18 @@ Page({
         }
       });
       if (bestKey && /^https?:\/\//i.test(snap.byName[bestKey].logo)) return snap.byName[bestKey];
+      // 反向前缀匹配：norm 以快照键开头且更长，剩余部分为修饰词（全名→简称，LP 加后缀场景）
+      let revKey = null;
+      Object.keys(snap.byName).forEach((k) => {
+        if (k.length < 4 || k.length >= norm.length) return;
+        if (norm.indexOf(k) === 0) {
+          const rest = norm.slice(k.length);
+          if (rest && _NAME_MODIFIERS.indexOf(rest) >= 0) {
+            if (!revKey || k.length > revKey.length) revKey = k;  // 取最长键（最接近全名）
+          }
+        }
+      });
+      if (revKey && /^https?:\/\//i.test(snap.byName[revKey].logo)) return snap.byName[revKey];
       return null;
     };
     if (snap && (snap.byId || snap.byName)) {
@@ -1849,8 +1895,15 @@ Page({
     //   当前页可见 series 的队伍优先（次优先 name 路径——参赛队伍 Tab 负 id 占位队）。
     //   被延后的队伍（未查询、未负缓存）由下一次调用增量补齐：
     //   loadMore 翻页 / refreshSchedule 轮询（30-60s）均会重入 enrichTeamLogos。
+    // ★ 2026-09-01（v8.7 A+ 修复）：QUERY_CAP **只对 ID 查询限流**（needQueryIds，
+    //   api.getTeam 每个 team_id 1 次 OpenDota 请求，确实需要限流防 60req/min 触发）；
+    //   name 查询（needQueryNames，findTeamByName）**全量放行** —— 内部共享
+    //   cached('/teams', 24h) 单一缓存槽，N 个队名只发 1 次网络请求，无限流需求。
+    //   原实现把两者捆进同一 QUERY_CAP：进行中/已结束段 ID ≥12 时 name 被砍到 0，
+    //   upcoming 段（team_id=0 只能走 name 路径）队徽一轮都不查 → 详情页「即将到来」
+    //   队标大范围空白（首页无此配额所以正常）。A+ 修复该饿死问题。
     const QUERY_CAP = 12;
-    if (needQueryIds.length + needQueryNames.length > QUERY_CAP) {
+    if (needQueryIds.length > QUERY_CAP) {
       const visibleIds = {};
       (this.data.series || []).forEach((s) => {
         if (s && s.radiantTeamId > 0) visibleIds[s.radiantTeamId] = 1;
@@ -1861,14 +1914,10 @@ Page({
       const cappedIds = visIds.length >= QUERY_CAP
         ? visIds.slice(0, QUERY_CAP)
         : visIds.concat(otherIds).slice(0, QUERY_CAP);
-      const keptNames = cappedIds.length < QUERY_CAP
-        ? needQueryNames.slice(0, QUERY_CAP - cappedIds.length)
-        : [];
-      const deferred = (needQueryIds.length - cappedIds.length) + (needQueryNames.length - keptNames.length);
-      console.info('[detail][perf] P1-3 查询上限：本次 ' + cappedIds.length + ' id + ' +
-        keptNames.length + ' name（延后 ' + deferred + ' 由下次调用补齐）');
+      const deferred = (needQueryIds.length - cappedIds.length) + needQueryNames.length;
+      console.info('[detail][perf] P1-3 查询上限：本次 ' + cappedIds.length + ' id（name ' +
+        needQueryNames.length + ' 全量放行，延后 ' + deferred + ' 由下次调用补齐）');
       needQueryIds = cappedIds;
-      needQueryNames = keptNames;
     }
     if (!needQueryIds.length && !needQueryNames.length) {
       // 快照全命中（无网络任务）：仍需走结果管线把快照结果写入缓存/视图

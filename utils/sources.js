@@ -839,22 +839,44 @@ function _orphanPairMerge(matches) {
       orphanList.push({ m: pm, A: pA, B: pB, day: Math.floor(pStart / 86400) });
     }
   }
-  var obuckets = {};
+  // ★ 2026-09-01 修复「跨 UTC 午夜的 BO3 被拆成两张卡」：
+  //   原分桶键是「队ID对@UTC自然日」，跨午夜的两局（如 23:53Z / 次日 00:23Z）落到
+  //   不同桶 → 不合并 → 同一场 BO3 在首页显示成两张独立卡（正是「单局而非整场 BO3」的成因）。
+  //   改为：同队ID对的局先按开赛时间排序，再做「相邻局间隔 ≤6h」链式聚类，
+  //   与 groupLiquipediaMatches 的跨午夜缝合同口径，彻底摆脱 UTC 日边界。
+  var byPair = {};
   orphanList.forEach(function (it) {
     var pk = it.A < it.B ? (it.A + '_' + it.B) : (it.B + '_' + it.A);
-    var bk = pk + '@' + it.day;
-    (obuckets[bk] || (obuckets[bk] = [])).push(it);
+    (byPair[pk] || (byPair[pk] = [])).push(it);
   });
-  Object.keys(obuckets).forEach(function (bk) {
-    var arr = obuckets[bk];
-    if (arr.length < 2) return;
-    var synKey = 'orphan_' + bk;
-    arr.forEach(function (it) {
-      it.m._patchedSeriesKey = synKey;
-      if (typeof console !== 'undefined' && console.warn) {
-        console.warn('[patchNullSeriesId]', { matchId: it.m.match_id, toKey: synKey, reason: 'orphan_pair_day_cluster' });
-      }
+  var CHAIN_WINDOW = 6 * 3600;   // 相邻局最大间隔（同 groupLiquipediaMatches 的 6h 链式聚类）
+  Object.keys(byPair).forEach(function (pk) {
+    var arr = byPair[pk].slice().sort(function (x, y) {
+      return (x.m.start_time || 0) - (y.m.start_time || 0);
     });
+    if (arr.length < 2) return;
+    var cluster = [arr[0]];
+    var flush = function () {
+      if (cluster.length < 2) return;
+      var synKey = 'orphan_' + pk + '@' + Math.floor((cluster[0].m.start_time || 0) / 60);
+      cluster.forEach(function (it) {
+        it.m._patchedSeriesKey = synKey;
+        if (typeof console !== 'undefined' && console.warn) {
+          console.warn('[patchNullSeriesId]', { matchId: it.m.match_id, toKey: synKey, reason: 'orphan_pair_chain' });
+        }
+      });
+    };
+    for (var i = 1; i < arr.length; i++) {
+      var prevStart = cluster[cluster.length - 1].m.start_time || 0;
+      var curStart = arr[i].m.start_time || 0;
+      if (curStart - prevStart <= CHAIN_WINDOW) {
+        cluster.push(arr[i]);
+      } else {
+        flush();
+        cluster = [arr[i]];
+      }
+    }
+    flush();
   });
   return matches;
 }
@@ -1153,6 +1175,10 @@ function groupSeries(matches) {
       //   注意：groupSeries 内部的 boType 仍是旧比分反推推断，仅为兼容保留；
       //   详情页最终以 resolveBoType 输出为准（buildSeriesFromSources 后处理覆盖）。
       seriesType: st,
+      // ★ 2026-09-01（双卡修复）：透传 series_id —— 首页 ⑥ 段按 series_id 覆盖
+      //   ② /live 错误卡（league_name 缺失 → 「职业赛事」）时需匹配同系列。
+      //   原实现只有 seriesType 无 series_id，_cardFromSeries 读 s.series_id 恒 undefined。
+      series_id: first.series_id != null ? first.series_id : null,
       isDraw: isDraw,
       isLive: isLive,
       isRecent: isRecent,
@@ -1876,6 +1902,161 @@ function dedupeLiveSeries(seriesList) {
   return seriesList.filter(function (s) { return drop.indexOf(s) < 0; });
 }
 
+// ★ 2026-09-02（v8.8 A'）：RECENT 段「OpenDota 拆裂 BO3」合并（纯函数，首页/详情页共用）。
+//   背景：EPL Masters 2026 等赛事的部分真实 BO3 被 OpenDota 拆成多个 series_id
+//   （同一 BO3 三局各带不同 sid，甚至同队双 team_id，如 Zero Tenacity=9600141/10208035），
+//   groupSeries 按 sid 聚合成多张 games=1 的独立卡 → 已结束段显示成多场 BO1。
+//   本函数在「队名已解（radiantName/direName 为真实名）」后执行，按队名而非 id 聚合，
+//   把同队名对 + 6h 链式窗内的多张单局卡合并为一张 BO3/BO5 卡。
+//   安全守卫（防误并）：
+//     ① 仅 phase='recent'（已结束）+ games.length===1（单局卡，正常 BO3 games≥2 不受影响）
+//     ② 双方均为真实队名（天辉/夜魇占位、TBD 不参与——无法可靠归并）
+//     ③ 同归一化队名对（顺序无关）+ start_time 链式间隔 ≤6h 聚簇
+//     ④ 完整终局守卫：簇内按 radiant_win 累计的胜局数 max≥2（BO3 终局 2:0/2:1 才并；
+//        1:1 中断局、或同日两场独立 BO1 累计成 2:0 的歧义场景不并）
+//     ⑤ 局间隔 ≥10min（防把分钟级重复注入误并）
+//     ⑥ 合并后 boType 由 series_type 声明推导（stype=1→BO3 / 2→BO5；缺失时按局数 2-3→BO3）
+//   key 用 `mrg_<normA>__<normB>_<首局分钟桶>` 稳定键（refresh 轮询 diff 可复用）。
+//   ⚠️ 输入 series 需带 radiantName/direName（已解名）、radiantTeamId/direTeamId、games（≥1）、
+//      lastTime/firstTime、phase、seriesType。games 元素保留各局原始字段即可。
+function mergeSplittedBo3Series(allSeries) {
+  if (!Array.isArray(allSeries) || allSeries.length < 2) return allSeries;
+  var CHAIN_WINDOW = 6 * 3600;
+  var MIN_GAP = 10 * 60;
+  var TBD_RE = /^(tbd|tba|待定|待公布|unknown)$/i;
+  function _normName(s) {
+    var n = String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    return n || '';
+  }
+  function _isRealTeamName(nm) {
+    if (!nm) return false;
+    if (nm === '天辉' || nm === '夜魇') return false;
+    if (TBD_RE.test(nm)) return false;
+    return true;
+  }
+  // ① 候选：recent + 单局 + 真实队名
+  var cand = allSeries.filter(function (s) {
+    if (!s || s.phase !== 'recent') return false;
+    if (!Array.isArray(s.games) || s.games.length !== 1) return false;
+    if (!_isRealTeamName(s.radiantName) || !_isRealTeamName(s.direName)) return false;
+    return true;
+  });
+  if (cand.length < 2) return allSeries;
+  // ② 同队名对分组（顺序无关）
+  var groups = {};
+  cand.forEach(function (s) {
+    var a = _normName(s.radiantName), b = _normName(s.direName);
+    if (!a || !b) return;
+    var k = a < b ? (a + '__' + b) : (b + '__' + a);
+    if (!groups[k]) groups[k] = [];
+    groups[k].push(s);
+  });
+  var merges = [];
+  Object.keys(groups).forEach(function (k) {
+    var arr = groups[k].slice().sort(function (x, y) { return (x.lastTime || 0) - (y.lastTime || 0); });
+    // ③ 链式聚类：相邻局间隔 ≤6h
+    var cur = [arr[0]];
+    for (var i = 1; i < arr.length; i++) {
+      var gap = (arr[i].lastTime || 0) - (cur[cur.length - 1].lastTime || 0);
+      if (gap <= CHAIN_WINDOW) cur.push(arr[i]);
+      else { if (cur.length >= 2) merges.push({ items: cur }); cur = [arr[i]]; }
+    }
+    if (cur.length >= 2) merges.push({ items: cur });
+  });
+  if (!merges.length) return allSeries;
+  var removedKeys = {};
+  var added = [];
+  merges.forEach(function (group) {
+    var sorted = group.items.slice().sort(function (x, y) { return (x.lastTime || 0) - (y.lastTime || 0); });
+    // ④ 完整终局守卫：累计 A/B 胜局
+    var scoreA = 0, scoreB = 0;
+    var aName = sorted[0].radiantName, bName = sorted[0].direName;
+    var na = _normName(aName), nb = _normName(bName);
+    if (!na || !nb) return;
+    sorted.forEach(function (s) {
+      var g = s.games && s.games[0];
+      var radiantWon = g ? (g.radiantWin === true || g.radiant_win === true) : (s.scoreA > s.scoreB);
+      var radiantIsA = _normName(s.radiantName) === na;
+      if (radiantWon) { if (radiantIsA) scoreA++; else scoreB++; }
+      else { if (radiantIsA) scoreB++; else scoreA++; }
+    });
+    if (Math.max(scoreA, scoreB) < 2) return;  // 非完整终局不并
+    // ⑤ 局间隔 ≥10min 校验
+    for (var j = 1; j < sorted.length; j++) {
+      if ((sorted[j].lastTime || 0) - (sorted[j - 1].lastTime || 0) < MIN_GAP) return;
+    }
+    // ⑥ boType 推导
+    var stype = sorted[0].seriesType;
+    var boType = 'BO3';
+    if (stype === 2) boType = 'BO5';
+    else if (sorted.length >= 4 || Math.max(scoreA, scoreB) >= 3) boType = 'BO5';
+    var firstT = sorted[0].lastTime || 0;
+    var merged = Object.assign({}, sorted[0], {
+      key: 'mrg_' + (na < nb ? na + '__' + nb : nb + '__' + na) + '_' + Math.floor(firstT / 60),
+      radiantName: aName, direName: bName,
+      radiantTeamId: sorted[0].radiantTeamId, direTeamId: sorted[0].direTeamId,
+      radiantWin: scoreA > scoreB, direWin: scoreB > scoreA,
+      scoreA: scoreA, scoreB: scoreB,
+      boType: boType,
+      isMulti: true,
+      seriesType: stype != null ? stype : null,
+      games: sorted.map(function (s) { return s.games[0]; }),
+      firstTime: sorted[0].firstTime || firstT,
+      lastTime: sorted[sorted.length - 1].lastTime || firstT
+    });
+    sorted.forEach(function (s) { if (s.key) removedKeys[s.key] = true; });
+    added.push(merged);
+  });
+  if (!added.length) return allSeries;
+  var out = allSeries.filter(function (s) { return !(s.key && removedKeys[s.key]); });
+  added.forEach(function (m) { out.push(m); });
+  return out;
+}
+
+// ★ 2026-09-02（v8.8c）：参赛队白名单过滤 —— 剔除「跨联赛误标」对局（首页/详情页共用）。
+//   实证：EPL World Series: SEA（leagueid=18865）的 BO3 前两局被 OpenDota 误标到
+//   league 19944（EPL Masters 2026），Yangon Galacticos / Team Kinetix 并非 EPL Masters II
+//   参赛队，却被「按 leagueId 过滤」的视图（详情页窗口 / 首页 league 卡）收进来。
+//   修复：以该 leagueId 对应 curation 赛事的 participants（人工策展参赛队）为白名单，
+//   已结束系列双方队名（series 层需已解名）**均不在白名单** → 整系列剔除。
+//   守卫：
+//     ① 仅当 curation 能按 leagueId 命中且 participants 为非空数组才生效（缺数据不强过滤）
+//     ② 仅过滤 phase='recent'（live/upcoming 由 LP/Steam 排期背书，不误伤）
+//     ③ 队名缺失（占位天辉/夜魇/TBD）不判（无法可靠归并）
+//   纯函数：leagueId 传 Number；内部按需 require remoteCuration（延迟避免循环依赖）。
+function filterMisattributedRecentSeries(allSeries, leagueId) {
+  if (!Array.isArray(allSeries) || !allSeries.length) return allSeries;
+  var lid = Number(leagueId);
+  if (!lid || lid <= 0) return allSeries;
+  var _norm = function (s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); };
+  var TBD_RE = /^(tbd|tba|待定|待公布|unknown)$/i;
+  function _real(nm) {
+    if (!nm || nm === '天辉' || nm === '夜魇' || TBD_RE.test(nm)) return '';
+    return _norm(nm);
+  }
+  var wl = null;
+  try {
+    var rc = require('./remoteCuration.js');
+    var ev = rc.curatedEventFor('', { leagueId: lid, game: 'dota2' });
+    if (ev && Array.isArray(ev.participants) && ev.participants.length) {
+      wl = new Set(ev.participants.map(function (p) { return _real((p && p.name) || ''); }).filter(Boolean));
+    }
+  } catch (e) { wl = null; }
+  if (!wl || !wl.size) return allSeries;   // curation 未命中/无参赛队 → 不强过滤
+  var before = allSeries.length;
+  var out = allSeries.filter(function (s) {
+    if (!s || s.phase !== 'recent') return true;
+    var a = _real(s.radiantName), b = _real(s.direName);
+    if (!a || !b) return true;                 // 队名缺失不判
+    if (wl.has(a) || wl.has(b)) return true;   // 任一方是参赛队 → 保留
+    return false;                              // 双方都不在 → 跨联赛误标剔除
+  });
+  if (out.length !== before) {
+    console.info('[A-merge][filterMisattributed] leagueId=' + lid + ' 剔除跨联赛误标 ' + (before - out.length) + ' 组');
+  }
+  return out;
+}
+
 // ★ 2026-09-01（v8.4 Fix-E）：参赛队伍同名多 id 去重（纯函数）。
 //   根因：同一战队跨届/重注册会持有多个 OpenDota team_id（实证：19944 中 Zero Tenacity
 //   9600141 与 10208035、Team Syntax 10213108 与 10232570 并存），refreshMetadataDerived
@@ -1925,6 +2106,8 @@ function _dedupCrossSourceMatches(matches) {
   function _normTeam(s) {
     if (!s) return '';
     var n = String(s).toLowerCase().trim();
+    // ★ 2026-09-01（三卡修复）：剥离「 x 赞助商」后缀（与 buildLpLiveSeries._normTeamX 同口径）
+    n = n.replace(/\s*[x×]\s+\S+.*$/i, '');
     n = n.replace(/\s*(esports|e-sports|gaming|team|club)\s*$/g, '');
     n = n.replace(/[^a-z0-9一-鿿а-яё]/g, '');
     return n;
@@ -2029,9 +2212,11 @@ function groupLiquipediaMatches(matches) {
     //   原 toLowerCase + sort 容易被 "Team Spirit" vs "Team  Spirit" 双空格、
     //   "Nigma Galaxy" vs "Nigma" 后缀差异等切开 → 同一 BO3 各局分到不同桶。
     //   归一化：小写 + 去 esports/gaming/team/club 后缀 + 去非字母数字 + 双向排序。
+    //   ★ 2026-09-01（三卡修复）：剥离「 x 赞助商」后缀（与 buildLpLiveSeries._normTeamX 同口径）
     function _normTeam(s) {
       if (!s) return '';
       var n = String(s).toLowerCase().trim();
+      n = n.replace(/\s*[x×]\s+\S+.*$/i, '');
       n = n.replace(/\s*(esports|e-sports|gaming|team|club)\s*$/g, '');
       n = n.replace(/[^a-z0-9一-鿿а-яё]/g, '');
       return n;
@@ -2160,6 +2345,13 @@ function mergeLiquipediaGroup(group) {
     team2Name: base.team2Name || base.dire_team_name || '',
     team1Short: base.team1Short || '',
     team2Short: base.team2Short || '',
+    // ★ 2026-09-01（进行中卡修复）：透传 Steam LIVE 原生字段 —— radiant_team_id/dire_team_id
+    //   （首页 live 卡队徽按 id 查询、点击跳转依赖）与 team1Logo/team2Logo（UGC 队标直出，
+    //   省一次 explorer 查询）。原实现聚合后丢失 → buildLpLiveSeries 消费侧拿不到。
+    radiant_team_id: base.radiant_team_id || 0,
+    dire_team_id: base.dire_team_id || 0,
+    team1Logo: base.team1Logo || '',
+    team2Logo: base.team2Logo || '',
     startTime: startTime,
     start_time: startTime,        // 兼容两种字段名（v3 输出 start_time，旧 wikitext 输出 startTime）
     phase: phase,
@@ -2180,6 +2372,10 @@ function mergeLiquipediaGroup(group) {
     //   需要 leagueName 渲染首页 LP 卡头（缺省会退化「职业赛事」）。原实现聚合后丢失。
     leagueName: base.leagueName || base._leagueName || '',
     _leagueName: base.leagueName || base._leagueName || '',
+    // ★ 2026-09-01 补修：聚合透传 leagueId —— 原实现只透传了 leagueName，
+    //   buildLpUpcomingSeries 的 `leagueId: m.leagueId || 0` 因此恒为 0，
+    //   首页 LP 卡点击跳转联赛详情丢目标（_cardFromSeries 依赖 s.leagueId）。
+    leagueId: base.leagueId || 0,
     // 标记：由聚合产生，供调试 / 可选渲染小场（各局原始记录）
     _aggregated: true,
     _games: group
@@ -2242,10 +2438,162 @@ function buildLpUpcomingSeries(lpMatches, now) {
   });
 }
 
+// ★ 2026-09-01（进行中卡修复）：Liquipedia/Steam/haglund 排期对局 → 首页「对局级 live」系列。
+//   背景：首页「进行中」段此前只有 curation 赛事级卡（无对阵/比分）——LP/Steam 排期里
+//   已开赛的 LIVE 对局（phase='live'，Steam LIVE 数据含 series_id/score1/score2/队标）
+//   被 buildLpUpcomingSeries 的「未开赛」过滤（start > now）丢弃 → 进行中段无对局卡。
+//   本函数与 buildLpUpcomingSeries 对称：**保留已开赛且未结束的 LIVE 场**，同样经
+//   groupLiquipediaMatches 聚合（防 Steam LIVE「一局=1条」的 BO3 拆卡），映射为 series。
+//   输出与 groupSeries 兼容（radiantName/direName/scoreA/scoreB/phase='live'），
+//   供首页 _cardFromSeries 直接消费（_applyMatchSources ⑥ 段并入）。
+//   纯函数（不依赖 wx/云），可单测。
+function buildLpLiveSeries(lpMatches, now) {
+  if (!Array.isArray(lpMatches) || !lpMatches.length) return [];
+  now = now || Math.floor(Date.now() / 1000);
+  var TBD_RE = /^(tbd|tba|待定|待公布|unknown)$/i;
+  // ★ 2026-09-01（多卡修复）：series 是否已结束的独立判定（不依赖上游 phase）。
+  //   Steam GetLiveLeagueGames 在比赛结束后短暂残留返回该对局，normalizeSteamLiveGame
+  //   的 phase 判定在 series_type 缺失时仅 `totalScore>=6` 判 recent → BO3 2:0（总分2）、
+  //   BO5 3:1（总分4）等已结束残留场 phase 仍为 'live' → 首页多卡。
+  //   本守卫与详情页 absorbSettledGames 的「已结算局吸收」同语义：按系列比分达上限判结束。
+  //   series_type 映射（Steam 规范）：0=BO1(1胜) 1=BO3(2胜) 2=BO5(3胜) 3=BO2(2胜) 4=BO7(4胜)
+  function _seriesEnded(m) {
+    var s1 = (m.score1 != null ? m.score1 : 0);
+    var s2 = (m.score2 != null ? m.score2 : 0);
+    var total = s1 + s2;
+    if (total === 0) return false;                       // 无比分 → 无法判定，按 live 处理
+    var st = m.series_type;
+    if (st != null && st >= 0) {
+      var boNum = [1, 3, 5, 2, 7][st] || (st * 2 + 1);
+      var winsToClinch = Math.ceil(boNum / 2);
+      return Math.max(s1, s2) >= winsToClinch;
+    }
+    // series_type 缺失的兜底：
+    //   ① 比分总和 >= 6（绝不可能在 BO5 内达到）→ 已结束
+    //   ② max(score) >= 3 → 至少 BO5 已打完（BO3 上限 2 胜，3 胜只能是 BO5+ 且已拿下）
+    //   ③ 2:0 / 0:2 → BO3 或 BO2 已结束（BO5 2:0 未完但概率低；Steam 残留场以短 BO 为主）
+    //      —— 2:0 在 BO3/BO2 下必已结束；即使误杀 BO5 2:0，用户看到的是「进行中但无比分」，
+    //      也远好于把已结束场当 live 展示。保守取「任一侧 >=2 且另一侧为 0」判结束。
+    if (total >= 6) return true;
+    if (Math.max(s1, s2) >= 3) return true;
+    if ((s1 === 2 && s2 === 0) || (s2 === 2 && s1 === 0)) return true;
+    return false;
+  }
+  // ① 过滤：已开赛（start 在过去）+ 双方均为确定队名 + 未结束（phase 与比分双守卫）
+  //   注意：Steam LIVE 场 startTime 为「当前时间」占位（无固定开赛时间），
+  //   故以 phase==='live' 为主判据，startTime 仅作辅助（haglund 等源有真实开赛时间）。
+  var live = lpMatches.filter(function (m) {
+    if (!m) return false;
+    var ph = m.phase || '';
+    var st = m.startTime || m.start_time || 0;
+    var isLivePhase = (ph === 'live');
+    var isRecentPhase = (ph === 'recent');
+    // 已结束（recent 或系列比分达上限）不渲染为进行中
+    if (isRecentPhase) return false;
+    // ★ 比分守卫：phase 误判 live 但比分已达 BO 上限 → 已结束残留场，排除
+    if (_seriesEnded(m)) return false;
+    if (!isLivePhase && st && st > now) return false;   // 未来场 → 归 upcoming 函数处理
+    if (!isLivePhase && st && st <= now) {
+      // 无 phase 标记但已开赛：需结合「未结束」证据（无 series 比分或未达 BO 上限）
+      // 保守起见：仅当同时有比分且比分总和达上限才排除，否则视为 live（首页兜底展示）
+    }
+    var n1 = String(m.team1Name || m.radiant_team_name || '').trim();
+    var n2 = String(m.team2Name || m.dire_team_name || '').trim();
+    if (!n1 || !n2 || TBD_RE.test(n1) || TBD_RE.test(n2)) return false;
+    return true;
+  });
+  if (!live.length) return [];
+  // ★ 2026-09-01（三卡修复）：跨源同对局去重（live 专用，不污染 groupLiquipediaMatches 通用逻辑）。
+  //   根因：同一对局在 Steam（全名如 'Inner Circle x Insanity'）与 Liquipedia/haglund（简称
+  //   'Inner Circle'）中队名写法不同 + startTime 不同（Steam 用 Date.now() 占位、真实开赛在数小时前）
+  //   → 归一化键不匹配 + 「同 UTC 日」分组失效 → 同一对局拆成多张卡。
+  //   方案：按「剥离 x 赞助商后缀后的队名对」去重（**时间无关**——live 场 startTime 不可靠），
+  //   组内保留信息量最大的一条（有 series_id > 无；有比分 > 无；score 总和大 > 小）。
+  function _normTeamX(s) {
+    if (!s) return '';
+    var n = String(s).toLowerCase().trim();
+    // 剥离「 x 赞助商」后缀（Valve 全名 'Team x Sponsor' → 'Team'）：
+    //   'Inner Circle x Insanity' → 'innercircle'；'Pipsqueak + 4' → 'pipsqueak4'
+    n = n.replace(/\s*[x×]\s+\S+.*$/i, '');
+    n = n.replace(/\s*(esports|e-sports|gaming|team|club)\s*$/g, '');
+    n = n.replace(/[^a-z0-9一-鿿а-яё]/g, '');
+    return n;
+  }
+  function _pairKeyX(m) {
+    var a = _normTeamX(m.team1Name || m.radiant_team_name);
+    var b = _normTeamX(m.team2Name || m.dire_team_name);
+    if (!a || !b) return null;
+    return a < b ? (a + '|' + b) : (b + '|' + a);
+  }
+  function _infoScoreX(m) {
+    var sc = 0;
+    if (m.series_id != null && m.series_id !== 0 && String(m.series_id) !== '0') sc += 1000;
+    sc += ((m.score1 || 0) + (m.score2 || 0)) * 10;
+    if (m.boType) sc += 5;
+    if (m.radiant_team_id) sc += 2;
+    return sc;
+  }
+  var dedupMap = {};    // pairKeyX -> best match
+  var dedupOrder = [];
+  live.forEach(function (m) {
+    var pk = _pairKeyX(m);
+    if (!pk) { dedupMap['__standalone_' + dedupOrder.length] = m; dedupOrder.push('__standalone_' + (dedupOrder.length - 1)); return; }
+    var prev = dedupMap[pk];
+    if (!prev) { dedupMap[pk] = m; dedupOrder.push(pk); return; }
+    if (_infoScoreX(m) > _infoScoreX(prev)) dedupMap[pk] = m;
+  });
+  live = dedupOrder.map(function (k) { return dedupMap[k]; });
+  // ② 聚合：同队名对 + ≤6h 链式聚类合并为一项（防 Steam LIVE 各局拆卡）
+  var grouped = groupLiquipediaMatches(live);
+  // ③ 映射为 series 形状（对齐 groupSeries 输出，_cardFromSeries 兼容）
+  return grouped.map(function (m, idx) {
+    var st = m.startTime || m.start_time || now;
+    // 系列比分（Steam LIVE 原生提供；无则 0:0 由 phase 判定 live）
+    var sc1 = (m.score1 != null ? m.score1 : 0);
+    var sc2 = (m.score2 != null ? m.score2 : 0);
+    var sid = m.series_id || null;
+    return {
+      key: 'lplive_' + (sid != null && sid !== 0 ? ('s' + sid) : (idx + '_' + Math.floor(st / 60))),
+      games: [],
+      phase: 'live',
+      isUpcoming: false,
+      isLive: true,
+      isMulti: false,
+      scoreA: sc1,
+      scoreB: sc2,
+      boType: m.boType || 'BO1',
+      seriesType: (m.series_type != null ? m.series_type : null),   // applyBo S3 信号
+      declaredBo: m.boDeclared ? (m.boType || null) : null,         // applyBo S1 信号
+      mapSlots: m.mapSlots || 0,                                    // applyBo S4.5 信号
+      radiantName: m.team1Name || m.radiant_team_name || '',
+      direName: m.team2Name || m.dire_team_name || '',
+      radiantTeamId: m.radiant_team_id || m.team1Id || 0,           // Steam LIVE 有真实 team_id
+      direTeamId: m.dire_team_id || m.team2Id || 0,
+      firstTime: st,
+      lastTime: st,
+      leagueName: m._leagueName || m.leagueName || '',
+      leagueId: m.leagueId || 0,
+      matchIds: m.matchIds || (m.match_id ? [m.match_id] : []),
+      series_id: sid,
+      // 队标（Steam LIVE 直接返回，_enrichMatchLogos 可优先消费）
+      // ★ 2026-09-01（图片加载失败修复）：仅透传「字符串且 https」的 logo——
+      //   上游（Steam normalizeSteamLiveGame）可能返回对象形态（{logo: url}），
+      //   透传对象 → 下游 <image src> 收到对象 → 微信序列化成 __pageframe__ 路径报错。
+      //   统一提取字符串 URL；非 https 置空（image-fallback 走首字母占位）。
+      team1Logo: (typeof m.team1Logo === 'string' && /^https?:\/\//i.test(m.team1Logo)) ? m.team1Logo
+        : (m.team1Logo && typeof m.team1Logo === 'object' && typeof (m.team1Logo.logo || m.team1Logo.url) === 'string' && /^https?:\/\//i.test(m.team1Logo.logo || m.team1Logo.url) ? (m.team1Logo.logo || m.team1Logo.url) : ''),
+      team2Logo: (typeof m.team2Logo === 'string' && /^https?:\/\//i.test(m.team2Logo)) ? m.team2Logo
+        : (m.team2Logo && typeof m.team2Logo === 'object' && typeof (m.team2Logo.logo || m.team2Logo.url) === 'string' && /^https?:\/\//i.test(m.team2Logo.logo || m.team2Logo.url) ? (m.team2Logo.logo || m.team2Logo.url) : ''),
+      _source: 'lp-live'
+    };
+  });
+}
+
 module.exports = {
   SOURCE_LABEL: SOURCE_LABEL,
   groupLiquipediaMatches: groupLiquipediaMatches,
   buildLpUpcomingSeries: buildLpUpcomingSeries,
+  buildLpLiveSeries: buildLpLiveSeries,
   getLeagueTier: getLeagueTier,
   voteLeagueNameForMatch: voteLeagueNameForMatch,
   getLeagueWindow: getLeagueWindow,
@@ -2267,6 +2615,8 @@ module.exports = {
   // ★ 2026-09-01（v8.4）：赛事详情页数据重叠修复三件套（纯函数，可单测）
   filterMatchesByWindow: filterMatchesByWindow,
   dedupeLiveSeries: dedupeLiveSeries,
+  mergeSplittedBo3Series: mergeSplittedBo3Series,
+  filterMisattributedRecentSeries: filterMisattributedRecentSeries,
   dropDuplicateNameIds: dropDuplicateNameIds,
   classifyStage: classifyStage,
   enrichTeamLogo: enrichTeamLogo,

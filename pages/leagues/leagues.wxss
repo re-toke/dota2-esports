@@ -42,13 +42,14 @@
 .league-item .league-badges,
 .league-item .league-sub,
 .league-item .league-countdown { position: relative; z-index: 1; }
-/* 进行中（LIVE）：绿色光晕替代 Tier 色，卡片亮一级 + 脉冲呼吸（pulse-glow 定义在 app.wxss） */
+/* 进行中（LIVE）：绿色光晕替代 Tier 色，卡片亮一级 + 脉冲呼吸（pulse-glow 定义在 app.wxss）
+   v4.3 去红：删除 ::before 的 --card-glow-live 红渐变条（与首页同款被否决的涂装），
+   左侧色条回退为 Tier 色，进行中语义由绿呼吸光晕 + 状态徽标承载 */
 .league-item--ongoing {
   background: linear-gradient(135deg, #222228 0%, #1e1e24 100%);
   box-shadow: 0 0 16rpx rgba(95,211,95,0.08), var(--card-inner-shadow);
   animation: pulse-glow var(--dur-breath) var(--ease-in-out) infinite;
 }
-.league-item--ongoing::before { background: var(--card-glow-live); }
 .league-item--ongoing .league-name { color: #e8fff0; }
 /* 已结束：分元素衰减（文字 85% 可读 / 装饰 45% 渐暗） */
 .league-item--ended { opacity: 0.85; }

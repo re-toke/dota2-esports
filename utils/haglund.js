@@ -34,6 +34,10 @@
 //   - 本模块所有失败均 resolve 空对象（错误隔离，不影响其它源）。
 
 var cache = require('./cache.js');
+// ★ 2026-09-01（P0-C1）：haglund 云代理。正式版客户端直连 dota.haglund.dev 必被域名白名单
+//   拦截（海外未备案不可配）→ 改由云函数服务端拉取（10min 云端缓存），本模块仅做
+//   「云代理优先 → 失败回退直连（开发态）→ stale 缓存」三级回退，归一化逻辑不变。
+var cloudProxy = require('./cloudProxy.js');
 
 // ============== 配置 ==============
 var BASE = 'https://dota.haglund.dev/v1/matches';
@@ -302,66 +306,87 @@ function fetchUpcoming(opts) {
     return Promise.resolve(staleResult);
   }
 
-  // 3) wx.request 拉取（status === 'closed' 或 'half_open'）
-  return new Promise(function (resolve) {
-    if (typeof wx === 'undefined' || !wx.request) {
-      var empty = { matches: [], boFormat: null, _source: 'none' };
-      // 无 wx.request 时也尝试 stale 兜底
-      var staleOnly = loadStaleAsFallback(leagueName, nowSec);
-      resolve(staleOnly.matches.length ? staleOnly : empty);
-      return;
+  // 3) 拉取原始数据（P0-C1：云代理优先 → 失败回退 wx.request 直连）
+  //    云代理返回与 haglund 原始端点相同的「原始数组」，归一化在本函数统一处理（零漂移）。
+  //    云代理不可用（未开云开发/熔断）时直接走直连（开发态 urlCheck:false 可用；
+  //    正式版直连会被白名单拦截，属预期——此时靠 stale 缓存兜底）。
+  function fetchRaw() {
+    if (typeof wx !== 'undefined' && wx.cloud && cloudProxy.isAvailable()) {
+      return cloudProxy.haglundUpcomingProxy(false)
+        .then(function (data) { return { data: data, source: 'cloud' }; })
+        .catch(function (e) {
+          // 云代理失败（超时不计熔断，breaker 内部已处理）→ 回退直连
+          console.info('[haglund] 云代理失败，回退直连:', (e && e.message) || e);
+          return rawRequest();
+        });
     }
-    wx.request({
-      url: BASE,
-      method: 'GET',
-      timeout: 8000,
-      // 2026-08-24 容灾强化：补浏览器请求头降低 403 概率
-      // 注意 wx.request 支持 header 但禁止设置 User-Agent（违反微信规范），
-      // 因此只用 Referer + Accept-* 等允许的字段。
-      header: {
-        'Accept': 'application/json, text/plain, */*',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Referer': 'https://liquipedia.net/'
-      },
-      success: function (res) {
-        var data = res && res.data;
-        if (res.statusCode !== 200 || !Array.isArray(data)) {
-          // 请求失败（403/500/超时等）→ 计入熔断器
+    return rawRequest();
+  }
+  function rawRequest() {
+    return new Promise(function (resolve) {
+      if (typeof wx === 'undefined' || !wx.request) {
+        var empty = { matches: [], boFormat: null, _source: 'none' };
+        var staleOnly = loadStaleAsFallback(leagueName, nowSec);
+        resolve(staleOnly.matches.length ? staleOnly : empty);
+        return;
+      }
+      wx.request({
+        url: BASE,
+        method: 'GET',
+        timeout: 8000,
+        // 2026-08-24 容灾强化：补浏览器请求头降低 403 概率
+        // 注意 wx.request 支持 header 但禁止设置 User-Agent（违反微信规范），
+        // 因此只用 Referer + Accept-* 等允许的字段。
+        header: {
+          'Accept': 'application/json, text/plain, */*',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Referer': 'https://liquipedia.net/'
+        },
+        success: function (res) {
+          var data = res && res.data;
+          if (res.statusCode !== 200 || !Array.isArray(data)) {
+            // 请求失败（403/500/超时等）→ 计入熔断器
+            cbOnFail();
+            var stale = loadStaleAsFallback(leagueName, nowSec);
+            resolve(stale);
+            return;
+          }
+          resolve({ data: data, source: 'live' });
+        },
+        fail: function () {
+          // 网络层失败 → 计入熔断器
           cbOnFail();
           var stale = loadStaleAsFallback(leagueName, nowSec);
           resolve(stale);
-          return;
         }
-        // 归一化 + 过滤已开赛/已过期
-        var normalized = [];
-        data.forEach(function (raw) {
-          var m = normalizeMatch(raw, nowSec);
-          if (!m) return;
-          if (m.startTime && m.startTime < nowSec - 24 * 3600) return;
-          normalized.push(m);
-        });
-
-        var boFormat = inferPageBoFormat(normalized);
-        var result = { matches: normalized, boFormat: boFormat };
-        // 写缓存（保存全量，过滤在每次读取时做）
-        try { cache.set(CACHE_KEY, result, CACHE_TTL); } catch (e) {}
-
-        // 成功反馈熔断器
-        cbOnSuccess();
-
-        resolve({
-          matches: filterByLeague(normalized, leagueName),
-          boFormat: boFormat,
-          _source: 'live'
-        });
-      },
-      fail: function () {
-        // 网络层失败 → 计入熔断器
-        cbOnFail();
-        var stale = loadStaleAsFallback(leagueName, nowSec);
-        resolve(stale);
-      }
+      });
     });
+  }
+  return fetchRaw().then(function (fetched) {
+    if (!fetched) return { matches: [], boFormat: null, _source: 'none' };
+    // stale / none 是「已完成兜底」的结果（形状 { matches, boFormat, _source }，无 data 字段），
+    // 直接透传——不可再按 data 判空，否则 stale 会被误判为失败返回 none。
+    if (fetched._source === 'stale' || fetched._source === 'none') return fetched;
+    if (!fetched.data) return { matches: [], boFormat: null, _source: 'none' };
+    // 归一化 + 过滤已开赛/已过期（云代理与直连共用同一管线）
+    var normalized = [];
+    (fetched.data || []).forEach(function (raw) {
+      var m = normalizeMatch(raw, nowSec);
+      if (!m) return;
+      if (m.startTime && m.startTime < nowSec - 24 * 3600) return;
+      normalized.push(m);
+    });
+    var boFormat = inferPageBoFormat(normalized);
+    var result = { matches: normalized, boFormat: boFormat };
+    // 写缓存（保存全量，过滤在每次读取时做）
+    try { cache.set(CACHE_KEY, result, CACHE_TTL); } catch (e) {}
+    // 成功反馈熔断器（云代理成功也算成功——源本身可达）
+    cbOnSuccess();
+    return {
+      matches: filterByLeague(normalized, leagueName),
+      boFormat: boFormat,
+      _source: fetched.source === 'cloud' ? 'cloud' : 'live'
+    };
   });
 }
 

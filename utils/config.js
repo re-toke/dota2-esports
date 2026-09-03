@@ -58,7 +58,12 @@ module.exports = {
     // 2026-08-13 复核修正：120 → 40。原因——Liquipedia 限流为模块级全局串行
     // （liquipedia.js lastCall 槽位共享），并发改造无效，只能降量提速；
     // 40 已覆盖 S/A 级核心赛事（云缓存 + 本地快照 + curation 注入兜底其余）。
-    upcomingQueryLimit: 40,
+    // ★ 2026-09-01（P0-L1 三维护核修订）：40 → 15。理由——curation + 本地快照
+    //   （upcoming-local.json）+ haglund 云代理已覆盖绝大部分 S/A 级赛事，串行查询只是
+    //   最后的兜底补漏；40 个候选 × Liquipedia 2.2s 限流最坏 88s，用户不可接受。
+    //   降为 15 后最坏 33s（实际本地源命中后只查 0-3 个，秒级）。配合
+    //   loadUpcomingSerial 的 rank>=2 或 isKnownEvent 候选过滤，B/C 级不再串行查询。
+    upcomingQueryLimit: 15,
     // 2026-08-13（「即将」加载优化 · P0）：云函数调用超时（ms）。云函数冷缓存现场预热
     // 可达 30-60s，超时后客户端降级本地快照 + curation 注入，保证 loading 必复位。
     upcomingTimeoutMs: 8000,

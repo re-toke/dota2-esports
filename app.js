@@ -95,6 +95,19 @@ App({
       auth.ensureLogin().catch(() => {});
       // ★ 2026-08-11 方案 E：迁移老用户 fakeId 关注记录到真实 leagueId（一次性幂等）
       migrateFakeIdFollows();
+      // ★ 2026-09-03（加载优化 A）：冷启动后台预取赛事列表 + 时间窗口（fire-and-forget）。
+      //   用户从首页浏览数秒后切到赛事页时本地缓存已热（cachedFresh 1h 新鲜窗口命中），
+      //   4493ms 网络段 → 秒开。5min 节流避免短时间多次冷启动重复打云。
+      //   预取条件：① 仅在启用云代理时 ② 距上次预取 > 5min 或首次冷启动。
+      const _now = Date.now();
+      if (
+        config.cloudProxy && config.cloudProxy.enabled &&
+        (!this._leaguesPrefetchedAt || (_now - this._leaguesPrefetchedAt) > 5 * 60 * 1000)
+      ) {
+        this._leaguesPrefetchedAt = _now;
+        api.getLeagues().catch(() => {});
+        api.getLeagueWindows().catch(() => {});
+      }
     }, 0);
   },
 

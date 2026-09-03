@@ -94,7 +94,12 @@ const TTL = {
   liquipediaTeamLogo: 30 * 24 * 3600 * 1000,
   // §9 Liquipedia 主动枚举（2026-07-30）：赛事列表变化慢，7 天长缓存 + 每月主动刷新一次
   // categorymembers 全量拉取（约 3000+ 条），降频到每月 1 次合规调用
-  liquipediaTournamentList: 7 * 24 * 3600 * 1000
+  liquipediaTournamentList: 7 * 24 * 3600 * 1000,
+  // ★ 2026-09-01（P0-C1）：haglund 第三方兜底源云代理。
+  //   客户端 wx.request 直连 dota.haglund.dev 在正式版必被域名白名单拦截（未备案不可配），
+  //   改由云函数服务端拉取（Cloudflare Workers 无 UA 限制，自带 3h 缓存）→ 云端 10min 缓存。
+  //   与客户端 CACHE_TTL=60min 叠加：客户端本地缓存优先，miss 才走云代理。
+  haglundUpcoming: 10 * 60 * 1000
 };
 
 // ===== 缓存操作（可选，依赖 cloud DB collection） =====
@@ -798,6 +803,45 @@ async function liquipediaScheduledMatches(params, force) {
   return { data: payload, source: 'liquipedia' };
 }
 
+// ===== haglund 第三方兜底源云代理（P0-C1，2026-09-01）=====
+// 背景：客户端 wx.request 直连 dota.haglund.dev 在正式版必被域名白名单拦截
+//   （海外 Cloudflare 域名未 ICP 备案，微信 request 合法域名不可配）→
+//   「即将到来」tab 的 haglund 兜底在正式版从未生效。
+// 方案：改由云函数服务端拉取（Node 无域名白名单限制，haglund 自带 3h 缓存），
+//   云端 10min 缓存（TTL.haglundUpcoming）；返回**原始数组**，归一化仍在客户端
+//   haglund.js 的 normalizeMatch 完成（单一实现，零漂移——与 liquipedia-parse 镜像同理念）。
+// 客户端 fetchUpcoming 改为「云代理优先 → 失败回退直连（开发态）→ stale 缓存兜底」。
+const HAGLUND_BASE = 'https://dota.haglund.dev/v1/matches';
+async function haglundUpcoming(params, force) {
+  const cacheKey = 'haglund_upcoming';
+  if (!force) {
+    const cached = await getCache(cacheKey);
+    if (cached) return { data: cached, source: 'cache' };
+  }
+  try {
+    // 与客户端 haglund.js 同款浏览器请求头（降低 Cloudflare Workers 403 概率）
+    const res = await safeFetch({
+      url: HAGLUND_BASE,
+      headers: {
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': 'https://liquipedia.net/'
+      },
+      responseType: 'json',
+      source: 'Haglund'
+    });
+    const body = res && res.body;
+    if (!Array.isArray(body)) return { data: [], source: 'haglund' };
+    await setCache(cacheKey, body, TTL.haglundUpcoming).catch(() => {});
+    return { data: body, source: 'haglund' };
+  } catch (e) {
+    // 拉取失败 → 云端过期缓存兜底（尽力而为；客户端还有本地 stale 兜底）
+    const fallback = await getCache(cacheKey);
+    if (fallback) return { data: fallback, source: 'cache_fallback' };
+    return { data: [], error: makeError(ERROR_CODES.UPSTREAM_ERROR, 'haglund fetch failed: ' + ((e && e.message) || '')) };
+  }
+}
+
 // ===== Liquipedia 战队 Logo（§8.3 2026-07-29，OpenDota 无 logo 的兜底源）=====
 // 仅在 OpenDota logo_url 为空 + STRATZ 无数据时调用，作为独立第四源。
 // 两步获取：
@@ -1343,6 +1387,9 @@ function normalizeSteamLiveGame(g) {
     //   若 max(score1, score2) >= winsToClinch → 系列已结束 → phase='recent'
     //   此外，即便无法精确判定（series_type 缺失），若比分总和 >= 6（绝不可能在 BO5 内达到），
     //   也认为已结束（兜底防御）。
+    // ★ 2026-09-01（多卡修复）：series_type 缺失的兜底加严 —— 与客户端 buildLpLiveSeries
+    //   的 _seriesEnded 守卫同口径：总分>=6 / max>=3 / 任侧 2:0。修复「BO3 2:0、BO5 3:1
+    //   残留场 phase 仍为 live」导致首页多卡的问题。
     let phase = 'live';
     const totalScore = score1 + score2;
     if (seriesType != null && seriesType >= 0) {
@@ -1352,8 +1399,12 @@ function normalizeSteamLiveGame(g) {
       if (Math.max(score1, score2) >= winsToClinch) {
         phase = 'recent';
       }
-    } else if (totalScore >= 6) {
-      // series_type 缺失的兜底：比分总和 >= 6 不可能是进行中的系列
+    } else if (totalScore >= 6 || Math.max(score1, score2) >= 3 ||
+               (score1 === 2 && score2 === 0) || (score2 === 2 && score1 === 0)) {
+      // series_type 缺失的兜底（与客户端 buildLpLiveSeries._seriesEnded 同口径）：
+      //   ① 总分 >= 6 不可能是进行中的系列
+      //   ② max >= 3 → 至少 BO5 已打完
+      //   ③ 2:0 / 0:2 → BO3/BO2 已结束
       phase = 'recent';
     }
     return {
@@ -2176,6 +2227,10 @@ async function getLeagueDetailBundle(params, force) {
   const odPath = '/leagues/' + leagueId + '/matches';
 
   // 子任务：OD league matches（缓存 → 现抓 → 过期缓存兜底，与通用路径同语义）
+  // ★ 2026-09-01（详情页 13s 修复）：现抓用短超时 + 单次尝试（不走 fetchWithRetry 的
+  //   5xx 重试退避——那会拖到 10-15s，客户端 bundle 超时 12s 后回退 direct，等于白等）。
+  //   bundle 的定位是「快速聚合」：OD 慢时快速返回空/缓存，客户端 direct 兜底有自己的
+  //   cachedFresh（30min 缓存）+ 重试链。快失败优于慢成功。
   async function loadOd() {
     if (!hasValidId) return [];
     if (!force) {
@@ -2183,9 +2238,18 @@ async function getLeagueDetailBundle(params, force) {
       if (cached) return cached;
     }
     try {
-      const data = await fetch(odPath);
+      const res = await safeFetch({
+        url: BASE + odPath,
+        responseType: 'json',
+        headers: { 'User-Agent': 'DOTA2-Esports-Hub/1.0' },
+        timeout: { request: 6000 },     // ★ 6s 短超时：OpenDota 慢/521 时快速失败，不拖 bundle
+        retryCount: 0,                  // ★ 单次尝试：不做 5xx/429 重试（重试时间留给客户端 direct）
+        source: 'OpenDota-Bundle'
+      });
+      const data = res && res.body;
+      if (!Array.isArray(data)) return (await getCache(odPath).catch(() => null)) || [];
       setCache(odPath, data, TTL.leagueMatches).catch(() => {});
-      return data || [];
+      return data;
     } catch (e) {
       const fallback = await getCache(odPath);
       return fallback || [];
@@ -2265,6 +2329,8 @@ const HANDLERS = new Map([
   ['liquipediaPrewarm', (e) => liquipediaPrewarm(e.params, e.force)],
   // 赛程
   ['getUpcomingSchedule', handleGetUpcomingSchedule],
+  // haglund 第三方兜底源（P0-C1，2026-09-01）：云函数服务端拉取，规避客户端白名单
+  ['haglundUpcoming', (e) => haglundUpcoming(e.params, e.force)],
   // 赛事详情页聚合 bundle（P0-3③，2026-09-01）
   ['getLeagueDetailBundle', (e) => getLeagueDetailBundle(e.params, e.force)],
   // 实验
@@ -2309,6 +2375,10 @@ function buildPath(action, params) {
     case 'getHeroes':          return '/heroes';
     case 'searchTeams':        return '/search?q=' + encodeURIComponent(p.q || '');
     case 'getLeagueWindows':   return '/explorer?sql=' + encodeURIComponent(LEAGUE_WINDOWS_SQL);
+    // ★ 2026-09-01（P0-1）：首页比赛流两大数据源接入云代理（国内加速 + 云端共享缓存）。
+    //   此前客户端直连 OpenDota 海外源（1-3s+）；改云代理后冷启动命中云端缓存（200-500ms）。
+    case 'getProMatches':      return '/proMatches';
+    case 'getLiveMatches':     return '/live';
     default: return null;
   }
 }
@@ -2320,6 +2390,10 @@ function resolveTtl(action) {
   if (action === 'getTeamPlayers') return TTL.team;
   if (action === 'getPlayer') return TTL.player;
   if (action === 'getHeroes') return TTL.heroes;
+  // ★ 2026-09-01（P0-1）：首页比赛流 —— TTL 与客户端 config.cacheTTL 对齐
+  //   （proMatches 5min / live 60s），云成功路径 writeThrough 写穿本地缓存后断网兜底。
+  if (action === 'getProMatches') return 5 * 60 * 1000;
+  if (action === 'getLiveMatches') return 60 * 1000;
   return 30 * 60 * 1000;
 }
 

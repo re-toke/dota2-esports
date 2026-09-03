@@ -7,7 +7,7 @@
 // 刷新：npm run fetch:logos
 
 module.exports = {
-  "generatedAt": 1788230028,
+  "generatedAt": 1788271931,
   "source": "opendota",
   "note": "build-time team logo snapshot (active leagues + top rated), refresh via scripts/sync/fetch-team-logos.js",
   "stats": {

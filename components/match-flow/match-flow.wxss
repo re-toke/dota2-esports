@@ -1,6 +1,7 @@
 /* components/match-flow/match-flow.wxss */
 /* 批次2 · PRD §4.2：比赛卡（行式卡：头部 meta + 三段式主体）
-   状态语义：LIVE 红（--status-live 脉冲）/ 即将开始琥珀倒计时 / 已结束灰 + 胜方绿。
+   v4.3 状态语义（彻底去红）：进行中 = 品牌金脉冲（卡面无红色涂装）/
+   即将开始琥珀倒计时 / 已结束灰 + 胜方绿。
    比分等宽 tnum 防抖动；闪光 keyframe 300ms 金色渐隐；reduced-motion 降级。 */
 
 .mf {
@@ -33,10 +34,8 @@
   background: rgba(200, 169, 81, 0.14);
   border-color: rgba(200, 169, 81, 0.5);
 }
-.mf-chip--live.mf-chip--active {
-  background: rgba(255, 91, 82, 0.12);
-  border-color: rgba(255, 91, 82, 0.5);
-}
+/* v4.3 去红：进行中 chip 复用通用金色激活态（原红色激活态规则已删除），
+   状态区分由 chip 前导小圆点承载（金色脉冲） */
 .mf-chip-text {
   font-size: var(--fs-caption);
   color: var(--text-2);
@@ -46,14 +45,11 @@
 .mf-chip--active .mf-chip-text {
   color: var(--dota-gold);
 }
-.mf-chip--live.mf-chip--active .mf-chip-text {
-  color: var(--status-live);
-}
 .mf-chip-dot--live {
   width: 10rpx;
   height: 10rpx;
   border-radius: 50%;
-  background: var(--status-live);
+  background: var(--dota-gold);
   animation: mf-pulse 1.6s ease-in-out infinite;
 }
 
@@ -76,6 +72,47 @@
   gap: var(--space-2);
 }
 
+/* ===== 三段式分段标题（★ v5 2026-09-01，对齐详情页 phase-divider）=====
+   「全部」视图下按 live→upcoming→ended 连续段插入；
+   左侧 6rpx 色条 + 段文案 + 段计数（进行中 · 3 场）。
+   色值沿用详情页：LIVE 红 / UPCOMING 暖黄 / ENDED 灰。 */
+.mf-divider {
+  display: flex;
+  align-items: center;
+  padding: var(--space-2) var(--space-2-5) var(--space-0-5);
+}
+.mf-divider-bar {
+  width: 6rpx;
+  height: 28rpx;
+  border-radius: 3rpx;
+  margin-right: var(--space-2);
+  flex-shrink: 0;
+}
+.mf-divider-text {
+  font-size: var(--fs-label);
+  font-weight: 600;
+  color: #c0c4cc;
+  flex: 1;
+}
+/* v4.3 去红：进行中分段条改品牌金（原红色 + 红光晕），与 upcoming 亮黄 #ffcf5c 拉开区分 */
+.mf-divider--live .mf-divider-bar {
+  background: var(--dota-gold);
+  box-shadow: 0 0 12rpx rgba(200, 169, 81, 0.35);
+}
+.mf-divider--live .mf-divider-text {
+  color: var(--dota-gold);
+}
+.mf-divider--upcoming .mf-divider-bar {
+  background: #ffcf5c;
+  box-shadow: 0 0 12rpx rgba(255, 207, 92, 0.4);
+}
+.mf-divider--upcoming .mf-divider-text {
+  color: #ffcf5c;
+}
+.mf-divider--ended .mf-divider-bar {
+  background: #5a6068;
+}
+
 .mf-card {
   position: relative;
   overflow: hidden;
@@ -90,20 +127,14 @@
   transform: scale(0.98);
 }
 
-/* LIVE 卡：左侧红色光晕浸染（card-glow-live token） */
-.mf-card--live::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 100%;
-  z-index: 0;
-  background: var(--card-glow-live);
-  pointer-events: none;
-}
-.mf-card--live {
-  box-shadow: 0 2rpx 16rpx rgba(255, 91, 82, 0.12);
+/* LIVE 卡（v4.3 彻底去红）：
+   v4.2 曾把整卡红渐变降级为「左侧 4rpx 红竖条 + 微红描边」，用户仍反馈红色涂装干扰阅读。
+   → 卡面描边与普通卡完全一致，删除红色竖条；LIVE 语义收敛到底部状态行
+     （金点脉冲 + 进行中文案）与中央状态行（第N局进行中），不靠涂装区分。 */
+
+/* 已结束卡（v4.1）：整体降权灰阶（胜负色高亮仍保留，观感弱化） */
+.mf-card--ended {
+  opacity: 0.82;
 }
 
 /* 关注战队卡：暗金描边（复核修订：去掉 inset 双重描边） */
@@ -111,8 +142,24 @@
   border: 1.5rpx solid rgba(200, 169, 81, 0.6);
 }
 
-/* 头部：等级标签 + 赛事名 + BO */
+/* 卡头（v4.2）：赛事名独占一行作主角；赛制 + 等级降为第二行小字。
+   旧实现把等级标签放在行首、赛事名居中且被 ellipsis 截断 —— 用户第一眼看到的是
+   抽象的「S级」而不是赛事名，这是「不知道在说什么」的次要根因。 */
 .mf-head {
+  position: relative;
+  z-index: 1;
+  margin-bottom: var(--space-0-5);
+}
+.mf-league {
+  display: block;
+  font-size: var(--fs-label);
+  font-weight: 500;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mf-subhead {
   position: relative;
   z-index: 1;
   display: flex;
@@ -122,83 +169,86 @@
 }
 .mf-tier {
   flex-shrink: 0;
-  padding: 2rpx 10rpx;
-  border-radius: var(--radius-sm);
+  padding: 1rpx 8rpx;
+  border-radius: var(--radius-xs);
   font-size: var(--fs-caption);
-  font-weight: 700;
-  line-height: 1.4;
+  font-weight: 500;
+  line-height: 1.5;
 }
 .mf-tier.tier-sss { background: var(--tier-sss-soft); color: var(--tier-sss); }
 .mf-tier.tier-s { background: var(--tier-s-soft); color: var(--tier-s); }
 .mf-tier.tier-a { background: var(--tier-a-soft); color: var(--tier-a); }
 .mf-tier.tier-b { background: var(--tier-b-soft); color: var(--tier-b); }
 
-.mf-league {
-  flex: 1;
-  font-size: var(--fs-body);
-  color: var(--text-1);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+/* 赛制（v4.2）：改中文说明（单局制 / 三局两胜 / 五局三胜），等级降权后它成为副行主信息 */
 .mf-bo {
   flex-shrink: 0;
   font-size: var(--fs-caption);
-  color: var(--text-3);
-  font-feature-settings: 'tnum';
+  color: var(--text-2);
 }
 
-/* 主体：三段式 */
+/* 主体（v4.2 徽上名下横向对称）：队徽在上、完整队名在下。
+   旧实现队徽与"队名"同行，横向只剩 ~207rpx，逼得代码把队名截断成 4 字符大写；
+   改为竖排后每栏约 275rpx，可容纳约 19 字符，长队名基本不截断。 */
 .mf-body {
   position: relative;
   z-index: 1;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  gap: var(--space-1);
 }
-.mf-team {
+.mf-side {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--space-1);
 }
 .mf-logo {
-  width: 88rpx;
-  height: 88rpx;
+  width: 56rpx;
+  height: 56rpx;
   border-radius: var(--radius-md);
+  flex-shrink: 0;
+  background: var(--card-bg-inset);
 }
-.mf-tag {
+.mf-name {
   max-width: 100%;
   font-size: var(--fs-body);
-  font-weight: 600;
-  color: var(--text-2);
+  font-weight: 500;
+  color: var(--text-1);
+  text-align: center;
+  line-height: 1.3;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 /* 胜方高亮：天辉绿（沿用 --radiant 语义色） */
-.mf-tag--win {
+.mf-name--win {
   color: var(--radiant);
 }
 
-/* 中段：比分/倒计时 */
+/* 中段（v4.2）：比分/倒计时 居中，固定宽度防布局抖动。
+   padding-top 4rpx 让比分视觉中心对齐左右队徽中心（徽高 56rpx，比分盒高 48rpx）。 */
 .mf-mid {
-  flex: 1.2;
+  flex-shrink: 0;
+  min-width: 130rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6rpx;
+  gap: 4rpx;
+  padding: 4rpx var(--space-1) 0;
 }
 .mf-score {
   display: flex;
   align-items: baseline;
   gap: 6rpx;
-  padding: 4rpx 20rpx;
+  padding: 4rpx 16rpx;
   border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.03);
 }
 .mf-score-num {
-  font-size: 40rpx;
+  font-size: 36rpx;
   font-weight: 700;
   font-feature-settings: 'tnum';
   color: var(--text-1);
@@ -217,6 +267,13 @@
   color: var(--text-3);
   font-feature-settings: 'tnum';
 }
+/* v4.3：中央比分下方状态行（第2局进行中 / 已结束）——
+   说明性文字用中性灰，不抢比分焦点；比分的「系列胜局」语义由它自解释 */
+.mf-status {
+  font-size: var(--fs-caption);
+  color: var(--text-2);
+  font-feature-settings: 'tnum';
+}
 
 /* 比分闪光：300ms 金色渐隐（数据是活的） */
 .mf-score--flash {
@@ -227,25 +284,84 @@
   100% { background: rgba(255, 255, 255, 0.03); }
 }
 
-/* LIVE 行：红点脉冲 + 文案 */
+/* LIVE 行（v4.1：移到底部 foot 右侧；v4.3 去红：红点脉冲 → 金点脉冲，LIVE 文案 → 进行中） */
 .mf-live-row {
   display: flex;
   align-items: center;
   gap: 8rpx;
+  flex-shrink: 0;
 }
 .mf-live-dot {
   width: 12rpx;
   height: 12rpx;
   border-radius: 50%;
-  background: var(--status-live);
-  box-shadow: 0 0 10rpx rgba(255, 91, 82, 0.5);
+  background: var(--dota-gold);
+  box-shadow: 0 0 10rpx rgba(200, 169, 81, 0.45);
   animation: mf-pulse 1.6s ease-in-out infinite;
 }
 .mf-live-text {
   font-size: var(--fs-caption);
-  color: var(--status-live);
+  color: var(--dota-gold);
   font-weight: 600;
 }
+/* 注：.mf-live-sub 的字体样式统一定义在下方「v8.2」块（此处曾有一份重复定义已删除，
+   两份并存时后者覆盖前者，易造成改了不生效的假象） */
+
+/* 底部行（v4.2）：开赛时间 + 局间色点（左） | LIVE 状态（右），上方细分隔线 */
+.mf-foot {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding-top: var(--space-1-5);
+  border-top: 1rpx solid rgba(255, 255, 255, 0.05);
+}
+/* 左侧组：开赛时间 + 色点。此前 LIVE 卡完全没有时间锚点，只有「进行时长」 */
+.mf-foot-l {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  flex: 1;
+  min-width: 0;
+}
+.mf-time {
+  flex-shrink: 0;
+  font-size: var(--fs-caption);
+  color: var(--text-2);
+  font-feature-settings: 'tnum';
+}
+.mf-dots {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  min-width: 0;
+}
+.mf-dot {
+  width: 10rpx;
+  height: 10rpx;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+/* A 队胜局：暗金（沿用品牌金） */
+.mf-dot--a { background: var(--tier-s); }
+/* B 队胜局：v4.3 改用夜魇阵营色 --dire（原 --status-live 亮红；小圆点承载阵营语义，非卡面涂装） */
+.mf-dot--b { background: var(--dire); }
+/* LIVE 当前局：v4.3 脉冲金（原红脉冲） */
+.mf-dot--now {
+  background: var(--dota-gold);
+  animation: mf-pulse 1.6s ease-in-out infinite;
+}
+/* 未打局：灰空心 */
+.mf-dot--tbd {
+  background: transparent;
+  border: 1.5rpx solid #3a3a40;
+  box-sizing: border-box;
+}
+/* 注：原 .mf-dots-bo（色点后的 BO 文字）已随 v4.2 移除 —— 赛制上移到卡头副行，
+   底部再重复一次既占空间又与副行信息冗余 */
 /* v8.2：LIVE 行补充信息（进行时长 · 观赛人数）——弱化层级，不与红色主文案抢焦点 */
 .mf-live-sub {
   font-size: var(--fs-caption);
@@ -253,19 +369,27 @@
   font-feature-settings: 'tnum';
 }
 
-/* 倒计时（即将开始）：琥珀 */
-.mf-countdown {
+/* 即将开始（v2，2026-09-01）：中央 VS 标识 + 金色开赛时间（对齐详情页 series-scheduled-time）。
+   原倒计时（.mf-countdown/.mf-cd-text）已移除——用户反馈倒计时与开赛时间重复且信息模糊 */
+.mf-vs {
   display: flex;
   align-items: center;
-  padding: 4rpx 20rpx;
+  padding: 2rpx 16rpx;
   border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.03);
 }
-.mf-cd-text {
-  font-size: 30rpx;
+.mf-vs-text {
+  font-size: 26rpx;
+  font-weight: 700;
+  letter-spacing: 2rpx;
+  color: var(--text-3);
+  line-height: 1.2;
+}
+.mf-scheduled {
+  font-size: 26rpx;
   font-weight: 700;
   font-feature-settings: 'tnum';
-  color: var(--status-upcoming);
+  color: var(--dota-gold);
   line-height: 1.2;
 }
 
@@ -284,6 +408,69 @@
   .mf-score--flash {
     animation: none;
   }
+}
+
+/* ===== F4 赛事级卡片主体（2026-08-31 引入时漏写样式，v4.2 补齐）=====
+   kind==='event' 的卡（curation 未来赛事排期）没有队伍，中央展示开赛信息。
+   此前 .mf-event-* 系列 class 在 wxml 里用了但全项目无任何 wxss 规则 → 裸文本渲染。 */
+.mf-body--event {
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2) 0 var(--space-1);
+}
+.mf-event-mid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+}
+.mf-event-cd {
+  font-size: var(--fs-display);
+  font-weight: 500;
+  color: var(--status-upcoming);
+  font-feature-settings: 'tnum';
+  line-height: 1.2;
+}
+.mf-event-time {
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+  font-feature-settings: 'tnum';
+}
+.mf-event-live {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.mf-event-live-text {
+  font-size: var(--fs-body);
+  font-weight: 500;
+  color: var(--dota-gold);
+}
+.mf-event-ended {
+  font-size: var(--fs-body);
+  color: var(--text-3);
+}
+/* 赛事元数据行（赛区 / 奖金池）——与 LIVE 行同处底部，靠右对齐 */
+.mf-event-meta-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  flex-shrink: 0;
+}
+.mf-event-meta {
+  flex-shrink: 0;
+  padding: 2rpx 10rpx;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1rpx solid var(--td-border-level-1-color, #262628);
+  font-size: var(--fs-caption);
+  color: var(--text-2);
+}
+/* 奖金池：品牌金强调（赛事分级之外最有辨识度的元数据） */
+.mf-event-meta--prize {
+  background: rgba(200, 169, 81, 0.12);
+  border-color: rgba(200, 169, 81, 0.35);
+  color: var(--dota-gold);
 }
 
 /* ===== 空态 ===== */
