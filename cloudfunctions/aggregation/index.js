@@ -562,8 +562,26 @@ const _odLastForce = {};   // path -> 最近一次 force 现抓时间戳（实�
 // ★ 2026-08-11：多页面赛事（如 TI）的主页面不含 {{Match}} 模板（对阵在 Group_Stage 子页面）。
 //   云函数端小硬编码表（仅收录主页面 wikitext 不含 {{Match}} 的赛事）。
 //   2026-08-13（方案3）：提升为模块级常量——handleTimer 定时预热赛程缓存也需读取。
+//   2026-09-03（方案 C）：扩到 9 条候选（rank≥S 即将到来 + 进行中 A 级 + TI 模板）。
+//     配额核算：30min timer × 48 跑/天 × 9 条 = 432 请求/天（红线 ~3000 的 14%，安全）。
+//     入选标准：① curation status=进行中/即将到来；② rank≥2；③ slug 来自 curation.liquipediaSlug。
+//     候选赛事结束（status 改为「已结束」）后应从此表移除以节省配额。
+//     ⚠️ LPDB v3 启用前必须重新核算（v3 + wikitext 双路径会翻倍逼近 80% 红线）。
+//     未来新公布的 S 级赛事可补足到 10 条（红线 480/天）。
 const SCHEDULED_MATCHES_SLUG_OVERRIDE = {
-  'The International 2026': 'The_International/2026/Group_Stage'
+  // 已结束但保留作多页面赛事模板示例（对阵在子页面 Group_Stage）
+  'The International 2026': 'The_International/2026/Group_Stage',
+  // 进行中（A 级，rank=2，用户当前重点关注）
+  'EPL Masters II': 'EPL/Masters/2',
+  // 2026 下半年即将到来（S 级正赛）
+  'PGL Wallachia Season 9': 'PGL/Wallachia/9',
+  'BLAST SLAM VIII': 'BLAST/Slam/8',
+  'Esports Nations Cup 2026': 'Esports_Nations_Cup/2026',
+  'BLAST SLAM IX': 'BLAST/Slam/9',
+  // BLAST SLAM IX 三大赛区封闭预选赛（S 级预选，9-11 月密集赛程）
+  'RES Unchained 6: BLAST SLAM IX Europe Closed Qualifier': 'RES_Unchained/6/BLAST_SLAM_IX/Europe',
+  'RES Unchained 6: BLAST SLAM IX Southeast Asia Closed Qualifier': 'RES_Unchained/6/BLAST_SLAM_IX/Southeast_Asia',
+  'BLAST SLAM IX China Closed Qualifier': 'BLAST/Slam/9/China'
 };
 
 // ===== LiquipediaDB v3 REST API（2026-08-20，P0 修复 LIVE/UPCOMING）=====
@@ -2519,8 +2537,10 @@ async function handleTimer() {
 // 本 handler 只预热「分钟级时效」的赛程类缓存：
 //   ① preheatUpcoming      → upcoming_schedule（6h TTL，列表页「即将」tab + 首页秒开）
 //   ② preheatScheduledMatches → SCHEDULED_MATCHES_SLUG_OVERRIDE 页缓存（详情页秒开）
-// Liquipedia 配额核算（30min 一跑 × 48 跑/天）：① notable 过滤后 ~10-25 页 + ② ~N 页，
-//   约 15-30 请求/跑 ≈ 720-1440 请求/天，处于安全区间（复核红线 ~3000/天）。
+// Liquipedia 配额核算（30min 一跑 × 48 跑/天）：① notable 过滤后 ~10-25 页 + ② 9 条白名单，
+//   约 19-34 请求/跑 ≈ 912-1632 请求/天（含 SCHEDULED_MATCHES_SLUG_OVERRIDE 432/天），
+//   处于安全区间（红线 ~3000/天的 30-54%）。
+//   ⚠️ STRATZ 启用时 preheatUpcoming 走 STRATZ，① 段不消耗 LP 配额 → 实际值更低。
 // 退避：复用 preheatShouldRun / preheatMarkResult（失败指数退避至 4h，防故障时打爆）。
 async function handleSchedulePreheat() {
   const results = [];
