@@ -446,11 +446,16 @@ function mkLp(id, sId, t1, t2, st, extra) {
   //   验证点：① 合并后只有 1 条（去重生效）；② 保留的是 /live 版本（radiant_win=null、
   //   _isLiveSource=true）；③ league_name 空值已回填（proLeagueNameById）。
   (function () {
+    // ★ 2026-09-04 修复时间炸弹：原 start_time 用固定时间戳（1788356464，2026-09-02 编写），
+    //   groupSeries 根因 H 的「最后一场结算后 ≤6h 强制 live」窗口随真实时间流逝过期
+    //   （两天后运行 phase 退化为 recent）→ 测试恒失败。改为相对运行时间的偏移，
+    //   与 groupSeries 内部 Math.floor(Date.now()/1000) 的 now 口径解耦。
+    const _nowH9 = Math.floor(Date.now() / 1000);
     const proM = {
       match_id: 8979131280, series_id: 1137089, series_type: 1,
       radiant_win: true, leagueid: 19944, league_name: 'EPL Masters 2026 ',
       radiant_team_id: 10225542, dire_team_id: 10164236,
-      radiant_name: 'DYNASTY', dire_name: 'PuckChamp', start_time: 1788356464
+      radiant_name: 'DYNASTY', dire_name: 'PuckChamp', start_time: _nowH9 - 700
     };
     const rawH9 = [];
     const seenIdH9 = {};
@@ -466,9 +471,9 @@ function mkLp(id, sId, t1, t2, st, extra) {
       rawH9.push(m);
     };
     const proLeagueNameByIdH9 = { 19944: 'EPL Masters 2026 ' };
-    // ② live 先入（模拟修复后的顺序 + league_name 回填）
+    // ② live 先入（模拟修复后的顺序 + league_name 回填；start = 10 分钟前开打，6h 窗内）
     const normH9 = {
-      match_id: '8979131280', start_time: 1788357364, radiant_win: null,
+      match_id: '8979131280', start_time: _nowH9 - 600, radiant_win: null,
       leagueid: 19944, league_name: '',
       radiant_team_id: 10225542, dire_team_id: 10164236,
       radiant_name: 'DYNASTY', dire_name: 'PuckChamp',

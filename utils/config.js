@@ -163,7 +163,14 @@ module.exports = {
     // 原 30min 双层缓存（客户端 + 云函数）叠加最坏 60min 旧数据；
     // 缩至 5min 提升及时性，配合详情页 30-60s 定时刷新（force）达到近实时。
     // 注意：云函数 TTL.liquipediaSchedule 必须与此同步缩短，否则上层白做。
-    cacheTtlSchedule: 5 * 60
+    cacheTtlSchedule: 5 * 60,
+    // ★ v8.12（S2）：赛程 stale 兜底窗口（写入侧硬过期 = 读取侧 stale 上限，同常量）。
+    //   6h → 24h：每天第一次打开（距上次 >6h）也能秒出昨日排期快照，配合首页
+    //   stale 后台 force 刷新（S3）数秒内转新。排期低频变化（对局通常提前数小时~
+    //   数天排定），24h 旧数据对首页「即将开始」段仍有价值；详情页 load 后轮询
+    //   首刷 force 拉新，不受影响。⚠️ cache.set 写入时 expire 按本值定死——改动
+    //   仅影响新写入（存量 6h 条目过期后自动按 24h 重写），上线当天部分场景仍走网络属预期。
+    cacheStaleTtlSchedule: 24 * 3600
   },
 
   // 远程 curation 配置（已启用，本地兜底 + 可选热更新）：

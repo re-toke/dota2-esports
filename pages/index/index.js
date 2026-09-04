@@ -106,6 +106,9 @@ Page({
     this._lastLive = null;
     this._lastProTs = 0;
     this._lastLiveTs = 0;
+    // v8.12（S3）：stale LP 后台 force 刷新的节流状态（每会话 ≤2 次 + 5min 间隔）
+    this._lpForceCount = 0;
+    this._lpForceAt = 0;
     // F8（2026-08-31）：logo 兜底请求去重表（teamId -> Promise），同战队并发只发一次。
     //   懒初始化（首次兜底时创建），请求完成后自动清理对应条目。
     this._logoInflight = {};
@@ -408,19 +411,32 @@ Page({
     const myEpoch = this._epoch;
     this.setData({ matchLoading: true });
     const FETCH_TIMEOUT_MS = 15 * 1000;  // F10：pro/live 15s 超时兜底
-    // ★ 2026-09-04（首页加载优化）：拆分异步链 —— pro+live 先渲染，LP 后到再覆盖。
-    //   原实现 `Promise.all([pro, live, lp])` 把 LP 云代理（2-5s）作为首屏瓶颈，
-    //   导致冷启动期间即便 pro/live 已经返回、卡片也得等 LP 完成才能渲染 →
-    //   「首页即将开始/进行中卡片延迟数秒才出现」。
-    //   拆两段后：
-    //     第一段：pro + live 完成（通常 <1s）→ 立刻 `_applyMatchSources(pro, live, [], [])`
-    //             首屏秒出；matchLoading 置 false；F10 超时兜底也只保护这一段。
-    //     第二段：LP 完成（可能晚数秒；失败 → [] 降级）→ 用第一段保留的 pro/live
-    //             再次 `_applyMatchSources(pro, live, rows, lpUp)` 覆盖一次（含对局级
-    //             upcoming/live 排期卡）。epoch 守卫确保旧回调被新一轮取代时丢弃。
+    // ★ 2026-09-04 v8.12（S1 三源独立就绪独立渲染）：修复「即将开始卡仍延迟」。
+    //   v8.11 拆链只修了一半——lpP.then 注册在 pro/live then 内部，LP 数据即使
+    //   本地缓存秒回（~10ms），也要干等 pro/live（云函数冷启动 1-3s）完成才渲染。
+    //   现改为顶层注册：LP 先到 → 立即渲染（_lastPro/_lastLive 此刻为 null，
+    //   _applyMatchSources 内部 (pro || []) 兜底安全）；LP 后到 → 用已就绪的
+    //   pro/live 渲染。两种到达顺序都覆盖，无竞态（JS 单线程 + epoch 守卫）。
+    //   ★ 视图层契约（复核 R-1 实查 wxml）：骨架屏条件 `matchLoading && !matchCards.length`
+    //   → matchCards 非空即消失；空态条件 `wx:elif="{{!loading}}"` → loading=true 不显示。
+    //   故 LP 渲染时**保持 matchLoading=true** 直到 pro/live 到达——即将开始卡立即可见，
+    //   且进行中/已结束段暂空不会闪现「暂无对局」空态。
+    //   ★ S3（同轮落地）：LP 数据带 _stale 标记（缓存 >5min 旧）时，渲染旧值秒开后
+    //   由 _refreshStaleLp 后台 force 重拉转新。
     const proP = api.getProMatches().catch(() => null);
     const liveP = api.getLiveMatches().catch(() => null);
     const lpP = this._fetchLpUpcoming().catch(() => []);
+    let lpReady = null;                  // 本 epoch LP 就绪缓存（pro/live 渲染时带上，省一次二次渲染）
+    lpP.then((lpUp) => {
+      if (myEpoch !== this._epoch) return;
+      this._lastLpUp = lpUp; this._lastLpUpTs = Date.now();
+      if (!(lpUp && lpUp.length)) return;
+      lpReady = lpUp;
+      // LP 就绪即渲染（pro/live 未到时二者为 null，_applyMatchSources 兼容）
+      this._applyMatchSources(this._lastPro, this._lastLive, this._followRows || [], lpUp);
+      // stale 后台刷新（S3）：_stale 由 _fetchLpUpcoming 胶合传递（任一赛事 stale 即整体 stale）
+      if (lpUp._stale) this._refreshStaleLp(myEpoch);
+    }).catch(() => {});
     Promise.race([
       Promise.all([proP, liveP]),
       new Promise((_, reject) => setTimeout(() => reject(new Error('matchflow_timeout')), FETCH_TIMEOUT_MS))
@@ -429,27 +445,38 @@ Page({
       this._lastPro = pro; this._lastProTs = Date.now();
       this._lastLive = live; this._lastLiveTs = Date.now();
       const degraded = (pro == null) && (live == null) && !this._allMatches;
-      // 首屏渲染：先不含 LP 对局级卡（lpUp=[]），让 pro/live 秒出
-      this._applyMatchSources(pro, live, this._followRows || [], []);
+      // LP 已就绪则此渲染直接带上（lpReady）；未就绪则稍后由 LP 回调独立渲染
+      this._applyMatchSources(pro, live, this._followRows || [], lpReady || []);
       this.setData({ matchLoading: false, matchDegraded: !!degraded });
-      // 第二段：LP 完成后覆盖一次，注入对局级 upcoming/live 卡
-      lpP.then((lpUp) => {
-        if (myEpoch !== this._epoch) return;
-        this._lastLpUp = lpUp; this._lastLpUpTs = Date.now();
-        // 只在 LP 确有数据时二次渲染（空数组则保持首屏视图，减少抖动）
-        if (lpUp && lpUp.length) {
-          this._applyMatchSources(pro, live, this._followRows || [], lpUp);
-        }
-      });
     }).catch(() => {
       if (myEpoch !== this._epoch) return;
-      // F10 超时/失败降级：若有缓存数据，仍降级渲染（避免空白）；否则显示降级提示
-      if (this._lastPro || this._lastLive) {
+      // F10 超时/失败降级。★ S1 补漏：原实现此分支不处理 lpP——超时场景 LP 数据
+      //   到手也永远不渲染。现带上 lpReady（若已就绪）。
+      if (this._lastPro || this._lastLive || lpReady) {
         this._applyMatchSources(this._lastPro, this._lastLive, this._followRows || [],
-          this._lastLpUp || []);
+          lpReady || this._lastLpUp || []);
       }
       this.setData({ matchLoading: false, matchDegraded: !this._allMatches });
     });
+  },
+
+  // ★ v8.12（S3）：stale LP 数据后台 force 刷新。
+  //   触发：本轮 LP 渲染数据带 _stale 标记（本地赛程缓存 >5min 旧）。旧值已秒开渲染，
+  //   此处后台 force 重拉最新排期，完成后二次渲染转新（用户无感知，卡片原地更新）。
+  //   节流：距上次 force >5min 且每会话最多 2 次——force 会复位 cloudBreaker
+  //   （liquipedia.js 入口处复核确认），限次防云函数真挂时反复打破熔断保护。
+  _refreshStaleLp(myEpoch) {
+    const nowMs = Date.now();
+    if (this._lpForceCount >= 2) return;
+    if (this._lpForceAt && (nowMs - this._lpForceAt) < 5 * 60 * 1000) return;
+    this._lpForceCount++;
+    this._lpForceAt = nowMs;
+    this._fetchLpUpcoming({ force: true }).then((fresh) => {
+      if (myEpoch !== this._epoch) return;
+      if (!(fresh && fresh.length)) return;
+      this._lastLpUp = fresh; this._lastLpUpTs = Date.now();
+      this._applyMatchSources(this._lastPro, this._lastLive, this._followRows || [], fresh);
+    }).catch(() => {});
   },
 
   // v5.1（2026-09-01）：首页「对局级 upcoming」数据源。
@@ -467,10 +494,17 @@ Page({
   //     - phase==='live'（或已开赛未结束）→ buildLpLiveSeries（保留，含 series 比分/队标）
   //     - 未开赛 → buildLpUpcomingSeries（原逻辑不变）
   //   _applyMatchSources ⑥ 段对两类 series 统一走 buildBoContext+applyBo + _cardFromSeries。
-  _fetchLpUpcoming() {
+  // ★ 2026-09-04 v8.12（S3）：接受 opts.force 透传（stale 后台刷新用）+ _stale 落地。
+  //   getScheduledMatches 的 _stale 标记挂在 res 层（非 matches 层），原实现只取
+  //   res.matches 会丢标记 → 本函数聚合各赛事的 _stale（任一 stale 即整体 stale），
+  //   在返回的 series 数组上挂 _stale 属性（进程内传递，不经 JSON 序列化，安全）。
+  //   force=true 时拉到的就是新数据，不标 _stale。
+  _fetchLpUpcoming(opts) {
+    const force = !!(opts && opts.force);
     if (typeof wx === 'undefined' || !wx.cloud) return Promise.resolve([]);
     const now = util.nowSec();
     let events = [];
+    let anyStale = false;                // S3：任一赛事缓存为 stale 即整体标记
     try {
       // ★ 2026-09-01（A2）：候选 3→5 + S 级优先排序。
       //   原 slice(0,3) 只取前 3 个近期赛事，覆盖窄（memory 已知遗留）；且未排序，
@@ -489,9 +523,10 @@ Page({
     //   _cardFromSeries 最终兜底成「职业赛事」。而本函数明确知道每条 match 来自哪个赛事
     //   （ev.name/ev.leagueId 就是查询入参）→ 在此按来源回填，下游即可拿到真实赛事名。
     return Promise.all(events.map((ev) =>
-      liquipedia.getScheduledMatches(ev.name, { leagueId: ev.leagueId })
+      liquipedia.getScheduledMatches(ev.name, { leagueId: ev.leagueId, force: force })
         .then((res) => {
           const ms = (res && res.matches) ? res.matches : [];
+          if (res && res._stale) anyStale = true;
           return ms.map((m) => Object.assign({}, m, {
             leagueName: ev.name || '',
             _leagueName: ev.name || '',
@@ -516,7 +551,10 @@ Page({
       const upMs = all.filter((m) => !isLiveMatch(m));
       const upSeries = sources.buildLpUpcomingSeries(upMs, now);
       const liveSeries = sources.buildLpLiveSeries(liveMs, now);
-      return upSeries.concat(liveSeries);
+      const out = upSeries.concat(liveSeries);
+      // S3：stale 标记落地（force 拉取的结果是新的，不标）
+      if (anyStale && !force) out._stale = true;
+      return out;
     }).catch(() => []);
   },
 
