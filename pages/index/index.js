@@ -407,25 +407,42 @@ Page({
     this._epoch++;                       // 新代际，旧 epoch 的回调一律丢弃
     const myEpoch = this._epoch;
     this.setData({ matchLoading: true });
-    const FETCH_TIMEOUT_MS = 15 * 1000;  // F10：15s 超时兜底
+    const FETCH_TIMEOUT_MS = 15 * 1000;  // F10：pro/live 15s 超时兜底
+    // ★ 2026-09-04（首页加载优化）：拆分异步链 —— pro+live 先渲染，LP 后到再覆盖。
+    //   原实现 `Promise.all([pro, live, lp])` 把 LP 云代理（2-5s）作为首屏瓶颈，
+    //   导致冷启动期间即便 pro/live 已经返回、卡片也得等 LP 完成才能渲染 →
+    //   「首页即将开始/进行中卡片延迟数秒才出现」。
+    //   拆两段后：
+    //     第一段：pro + live 完成（通常 <1s）→ 立刻 `_applyMatchSources(pro, live, [], [])`
+    //             首屏秒出；matchLoading 置 false；F10 超时兜底也只保护这一段。
+    //     第二段：LP 完成（可能晚数秒；失败 → [] 降级）→ 用第一段保留的 pro/live
+    //             再次 `_applyMatchSources(pro, live, rows, lpUp)` 覆盖一次（含对局级
+    //             upcoming/live 排期卡）。epoch 守卫确保旧回调被新一轮取代时丢弃。
+    const proP = api.getProMatches().catch(() => null);
+    const liveP = api.getLiveMatches().catch(() => null);
+    const lpP = this._fetchLpUpcoming().catch(() => []);
     Promise.race([
-      Promise.all([
-        api.getProMatches().catch(() => null),
-        api.getLiveMatches().catch(() => null),
-        // v5.1：并行拉「对局级 upcoming」（云代理 30min 缓存；失败 → [] 降级，不影响 pro/live）
-        this._fetchLpUpcoming().catch(() => [])
-      ]),
+      Promise.all([proP, liveP]),
       new Promise((_, reject) => setTimeout(() => reject(new Error('matchflow_timeout')), FETCH_TIMEOUT_MS))
-    ]).then(([pro, live, lpUp]) => {
-      if (myEpoch !== this._epoch) return;  // 已被新一轮取代，丢弃
+    ]).then(([pro, live]) => {
+      if (myEpoch !== this._epoch) return;
       this._lastPro = pro; this._lastProTs = Date.now();
       this._lastLive = live; this._lastLiveTs = Date.now();
-      this._lastLpUp = lpUp; this._lastLpUpTs = Date.now();
       const degraded = (pro == null) && (live == null) && !this._allMatches;
-      this._applyMatchSources(pro, live, this._followRows || [], lpUp);
+      // 首屏渲染：先不含 LP 对局级卡（lpUp=[]），让 pro/live 秒出
+      this._applyMatchSources(pro, live, this._followRows || [], []);
       this.setData({ matchLoading: false, matchDegraded: !!degraded });
+      // 第二段：LP 完成后覆盖一次，注入对局级 upcoming/live 卡
+      lpP.then((lpUp) => {
+        if (myEpoch !== this._epoch) return;
+        this._lastLpUp = lpUp; this._lastLpUpTs = Date.now();
+        // 只在 LP 确有数据时二次渲染（空数组则保持首屏视图，减少抖动）
+        if (lpUp && lpUp.length) {
+          this._applyMatchSources(pro, live, this._followRows || [], lpUp);
+        }
+      });
     }).catch(() => {
-      if (myEpoch !== this._epoch) return;  // 已被新一轮取代，丢弃
+      if (myEpoch !== this._epoch) return;
       // F10 超时/失败降级：若有缓存数据，仍降级渲染（避免空白）；否则显示降级提示
       if (this._lastPro || this._lastLive) {
         this._applyMatchSources(this._lastPro, this._lastLive, this._followRows || [],
@@ -655,28 +672,13 @@ Page({
       if (card) byKey[card.key] = card;
     });
 
-    // ⑤ F4（2026-08-31）：curation 赛事级卡片（零请求，纯本地策展数据）
-    //   覆盖三源不含的未来赛事（如未来 1-12 周的 S 级赛事排期）。
-    //   去重：同 leagueId **已有 live 卡**则不铺赛事级卡片（防同一赛事出两张 live 卡）。
-    //   ★ 2026-09-01 修复「进行中数据消失」：原实现按「leagueId 已存在」即跳过——
-    //     proMatches 含 EPL 已结束系列卡（leagueId=19944）→ existingLeagueIds 命中 →
-    //     curation EPL Masters II「进行中」卡被错误跳过 → 首页进行中段为空。
-    //     现改为仅当同 leagueId 已有 live 卡才跳过；ended/upcoming 系列卡不阻挡
-    //     curation live 卡（赛事级「进行中」信息必须保留）。
-    const existingLiveLeagueIds = {};
-    Object.keys(byKey).forEach((k) => {
-      const c = byKey[k];
-      const lid = c.leagueId;
-      if (lid && lid > 0 && c.status === 'live') existingLiveLeagueIds[lid] = true;
-    });
-    try {
-      const cuEvents = sources.getUpcomingFromCuration(now) || [];
-      cuEvents.forEach((ev) => {
-        if (ev.leagueId && existingLiveLeagueIds[ev.leagueId]) return;
-        const card = this._cardFromCuration(ev, now);
-        if (card) byKey[card.key] = card;
-      });
-    } catch (e) { /* curation 源不可用静默跳过，不影响主流程 */ }
+    // ⑤ F4（2026-08-31）：curation 赛事级卡片 —— ★ 2026-09-04 移除。
+    //   用户决策：首页「进行中」段只展示对局级卡片（含队名/比分/BO色点），
+    //   不再展示「无对阵信息」的赛事级兜底卡（kind='event'，仅赛事名+倒计时）。
+    //   原实现把 curation 本地赛事数据兜底成赛事级卡铺到首页，会与「只显示对局」
+    //   的产品定位冲突；现在「对局级 upcoming」由 ⑥ 段 LP/Steam/haglund 排期
+    //   提供（_fetchLpUpcoming），curation 仅作为 leagueId 来源用于查询。
+    //   保留 _cardFromCuration 方法本体（其他调用点仍可能引用），仅停止注入。
 
     // ⑥ v5.1：Liquipedia/Steam/haglund 排期对局 → 「对局级 upcoming」系列卡
     //   顺序在 ⑤ 之后：不反向影响 curation 赛事级卡（如 EPL Masters II 进行中赛事卡保留）。
