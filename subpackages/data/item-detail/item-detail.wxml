@@ -25,7 +25,7 @@
       </view>
       <view class="info-row">
         <text class="info-label">是否配方</text>
-        <text class="info-value" style="color:{{item.recipe ? '#C8A951' : '#8a8f99'}};">{{item.recipe ? '是（合成组件）' : '否'}}</text>
+        <text class="info-value" style="color:{{item.recipe ? '#C8A951' : '#4B5563'}};">{{item.recipe ? '是（合成组件）' : '否'}}</text>
       </view>
       <view class="info-row" wx:if="{{item.category !== 'neutral'}}">
         <text class="info-label">购买渠道</text>

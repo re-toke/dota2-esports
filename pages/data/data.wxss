@@ -7,12 +7,12 @@
   align-items: center;
   gap: var(--space-2-5);
   padding: var(--space-4) var(--space-3-5);
-  background: var(--card-bg, #1a1a1e);
-  border: 1rpx solid #1f262f;
+  background: var(--card-bg, #FFFFFF);
+  border: 1rpx solid #E5E7EB;
   border-radius: var(--radius-lg, 16rpx);
   transition: transform 0.12s ease, background 0.12s ease;
 }
-.entry-card--hover { background: var(--card-bg-elevated, #222226); transform: scale(0.99); }
+.entry-card--hover { background: var(--card-bg-elevated, #F1F3F5); transform: scale(0.99); }
 
 .entry-icon {
   width: 96rpx;

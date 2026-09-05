@@ -8,15 +8,15 @@
   display: inline-block;
   font-size: var(--fs-body);
   color: var(--text-2);
-  background: #1a1a1e;
-  border: 1rpx solid #262628;
+  background: #FFFFFF;
+  border: 1rpx solid #E5E7EB;
   border-radius: var(--radius-pill);
   padding: var(--space-1) var(--space-3);
   margin-right: var(--space-1-5);
   transition: all 0.15s ease;
 }
 .cat.active {
-  color: #121015;
+  color: #1F2937;
   background: #C8A951;
   border-color: #C8A951;
   font-weight: 600;
@@ -28,14 +28,14 @@
 .chip {
   font-size: var(--fs-body);
   color: var(--text-2);
-  background: #1a1a1e;
-  border: 1rpx solid #262628;
+  background: #FFFFFF;
+  border: 1rpx solid #E5E7EB;
   border-radius: var(--radius-pill);
   padding: var(--space-1) 22rpx;
   transition: all 0.15s ease;
 }
 .chip.active {
-  color: #121015;
+  color: #1F2937;
   background: #C8A951;
   border-color: #C8A951;
   font-weight: 600;
@@ -47,15 +47,15 @@
   display: flex;
   align-items: center;
   gap: 18rpx;
-  background: var(--card-bg, #1a1a1e);
-  border: 1rpx solid #1f262f;
+  background: var(--card-bg, #FFFFFF);
+  border: 1rpx solid #E5E7EB;
   border-radius: var(--radius-lg, 16rpx);
   padding: var(--space-2) var(--space-2-5);
   margin-bottom: var(--space-1-5);
   transition: transform 0.12s ease, background 0.12s ease;
 }
 .item-row.skel { padding: var(--space-3); }
-.item-row--hover { background: var(--card-bg-elevated, #222226); transform: scale(0.99); }
+.item-row--hover { background: var(--card-bg-elevated, #F1F3F5); transform: scale(0.99); }
 
 /* 图标区 */
 .item-icon {
@@ -89,8 +89,8 @@
 .item-tag {
   font-size: var(--fs-micro);
   color: var(--text-2);
-  background: #131316;
-  border: 1rpx solid #262628;
+  background: #F1F3F5;
+  border: 1rpx solid #E5E7EB;
   border-radius: var(--radius-sm);
   padding: 2rpx 10rpx;
 }

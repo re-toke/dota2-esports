@@ -1,7 +1,4 @@
 <view class="container with-tab-bar">
-  <!-- 聚光灯背景图（v12）：页面级 image（fixed 相对视口，滚动不跟随） -->
-  <image class="bg-page" src="/assets/bg-battlefield-dark.webp" mode="aspectFill" />
-  <view class="bg-page-dim"></view>
   <!-- ===== 段一 · 身份区（批次4 · PRD §11.1/11.2/11.3 紧凑头部卡） =====
        用户卡 + 统计行合并为单卡：chooseAvatar 头像（96rpx 暗金描边环）+ 昵称 input
        （微信一键填充）+ 内嵌统计行（前两格 tnum 数字，第三格提醒开关徽章）。 -->
@@ -197,7 +194,4 @@
 
   <view class="bottom-spacer"></view>
 
-  <!-- 聚光灯背景遮罩（v11）：顶部/底部渐变暗化，只作用于背景不遮挡内容 -->
-  <view class="bg-mask-top"></view>
-  <view class="bg-mask-bottom"></view>
-</view>
+  </view>

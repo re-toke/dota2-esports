@@ -23,7 +23,7 @@
   gap: 8rpx;
   padding: var(--space-1) var(--space-2-5);
   background: rgba(255, 255, 255, 0.04);
-  border: 1rpx solid var(--td-border-level-1-color, #262628);
+  border: 1rpx solid var(--td-border-level-1-color, #E5E7EB);
   border-radius: var(--radius-pill, 999rpx);
   transition: background 0.15s ease, border-color 0.15s ease;
 }
@@ -107,7 +107,7 @@
   box-shadow: 0 0 12rpx rgba(255, 207, 92, 0.4);
 }
 .mf-divider--upcoming .mf-divider-text {
-  color: #ffcf5c;
+  color: var(--dota-gold-strong);
 }
 .mf-divider--ended .mf-divider-bar {
   background: #5a6068;
@@ -118,7 +118,7 @@
   overflow: hidden;
   padding: var(--space-2) var(--space-2-5);
   background: var(--card-grad);
-  border: 1rpx solid var(--td-border-level-1-color, #262628);
+  border: 1rpx solid var(--td-border-level-1-color, #E5E7EB);
   border-radius: var(--radius-lg);
   box-shadow: var(--card-inner-shadow);
   transition: transform 0.12s ease;
@@ -357,7 +357,7 @@
 /* 未打局：灰空心 */
 .mf-dot--tbd {
   background: transparent;
-  border: 1.5rpx solid #3a3a40;
+  border: 1.5rpx solid #D1D5DB;
   box-sizing: border-box;
 }
 /* 注：原 .mf-dots-bo（色点后的 BO 文字）已随 v4.2 移除 —— 赛制上移到卡头副行，
@@ -462,7 +462,7 @@
   padding: 2rpx 10rpx;
   border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.04);
-  border: 1rpx solid var(--td-border-level-1-color, #262628);
+  border: 1rpx solid var(--td-border-level-1-color, #E5E7EB);
   font-size: var(--fs-caption);
   color: var(--text-2);
 }
@@ -481,7 +481,7 @@
   gap: var(--space-2);
   padding: var(--space-4) var(--space-3);
   background: rgba(255, 255, 255, 0.02);
-  border: 1rpx solid var(--td-border-level-1-color, #262628);
+  border: 1rpx solid var(--td-border-level-1-color, #E5E7EB);
   border-radius: var(--radius-lg);
 }
 .mf-empty-icon {

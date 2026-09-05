@@ -8,23 +8,23 @@
 .head-sub { font-size: var(--fs-caption); color: var(--text-3); font-family: var(--font-mono, monospace); }
 
 /* ===== 区块 ===== */
-.block { background: var(--card-bg, #1a1a1e); border: 1rpx solid #1f262f; border-radius: var(--radius-lg, 16rpx); padding: var(--space-2-5) var(--space-3); margin-bottom: var(--space-2); }
+.block { background: var(--card-bg, #FFFFFF); border: 1rpx solid #E5E7EB; border-radius: var(--radius-lg, 16rpx); padding: var(--space-2-5) var(--space-3); margin-bottom: var(--space-2); }
 .block-title { font-size: var(--fs-label); font-weight: 700; color: var(--text-1); margin-bottom: var(--space-2); }
 
-.info-row { display: flex; align-items: center; justify-content: space-between; padding: var(--space-1-5) 0; border-bottom: 1rpx solid #1a2029; }
+.info-row { display: flex; align-items: center; justify-content: space-between; padding: var(--space-1-5) 0; border-bottom: 1rpx solid #E5E7EB; }
 .info-row:last-child { border-bottom: none; }
 .info-label { font-size: var(--fs-label); color: var(--text-2); }
 .info-value { font-size: var(--fs-label); font-weight: 600; color: var(--text-1); font-family: var(--font-mono, monospace); }
 .info-value.muted { color: var(--text-2); font-weight: 400; }
 
 /* 待补充 */
-.block.pending { background: #14181f; border-style: dashed; }
+.block.pending { background: #F1F3F5; border-style: dashed; }
 .pending-item { display: flex; align-items: flex-start; gap: 10rpx; padding: var(--space-1) 0; font-size: var(--fs-body); color: var(--text-2); line-height: var(--lh-relaxed); }
 .pending-item t-icon { margin-top: 2rpx; flex-shrink: 0; }
 
 /* §8.3 合成组件列表 */
 .recipe-list { display: flex; flex-direction: column; gap: var(--space-1-5); }
-.recipe-item { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1-5); background: #131316; border-radius: var(--radius-md); border: 1rpx solid #1a2029; }
+.recipe-item { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1-5); background: #F1F3F5; border-radius: var(--radius-md); border: 1rpx solid #E5E7EB; }
 .recipe-icon { width: 64rpx; height: 64rpx; border-radius: var(--radius-md); overflow: hidden; flex-shrink: 0; }
 .recipe-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-0-5); }
 .recipe-name { font-size: var(--fs-label); font-weight: 600; color: var(--text-1); }
@@ -32,7 +32,7 @@
 .recipe-cost.muted { color: var(--text-2); font-weight: 400; }
 
 /* P1 缺口补齐（2026-08-31）：出装统计 */
-.usage-hero { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1-5) 0; border-bottom: 1rpx solid #1a2029; }
+.usage-hero { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1-5) 0; border-bottom: 1rpx solid #E5E7EB; }
 .usage-hero:last-of-type { border-bottom: none; }
 .usage-avatar { width: 64rpx; height: 64rpx; border-radius: 50%; overflow: hidden; flex-shrink: 0; }
 .usage-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-0-5); }
@@ -42,7 +42,7 @@
 .usage-win { font-size: var(--fs-label); font-weight: 700; color: #C8A951; font-family: var(--font-mono, monospace); }
 .usage-win-label { font-size: var(--fs-caption); color: var(--text-3); }
 .timing-chips { display: flex; flex-wrap: wrap; gap: var(--space-1-5); }
-.timing-chip { display: flex; flex-direction: column; align-items: center; gap: var(--space-0-5); padding: var(--space-1-5) var(--space-2-5); background: #131316; border: 1rpx solid #1a2029; border-radius: var(--radius-md); }
+.timing-chip { display: flex; flex-direction: column; align-items: center; gap: var(--space-0-5); padding: var(--space-1-5) var(--space-2-5); background: #F1F3F5; border: 1rpx solid #E5E7EB; border-radius: var(--radius-md); }
 .timing-min { font-size: var(--fs-caption); color: var(--text-2); }
 .timing-share { font-size: var(--fs-label); font-weight: 700; color: var(--text-1); font-family: var(--font-mono, monospace); }
 .usage-note { margin-top: var(--space-1-5); font-size: var(--fs-caption); color: var(--text-3); line-height: var(--lh-relaxed); }

@@ -11,7 +11,7 @@
       </view>
     </view>
     <view class="star-btn" catchtap="toggleFollow">
-      <t-icon name="star" size="48rpx" color="{{followed ? '#ffcf5c' : '#5b626d'}}" />
+      <t-icon name="star" size="48rpx" color="{{followed ? '#C8A951' : '#6B7280'}}" />
     </view>
   </view>
 
@@ -81,7 +81,7 @@
   <!-- 赛事概述：自动摘要已有元数据，结构统一 -->
   <view class="overview-card" wx:if="{{metadata}}">
     <view class="overview-head">
-      <t-icon name="info-circle" size="28rpx" color="#8a8f99" />
+      <t-icon name="info-circle" size="28rpx" color="#4B5563" />
       <text class="overview-title">赛事概述</text>
     </view>
     <view class="overview-body">

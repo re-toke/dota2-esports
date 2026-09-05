@@ -1,7 +1,7 @@
 /* ===== TDesign 设计变量（先引入完整 token 集，再强制暗色覆盖） ===== */
 @import 'miniprogram_npm/tdesign-miniprogram/common/style/theme/_index.wxss';
 
-/* 暗色极简风主题：深色底 + 等级彩条 + 天辉绿/夜魇红胜负语义 */
+/* 雾峰雪 Mist Peak v2.0 亮色系主题：冷雾底 + 矿物色调 + 留白节奏制造层次 */
 page {
   /* 天辉夜魇配色：胜=天辉绿 / 负=夜魇红 */
   --radiant: #5fd35f;
@@ -17,158 +17,99 @@ page {
   --dota-red-strong: #7a1414;
   --dota-gold: #C8A951;
   --dota-gold-strong: #b08a3e;
-  --dota-gold-soft: rgba(200, 169, 81, 0.14);
+  --dota-gold-soft: #FDF6E3;
   --td-brand-color: #C8A951;
   --td-brand-color-active: #b08a3e;
-  --td-brand-color-disabled: #4a4228;
-  --td-brand-color-light: rgba(200, 169, 81, 0.14);
-  --td-brand-color-light-active: rgba(200, 169, 81, 0.24);
-  --td-brand-color-focus: rgba(200, 169, 81, 0.14);
+  --td-brand-color-disabled: #D9C891;
+  --td-brand-color-light: #FDF6E3;
+  --td-brand-color-light-active: #FBEDC7;
+  --td-brand-color-focus: #FDF6E3;
   --td-primary-color-7: #C8A951;
   --td-primary-color-8: #d8be7a;
-  --td-text-color-brand: #C8A951;
-  --td-text-color-link: #C8A951;
+  --td-text-color-brand: #B08A3E;
+  --td-text-color-link: #B08A3E;
 
-  /* ===== 全局 Tier 用色 Token（暗色设计系统，S金/A紫/B蓝 规范） =====
+  /* ===== 全局 Tier 用色 Token（雾峰雪 v2.0 亮色系，四级化 S/Indigo A/B/C 规范） =====
      单一来源：所有等级色彩统一由此定义，各页面/组件仅引用 Token，禁止散落字面量。
-     规范映射：SSS=TI官方(亮金) / S=S-Tier(暗金·品牌金) / A=A-Tier(紫) / B=B-Tier(蓝) / C=社区赛(灰)
-     用途：等级彩条(::before)、t-tag 文本色(.tier-text-*)、筛选 chip 描边(.gc--*) 等。 */
-  --tier-sss: #FFD15C;          /* TI 官方顶级 · 亮金 */
-  --tier-s:   #C8A951;          /* S-Tier · 暗金（品牌色） */
-  --tier-a:   #A777E3;          /* A-Tier · 紫 */
-  --tier-b:   #5B9BD5;          /* B-Tier · 蓝 */
-  --tier-c:   #7A8696;          /* 社区赛 · 灰 */
-  --tier-sss-soft: rgba(255, 209, 92, 0.14);
-  --tier-s-soft:   rgba(200, 169, 81, 0.14);
-  --tier-a-soft:   rgba(167, 119, 227, 0.14);
-  --tier-b-soft:   rgba(91, 155, 213, 0.14);
-  --tier-c-soft:   rgba(122, 134, 150, 0.14);
+     规范映射：SSS 并入 S（实底金块角标） / S=S-Tier(暗金·品牌金) / A=A-Tier(Indigo) / B=B-Tier(蓝) / C=社区赛(灰)
+     v2.0：A 级 violet #8B5CF6 因 KPL 联想被否，2026-09-05 最终锁定 indigo #6366F1 */
+  --tier-sss: #C8A951;          /* 已并入 S · 旧 SSS 锚点的别名（保留向后兼容） */
+  --tier-s:   #C8A951;          /* S-Tier · 暗金（品牌色，含原 SSS） */
+  --tier-a:   #6366F1;          /* A-Tier · Indigo（Tailwind indigo-500） */
+  --tier-b:   #3B82F6;          /* B-Tier · 蓝（Tailwind blue-500） */
+  --tier-c:   #94A3B8;          /* 社区赛 · 灰（Tailwind slate-400） */
+  --tier-sss-soft: #FDF6E3;     /* 同 tier-s-soft */
+  --tier-s-soft:   #FDF6E3;     /* 浅金底纹（实色浅底，弃用半透明叠加） */
+  --tier-a-soft:   #EEF0FB;     /* 浅 indigo 底 */
+  --tier-b-soft:   #EBF4FE;     /* 浅蓝底 */
+  --tier-c-soft:   #F1F5F9;     /* 浅灰底 */
   /* 等级描边色（0.4 alpha，用于筛选 chip / 卡片边框等需要半透明的场景） */
-  --tier-sss-line: rgba(255, 209, 92, 0.40);
+  --tier-sss-line: rgba(200, 169, 81, 0.40);
   --tier-s-line:   rgba(200, 169, 81, 0.40);
-  --tier-a-line:   rgba(167, 119, 227, 0.40);
-  --tier-b-line:   rgba(91, 155, 213, 0.40);
-  --tier-c-line:   rgba(122, 134, 150, 0.40);
+  --tier-a-line:   rgba(99, 102, 241, 0.40);
+  --tier-b-line:   rgba(59, 130, 246, 0.40);
+  --tier-c-line:   rgba(148, 163, 184, 0.40);
 
   /* 夜魇红：危险/错误/取消关注 */
   --td-error-color: #e8443b;
   --td-error-color-active: #c9352d;
-  --td-error-color-disabled: #5a2b28;
-  --td-error-color-light: rgba(232, 68, 59, 0.12);
-  --td-error-color-light-active: rgba(232, 68, 59, 0.22);
+  --td-error-color-disabled: #F4B8B4;
+  --td-error-color-light: rgba(232, 68, 59, 0.10);
+  --td-error-color-light-active: rgba(232, 68, 59, 0.18);
   --td-text-color-error: #e8443b;
 
-  /* 背景（聚光灯：近黑舞台 + 冷炭灰卡片） */
-  --td-bg-color-page: #0d0d0d;
-  --td-bg-color-container: #1a1a1e;
-  --td-bg-color-container-active: #222226;
-  --td-bg-color-secondarycontainer: #1a1a1e;
-  --td-bg-color-component: #222226;
-  --td-bg-color-component-active: #26262a;
-  --td-bg-color-component-disabled: #1a1a1e;
-  --td-bg-color-specialcomponent: #1a1a1e;
+  /* 背景（雾峰雪：冷雾底 + 纯白卡 + 冷雾灰内嵌） */
+  --td-bg-color-page: #F8F9FA;
+  --td-bg-color-container: #FFFFFF;
+  --td-bg-color-container-active: #F8F9FA;
+  --td-bg-color-secondarycontainer: #FFFFFF;
+  --td-bg-color-component: #F1F3F5;
+  --td-bg-color-component-active: #E5E7EB;
+  --td-bg-color-component-disabled: #F8F9FA;
+  --td-bg-color-specialcomponent: #FFFFFF;
 
-  /* 文字（聚光灯 + 批次1 灰阶四档化 §9.1）
+  /* 文字（雾峰雪 v2.0：亮底深字反相，灰阶四档化）
      --text-* 为语义别名，指向同值 --td-*；页面统一引用 --text-*，禁止散落字面量灰 */
-  --text-1: #f0f3f6;               /* 主文字 */
-  --text-2: #8a8f99;               /* 次要文字（收敛 #9ca3af/#9aa4b2/#7d8794/#8b949e/#98a0ab 等 5 种近似灰） */
-  --text-3: #6b7280;               /* 已结束/新鲜度/非关键装饰 */
-  --text-4: #5b626d;               /* 占位/禁用 */
+  --text-1: #1F2937;               /* 主文字（AAA 15.9:1） */
+  --text-2: #4B5563;               /* 次要文字（AAA 9.2:1） */
+  --text-3: #6B7280;               /* 已结束/新鲜度/非关键装饰（AA+ 5.8:1） */
+  --text-4: #9CA3AF;               /* 占位/禁用（AA 大字 3.3:1） */
   --td-text-color-primary: var(--text-1);
   --td-text-color-secondary: var(--text-2);
   --td-text-color-placeholder: var(--text-4);
   --td-text-color-disabled: var(--text-4);
   --td-text-color-anti: var(--text-1);
 
-  /* 边框/分割线（聚光灯：冷炭灰） */
-  --td-border-level-1-color: #262628;
-  --td-component-stroke: #262628;
-  --td-border-level-2-color: #2e2e30;
-  --td-component-border: #2e2e30;
+  /* 边框/分割线（雾峰雪：冷雾灰） */
+  --td-border-level-1-color: #E5E7EB;
+  --td-component-stroke: #E5E7EB;
+  --td-border-level-2-color: var(--text-3);
+  --td-component-border: #D1D5DB;
 
   /* 遮罩 */
-  --td-mask-active: rgba(0, 0, 0, 0.6);
-  --td-mask-background: rgba(14, 17, 22, 0.96);
+  --td-mask-active: rgba(0, 0, 0, 0.4);
+  --td-mask-background: rgba(255, 255, 255, 0.9);
 
-  /* 全局背景与文字（聚光灯方案：近黑舞台底）
-     注1：微信小程序 WXSS 的 background-image 不支持本地资源路径（仅网络图/base64），
-          战场图由页面级 <image class="bg-page"> 渲染（fixed 相对视口，滚动不跟随）。
-     注2：background-attachment: fixed 也不被支持，此处省略 */
-  background: #0d0d0d;
-  color: #f0f3f6;
+  /* 全局背景与文字（雾峰雪方案：冷雾纸面底）
+     注：战场图背景层已移除（v2.0 §阶段 4），不再使用 bg-page / bg-page-dim */
+  background: #F8F9FA;
+  color: #1F2937;
   font-family: -apple-system, "PingFang SC", "Helvetica Neue", Helvetica, Arial, sans-serif;
   font-size: var(--fs-subhead);
 }
 
-/* ===== 聚光灯方案：页面级战场图背景层 =====
-   用法：每个页面根容器内放置（放在最前）：
-     <image class="bg-page" src="/assets/bg-battlefield-dark.webp" mode="aspectFill" />
-     <view class="bg-page-dim"></view>
-   - 页面级元素 fixed 相对视口（自定义组件内 fixed 不可靠，会随滚动露出缺口）
-   - .bg-page 在 page 背景之上、内容之下；.bg-page-dim 暗化层在其上 */
-.bg-page {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: -1;
-  pointer-events: none;
-}
-/* 暗化层：整体压暗背景图至"似有似无、仅见模糊轮廓"程度
-   rgba(13,13,13,0.84) ≈ 28% 图片亮度再压至 ~4%，近乎只剩隐约轮廓。
-   如需微调亮度，修改此 alpha 值即可（值越大越暗）。 */
-.bg-page-dim {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: -1;
-  background: rgba(13, 13, 13, 0.84);
-  pointer-events: none;
-}
+/* ===== 雾峰雪 v2.0：战场图背景层 + 上下暗化遮罩全部移除（§阶段 4）
+   原 .bg-page / .bg-page-dim / .bg-mask-top / .bg-mask-bottom 样式不再需要；
+   页面背景统一由 page {} 的 #F8F9FA 纯色承载，不再有任何暗化层。 */
 
-/* ===== 聚光灯方案：上下渐变遮罩层（真实 view，兼容所有基础库版本） =====
-   用法：每个页面的根容器内放置 <view class="bg-mask-top"></view> + <view class="bg-mask-bottom"></view>
-   z-index: -1 → 在 page 背景之上、页面内容之下，只暗化背景不遮挡内容；pointer-events: none 不拦截交互 */
-.bg-mask-top {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 30vh;
-  background: linear-gradient(180deg,
-    rgba(13, 13, 13, 0.9) 0%,
-    rgba(13, 13, 13, 0.5) 50%,
-    rgba(13, 13, 13, 0) 100%
-  );
-  z-index: -1;
-  pointer-events: none;
-}
-.bg-mask-bottom {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 20vh;
-  background: linear-gradient(0deg,
-    rgba(13, 13, 13, 0.9) 0%,
-    rgba(13, 13, 13, 0.5) 50%,
-    rgba(13, 13, 13, 0) 100%
-  );
-  z-index: -1;
-  pointer-events: none;
-}
-
-/* ===== 全局 Tier 用色 Token 工具类（B+D 混合：Tier 彩条改双色渐变） =====
-   仅定义渐变，几何尺寸（彩条宽度/定位）由各卡片 .tier-* 容器自身的 ::before 提供。
+/* ===== 全局 Tier 用色 Token 工具类（雾峰雪 v2.0：彩条改实色，弃用双色渐变） =====
+   仅定义实色，几何尺寸（彩条宽度/定位）由各卡片 .tier-* 容器自身的 ::before 提供。
    各页面/组件统一引用此处 Token，禁止散落字面量（见 #14）。 */
-.tier-sss::before { background: linear-gradient(180deg, #FFD15C, #C8A951); }
-.tier-s::before   { background: linear-gradient(180deg, #C8A951, #b08a3e); }
-.tier-a::before   { background: linear-gradient(180deg, #A777E3, #7B5BC9); }
-.tier-b::before   { background: linear-gradient(180deg, #5B9BD5, #3D7BBF); }
-.tier-c::before   { background: linear-gradient(180deg, #7A8696, #5A6676); }
+.tier-sss::before { background: var(--tier-sss); }
+.tier-s::before   { background: var(--tier-s); }
+.tier-a::before   { background: var(--tier-a); }
+.tier-b::before   { background: var(--tier-b); }
+.tier-c::before   { background: var(--tier-c); }
 /* 等级文本色工具类（供 t-tag / 文字直接引用） */
 .tier-text-sss { color: var(--tier-sss); }
 .tier-text-s   { color: var(--tier-s); }
@@ -179,7 +120,7 @@ page {
 /* 胜率颜色分级工具类（全局：teams / league-detail 共用，统一收敛到 kpi Token，禁止本地散落定义） */
 .wr-high { color: var(--kpi-primary, #5fd35f); }
 .wr-mid  { color: var(--kpi-warning, #f0aa28); }
-.wr-low  { color: #8a8f99; }
+.wr-low  { color: #9CA3AF; }
 
 view, text { box-sizing: border-box; }
 
@@ -199,10 +140,11 @@ view, text { box-sizing: border-box; }
 /* 搜索栏上下间距 */
 .search-wrap { margin: 8rpx 0 20rpx; }
 
-/* 卡片（聚光灯：冷炭灰渐变底 + 内阴影质感，无边框） */
+/* 卡片（雾峰雪 v2.0：纯白底 + 极淡边框 + 极淡阴影） */
 .card {
   background: var(--card-grad);
   border-radius: 14rpx;
+  border: 0.5rpx solid #E5E7EB;
   padding: 24rpx;
   margin-bottom: 16rpx;
   box-shadow: var(--card-inner-shadow);
@@ -212,13 +154,13 @@ view, text { box-sizing: border-box; }
 .row { display: flex; align-items: center; }
 .row-between { display: flex; align-items: center; justify-content: space-between; }
 
-/* 文字 */
-.title { font-size: var(--fs-heading); font-weight: 600; color: #f0f3f6; }
-.sub { font-size: var(--fs-body); color: #8a8f99; }
-.muted { color: #8a8f99; }
+/* 文字（雾峰雪 v2.0：亮底深字） */
+.title { font-size: var(--fs-heading); font-weight: 600; color: #1F2937; }
+.sub { font-size: var(--fs-body); color: #4B5563; }
+.muted { color: #6B7280; }
 .bold { font-weight: 600; }
 
-/* 等级标签（B+D 混合：背景改 Tier 渐变半透） */
+/* 等级标签（雾峰雪 v2.0：实色浅底 + 深字，弃用半透明叠加） */
 .tag {
   display: inline-block;
   font-size: var(--fs-caption);
@@ -226,18 +168,18 @@ view, text { box-sizing: border-box; }
   border-radius: 8rpx;
   line-height: var(--lh-relaxed);
 }
-.tag-sss { background: rgba(255,209,92,.15); color: #FFD15C; }
-.tag-s { background: rgba(200,169,81,.15); color: #C8A951; }
-.tag-a { background: rgba(167,119,227,.15); color: #A777E3; }
-.tag-b { background: rgba(91,155,213,.15); color: #5B9BD5; }
-.tag-c { background: rgba(122,134,150,.12); color: #7A8696; }
+.tag-sss { background: #FDF6E3; color: #7A6520; }
+.tag-s { background: #FDF6E3; color: #7A6520; }
+.tag-a { background: #EEF0FB; color: #3730A3; }
+.tag-b { background: #EBF4FE; color: #1E40AF; }
+.tag-c { background: #F1F5F9; color: #374151; }
 
 /* 胜负色：天辉绿=胜 / 夜魇红=负 */
 .win { color: #5fd35f; }
 .lose { color: #e8443b; }
 
 /* 加载 / 空态 */
-.center { text-align: center; color: #8a8f99; padding: 80rpx 0; }
+.center { text-align: center; color: #6B7280; padding: 80rpx 0; }
 
 /* ===== v11 聚光灯 Phase 7：Error 错误态 =====
    用法：<view class="error-strip"><t-icon name="error-circle" color="#e8443b"/> <text>信号中断，正在重连…</text><t-button size="small" theme="primary" bindtap="retry">重试</t-button></view> */
@@ -257,18 +199,18 @@ view, text { box-sizing: border-box; }
   color: #e8443b;
 }
 
-/* 搜索框（TDesign 之外的兜底 · B+D：暖灰渐变底） */
+/* 搜索框（TDesign 之外的兜底 · 雾峰雪 v2.0：纯白底 + 极淡边框） */
 .search-bar {
   display: flex;
   align-items: center;
   background: var(--card-grad);
-  border: 1rpx solid #242028;
+  border: 1rpx solid #E5E7EB;
   border-radius: 12rpx;
   padding: 12rpx 20rpx;
   margin-bottom: 20rpx;
   box-shadow: var(--card-inner-shadow);
 }
-.search-bar input { flex: 1; margin-left: 12rpx; color: #f0f3f6; }
+.search-bar input { flex: 1; margin-left: 12rpx; color: #1F2937; }
 
 /* 分段选择（筛选条）—— 暗色运动风：选中=品牌金 */
 .filter-bar {
@@ -281,15 +223,15 @@ view, text { box-sizing: border-box; }
   text-align: center;
   padding: 14rpx 0;
   font-size: var(--fs-label);
-  color: #8a8f99;
-  background: #181520;
-  border: 1rpx solid #242028;
+  color: #6B7280;
+  background: #F1F3F5;
+  border: 1rpx solid #E5E7EB;
   border-radius: 12rpx;
 }
 .filter-bar .chip.active {
-  color: #0e0c10;
-  background: linear-gradient(135deg, #FFD15C, #C8A951);
-  border-color: transparent;
+  color: #7A6520;
+  background: #FDF6E3;
+  border-color: rgba(200,169,81,0.4);
 }
 
 /* 新鲜度标签（更新于 X 前）推到最右 */
@@ -301,11 +243,11 @@ view, text { box-sizing: border-box; }
   padding-left: 8rpx;
 }
 
-/* 分段选择（通用，用于 现役/历史、关注分类等 · B+D：暖灰底） */
+/* 分段选择（通用，用于 现役/历史、关注分类等 · 雾峰雪 v2.0：雾灰底 + 金浅底激活） */
 .seg {
   display: flex;
-  background: #0d0d0d;
-  border: 1rpx solid #242028;
+  background: #F8F9FA;
+  border: 1rpx solid #E5E7EB;
   border-radius: 14rpx;
   padding: 6rpx;
   margin-bottom: 20rpx;
@@ -314,24 +256,24 @@ view, text { box-sizing: border-box; }
   flex: 1;
   text-align: center;
   font-size: var(--fs-subhead);
-  color: #8a8f99;
+  color: #6B7280;
   padding: 14rpx 0;
   border-radius: 10rpx;
 }
 .seg-item.active {
-  background: linear-gradient(135deg, #FFD15C, #C8A951);
-  color: #0e0c10;
+  background: #FDF6E3;
+  color: #7A6520;
   font-weight: 600;
 }
 
 /* 加载更多按钮容器 */
 .loadmore { text-align: center; padding: 24rpx 0; }
 
-/* 天辉→夜魇 渐变签名条（页面可选使用 · B+D：增强渐变质感） */
+/* 天辉→夜魇 渐变签名条（页面可选使用 · 雾峰雪 v2.0：保留渐变，用于签名效果） */
 .radiant-dire-bar {
   height: 6rpx;
   border-radius: 6rpx;
-  background: linear-gradient(90deg, #5fd35f 0%, #8a7d3b 50%, #e8443b 100%);
+  background: linear-gradient(90deg, #5fd35f 0%, #C8A951 50%, #e8443b 100%);
   margin-bottom: 20rpx;
 }
 
@@ -372,8 +314,8 @@ page {
   --radius-xl:  24rpx;
   --radius-pill: 999rpx;
 
-  /* ===== 状态色 token（统一全站语义，批次1 §9.2：LIVE 全站改红） ===== */
-  --status-live: #FF5B52;          /* 直播中：脉冲红（电竞行业惯例；与负方暗红 --dire #e8443b 拉开亮度差） */
+  /* ===== 状态色 token（雾峰雪 v2.0：LIVE 改 red-500，对比度 4.0:1 过 WCAG-AA） ===== */
+  --status-live: #EF4444;          /* 直播中：脉冲红（red-500，比珊瑚红对比度更高） */
   --status-ongoing: #5fd35f;       /* 进行中：天辉绿 */
   --status-upcoming: #f0aa28;      /* 即将到来：琥珀 */
   --status-ended: #6b7280;         /* 已结束：灰 */
@@ -392,24 +334,24 @@ page {
   --source-liquipedia: #ffcf5c;
   --source-curation: #9bb0c9;
 
-  /* ===== 卡片层级（聚光灯：极淡渐变基色 + 冷炭灰 + 顶部微亮内阴影） ===== */
-  --card-bg: #1a1a1e;
-  --card-bg-elevated: #222226;     /* 浮起卡片：直播卡/KPI strip */
-  --card-bg-inset: #131316;         /* 内嵌区：表格行/cell */
-  /* 卡片对角线渐变基底（聚光灯风格） */
-  --card-grad: linear-gradient(135deg, #1c1c20 0%, #18181c 100%);
-  /* 卡片内阴影叠层（顶部微亮 + 底部微暗：物理质感） */
-  --card-inner-shadow: inset 0 1rpx 0 rgba(255,255,255,0.04), inset 0 -1rpx 0 rgba(0,0,0,0.15);
+  /* ===== 卡片层级（雾峰雪：纯白卡 + 极淡边框 + 极淡外阴影，弃用渐变/inner-shadow） ===== */
+  --card-bg: #FFFFFF;
+  --card-bg-elevated: #FFFFFF;     /* 浮起卡片：直播卡/KPI strip（亮色下与普通卡同底，靠阴影区分） */
+  --card-bg-inset: #F1F3F5;         /* 内嵌区：表格行/cell（冷雾灰） */
+  /* v2.0 弃用对角线渐变基底，改纯白 */
+  --card-grad: #FFFFFF;
+  /* v2.0 弃用内阴影叠层，改极淡外阴影（几乎看不见但有微抬起感） */
+  --card-inner-shadow: 0 1rpx 4rpx rgba(0, 0, 0, 0.04);
 
-  /* ===== Tier 色浸染渐变（聚光灯核心特征：左侧色带 → 向右浸染衰减） =====
+  /* ===== Tier 色浸染改纯色竖条（雾峰雪 v2.0：弃用浸染渐变，改 4rpx 纯色左侧竖条） =====
      色标单位使用 rpx 与项目 Token 体系一致（1rpx ≈ 0.5px @2x） */
-  --card-glow-sss: linear-gradient(90deg, var(--tier-sss) 0%, var(--tier-sss) 10rpx, rgba(255,209,92,0.08) 160rpx, transparent 280rpx);
-  --card-glow-s:   linear-gradient(90deg, var(--tier-s) 0%, var(--tier-s) 10rpx, rgba(200,169,81,0.08) 160rpx, transparent 280rpx);
-  --card-glow-a:   linear-gradient(90deg, var(--tier-a) 0%, var(--tier-a) 10rpx, rgba(167,119,227,0.08) 160rpx, transparent 280rpx);
-  --card-glow-b:   linear-gradient(90deg, var(--tier-b) 0%, var(--tier-b) 10rpx, rgba(91,155,213,0.08) 160rpx, transparent 280rpx);
-  --card-glow-c:   linear-gradient(90deg, var(--tier-c) 0%, var(--tier-c) 10rpx, rgba(122,134,150,0.06) 160rpx, transparent 280rpx);
-  /* LIVE 特殊：红色光晕替代 Tier 色（直播永远最抢眼；批次1 §9.2 绿→红） */
-  --card-glow-live: linear-gradient(90deg, var(--status-live) 0%, var(--status-live) 10rpx, rgba(255, 91, 82, 0.10) 200rpx, transparent 320rpx);
+  --card-glow-sss: linear-gradient(90deg, var(--tier-sss) 0%, var(--tier-sss) 4rpx, transparent 4rpx);
+  --card-glow-s:   linear-gradient(90deg, var(--tier-s) 0%, var(--tier-s) 4rpx, transparent 4rpx);
+  --card-glow-a:   linear-gradient(90deg, var(--tier-a) 0%, var(--tier-a) 4rpx, transparent 4rpx);
+  --card-glow-b:   linear-gradient(90deg, var(--tier-b) 0%, var(--tier-b) 4rpx, transparent 4rpx);
+  --card-glow-c:   linear-gradient(90deg, var(--tier-c) 0%, var(--tier-c) 4rpx, transparent 4rpx);
+  /* LIVE 特殊：v2.0 无涂装，卡片不再有 LIVE 浸染色带（保留 token 兼容但置空效果） */
+  --card-glow-live: linear-gradient(90deg, transparent 0%, transparent 4rpx, transparent 4rpx);
 
   /* ===== 数据指挥台 KPI 色（C 风格专用，仅用于强调单个 KPI） ===== */
   --kpi-primary: #5fd35f;
@@ -467,7 +409,7 @@ page {
 }
 .kpi-label {
   font-size: var(--fs-caption);
-  color: #8a8f99;
+  color: #6B7280;
   text-transform: uppercase;
   letter-spacing: 1rpx;
   line-height: var(--lh-normal);
@@ -475,14 +417,14 @@ page {
 .kpi-value {
   font-size: var(--fs-emphasis);
   font-weight: 600;
-  color: #f0f3f6;
+  color: #1F2937;
   font-family: var(--font-numeric);
   line-height: var(--lh-normal);
   word-break: break-word;
   white-space: normal;
 }
 .kpi-value.is-empty {
-  color: #5b626d;
+  color: #9CA3AF;
   font-weight: 400;
 }
 .kpi-value.accent { color: var(--kpi-primary); }
@@ -490,7 +432,7 @@ page {
 .kpi-value.info { color: var(--kpi-info); }
 .kpi-unit {
   font-size: var(--fs-caption);
-  color: #8a8f99;
+  color: #6B7280;
   font-weight: 400;
   margin-left: 4rpx;
 }
@@ -506,8 +448,8 @@ page {
   font-size: var(--fs-micro);
   padding: 2rpx 10rpx;
   border-radius: var(--radius-pill);
-  background: rgba(120, 140, 160, 0.12);
-  color: #9bb0c9;
+  background: #F1F3F5;
+  color: #6B7280;
   line-height: var(--lh-relaxed);
   border: 1rpx solid transparent;
 }
@@ -612,7 +554,7 @@ page {
 .vs-team-name {
   font-size: var(--fs-subhead);
   font-weight: 500;
-  color: #f0f3f6;
+  color: #1F2937;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -631,8 +573,9 @@ page {
   margin-left: 8rpx;
   font-size: var(--fs-badge);
   font-weight: 700;
-  color: #1a1205;
-  background: linear-gradient(135deg, #ffcf5c, #C8A951);
+  color: #7A6520;
+  background: #FDF6E3;
+  border: 1rpx solid rgba(200,169,81,0.4);
   border-radius: 999rpx;
   padding: 2rpx 12rpx;
   line-height: var(--lh-normal);
@@ -674,7 +617,7 @@ page {
 }
 .stat-label {
   font-size: var(--fs-body);
-  color: #8a8f99;
+  color: #4B5563;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -696,7 +639,7 @@ page {
 .stat-value {
   font-size: var(--fs-body);
   font-weight: 600;
-  color: #f0f3f6;
+  color: #1F2937;
   font-family: var(--font-numeric);
   text-align: right;
 }
@@ -734,9 +677,9 @@ page {
 .hero-title {
   font-size: var(--fs-mega);
   font-weight: 700;
-  color: #f0f3f6;
+  color: #1F2937;
   font-family: var(--font-display);
-  text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.6);
+  /* 雾峰雪 v2.0：亮底去掉强阴影 */
   line-height: var(--lh-tight);
 }
 .hero-meta {
@@ -744,7 +687,7 @@ page {
   gap: var(--space-2);
   align-items: center;
   font-size: var(--fs-body);
-  color: #c9d1d9;
+  color: var(--text-3);
 }
 
 /* ===================================================================
@@ -796,7 +739,7 @@ page {
 .section-title {
   font-size: var(--fs-subhead);
   font-weight: 600;
-  color: #f0f3f6;
+  color: #1F2937;
   letter-spacing: 1rpx;
 }
 .section-action {
@@ -835,13 +778,13 @@ page {
 .brand-title {
   font-size: var(--fs-display);
   font-weight: 700;
-  color: #f0f3f6;
+  color: #1F2937;
   font-family: var(--font-display, sans-serif);
   line-height: var(--lh-tight);
 }
 .brand-sub {
   font-size: var(--fs-caption);
-  color: #8a8f99;
+  color: #4B5563;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -854,8 +797,8 @@ page {
   width: 64rpx;
   height: 64rpx;
   border-radius: 16rpx;
-  background: #181520;
-  border: 1rpx solid rgba(255,255,255,0.08);
+  background: #F1F3F5;
+  border: 1rpx solid #E5E7EB;
 }
 
 /* ===================================================================

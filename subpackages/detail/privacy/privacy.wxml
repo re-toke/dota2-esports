@@ -95,7 +95,7 @@
   </view>
 
   <view class="footer">
-    <t-icon name="info-circle" size="32rpx" color="#5b626d" />
+    <t-icon name="info-circle" size="32rpx" color="#6B7280" />
     <text class="footer-text">本小程序为个人开发者作品，数据来源于公开 API，与 Valve / OpenDota / STRATZ / Liquipedia 无官方 affiliation 关系。</text>
   </view>
 

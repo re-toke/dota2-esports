@@ -10,7 +10,7 @@
   margin-left: auto;
   padding: 0 24rpx;
   border-radius: 32rpx;
-  border-color: var(--td-border-level-2-color, #2e2e30);
+  border-color: var(--td-border-level-2-color, #D1D5DB);
 }
 .search-bar--inline .search-placeholder {
   font-size: var(--fs-caption);
@@ -74,9 +74,9 @@
   width: 300rpx;
   padding: var(--space-2-5) 22rpx var(--space-2-5) 30rpx;
   background: var(--card-grad);
-  border: 1rpx solid var(--td-border-level-1-color, #262628);
+  border: 1rpx solid var(--td-border-level-1-color, #E5E7EB);
   border-radius: var(--radius-lg);
-  box-shadow: var(--card-inner-shadow), 0 4rpx 16rpx rgba(0,0,0,.22);
+  box-shadow: var(--card-inner-shadow);
 }
 /* 左侧 Tier 色浸染（v11 聚光灯：色带 + 向右浸染衰减，铺满卡宽自然过渡） */
 .ff-card::before {
@@ -85,7 +85,7 @@
   left: 0; top: 0; bottom: 0;
   width: 100%;
   z-index: 0;
-  background: var(--td-border-level-1-color, #262628);
+  background: var(--td-border-level-1-color, #E5E7EB);
 }
 .ff-card.tier-sss::before { background: var(--card-glow-sss); }
 .ff-card.tier-s::before { background: var(--card-glow-s); }
@@ -104,8 +104,8 @@
 .ff-tier {
   font-size: var(--fs-micro);
   font-weight: 700;
-  color: #121015;
-  background: linear-gradient(135deg, #FFD15C, #C8A951);
+  color: #1F2937;
+  background: var(--dota-gold, #C8A951);
   padding: 2rpx 10rpx;
   border-radius: var(--radius-sm);
   flex-shrink: 0;
@@ -127,7 +127,7 @@
 .ff-team {
   font-size: var(--fs-emphasis);
   font-weight: 800;
-  color: #e6ebf2;
+  color: var(--text-1);
   max-width: 110rpx;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -172,7 +172,7 @@
   width: 300rpx;
   height: 168rpx;
   border-radius: var(--radius-lg);
-  background: var(--card-bg-elevated, #222226);
+  background: var(--card-bg-elevated, #F1F3F5);
   flex-shrink: 0;
 }
 .ff-empty {
@@ -182,9 +182,9 @@
   padding: var(--space-3-5) var(--space-2);
   background: var(--card-grad);
   border-radius: var(--radius-lg);
-  border: 1rpx dashed var(--td-border-level-1-color, #262628);
+  border: 1rpx dashed var(--td-border-level-1-color, #E5E7EB);
 }
-.ff-empty-text { font-size: var(--fs-label); color: #c3ccd9; font-weight: 600; }
+.ff-empty-text { font-size: var(--fs-label); color: var(--text-2); font-weight: 600; }
 .ff-empty-sub { font-size: var(--fs-caption); color: var(--text-3); }
 
 /* 未关注态引导卡（B+D：增强金色渐变质感） */
@@ -204,8 +204,8 @@
 .fg-sub { font-size: var(--fs-caption); color: var(--text-2); }
 .fg-btn {
   padding: var(--space-1-5) var(--space-3-5);
-  background: linear-gradient(135deg, #FFD15C, #C8A951);
-  color: #0e0c10;
+  background: linear-gradient(135deg, #C8A951, #C8A951);
+  color: #7A6520;
   font-size: var(--fs-label);
   font-weight: 700;
   border-radius: var(--radius-pill);
@@ -258,4 +258,4 @@
   height: 44rpx;
   display: block;
 }
-.quick-cell .qc-name { font-size: var(--fs-label); color: #e8eef6; font-weight: 600; }
+.quick-cell .qc-name { font-size: var(--fs-label); color: var(--text-1); font-weight: 600; }

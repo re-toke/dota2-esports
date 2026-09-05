@@ -1,13 +1,13 @@
 /* components/skeleton/skeleton.wxss */
 /* §8.3 自定义骨架屏（2026-07-29）
    - shimmer 动画：渐变高光从左到右扫过，循环 1.4s
-   - 暗色主题：base #222226 → highlight #2a323d
+   - 雾峰雪 v2.0 主题：base #F1F3F5 → highlight rgba(0,0,0,0.05)
    - 匹配项目设计 token（--card-bg / --card-bg-elevated）
 */
 
 /* ===== 基础骨架块 + shimmer 动画 ===== */
 .sk-block {
-  background: var(--card-bg-elevated, #222226);
+  background: var(--card-bg-elevated, #F1F3F5);
   border-radius: var(--radius-sm);
   position: relative;
   overflow: hidden;
@@ -22,7 +22,7 @@
   background: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(255, 255, 255, 0.06) 50%,
+    rgba(0, 0, 0, 0.05) 50%,
     transparent 100%
   );
   transform: translateX(-100%);
@@ -41,8 +41,8 @@
 
 /* ===== card：卡片列表骨架 ===== */
 .sk-card {
-  background: var(--card-bg, #1a1a1e);
-  border: 1rpx solid #1f262f;
+  background: var(--card-bg, #FFFFFF);
+  border: 1rpx solid #E5E7EB;
   border-radius: var(--radius-lg);
   padding: var(--space-3);
   margin-bottom: var(--space-2);
@@ -91,8 +91,8 @@
   align-items: center;
   gap: var(--space-2-5);
   padding: var(--space-3);
-  background: var(--card-bg, #1a1a1e);
-  border: 1rpx solid #1f262f;
+  background: var(--card-bg, #FFFFFF);
+  border: 1rpx solid #E5E7EB;
   border-radius: var(--radius-lg);
   margin-bottom: var(--space-2);
 }
@@ -122,7 +122,7 @@
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: var(--space-2);
-  background: var(--card-bg-elevated, #222226);
+  background: var(--card-bg-elevated, #F1F3F5);
   border-radius: var(--radius-lg);
   padding: var(--space-3);
   margin-bottom: var(--space-2);
@@ -154,8 +154,8 @@
   border-radius: var(--radius-md);
 }
 .sk-detail-card {
-  background: var(--card-bg, #1a1a1e);
-  border: 1rpx solid #1f262f;
+  background: var(--card-bg, #FFFFFF);
+  border: 1rpx solid #E5E7EB;
   border-radius: var(--radius-lg);
   padding: var(--space-3);
   margin-bottom: var(--space-2);
@@ -177,7 +177,7 @@
   width: 300rpx;
   height: 168rpx;
   border-radius: var(--radius-lg);
-  background: var(--card-bg-elevated, #222226);
+  background: var(--card-bg-elevated, #F1F3F5);
   padding: var(--space-2-5);
   display: flex;
   flex-direction: column;
@@ -196,7 +196,7 @@
   background: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(255, 255, 255, 0.06) 50%,
+    rgba(0, 0, 0, 0.05) 50%,
     transparent 100%
   );
   transform: translateX(-100%);
@@ -225,8 +225,8 @@
   align-items: center;
   gap: var(--space-2-5);
   padding: var(--space-3);
-  background: var(--card-bg, #1a1a1e);
-  border: 1rpx solid #1f262f;
+  background: var(--card-bg, #FFFFFF);
+  border: 1rpx solid #E5E7EB;
   border-radius: var(--radius-lg);
   margin-bottom: var(--space-1-5);
 }

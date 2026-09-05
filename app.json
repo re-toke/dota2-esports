@@ -59,17 +59,19 @@
   "__usePrivacyCheck__": true,
   "window": {
     "backgroundTextStyle": "dark",
-    "navigationBarBackgroundColor": "#0d0d0d",
+    "navigationBarBackgroundColor": "#F8F9FA",
     "navigationBarTitleText": "DOTA2赛事",
-    "navigationBarTextStyle": "white",
-    "backgroundColor": "#0d0d0d"
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#F8F9FA",
+    "backgroundColorTop": "#F8F9FA",
+    "backgroundColorBottom": "#F8F9FA"
   },
   "tabBar": {
     "custom": true,
-    "color": "#6b6b73",
-    "selectedColor": "#FFD15C",
-    "backgroundColor": "#0d0d0d",
-    "borderStyle": "black",
+    "color": "#6B7280",
+    "selectedColor": "#C8A951",
+    "backgroundColor": "#F8F9FA",
+    "borderStyle": "white",
     "list": [
       { "pagePath": "pages/index/index", "text": "首页" },
       { "pagePath": "pages/leagues/leagues", "text": "赛事" },

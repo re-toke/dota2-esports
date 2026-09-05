@@ -1,7 +1,4 @@
 <view class="container with-tab-bar">
-  <!-- 聚光灯背景图（v12）：页面级 image（fixed 相对视口，滚动不跟随） -->
-  <image class="bg-page" src="/assets/bg-battlefield-dark.webp" mode="aspectFill" />
-  <view class="bg-page-dim"></view>
 
   <!-- 品牌标识栏 + 搜索框（v4.1：合并为一行，logo+标题左置、搜索胶囊右置，首屏上移 ~80rpx） -->
   <view class="brand-header">
@@ -119,7 +116,4 @@
     <view class="fg-btn">去关注</view>
   </view>
 
-  <!-- 聚光灯背景遮罩（v11）：顶部/底部渐变暗化，只作用于背景不遮挡内容 -->
-  <view class="bg-mask-top"></view>
-  <view class="bg-mask-bottom"></view>
-</view>
+  </view>

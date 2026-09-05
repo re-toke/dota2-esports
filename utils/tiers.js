@@ -106,14 +106,13 @@ function shouldExclude(name) {
 }
 
 // ===== 文档五档展示标签（与《DOTA2赛事级别分类全景》对齐）=====
-// 复用既有 rank 数值（4/3/2/1/0），仅改变「展示名」与「高亮样式」，不影响排序/筛选。
-//   SSS → 官方TI（Valve 官方旗舰）
-//   S   → S-Tier（顶级第三方 + DPC Major）
+// 雾峰雪 v2.0：SSS 已并入 S（四级化），SSS 条目保留仅为向后兼容（与 S 同标签）
+//   S   → S-Tier（含原 SSS：TI / 顶级第三方 / DPC Major）
 //   A   → A-Tier（A 级第三方 + DPC Minor/Division I）
 //   B   → 区域赛（B 级区域联赛 + DPC Division II）
 //   C   → 社区赛（Tier 3-4 社区/公开预选/青训）
 const DISPLAY_TIERS = {
-  SSS: { display: '官方TI', theme: 'danger',  variant: 'light' },
+  SSS: { display: 'S-Tier', theme: 'danger',  variant: 'light' },
   S:   { display: 'S-Tier', theme: 'danger',  variant: 'light' },
   A:   { display: 'A-Tier', theme: 'warning', variant: 'light' },
   B:   { display: '区域赛',  theme: 'default', variant: 'light' },

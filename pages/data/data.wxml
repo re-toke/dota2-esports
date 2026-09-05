@@ -1,7 +1,4 @@
 <view class="container with-safe-bottom">
-  <!-- 聚光灯背景图（v12）：页面级 image（fixed 相对视口，滚动不跟随） -->
-  <image class="bg-page" src="/assets/bg-battlefield-dark.webp" mode="aspectFill" />
-  <view class="bg-page-dim"></view>
   <view class="brand-header">
     <image class="brand-logo" src="/assets/brand-logo.png" mode="aspectFill" />
     <view class="brand-text">
@@ -17,7 +14,7 @@
         <text class="entry-title">英雄数据库</text>
         <text class="entry-desc">属性 · 定位 · 职业胜率 · 最佳/最差对位</text>
       </view>
-      <t-icon name="chevron-right" size="40rpx" color="#5b626d" />
+      <t-icon name="chevron-right" size="40rpx" color="#6B7280" />
     </view>
 
     <view class="entry-card entry-item" hover-class="entry-card--hover" bindtap="goItem">
@@ -26,7 +23,7 @@
         <text class="entry-title">物品数据库</text>
         <text class="entry-desc">价格 · 配方 · 商店类型</text>
       </view>
-      <t-icon name="chevron-right" size="40rpx" color="#5b626d" />
+      <t-icon name="chevron-right" size="40rpx" color="#6B7280" />
     </view>
   </view>
 
@@ -36,7 +33,4 @@
     <view>更新于本地缓存</view>
   </view>
 
-  <!-- 聚光灯背景遮罩（v11）：顶部/底部渐变暗化，只作用于背景不遮挡内容 -->
-  <view class="bg-mask-top"></view>
-  <view class="bg-mask-bottom"></view>
-</view>
+  </view>

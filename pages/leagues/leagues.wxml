@@ -1,7 +1,4 @@
 <view class="container with-tab-bar">
-  <!-- 聚光灯背景图（v12）：页面级 image（fixed 相对视口，滚动不跟随） -->
-  <image class="bg-page" src="/assets/bg-battlefield-dark.webp" mode="aspectFill" />
-  <view class="bg-page-dim"></view>
   <!-- 品牌标识栏 -->
   <view class="brand-header">
     <image class="brand-logo brand-logo--sm" src="/assets/brand-logo.png" mode="aspectFill" />
@@ -25,7 +22,7 @@
         </view>
       </view>
       <view class="star-btn focus-star" catchtap="toggleFollow" data-id="{{focusNode.leagueid}}" data-name="{{focusNode.name}}">
-        <t-icon name="star" size="44rpx" color="{{focusNode.followed ? '#ffcf5c' : '#5b626d'}}" />
+        <t-icon name="star" size="44rpx" color="{{focusNode.followed ? '#C8A951' : '#6B7280'}}" />
       </view>
     </view>
     <view class="focus-title">{{focusNode.name}}</view>
@@ -194,7 +191,7 @@
         </view>
       </view>
       <view class="star-btn" catchtap="toggleFollow" data-id="{{item.leagueid}}" data-name="{{item.name}}">
-        <t-icon name="star" size="44rpx" color="{{item.followed ? '#ffcf5c' : '#5b626d'}}" />
+        <t-icon name="star" size="44rpx" color="{{item.followed ? '#C8A951' : '#6B7280'}}" />
       </view>
     </view>
 
@@ -203,14 +200,14 @@
     <view class="loadmore-bar anim-fade" wx:if="{{hasMore && !armedMore && !loadingMore}}" bindtap="onLoadMore" hover-class="tap-scale">
       <text class="lm-text">继续滑动或点击加载</text>
       <view class="lm-arrow">
-        <t-icon name="chevron-down" size="32rpx" color="#FFD15C" />
+        <t-icon name="chevron-down" size="32rpx" color="#C8A951" />
       </view>
     </view>
     <!-- ARMED 态：触底后高亮，提示「上拉或点击加载」——点击即加载（明确意图） -->
     <view class="loadmore-bar loadmore-bar--armed anim-fade" wx:elif="{{hasMore && armedMore && !loadingMore}}" bindtap="onLoadMore" hover-class="tap-scale">
       <text class="lm-text lm-text--armed">上拉或点击加载</text>
       <view class="lm-arrow">
-        <t-icon name="chevron-down" size="32rpx" color="#FFD15C" />
+        <t-icon name="chevron-down" size="32rpx" color="#C8A951" />
       </view>
     </view>
     <!-- 加载中态：旋转圈 + 文字 -->
@@ -252,7 +249,7 @@
           hover-class="tap-scale"
         >
           <view class="tf-check {{teamDraft.indexOf(item.id) >= 0 ? 'tf-check--on' : ''}}">
-            <t-icon wx:if="{{teamDraft.indexOf(item.id) >= 0}}" name="check" size="28rpx" color="#0e1116" />
+            <t-icon wx:if="{{teamDraft.indexOf(item.id) >= 0}}" name="check" size="28rpx" color="#1F2937" />
           </view>
           <view class="tf-cell-tag">{{item.tag}}</view>
           <text class="tf-cell-name">{{item.name}}</text>
@@ -271,7 +268,4 @@
     </view>
   </view>
 
-  <!-- 聚光灯背景遮罩（v11）：顶部/底部渐变暗化，只作用于背景不遮挡内容 -->
-  <view class="bg-mask-top"></view>
-  <view class="bg-mask-bottom"></view>
-</view>
+  </view>

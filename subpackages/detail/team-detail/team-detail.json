@@ -1,6 +1,9 @@
 {
   "enablePullDownRefresh": true,
   "backgroundTextStyle": "dark",
+  "backgroundColor": "#F8F9FA",
+  "backgroundColorTop": "#F8F9FA",
+  "backgroundColorBottom": "#F8F9FA",
   "usingComponents": {
     "image-fallback": "../../../components/image-fallback/image-fallback",
     "t-avatar": "../../../miniprogram_npm/tdesign-miniprogram/avatar/avatar",

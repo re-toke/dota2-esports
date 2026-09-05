@@ -8,12 +8,13 @@
   margin: var(--space-1) 0 var(--space-1-5);
 }
 .hist-title { font-size: var(--fs-label); color: var(--text-2); }
-.hist-clear { font-size: var(--fs-body); color: #5b9bff; }
+.hist-clear { font-size: var(--fs-body); color: var(--dota-gold, #C8A951); }
 .hist-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .chip {
   padding: 10rpx var(--space-3);
-  background: #1c2230;
-  color: #c7ccd6;
+  background: #F1F3F5;
+  color: #4B5563;
+  border: 1rpx solid #E5E7EB;
   border-radius: 28rpx;
   font-size: var(--fs-label);
 }
@@ -30,14 +31,14 @@
 
 /* ===== B 风格：队伍卡片 ===== */
 .team-card {
-  background: var(--card-bg, #1a1a1e);
+  background: var(--card-bg, #FFFFFF);
   border-radius: var(--radius-lg, 16rpx);
   padding: var(--space-2-5) var(--space-3);
   margin-bottom: var(--space-2);
   transition: background 120ms ease, transform 120ms ease;
 }
 .team-card-hover {
-  background: var(--card-bg-elevated, #222226);
+  background: var(--card-bg-elevated, #F1F3F5);
   transform: scale(0.99);
 }
 
@@ -54,8 +55,8 @@
   border-radius: var(--radius-md, 12rpx);
   overflow: hidden;
   flex-shrink: 0;
-  background: var(--card-bg-inset, #131316);
-  border: 1rpx solid #262628;
+  background: var(--card-bg-inset, #F1F3F5);
+  border: 1rpx solid #E5E7EB;
 }
 .team-logo-img {
   width: 100%;
@@ -136,7 +137,7 @@
   align-items: center;
   margin-top: var(--space-2);
   padding-top: var(--space-2);
-  border-top: 1rpx solid #262628;
+  border-top: 1rpx solid #E5E7EB;
 }
 .stat-mini {
   flex: 1;
@@ -161,7 +162,7 @@
 .stat-mini-divider {
   width: 1rpx;
   height: 36rpx;
-  background: #262628;
+  background: #E5E7EB;
   flex-shrink: 0;
 }
 
@@ -196,13 +197,13 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--space-2-5) var(--space-3);
-  background: #1a1a1e;
+  background: #FFFFFF;
   border-radius: var(--radius-md);
   margin-bottom: var(--space-1-5);
-  border: 1rpx solid #1f262f;
+  border: 1rpx solid #E5E7EB;
   transition: transform 0.12s ease, background 0.12s ease;
 }
-.card-hover { background: #1c2330; transform: scale(0.99); }
+.card-hover { background: #F1F3F5; transform: scale(0.99); }
 .player-info {
   display: flex;
   flex-direction: column;
@@ -210,7 +211,7 @@
 }
 .player-name {
   font-size: var(--fs-subhead);
-  color: #e6edf3;
+  color: #1F2937;
   font-weight: 500;
 }
 .player-id {
@@ -257,8 +258,8 @@
 
 /* ===== 实时联想下拉 ===== */
 .sug-list {
-  background: #11161d;
-  border: 1rpx solid #262628;
+  background: #FFFFFF;
+  border: 1rpx solid #E5E7EB;
   border-radius: var(--radius-lg);
   margin: 10rpx 0 var(--space-0-5);
   overflow: hidden;
@@ -268,16 +269,16 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--space-2-5) var(--space-3);
-  border-bottom: 1rpx solid #222226;
+  border-bottom: 1rpx solid #F1F3F5;
 }
 .sug-item:last-child { border-bottom: none; }
-.sug-item:active { background: #1a1a1e; }
-.sug-name { font-size: var(--fs-subhead); color: #e8e8e8; }
+.sug-item:active { background: #F1F3F5; }
+.sug-name { font-size: var(--fs-subhead); color: #1F2937; }
 .sug-tag {
   font-size: var(--fs-caption);
   color: var(--text-2);
-  background: #1a2029;
-  border: 1rpx solid #2a323d;
+  background: #F1F3F5;
+  border: 1rpx solid #E5E7EB;
   border-radius: var(--radius-sm);
   padding: 2rpx var(--space-1-5);
 }

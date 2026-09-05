@@ -3,12 +3,10 @@
 Component({
   data: {
     selected: 0,
-    // §4.4 blur 降级（2026-07-29）：背景改为半透明，使 backdrop-filter: blur(12px) 生效。
-    //   - 中高端机型：半透明 + blur = 毛玻璃效果
-    //   - 低端 Android（不支持 backdrop-filter）：WXSS 中 .tab-bar__fallback 提供 rgba 降级色，
-    //     inline style 的 rgba(22,27,34,0.82) 在无 blur 时仍为半透明深色，视觉接近纯色。
-    //   - blur 渲染开销：低端机型如掉帧，可通过 data 属性切换 className 关闭 blur（预留扩展点）。
-    backgroundColor: 'rgba(13, 13, 13, 0.92)',
+    // 雾峰雪 v2.0（2026-09-05）：背景改为半透明白，配合 backdrop-filter: blur(12px) 毛玻璃效果。
+    //   - 中高端机型：半透明白 + blur = 亮色毛玻璃
+    //   - 低端 Android（不支持 backdrop-filter）：WXSS .tab-bar::after 兜底为不透明 #F8F9FA。
+    backgroundColor: 'rgba(248, 249, 250, 0.92)',
     // 批次0（2026-08-30）：3-tab 精简（首页/赛事/我的），战队/资料库移至首页快捷区。
     // 图标改 game-icons.net 剪影 PNG（PRD §3.2，SVG 内联在 wxml 不可行）：
     //   每项 iconOn（选中金）/ iconOff（未选中灰）两态图片，渲染层由 t-icon 换 <image>。

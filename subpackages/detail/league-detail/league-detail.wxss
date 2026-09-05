@@ -44,7 +44,7 @@
 
 /* ===== 数据溯源合并区（C 风格 · 替代原 4 个独立信息条） ===== */
 .source-section {
-  background: var(--card-bg-elevated, #222226);
+  background: var(--card-bg-elevated, #F1F3F5);
   border-radius: var(--radius-lg, 16rpx);
   padding: var(--space-2-5) var(--space-3);
   margin-bottom: var(--space-2);
@@ -87,7 +87,7 @@
 .quality-pill .q-src { font-size: var(--fs-caption); opacity: 0.85; }
 .quality-high { background: rgba(95, 211, 168, 0.12); color: var(--status-verified); }
 .quality-high .q-dot { background: var(--status-verified); }
-.quality-medium { background: rgba(255, 207, 92, 0.12); color: #ffcf5c; }
+.quality-medium { background: rgba(255, 207, 92, 0.12); color: var(--dota-gold-strong); }
 .quality-medium .q-dot { background: #ffcf5c; }
 .quality-low { background: rgba(107, 114, 128, 0.16); color: var(--text-2); }
 .quality-low .q-dot { background: var(--text-2); }
@@ -119,14 +119,14 @@
   font-size: var(--fs-body);
   font-weight: 700;
   color: var(--text-2);
-  background: var(--card-bg-inset, #131316);
-  border: 1rpx solid #262628;
+  background: var(--card-bg-inset, #F1F3F5);
+  border: 1rpx solid #E5E7EB;
 }
 
 /* ===== 三 Tab 分段控件 ===== */
 .seg {
   display: flex;
-  background: var(--card-bg-inset, #131316);
+  background: var(--card-bg-inset, #F1F3F5);
   border-radius: var(--radius-md, 12rpx);
   padding: var(--space-0-5);
   margin: var(--space-2) 0;
@@ -141,7 +141,7 @@
   transition: background 120ms ease, color 120ms ease;
 }
 .seg-item.active {
-  background: var(--card-bg-elevated, #222226);
+  background: var(--card-bg-elevated, #F1F3F5);
   color: var(--text-1);
   font-weight: 600;
 }
@@ -154,20 +154,19 @@
 
 /* ===== 系列赛聚合卡（A 紧凑 · B 点缀高亮） ===== */
 .series-card {
-  background: var(--card-bg, #1a1a1e);
+  background: var(--card-bg, #FFFFFF);
   border-radius: var(--radius-lg, 16rpx);
   margin-bottom: var(--space-2);
   overflow: hidden;
-  border: 1rpx solid #262628;
-  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.2);
+  border: 1rpx solid #E5E7EB;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
   transition: border-color 200ms ease, box-shadow 200ms ease;
 }
-/* B 点缀：直播中（红色高亮 + 左边框 + 呼吸光效；批次1 §9.2 LIVE 全站统一红） */
+/* 雾峰雪 v2.0：LIVE 卡纯左竖条 + 边框高亮，弃用浸染渐变与发光阴影 */
 .series-card.series-live {
-  border-color: rgba(255, 91, 82, 0.4);
+  border-color: rgba(239, 68, 68, 0.35);
   border-left: 4rpx solid var(--status-live);
-  background: linear-gradient(180deg, rgba(255, 91, 82, 0.06), var(--card-bg, #1a1a1e) 40%);
-  box-shadow: 0 2rpx 12rpx rgba(255, 91, 82, 0.12);
+  background: var(--card-bg, #FFFFFF);
 }
 /* B 点缀：近 2h 内结束（黄色高亮 + 左边框） */
 .series-card.series-recent {
@@ -196,8 +195,8 @@
   width: 48rpx;
   height: 48rpx;
   border-radius: var(--radius-sm, 8rpx);
-  background: var(--card-bg-inset, #131316);
-  border: 1rpx solid #2a323d;
+  background: var(--card-bg-inset, #F1F3F5);
+  border: 1rpx solid #E5E7EB;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -218,7 +217,7 @@
 .series-team-name {
   font-size: var(--fs-subhead);
   font-weight: 600;
-  color: #d4dce6;
+  color: var(--text-3);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -235,14 +234,12 @@
   color: var(--text-3);
   font-weight: 400;
 }
-.series-team-name.draw { color: #d4dce6; }
-.series-team.is-draw .series-team-name { color: #d4dce6; }
+.series-team-name.draw { color: var(--text-3); }
+.series-team.is-draw .series-team-name { color: var(--text-3); }
 /* 胜方 logo 加金色边框 + 微妙光效 */
 .series-team-logo.team-win {
-  border-color: rgba(255, 207, 92, 0.6);
-  background: linear-gradient(135deg, rgba(255, 207, 92, 0.12), rgba(255, 207, 92, 0.04));
-  color: #ffcf5c;
-  box-shadow: 0 0 8rpx rgba(255, 207, 92, 0.2);
+  border-color: rgba(200, 169, 81, 0.5);
+  color: var(--dota-gold, #C8A951);
 }
 /* 胜方行左侧/右侧金色竖线（3-4px），败方浅灰线 */
 .series-team.is-win { box-shadow: inset 4rpx 0 0 0 var(--dota-gold, #C8A951); }
@@ -255,9 +252,9 @@
   gap: var(--space-1);
   padding: var(--space-0-5) var(--space-2);
   position: relative;
-  background: var(--card-bg-inset, #131316);
+  background: var(--card-bg-inset, #F1F3F5);
   border-radius: var(--radius-md, 12rpx);
-  border: 1rpx solid #1f262f;
+  border: 1rpx solid #E5E7EB;
 }
 .series-score-num {
   font-size: var(--fs-mega);
@@ -278,7 +275,7 @@
 .series-score-num.lose,
 .series-score-num.is-lose { color: var(--text-4); }
 .series-score-num.draw,
-.series-score-num.is-draw { color: #d4dce6; }
+.series-score-num.is-draw { color: var(--text-3); }
 .series-score-sep {
   color: #3a4250;
   font-size: var(--fs-subhead);
@@ -291,7 +288,7 @@
   right: -12rpx;
   font-size: var(--fs-badge);
   font-weight: 700;
-  color: #ffcf5c;
+  color: var(--dota-gold-strong);
   background: rgba(255, 207, 92, 0.2);
   border: 1rpx solid rgba(255, 207, 92, 0.5);
   border-radius: var(--radius-pill, 999rpx);
@@ -304,7 +301,7 @@
   margin-left: 10rpx;
   font-size: var(--fs-badge);
   font-weight: 700;
-  color: #1a1205;
+  color: #1F2937;
   background: linear-gradient(135deg, #ffcf5c, #C8A951);
   border-radius: var(--radius-pill);
   padding: 2rpx var(--space-1-5);
@@ -424,16 +421,16 @@
 
 /* 小场列表 */
 .series-games {
-  border-top: 1rpx solid #1f262f;
-  background: var(--card-bg-inset, #131316);
+  border-top: 1rpx solid #E5E7EB;
+  background: var(--card-bg-inset, #F1F3F5);
 }
 .series-game {
-  border-bottom: 1rpx solid #1a1f26;
+  border-bottom: 1rpx solid #E5E7EB;
   transition: background 150ms ease;
 }
 .series-game:last-child { border-bottom: none; }
 .series-game.expanded {
-  background: var(--card-bg, #1a1a1e);
+  background: var(--card-bg, #FFFFFF);
 }
 .series-game-main {
   display: flex;
@@ -494,8 +491,8 @@
 .series-game-expand-box {
   margin-top: 0;
   padding: var(--space-2-5) var(--space-3);
-  border-top: 1rpx solid #262628;
-  background: var(--card-bg, #1a1a1e);
+  border-top: 1rpx solid #E5E7EB;
+  background: var(--card-bg, #FFFFFF);
 }
 
 /* ===== A 风格 · vs-card 展开态 ===== */
@@ -514,7 +511,7 @@
 .vs-card-expand {
   margin-top: var(--space-2);
   padding-top: var(--space-2);
-  border-top: 1rpx solid #262628;
+  border-top: 1rpx solid #E5E7EB;
 }
 .expand-loading, .expand-empty {
   font-size: var(--fs-body);
@@ -536,7 +533,7 @@
 }
 .mvp-tag {
   font-size: var(--fs-caption);
-  color: #ffcf5c;
+  color: var(--dota-gold-strong);
   font-weight: 700;
   background: rgba(255, 207, 92, 0.2);
   padding: var(--space-0-5) var(--space-1-5);
@@ -592,22 +589,22 @@
   width: 56rpx;
   height: 56rpx;
   border-radius: var(--radius-sm, 8rpx);
-  background: var(--card-bg-inset, #131316);
-  border: 1rpx solid #262628;
+  background: var(--card-bg-inset, #F1F3F5);
+  border: 1rpx solid #E5E7EB;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: var(--fs-micro);
   font-weight: 700;
-  color: #c9d2dd;
+  color: var(--text-3);
 }
 /* 英雄头像图片（Steam CDN _sb.png，mode=aspectFill 裁切填满） */
 .hero-icon-img {
   width: 56rpx;
   height: 56rpx;
   border-radius: var(--radius-sm, 8rpx);
-  border: 1rpx solid #262628;
-  background: var(--card-bg-inset, #131316);
+  border: 1rpx solid #E5E7EB;
+  background: var(--card-bg-inset, #F1F3F5);
 }
 .hero-icon-kda {
   font-size: var(--fs-badge);
@@ -631,7 +628,7 @@
 
 /* ===== Tab 2 · 赛事排名数据表样式 ===== */
 .standings-card {
-  background: var(--card-bg, #1a1a1e);
+  background: var(--card-bg, #FFFFFF);
   border-radius: var(--radius-lg, 16rpx);
   overflow: hidden;
   margin-bottom: var(--space-2);
@@ -639,7 +636,7 @@
 .stand-head {
   display: flex;
   align-items: center;
-  background: var(--card-bg-elevated, #222226);
+  background: var(--card-bg-elevated, #F1F3F5);
   padding: var(--space-2) var(--space-2-5);
   font-size: var(--fs-caption);
   color: var(--text-2);
@@ -650,12 +647,12 @@
   display: flex;
   align-items: center;
   padding: var(--space-2) var(--space-2-5);
-  border-top: 1rpx solid #262628;
+  border-top: 1rpx solid #E5E7EB;
   font-size: var(--fs-label);
   color: var(--text-1);
   transition: background 120ms ease;
 }
-.stand-row:active { background: var(--card-bg-elevated, #222226); }
+.stand-row:active { background: var(--card-bg-elevated, #F1F3F5); }
 .col-rank {
   width: 80rpx;
   text-align: center;
@@ -678,8 +675,8 @@
 }
 
 /* 排名前三颜色 */
-.rank-1 { color: #ffcf5c; }
-.rank-2 { color: #c9d2dd; }
+.rank-1 { color: var(--dota-gold-strong); }
+.rank-2 { color: var(--text-3); }
 .rank-3 { color: #d99252; }
 
 .loading-row {
@@ -700,20 +697,20 @@
   display: flex;
   align-items: center;
   gap: 10rpx;
-  background: #1a1a1e;
+  background: #FFFFFF;
   border-radius: var(--radius-md);
   padding: 14rpx var(--space-2-5);
   margin-bottom: var(--space-2);
   font-size: var(--fs-body);
 }
 .meta-card {
-  background: #1a1a1e;
+  background: #FFFFFF;
   border-radius: var(--radius-lg);
   padding: var(--space-2-5) var(--space-3);
   margin-bottom: var(--space-2);
 }
 .match-card {
-  background: #1a1a1e;
+  background: #FFFFFF;
   border-radius: var(--radius-lg);
   padding: var(--space-2-5) var(--space-3);
   margin-bottom: var(--space-2);
@@ -721,7 +718,7 @@
 
 /* ===== 赛事概述卡片 ===== */
 .overview-card {
-  background: var(--card-bg-elevated, #222226);
+  background: var(--card-bg-elevated, #F1F3F5);
   border-radius: var(--radius-lg, 16rpx);
   padding: var(--space-2-5) var(--space-3);
   margin-bottom: var(--space-2);
@@ -742,15 +739,15 @@
 .overview-body {
   display: block;
   font-size: var(--fs-label);
-  color: #c9d2dd;
+  color: var(--text-3);
   line-height: var(--lh-loose);
 }
 .overview-name { font-weight: 600; color: var(--text-1); }
-.overview-highlight { color: #ffcf5c; font-weight: 600; }
+.overview-highlight { color: var(--dota-gold-strong); font-weight: 600; }
 
 /* ===== 参赛队伍卡片 ===== */
 .teams-card {
-  background: var(--card-bg-elevated, #222226);
+  background: var(--card-bg-elevated, #F1F3F5);
   border-radius: var(--radius-lg, 16rpx);
   padding: var(--space-2-5) var(--space-3);
   margin-bottom: var(--space-2);
@@ -782,19 +779,19 @@
   display: flex;
   align-items: center;
   gap: var(--space-1-5);
-  background: var(--card-bg, #1a1a1e);
-  border: 1rpx solid #262628;
+  background: var(--card-bg, #FFFFFF);
+  border: 1rpx solid #E5E7EB;
   border-radius: var(--radius-md, 12rpx);
   padding: 14rpx var(--space-2);
   transition: background 120ms ease, border-color 120ms ease;
 }
-.team-chip:active { background: var(--card-bg-inset, #131316); }
+.team-chip:active { background: var(--card-bg-inset, #F1F3F5); }
 .team-chip-logo {
   width: 44rpx;
   height: 44rpx;
   border-radius: var(--radius-sm, 8rpx);
-  background: var(--card-bg-inset, #131316);
-  border: 1rpx solid #2a323d;
+  background: var(--card-bg-inset, #F1F3F5);
+  border: 1rpx solid #E5E7EB;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -808,7 +805,7 @@
   flex: 1;
   min-width: 0;
   font-size: var(--fs-label);
-  color: #d4dce6;
+  color: var(--text-3);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -887,7 +884,7 @@
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-1);
-  background: #1a1a1e;
+  background: #FFFFFF;
   border-radius: var(--radius-md);
   padding: 14rpx var(--space-2-5);
   margin-bottom: var(--space-2);
@@ -948,7 +945,7 @@
   box-shadow: 0 0 12rpx rgba(255, 207, 92, 0.4);
 }
 .phase-divider-upcoming .phase-divider-text {
-  color: #ffcf5c;
+  color: var(--dota-gold-strong);
 }
 /* RECENT 段：灰色色条，可点击折叠 */
 .phase-divider-recent .phase-divider-bar {
@@ -981,19 +978,19 @@
 
 /* UPCOMING 段：黄色左边框 + 浅黄背景 */
 .series-card.series-upcoming {
-  border-left: 3rpx solid #ffcf5c;
-  background: linear-gradient(90deg, rgba(255, 207, 92, 0.05) 0%, transparent 100%);
+  border-left: 3rpx solid var(--dota-gold, #C8A951);
+  background: var(--card-bg, #FFFFFF);
 }
 /* 未开赛：开赛时间样式（替代比分位） */
 .series-scheduled-time {
   font-size: var(--fs-subhead);
-  color: #ffcf5c;
+  color: var(--dota-gold, #C8A951);
   font-weight: 600;
   letter-spacing: 1rpx;
 }
 /* 未开赛：倒计时标签 */
 .series-upcoming-tag {
-  color: #ffcf5c;
+  color: var(--dota-gold-strong);
   font-size: var(--fs-caption);
   margin-left: auto;
 }
@@ -1135,8 +1132,8 @@
   margin: var(--space-3) 0 var(--space-2);
 }
 .lp-group-card {
-  background: var(--card-bg, #1a1a1e);
-  border: 1rpx solid #1f262f;
+  background: var(--card-bg, #FFFFFF);
+  border: 1rpx solid #E5E7EB;
   border-radius: var(--radius-lg, 16rpx);
   padding: var(--space-2-5) var(--space-3);
   margin-bottom: var(--space-2);
@@ -1152,7 +1149,7 @@
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-1) 0;
-  border-bottom: 1rpx solid #1a2029;
+  border-bottom: 1rpx solid #E5E7EB;
 }
 .lp-team-row:last-child { border-bottom: none; }
 .lp-team-rank {
@@ -1180,11 +1177,11 @@
   color: var(--text-3);
 }
 .lp-team-placement.up { color: #7ee787; background: rgba(126, 231, 135, 0.12); }
-.lp-team-placement.down { color: #ff7b72; background: rgba(255, 123, 114, 0.12); }
+.lp-team-placement.down { color: var(--dire); background: rgba(255, 123, 114, 0.12); }
 
 .lp-bracket-card {
-  background: var(--card-bg, #1a1a1e);
-  border: 1rpx solid #1f262f;
+  background: var(--card-bg, #FFFFFF);
+  border: 1rpx solid #E5E7EB;
   border-radius: var(--radius-lg, 16rpx);
   padding: var(--space-2-5) var(--space-3);
   margin-bottom: var(--space-2);
@@ -1199,8 +1196,8 @@
 }
 .lp-match {
   padding: var(--space-1-5) var(--space-2);
-  background: #131316;
-  border: 1rpx solid #1a2029;
+  background: #F1F3F5;
+  border: 1rpx solid #E5E7EB;
   border-radius: var(--radius-md);
   margin-bottom: var(--space-1-5);
 }
@@ -1221,7 +1218,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.lp-match-team.winner .lp-match-team-name { font-weight: 700; color: #ffd15c; }
+.lp-match-team.winner .lp-match-team-name { font-weight: 700; color: var(--dota-gold-strong); }
 .lp-match-score {
   flex-shrink: 0;
   font-size: var(--fs-label);
@@ -1229,7 +1226,7 @@
   color: var(--text-2);
   font-family: var(--font-mono, monospace);
 }
-.lp-match-score.winner { color: #ffd15c; }
+.lp-match-score.winner { color: var(--dota-gold-strong); }
 .lp-match-meta {
   margin-top: var(--space-0-5);
   font-size: var(--fs-caption);

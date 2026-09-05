@@ -1,6 +1,9 @@
 {
   "enablePullDownRefresh": true,
   "backgroundTextStyle": "dark",
+  "backgroundColor": "#F8F9FA",
+  "backgroundColorTop": "#F8F9FA",
+  "backgroundColorBottom": "#F8F9FA",
   "usingComponents": {
     "t-icon": "../../../miniprogram_npm/tdesign-miniprogram/icon/icon",
     "t-button": "../../../miniprogram_npm/tdesign-miniprogram/button/button",

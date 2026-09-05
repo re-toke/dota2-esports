@@ -22,7 +22,7 @@
   height: 96rpx;
   border-radius: var(--radius-lg);
   background: var(--card-bg-inset);
-  border: 1rpx solid var(--td-border-level-1-color, #262628);
+  border: 1rpx solid var(--td-border-level-1-color, #E5E7EB);
 }
 .vs-logo--fallback {
   display: flex;
@@ -80,7 +80,7 @@
 
 /* ===== 胜负条形区 ===== */
 .h2h-bar-block {
-  background: var(--card-bg, #1a1a1e);
+  background: var(--card-bg, #FFFFFF);
   border-radius: var(--radius-lg, 16rpx);
   padding: var(--space-3-5) var(--space-3);
   margin-bottom: var(--space-3);
@@ -115,7 +115,7 @@
   height: 28rpx;
   border-radius: var(--radius-pill, 999rpx);
   overflow: hidden;
-  background: var(--card-bg-inset, #131316);
+  background: var(--card-bg-inset, #F1F3F5);
 }
 .h2h-bar-fill {
   height: 100%;
@@ -164,7 +164,7 @@
 .h2h-match {
   position: relative;
   overflow: hidden;
-  background: var(--card-bg, #1a1a1e);
+  background: var(--card-bg, #FFFFFF);
   border-radius: var(--radius-md, 12rpx);
   padding: var(--space-2-5) var(--space-3) var(--space-2-5) var(--space-4);
   margin-bottom: 14rpx;
@@ -174,7 +174,7 @@
   position: absolute;
   left: 0; top: 0; bottom: 0;
   width: 6rpx;
-  background: var(--td-border-level-1-color, #262628);
+  background: var(--td-border-level-1-color, #E5E7EB);
 }
 .h2h-match.tier-sss::before { background: var(--tier-sss); }
 .h2h-match.tier-s::before { background: var(--tier-s); }
@@ -188,7 +188,7 @@
 .h2h-key-flag {
   font-size: var(--fs-micro);
   font-weight: 700;
-  color: #1a1a1a;
+  color: #1F2937;
   background: #C8A951;
   padding: 2rpx 10rpx;
   border-radius: var(--radius-pill);
@@ -210,7 +210,7 @@
   flex: 1;
   min-width: 0;
 }
-.h2h-league--plain { color: #c3ccd9; }
+.h2h-league--plain { color: var(--text-2); }
 .h2h-date {
   font-size: var(--fs-caption);
   color: var(--text-3);
@@ -270,19 +270,19 @@
   width: 96rpx;
   height: 96rpx;
   border-radius: var(--radius-lg);
-  background: var(--card-bg-elevated, #222226);
+  background: var(--card-bg-elevated, #F1F3F5);
   margin: 0 auto var(--space-3);
 }
 .sk-bar {
   height: 28rpx;
   border-radius: var(--radius-pill);
-  background: var(--card-bg-elevated, #222226);
+  background: var(--card-bg-elevated, #F1F3F5);
   margin-bottom: var(--space-2);
 }
 
 /* ===== 3.3 近期状态雷达卡 ===== */
 .radar-card {
-  background: var(--card-bg, #1a1a1e);
+  background: var(--card-bg, #FFFFFF);
   border: 1rpx solid var(--border, rgba(255, 255, 255, 0.08));
   border-radius: var(--radius-lg);
   padding: var(--space-2) var(--space-1) var(--space-1-5);
@@ -298,7 +298,7 @@
   display: flex;
   align-items: center;
   font-size: var(--fs-caption);
-  color: #c9d1d9;
+  color: var(--text-3);
 }
 .rl-dot {
   width: 18rpx;

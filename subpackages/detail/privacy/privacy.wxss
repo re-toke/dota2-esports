@@ -1,15 +1,15 @@
 /* pages/privacy/privacy.wxss */
 .container {
   padding: var(--space-4) var(--space-4) 64rpx;
-  background: #0d0d0d;
+  background: #F8F9FA;
   min-height: 100vh;
-  color: #e6edf3;
+  color: #1F2937;
 }
 
 .header {
   margin-bottom: var(--space-5);
   padding-bottom: var(--space-3);
-  border-bottom: 1rpx solid #262628;
+  border-bottom: 1rpx solid #E5E7EB;
 }
 .title {
   font-size: var(--fs-mega);
@@ -28,7 +28,7 @@
 .section-title {
   font-size: var(--fs-emphasis);
   font-weight: 600;
-  color: #e6edf3;
+  color: #1F2937;
   margin-bottom: var(--space-2);
   padding-left: var(--space-2);
   border-left: 6rpx solid var(--dota-gold);
@@ -49,14 +49,14 @@
   padding-left: var(--space-2);
 }
 .em {
-  color: #5fd3a8;
+  color: var(--dota-gold-strong);
   font-weight: 500;
 }
 
 .footer {
   margin-top: var(--space-6);
   padding: var(--space-3);
-  background: #1a1a1e;
+  background: #FFFFFF;
   border-radius: var(--radius-md);
   display: flex;
   align-items: flex-start;

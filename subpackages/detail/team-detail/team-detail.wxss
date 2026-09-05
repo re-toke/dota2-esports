@@ -14,8 +14,8 @@
   border-radius: var(--radius-md, 12rpx);
   overflow: hidden;
   flex-shrink: 0;
-  background: var(--card-bg-inset, #131316);
-  border: 1rpx solid #262628;
+  background: var(--card-bg-inset, #F1F3F5);
+  border: 1rpx solid #E5E7EB;
 }
 .head-info { flex: 1; min-width: 0; }
 .head-info .title {
@@ -35,8 +35,9 @@
 .head-meta .sub { font-size: var(--fs-body); color: var(--text-2); }
 .tag-tag {
   font-size: var(--fs-caption);
-  color: #c9d2dd;
-  background: #1c2433;
+  color: #4B5563;
+  background: #F1F3F5;
+  border: 1rpx solid #E5E7EB;
   border-radius: var(--radius-xs);
   padding: 2rpx var(--space-1);
   font-family: var(--font-mono, monospace);
@@ -59,7 +60,7 @@
 
 /* ===== 数据溯源合并区（C 风格 · 与 league-detail 一致） ===== */
 .source-section {
-  background: var(--card-bg-elevated, #222226);
+  background: var(--card-bg-elevated, #F1F3F5);
   border-radius: var(--radius-lg, 16rpx);
   padding: var(--space-2-5) var(--space-3);
   margin-bottom: var(--space-2);
@@ -102,7 +103,7 @@
 .quality-pill .q-src { font-size: var(--fs-caption); opacity: 0.85; }
 .quality-high { background: rgba(95, 211, 168, 0.12); color: var(--status-verified); }
 .quality-high .q-dot { background: var(--status-verified); }
-.quality-medium { background: rgba(255, 207, 92, 0.12); color: #ffcf5c; }
+.quality-medium { background: rgba(255, 207, 92, 0.12); color: var(--dota-gold-strong); }
 .quality-medium .q-dot { background: #ffcf5c; }
 .quality-low { background: rgba(107, 114, 128, 0.16); color: var(--text-2); }
 .quality-low .q-dot { background: var(--text-2); }
@@ -110,7 +111,7 @@
 /* ===== 分段控件 ===== */
 .seg {
   display: flex;
-  background: var(--card-bg-inset, #131316);
+  background: var(--card-bg-inset, #F1F3F5);
   border-radius: var(--radius-md, 12rpx);
   padding: var(--space-0-5);
   margin: var(--space-2) 0;
@@ -125,7 +126,7 @@
   transition: background 120ms ease, color 120ms ease;
 }
 .seg-item.active {
-  background: var(--card-bg-elevated, #222226);
+  background: var(--card-bg-elevated, #F1F3F5);
   color: var(--text-1);
   font-weight: 600;
 }
@@ -135,14 +136,14 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  background: var(--card-bg, #1a1a1e);
+  background: var(--card-bg, #FFFFFF);
   border-radius: var(--radius-lg, 16rpx);
   padding: 18rpx var(--space-2-5);
   margin-bottom: var(--space-1-5);
   transition: background 120ms ease;
 }
 .member-hover {
-  background: var(--card-bg-elevated, #222226);
+  background: var(--card-bg-elevated, #F1F3F5);
 }
 .member-avatar {
   width: 72rpx;
@@ -150,8 +151,8 @@
   border-radius: 50%;
   overflow: hidden;
   flex-shrink: 0;
-  background: var(--card-bg-inset, #131316);
-  border: 1rpx solid #262628;
+  background: var(--card-bg-inset, #F1F3F5);
+  border: 1rpx solid #E5E7EB;
 }
 .member-body { flex: 1; min-width: 0; }
 .member-name-row {
@@ -188,8 +189,8 @@
   font-size: var(--fs-body);
   font-weight: 700;
   color: var(--text-2);
-  background: var(--card-bg-inset, #131316);
-  border: 1rpx solid #262628;
+  background: var(--card-bg-inset, #F1F3F5);
+  border: 1rpx solid #E5E7EB;
 }
 
 /* ===== 通用 ===== */
@@ -201,7 +202,7 @@
 /* ===== 对战记录 H2H ===== */
 .h2h-list {
   margin-top: var(--space-1-5);
-  background: #1a1a1e;
+  background: #FFFFFF;
   border-radius: var(--radius-lg);
   overflow: hidden;
 }
@@ -210,10 +211,10 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--space-2-5) var(--space-3);
-  border-bottom: 1rpx solid #1f262f;
+  border-bottom: 1rpx solid #E5E7EB;
 }
 .h2h-row:last-child { border-bottom: none; }
-.h2h-row-hover { background: #1c2330; }
+.h2h-row-hover { background: #F1F3F5; }
 .h2h-opp {
   display: flex;
   align-items: center;
@@ -225,7 +226,7 @@
   font-size: var(--fs-micro);
   font-weight: 700;
   color: #5fd3a8;
-  background: #131316;
+  background: #F1F3F5;
   border-radius: var(--radius-sm);
   padding: var(--space-0-5) var(--space-1);
   min-width: 56rpx;
@@ -233,7 +234,7 @@
 }
 .h2h-opp-name {
   font-size: var(--fs-label);
-  color: #e6edf3;
+  color: #1F2937;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -273,7 +274,7 @@
 }
 .priority-badge.priority-ti {
   background: rgba(255, 207, 92, 0.18);
-  color: #ffcf5c;
+  color: var(--dota-gold-strong);
   border: 1rpx solid rgba(255, 207, 92, 0.4);
 }
 .priority-badge.priority-s {
@@ -294,11 +295,11 @@
   font-weight: 600;
   margin-left: var(--space-1);
   background: rgba(255, 207, 92, 0.15);
-  color: #ffcf5c;
+  color: var(--dota-gold-strong);
   border: 1rpx solid rgba(255, 207, 92, 0.3);
 }
 .h2h-stier {
-  color: #ffcf5c;
+  color: var(--dota-gold-strong);
   font-weight: 500;
   margin-left: var(--space-0-5);
 }

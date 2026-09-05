@@ -1,4 +1,4 @@
-/* custom-tab-bar/index.wxss */
+/* custom-tab-bar/index.wxss · 雾峰雪 v2.0 */
 .tab-bar {
   position: fixed;
   left: 0;
@@ -11,7 +11,7 @@
   padding-top: 10rpx;
   padding-bottom: calc(12rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
-  background: rgba(13, 13, 13, 0.92);
+  background: rgba(248, 249, 250, 0.92);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
@@ -28,7 +28,7 @@
   left: 0;
   right: 0;
   height: 1rpx;
-  background: linear-gradient(90deg, transparent 0%, rgba(255, 209, 92, 0.18) 50%, transparent 100%);
+  background: linear-gradient(90deg, transparent 0%, rgba(200, 169, 81, 0.25) 50%, transparent 100%);
   transform: scaleY(0.5);
   transform-origin: 0 0;
 }
@@ -41,12 +41,12 @@
   justify-content: flex-start;
   flex: 1;
   padding: var(--space-1-5) 0 var(--space-1);
-  color: #6b6b73;
+  color: #6B7280;
   transition: color 0.18s ease, transform 0.12s ease;
 }
 
 .tab-bar__item--active {
-  color: #FFD15C;
+  color: #C8A951;
 }
 
 .tab-bar__item--pressed {
@@ -85,8 +85,8 @@
   width: 8rpx;
   height: 8rpx;
   border-radius: 50%;
-  background: #FFD15C;
-  box-shadow: 0 0 10rpx rgba(255, 209, 92, 0.5);
+  background: #C8A951;
+  box-shadow: 0 0 10rpx rgba(200, 169, 81, 0.5);
 }
 
 .tab-bar__text {
@@ -103,9 +103,9 @@
 
 /* 安全区由 .tab-bar 的 padding-bottom 处理 */
 
-/* 批次2（2026-08-30）· PRD §5：底部安全区改不透明纯深色。
-   iOS Home 指示条区域原为半透明毛玻璃底，白色指示条对比突兀；
-   现该区域覆盖与页面背景同值的不透明 #0d0d0d，内容区保留毛玻璃视觉分层。
+/* 批次2（2026-08-30）· PRD §5：底部安全区不透明纯色（雾峰雪 v2.0 改亮色）。
+   iOS Home 指示条区域原为半透明毛玻璃底，黑色指示条对比突兀；
+   现该区域覆盖与页面背景同值的不透明 #F8F9FA，内容区保留毛玻璃视觉分层。
    无刘海设备 env()=0，::after 零高度，无副作用。 */
 .tab-bar::after {
   content: '';
@@ -114,5 +114,5 @@
   right: 0;
   bottom: 0;
   height: env(safe-area-inset-bottom);
-  background: #0d0d0d;
+  background: #F8F9FA;
 }

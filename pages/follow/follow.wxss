@@ -4,11 +4,13 @@
    用户卡 + 统计行合并为单卡：上=chooseAvatar 头像 + 昵称 input；下=内嵌统计行。 */
 .user-card {
   position: relative;
-  background: linear-gradient(135deg, #1c1c20 0%, #1a1a20 50%, #1a1a1c 100%);
+  background: var(--card-bg, #FFFFFF);
+  border: 1rpx solid #E5E7EB;
   border-radius: var(--radius-lg, 16rpx);
   padding: var(--space-3) var(--space-2-5);
   margin-bottom: var(--space-2);
   overflow: hidden;
+  box-shadow: var(--card-inner-shadow, 0 1rpx 4rpx rgba(0,0,0,0.04));
 }
 /* 顶部金线：暗示"传说级"身份 */
 .user-card::before {
@@ -174,7 +176,7 @@
 /* ===== 分段控件 ===== */
 .seg {
   display: flex;
-  background: var(--card-bg-inset, #131316);
+  background: var(--card-bg-inset, #F1F3F5);
   border-radius: var(--radius-md, 12rpx);
   padding: var(--space-0-5);
   margin: var(--space-2) 0;
@@ -189,7 +191,7 @@
   transition: background 120ms ease, color 120ms ease;
 }
 .seg-item.active {
-  background: var(--card-bg-elevated, #222226);
+  background: var(--card-bg-elevated, #F1F3F5);
   color: var(--text-1);
   font-weight: 600;
 }
@@ -200,7 +202,7 @@
   position: relative;
   display: flex;
   align-items: center;
-  background: var(--card-bg, #1a1a1e);
+  background: var(--card-bg, #FFFFFF);
   border-radius: var(--radius-lg, 16rpx);
   padding: 18rpx var(--space-2-5);
   margin-bottom: var(--space-1-5);
@@ -208,7 +210,7 @@
   transition: background 120ms ease;
 }
 .follow-card-hover {
-  background: var(--card-bg-elevated, #222226);
+  background: var(--card-bg-elevated, #F1F3F5);
 }
 .follow-card-main {
   flex: 1;
@@ -223,8 +225,8 @@
   width: 72rpx;
   height: 72rpx;
   border-radius: var(--radius-md, 12rpx);
-  background: var(--card-bg-inset, #131316);
-  border: 1rpx solid #262628;
+  background: var(--card-bg-inset, #F1F3F5);
+  border: 1rpx solid #E5E7EB;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -241,7 +243,7 @@
 }
 .follow-avatar-leagues {
   background: rgba(255, 207, 92, 0.12);
-  color: #ffcf5c;
+  color: var(--dota-gold-strong);
   border-color: rgba(255, 207, 92, 0.3);
 }
 .follow-avatar-icon {
@@ -252,7 +254,7 @@
   width: 100%;
   height: 100%;
   border-radius: inherit;
-  background: var(--card-bg-inset, #131316);
+  background: var(--card-bg-inset, #F1F3F5);
 }
 
 .follow-info {
@@ -291,7 +293,7 @@
 }
 .type-leagues {
   background: rgba(255, 207, 92, 0.14);
-  color: #ffcf5c;
+  color: var(--dota-gold-strong);
 }
 .follow-sub {
   font-size: var(--fs-caption);
@@ -369,12 +371,12 @@
   border-radius: var(--radius-pill, 999rpx);
   background: rgba(200, 169, 81, 0.16);
   border: 1rpx solid rgba(200, 169, 81, 0.5);
-  color: #e8eef6;
+  color: var(--text-1);
 }
 .rc-toggle--on {
   background: rgba(232, 68, 59, 0.16);
   border-color: rgba(232, 68, 59, 0.55);
-  color: #ff8a82;
+  color: var(--dire);
 }
 /* 已开启卡身内「重新授权」链接（替代原双按钮区） */
 .rc-reauth {
@@ -451,7 +453,7 @@
 }
 .sl-fail {
   background: rgba(248, 113, 113, 0.14);
-  color: #f87171;
+  color: var(--dire);
 }
 .sl-detail {
   flex: 1;
@@ -461,7 +463,7 @@
 }
 .sl-league {
   font-size: var(--fs-body);
-  color: #d1d5db;
+  color: var(--text-3);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -478,11 +480,11 @@
 
 /* ===== #20 智能提醒设置 ===== */
 .reminder-card {
-  background: var(--card-bg, #1a1a1e);
+  background: var(--card-bg, #FFFFFF);
   border-radius: var(--radius-lg, 16rpx);
   padding: var(--space-3);
   margin-bottom: var(--space-2-5);
-  border: 1rpx solid #262628;
+  border: 1rpx solid #E5E7EB;
 }
 .reminder-block { margin: var(--space-2) 0; }
 .reminder-label {
@@ -507,7 +509,7 @@
 .rc-chip--on {
   background: rgba(200,169,81,0.16);
   border-color: rgba(200,169,81,0.5);
-  color: #e8eef6;
+  color: var(--text-1);
   font-weight: 600;
 }
 .reminder-hint {
@@ -519,7 +521,7 @@
 
 /* ===== v11 新增：系统配置区（个人英雄面板底部） ===== */
 .settings-card {
-  background: var(--card-bg, #1a1a1e);
+  background: var(--card-bg, #FFFFFF);
   border-radius: var(--radius-lg, 14rpx);
   overflow: hidden;
   margin-bottom: var(--space-2);
@@ -530,7 +532,7 @@
   gap: var(--space-2);
   min-height: 88rpx;
   padding: 0 var(--space-3);
-  background: var(--card-bg, #1a1a1e);
+  background: var(--card-bg, #FFFFFF);
 }
 .settings-item + .settings-item {
   border-top: 1rpx solid rgba(255,255,255,0.04);

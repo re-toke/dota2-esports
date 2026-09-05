@@ -9,7 +9,7 @@
   gap: var(--space-1);
   padding: var(--space-1-5) var(--space-1);
   background: var(--card-grad);
-  border: 1rpx solid var(--td-border-level-1-color, #262628);
+  border: 1rpx solid var(--td-border-level-1-color, #E5E7EB);
   border-radius: var(--radius-lg);
   box-shadow: var(--card-inner-shadow);
 }

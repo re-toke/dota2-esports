@@ -1,6 +1,9 @@
 {
   "enablePullDownRefresh": true,
   "backgroundTextStyle": "dark",
+  "backgroundColor": "#F8F9FA",
+  "backgroundColorTop": "#F8F9FA",
+  "backgroundColorBottom": "#F8F9FA",
   "usingComponents": {
     "onboarding": "../../components/onboarding/onboarding",
     "t-search": "tdesign-miniprogram/search/search",

@@ -42,15 +42,15 @@
 .league-item .league-badges,
 .league-item .league-sub,
 .league-item .league-countdown { position: relative; z-index: 1; }
-/* 进行中（LIVE）：绿色光晕替代 Tier 色，卡片亮一级 + 脉冲呼吸（pulse-glow 定义在 app.wxss）
-   v4.3 去红：删除 ::before 的 --card-glow-live 红渐变条（与首页同款被否决的涂装），
+/* 进行中（LIVE）：雾峰雪 v2.0——白卡 + 绿脉冲呼吸（pulse-glow 定义在 app.wxss）
+   v4.3 去红：删除 ::before 的 --card-glow-live 红渐变条，
    左侧色条回退为 Tier 色，进行中语义由绿呼吸光晕 + 状态徽标承载 */
 .league-item--ongoing {
-  background: linear-gradient(135deg, #222228 0%, #1e1e24 100%);
-  box-shadow: 0 0 16rpx rgba(95,211,95,0.08), var(--card-inner-shadow);
+  background: var(--card-bg, #FFFFFF);
+  box-shadow: 0 0 16rpx rgba(95,211,95,0.08), var(--card-inner-shadow, 0 1rpx 4rpx rgba(0,0,0,0.04));
   animation: pulse-glow var(--dur-breath) var(--ease-in-out) infinite;
 }
-.league-item--ongoing .league-name { color: #e8fff0; }
+.league-item--ongoing .league-name { color: #1F2937; }
 /* 已结束：分元素衰减（文字 85% 可读 / 装饰 45% 渐暗） */
 .league-item--ended { opacity: 0.85; }
 .league-item--ended::before { opacity: 0.45; }
@@ -163,7 +163,7 @@
   max-width: 520rpx;
   background: var(--card-grad);
   box-shadow: var(--card-inner-shadow);
-  border: 1rpx solid #262628;
+  border: 1rpx solid #E5E7EB;
   border-radius: var(--radius-pill);          /* 胶囊形 */
   transition: transform 0.12s ease;
 }
@@ -188,7 +188,7 @@
   letter-spacing: 0.5rpx;
 }
 .lm-text--armed {
-  color: #FFD15C;
+  color: #C8A951;
   font-weight: 500;
 }
 .lm-text--loading {
@@ -198,7 +198,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  /* 金色渐变点缀，呼应项目 SSS tier 色（#FFD15C → #C8A951） */
+  /* 金色渐变点缀，呼应项目 SSS tier 色（#C8A951 → #C8A951） */
   filter: drop-shadow(0 0 4rpx rgba(255, 209, 92, 0.15));
   animation: lmArrowBob var(--dur-sway) var(--ease-in-out) infinite;
 }
@@ -210,8 +210,8 @@
 .lm-spinner {
   width: 28rpx;
   height: 28rpx;
-  border: 3rpx solid #2e2e30;
-  border-top-color: #FFD15C;
+  border: 3rpx solid #D1D5DB;
+  border-top-color: #C8A951;
   border-radius: 50%;
   animation: lmSpin 0.7s linear infinite;
 }
@@ -229,14 +229,14 @@
 .spinner {
   width: 56rpx;
   height: 56rpx;
-  border: 4rpx solid #262628;
+  border: 4rpx solid #E5E7EB;
   border-top-color: var(--dota-gold);
   border-radius: 50%;
   animation: spin 0.9s linear infinite;
   margin-bottom: var(--space-3);
 }
 @keyframes spin { to { transform: rotate(360deg); } }
-.progress-text { font-size: var(--fs-subhead); color: #e6edf3; margin-bottom: var(--space-1-5); }
+.progress-text { font-size: var(--fs-subhead); color: #1F2937; margin-bottom: var(--space-1-5); }
 .progress-tip { font-size: var(--fs-caption); color: var(--text-3); text-align: center; }
 
 /* ===== v8.1 P1-4：过期快照「数据截至」提示条（非模态、不打断浏览）===== */
@@ -264,16 +264,16 @@
   width: 100%;
   margin-top: var(--space-3);
   padding: var(--space-4) var(--space-3-5);
-  background: #1b222c;
-  border: 1rpx solid #2d3744;
-  border-left: 6rpx solid #ffcf5c;
+  background: #FFFFFF;
+  border: 1rpx solid #E5E7EB;
+  border-left: 6rpx solid var(--dota-gold, #C8A951);
   border-radius: var(--radius-lg);
   box-sizing: border-box;
 }
 .hint-title {
   font-size: var(--fs-emphasis);
   font-weight: 600;
-  color: #ffcf5c;
+  color: var(--dota-gold-strong);
   margin-bottom: var(--space-2);
 }
 .hint-desc {
@@ -291,7 +291,7 @@
 .hint-code {
   font-family: monospace;
   color: #5fd3a8;
-  background: #131316;
+  background: #F1F3F5;
   padding: 2rpx 10rpx;
   border-radius: var(--radius-sm);
   font-size: var(--fs-caption);
@@ -316,8 +316,8 @@
   padding: 0 var(--space-3-5);
   border-radius: var(--radius-lg);
   font-size: 0;
-  background: #1a1a1e;
-  border: 1.5rpx solid #2d3748;
+  background: #FFFFFF;
+  border: 1.5rpx solid #D1D5DB;
   cursor: pointer;
   overflow: hidden;
   transition:
@@ -340,8 +340,8 @@
   line-height: 1;
 }
 
-/* ── 各等级默认态（未选中）：淡品牌色边框 + 淡文字 ── */
-.gc--all   { border-color: #3d4a5c; }
+/* ── 各等级默认态（未选中）：Tier 描边 + Tier 文字 ── */
+.gc--all   { border-color: var(--text-3); }
 .gc--s     { border-color: var(--tier-s-line); }
 .gc--a     { border-color: var(--tier-a-line); }
 .gc--b     { border-color: var(--tier-b-line); }
@@ -350,67 +350,49 @@
 .gc--a   .gc__label { color: var(--tier-a); }
 .gc--b   .gc__label { color: var(--tier-b); }
 
-/* ── 选中态：渐变背景 + 发光阴影 + 白/深色高对比文字 ── */
+/* ── 选中态：雾峰雪 v2.0 实色浅底 + 深字（弃用渐变/阴影/光晕） ── */
 .gc--active {
   border-color: transparent;
-  box-shadow:
-    0 4rpx 16rpx rgba(0,0,0,.30),
-    0 0 20rpx var(--gc-glow, rgba(255,255,255,.08));
+  box-shadow: 0 1rpx 4rpx rgba(0,0,0,0.04);
   transform: translateY(-2rpx);
 }
 .gc--active:active {
   transform: scale(0.97) translateY(0);
 }
 
-/* ALL 选中：中性亮灰 */
+/* ALL 选中：中性雾灰浅底 */
 .gc--all.gc--active {
-  background: linear-gradient(135deg, #3d4a5c 0%, #2d3748 100%);
-  box-shadow:
-    0 4rpx 16rpx rgba(0,0,0,.30),
-    0 0 18rpx rgba(100,120,150,.15);
+  background: #F1F3F5;
 }
 .gc--all.gc--active .gc__label {
-  color: #e6edf3;
-  text-shadow: 0 1rpx 3rpx rgba(0,0,0,.35);
+  color: #1F2937;
 }
 
-/* S 选中：暗金渐变（批次1 §9.2：S-Tier=暗金，原翠绿为语义错误） */
+/* S 选中：金浅底（雾峰雪 v2.0） */
 .gc--s.gc--active {
-  --gc-glow: rgba(200,169,81,.28);
-  background: linear-gradient(135deg, var(--tier-s) 0%, var(--dota-gold-strong) 100%);
-  box-shadow:
-    0 4rpx 18rpx rgba(176,138,62,.38),
-    0 0 24rpx rgba(200,169,81,.22);
+  background: #FDF6E3;
 }
 .gc--s.gc--active .gc__label {
-  color: #1f1a08;
-  text-shadow: 0 1rpx 2rpx rgba(200,169,81,.5);
+  color: #7A6520;
 }
 
-/* A 选中：橙金渐变 */
+/* A 选中：indigo 浅底（雾峰雪 v2.0） */
 .gc--a.gc--active {
-  --gc-glow: rgba(240,170,40,.28);
-  background: linear-gradient(135deg, var(--status-upcoming) 0%, #e67e22 100%);
-  box-shadow:
-    0 4rpx 18rpx rgba(230,126,34,.38),
-    0 0 24rpx rgba(240,170,40,.22);
+  background: #EEF0FB;
 }
 .gc--a.gc--active .gc__label {
-  color: #1a0f00;
-  text-shadow: 0 1rpx 2rpx rgba(240,170,40,.5);
+  color: #3730A3;
 }
 
-/* B 选中：钢蓝渐变 */
+/* B 选中：蓝浅底（雾峰雪 v2.0） */
 .gc--b.gc--active {
-  --gc-glow: rgba(155,176,201,.28);
-  background: linear-gradient(135deg, #9bb0c9 0%, #7f8fa4 100%);
-  box-shadow:
-    0 4rpx 18rpx rgba(127,143,164,.38),
-    0 0 24rpx rgba(155,176,201,.22);
+  background: #EBF4FE;
 }
 .gc--b.gc--active .gc__label {
-  color: #0d1117;
-  text-shadow: 0 1rpx 2rpx rgba(155,176,201,.5);
+  color: #1E40AF;
+}
+.gc--b.gc--active .gc__label {
+  color: #1E40AF;
 }
 
 /* 来源高亮徽标（Valve 官方，信任信号保留） */
@@ -424,11 +406,10 @@
   font-weight: 600;
   flex-shrink: 0;
 }
-.hl-valve { color: #ffcf5c; background: rgba(255, 207, 92, 0.12); border: 1rpx solid rgba(255, 207, 92, 0.4); }
+.hl-valve { color: #7A6520; background: #FDF6E3; border: 1rpx solid rgba(200, 169, 81, 0.4); }
 
-/* ===== 焦点卡：重点运营节点（批次3 · PRD §10.2 hero 级视觉） =====
-   Tier 色浸染背景（--card-glow-sss 旗舰亮金）替代原 focus-glow 光斑；
-   倒计时 fs-hero 52rpx tnum 大数字；LIVE 红色脉冲徽章；tagline 单行截断。 */
+/* ===== 焦点卡：重点运营节点（雾峰雪 v2.0 · 白卡 + 品牌金点缀） =====
+   弃用暗色渐变 / 重阴影；改用白卡 + 金色径向晕染 + 极淡外阴影。 */
 .focus-card {
   position: relative;
   overflow: hidden;
@@ -436,10 +417,10 @@
   padding: var(--space-3-5) var(--space-3-5) 26rpx;
   border-radius: var(--radius-lg);
   background:
-    radial-gradient(120% 140% at 0% 0%, rgba(255,207,92,0.16) 0%, rgba(255,207,92,0) 55%),
-    linear-gradient(135deg, #1c2230 0%, #11161d 100%);
-  border: 1.5rpx solid rgba(255,207,92,0.45);
-  box-shadow: 0 6rpx 24rpx rgba(0,0,0,.32), 0 0 24rpx rgba(255,207,92,.12);
+    radial-gradient(120% 140% at 0% 0%, rgba(200,169,81,0.10) 0%, rgba(200,169,81,0) 55%),
+    var(--card-bg, #FFFFFF);
+  border: 1rpx solid #E5E7EB;
+  box-shadow: var(--card-inner-shadow, 0 1rpx 4rpx rgba(0,0,0,0.04));
 }
 /* Tier 色浸染：伪元素铺满整卡（角部光斑 focus-glow 已删，浸染更贴 PRD 视觉） */
 .focus-card--tier::before {
@@ -461,12 +442,13 @@
 .focus-badges { display: flex; align-items: center; gap: 10rpx; flex-wrap: wrap; }
 .focus-valve {
   font-size: var(--fs-micro); font-weight: 700;
-  color: #1a1400; background: linear-gradient(135deg, #ffcf5c, #f0a020);
+  color: #7A6520; background: #FDF6E3;
   padding: 3rpx var(--space-1-5); border-radius: var(--radius-sm);
+  border: 1rpx solid rgba(200,169,81,0.4);
 }
 .focus-flag {
   font-size: var(--fs-micro); font-weight: 600;
-  color: #ffcf5c; border: 1rpx solid rgba(255,207,92,0.5);
+  color: var(--dota-gold-strong); border: 1rpx solid rgba(255,207,92,0.5);
   padding: 2rpx 10rpx; border-radius: var(--radius-sm);
 }
 /* LIVE 徽章：红点脉冲 + 文案（批次3 §10.2） */
@@ -497,7 +479,7 @@
   position: relative;
   z-index: 1;
   margin-top: 18rpx;
-  font-size: var(--fs-display); font-weight: 800; color: #ffcf5c;
+  font-size: var(--fs-display); font-weight: 800; color: var(--dota-gold-strong);
   letter-spacing: 0.5rpx;
   text-shadow: 0 2rpx 8rpx rgba(255,207,92,.18);
 }
@@ -505,7 +487,7 @@
   position: relative;
   z-index: 1;
   margin-top: 6rpx;
-  font-size: var(--fs-body); color: #c3ccd9;
+  font-size: var(--fs-body); color: var(--text-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -536,14 +518,14 @@
 .cd-num {
   font-size: var(--fs-hero);
   font-weight: 800;
-  color: #ffcf5c;
+  color: var(--dota-gold-strong);
   line-height: 1;
   font-family: var(--font-numeric);
   font-feature-settings: 'tnum';
 }
-.cd-unit { font-size: var(--fs-body); color: #e6c97a; }
+.cd-unit { font-size: var(--fs-body); color: var(--dota-gold-strong); }
 .focus-countdown--live { background: rgba(255,91,91,0.12); border-color: rgba(255,91,91,0.45); }
-.cd-live { font-size: var(--fs-subhead); font-weight: 700; color: #ff7b7b; }
+.cd-live { font-size: var(--fs-subhead); font-weight: 700; color: var(--dire); }
 .focus-cta {
   position: relative;
   z-index: 1;
@@ -554,8 +536,8 @@
 
 /* 进行中态：红金边框，突出直播氛围 */
 .focus-card--live {
-  border-color: rgba(255,91,91,0.50);
-  box-shadow: 0 6rpx 24rpx rgba(0,0,0,.32), 0 0 24rpx rgba(255,91,91,.14);
+  border-color: rgba(239,68,68,0.50);
+  box-shadow: var(--card-inner-shadow, 0 1rpx 4rpx rgba(0,0,0,0.04)), 0 0 16rpx rgba(239,68,68,.10);
 }
 
 /* ===== 战队筛选入口（spec A）===== */
@@ -570,11 +552,11 @@
   align-items: center;
   gap: var(--space-1);
   padding: 10rpx 22rpx;
-  background: var(--card-bg, #1a1a1e);
-  border: 1rpx solid var(--td-border-level-1-color, #262628);
+  background: var(--card-bg, #FFFFFF);
+  border: 1rpx solid var(--td-border-level-1-color, #E5E7EB);
   border-radius: var(--radius-pill);
   font-size: var(--fs-label);
-  color: #c3ccd9;
+  color: var(--text-2);
 }
 .team-filter-btn--active {
   color: var(--dota-gold, #C8A951);
@@ -588,7 +570,7 @@
   padding: 0 var(--space-1);
   border-radius: var(--radius-pill);
   background: var(--dota-gold, #C8A951);
-  color: #121015;
+  color: #1F2937;
   font-size: var(--fs-micro);
   font-weight: 800;
   line-height: 30rpx;
@@ -596,18 +578,18 @@
 }
 .team-clear {
   font-size: var(--fs-body);
-  color: #ff7b7b;
+  color: var(--dire);
 }
 .team-hint {
   font-size: var(--fs-caption);
   color: var(--text-3);
 }
 
-/* ===== 战队筛选弹层（spec A）===== */
+/* ===== 战队筛选弹层（spec A · 雾峰雪 v2.0）===== */
 .tf-mask {
   position: fixed;
   left: 0; top: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.55);
+  background: rgba(0,0,0,0.40);
   z-index: 100;
   display: flex;
   align-items: flex-end;
@@ -615,12 +597,12 @@
 .tf-sheet {
   width: 100%;
   max-height: 78vh;
-  background: var(--card-bg, #1a1a1e);
+  background: var(--card-bg, #FFFFFF);
   border-radius: 28rpx 28rpx 0 0;
   padding: var(--space-3-5) var(--space-3-5) calc(28rpx + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
-  box-shadow: 0 -8rpx 32rpx rgba(0,0,0,.4);
+  box-shadow: 0 -4rpx 24rpx rgba(0,0,0,0.04);
 }
 .tf-sheet-head {
   display: flex;
@@ -662,7 +644,7 @@
   width: 64rpx;
   height: 48rpx;
   border-radius: var(--radius-md);
-  background: var(--card-bg-inset, #131316);
+  background: var(--card-bg-inset, #F1F3F5);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -673,7 +655,7 @@
 }
 .tf-cell-name {
   font-size: var(--fs-subhead);
-  color: #e6ebf2;
+  color: var(--text-1);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -687,7 +669,7 @@
   padding: 60rpx var(--space-5);
   gap: var(--space-1-5);
 }
-.tf-empty-text { font-size: var(--fs-subhead); color: #c3ccd9; font-weight: 600; }
+.tf-empty-text { font-size: var(--fs-subhead); color: var(--text-2); font-weight: 600; }
 .tf-empty-sub { font-size: var(--fs-body); color: var(--text-3); text-align: center; }
 .tf-sheet-foot {
   display: flex;
@@ -705,12 +687,12 @@
   font-weight: 700;
 }
 .tf-btn--cancel {
-  background: var(--card-bg-inset, #131316);
+  background: var(--card-bg-inset, #F1F3F5);
   color: var(--text-2);
 }
 .tf-btn--confirm {
   background: var(--dota-gold, #C8A951);
-  color: #121015;
+  color: #1F2937;
 }
 
 /* ===== 首页「我的关注」横向卡片流（spec C.2.1）===== */
@@ -750,17 +732,17 @@
   flex-direction: column;
   width: 300rpx;
   padding: var(--space-2-5) 22rpx var(--space-2-5) 30rpx;
-  background: var(--card-bg, #1a1a1e);
-  border: 1rpx solid var(--td-border-level-1-color, #262628);
+  background: var(--card-bg, #FFFFFF);
+  border: 1rpx solid var(--td-border-level-1-color, #E5E7EB);
   border-radius: var(--radius-lg);
-  box-shadow: 0 4rpx 16rpx rgba(0,0,0,.22);
+  box-shadow: var(--card-inner-shadow);
 }
 .ff-card::before {
   content: '';
   position: absolute;
   left: 0; top: 0; bottom: 0;
   width: 6rpx;
-  background: var(--td-border-level-1-color, #262628);
+  background: var(--td-border-level-1-color, #E5E7EB);
 }
 .ff-card.tier-sss::before { background: var(--tier-sss); }
 .ff-card.tier-s::before { background: var(--tier-s); }
@@ -775,7 +757,7 @@
 .ff-tier {
   font-size: var(--fs-micro);
   font-weight: 700;
-  color: #121015;
+  color: #1F2937;
   background: var(--dota-gold, #C8A951);
   padding: 2rpx 10rpx;
   border-radius: var(--radius-sm);
@@ -798,7 +780,7 @@
 .ff-team {
   font-size: var(--fs-emphasis);
   font-weight: 800;
-  color: #e6ebf2;
+  color: var(--text-1);
   max-width: 110rpx;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -843,7 +825,7 @@
   width: 300rpx;
   height: 168rpx;
   border-radius: var(--radius-lg);
-  background: var(--card-bg-elevated, #222226);
+  background: var(--card-bg-elevated, #F1F3F5);
   flex-shrink: 0;
 }
 .ff-empty {
@@ -851,11 +833,11 @@
   flex-direction: column;
   gap: 6rpx;
   padding: var(--space-3-5) var(--space-2);
-  background: var(--card-bg, #1a1a1e);
+  background: var(--card-bg, #FFFFFF);
   border-radius: var(--radius-lg);
-  border: 1rpx dashed var(--td-border-level-1-color, #262628);
+  border: 1rpx dashed var(--td-border-level-1-color, #E5E7EB);
 }
-.ff-empty-text { font-size: var(--fs-label); color: #c3ccd9; font-weight: 600; }
+.ff-empty-text { font-size: var(--fs-label); color: var(--text-2); font-weight: 600; }
 .ff-empty-sub { font-size: var(--fs-caption); color: var(--text-3); }
 
 /* 未关注态引导卡 */
@@ -876,7 +858,7 @@
 .fg-btn {
   padding: var(--space-1-5) var(--space-3-5);
   background: var(--dota-gold, #C8A951);
-  color: #121015;
+  color: #1F2937;
   font-size: var(--fs-label);
   font-weight: 700;
   border-radius: var(--radius-pill);
@@ -914,16 +896,16 @@
   align-items: center;
   gap: 6rpx;
   padding: 14rpx 22rpx;
-  background: #1a1a1e;
+  background: #FFFFFF;
   border: 1rpx solid rgba(255,255,255,0.10);
   border-radius: var(--radius-md);
-  color: #c3ccd9;
+  color: var(--text-2);
   font-size: var(--fs-label);
 }
 .filter-toggle--active {
   border-color: rgba(200,169,81,0.5);
   background: rgba(200,169,81,0.12);
-  color: #e8eef6;
+  color: var(--text-1);
 }
 .ft-text { font-weight: 600; }
 .filter-badge {
@@ -932,18 +914,18 @@
   padding: 0 var(--space-1);
   border-radius: var(--radius-pill);
   background: var(--dota-gold, #C8A951);
-  color: #121015;
+  color: #1F2937;
   font-size: var(--fs-micro);
   font-weight: 800;
   line-height: 30rpx;
   text-align: center;
 }
 
-/* ====================== B-1 筛选抽屉 ====================== */
+/* ====================== B-1 筛选抽屉（雾峰雪 v2.0）====================== */
 .fp-mask {
   position: fixed;
   left: 0; top: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.55);
+  background: rgba(0,0,0,0.40);
   z-index: 100;
   display: flex;
   align-items: flex-end;
@@ -951,12 +933,12 @@
 .fp-sheet {
   width: 100%;
   max-height: 80vh;
-  background: var(--card-bg, #1a1a1e);
+  background: var(--card-bg, #FFFFFF);
   border-radius: 28rpx 28rpx 0 0;
   padding: var(--space-3-5) var(--space-3-5) calc(28rpx + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
-  box-shadow: 0 -8rpx 32rpx rgba(0,0,0,.4);
+  box-shadow: 0 -4rpx 24rpx rgba(0,0,0,0.04);
 }
 .fp-head {
   display: flex;
@@ -999,7 +981,7 @@
   flex: 1;
   padding: var(--space-2) 0;
   border-radius: var(--radius-lg);
-  background: #1a1a1e;
+  background: #FFFFFF;
   border: 1rpx solid rgba(255,255,255,0.08);
   color: var(--text-2);
   font-size: var(--fs-label);
@@ -1007,7 +989,7 @@
 .seg--active {
   background: rgba(200,169,81,0.16);
   border-color: rgba(200,169,81,0.5);
-  color: #e8eef6;
+  color: var(--text-1);
 }
 .tf-hint {
   display: block;
@@ -1027,7 +1009,7 @@
 }
 .fp-btn--confirm {
   background: var(--dota-gold, #C8A951);
-  color: #121015;
+  color: #1F2937;
 }
 
 /* ====================== B-2 列表表格化（压缩密度） ====================== */

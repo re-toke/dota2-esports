@@ -7,14 +7,14 @@
   overflow: hidden;
   margin-bottom: var(--space-2);
   height: 180rpx;
-  background: linear-gradient(135deg, #222226 0%, #0d0d0d 100%);
+  background: linear-gradient(135deg, #F1F3F5 0%, #F8F9FA 100%);
 }
 .report-hero.radiant-win {
-  background: linear-gradient(135deg, rgba(95, 211, 95, 0.18) 0%, #0d0d0d 80%);
+  background: linear-gradient(135deg, rgba(95, 211, 95, 0.18) 0%, #F8F9FA 80%);
   border-left: 6rpx solid var(--radiant);
 }
 .report-hero.dire-win {
-  background: linear-gradient(135deg, rgba(232, 68, 59, 0.18) 0%, #0d0d0d 80%);
+  background: linear-gradient(135deg, rgba(232, 68, 59, 0.18) 0%, #F8F9FA 80%);
   border-left: 6rpx solid var(--dire);
 }
 .hero-overlay {
@@ -40,7 +40,7 @@
   flex-wrap: wrap;
   gap: var(--space-1-5);
   font-size: var(--fs-body);
-  color: #c9d2dd;
+  color: var(--text-3);
   margin-top: var(--space-0-5);
 }
 
@@ -59,7 +59,7 @@
 .mvp-tag {
   font-size: var(--fs-caption);
   font-weight: 700;
-  color: #ffcf5c;
+  color: var(--dota-gold-strong);
   background: rgba(255, 207, 92, 0.2);
   padding: var(--space-0-5) 14rpx;
   border-radius: var(--radius-pill, 999rpx);
@@ -67,7 +67,7 @@
 .mvp-body { flex: 1; min-width: 200rpx; }
 .mvp-hero {
   font-size: var(--fs-body);
-  color: #ffcf5c;
+  color: var(--dota-gold-strong);
   font-weight: 600;
 }
 .mvp-player {
@@ -81,7 +81,7 @@
   gap: var(--space-2);
   font-size: var(--fs-caption);
   font-family: var(--font-mono, monospace);
-  color: #c9d2dd;
+  color: var(--text-3);
   font-variant-numeric: tabular-nums;
 }
 
@@ -117,7 +117,7 @@
 
 /* ===== KDA 表（HLTV 风格） ===== */
 .kda-table {
-  background: var(--card-bg, #1a1a1e);
+  background: var(--card-bg, #FFFFFF);
   border-radius: var(--radius-lg, 16rpx);
   overflow: hidden;
 }
@@ -127,19 +127,19 @@
   padding: 14rpx var(--space-2);
 }
 .kda-head {
-  background: var(--card-bg-elevated, #222226);
+  background: var(--card-bg-elevated, #F1F3F5);
   font-size: var(--fs-caption);
   color: var(--text-2);
   letter-spacing: 1rpx;
   text-transform: uppercase;
 }
 .kda-row {
-  border-top: 1rpx solid #262628;
+  border-top: 1rpx solid #E5E7EB;
   font-size: var(--fs-label);
   color: var(--text-1);
   transition: background 120ms ease;
 }
-.kda-row-hover { background: var(--card-bg-elevated, #222226); }
+.kda-row-hover { background: var(--card-bg-elevated, #F1F3F5); }
 
 .c-hero {
   width: 100rpx;
@@ -149,22 +149,22 @@
   width: 56rpx;
   height: 56rpx;
   border-radius: var(--radius-sm, 8rpx);
-  background: var(--card-bg-inset, #131316);
-  border: 1rpx solid #262628;
+  background: var(--card-bg-inset, #F1F3F5);
+  border: 1rpx solid #E5E7EB;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: var(--fs-micro);
   font-weight: 700;
-  color: #c9d2dd;
+  color: var(--text-3);
 }
 /* 英雄头像图片（Steam CDN _sb.png，mode=aspectFill 裁切填满） */
 .hero-img {
   width: 56rpx;
   height: 56rpx;
   border-radius: var(--radius-sm, 8rpx);
-  border: 1rpx solid #262628;
-  background: var(--card-bg-inset, #131316);
+  border: 1rpx solid #E5E7EB;
+  background: var(--card-bg-inset, #F1F3F5);
 }
 .hero-box.win-side {
   border-color: rgba(95, 211, 95, 0.4);
@@ -184,7 +184,7 @@
   text-align: center;
   font-family: var(--font-mono, monospace);
   font-variant-numeric: tabular-nums;
-  color: #c9d2dd;
+  color: var(--text-3);
 }
 .c-net {
   width: 100rpx;
@@ -209,9 +209,9 @@
 .items-block {
   margin: var(--space-1) 0 var(--space-3);
   padding: var(--space-1-5) var(--space-2);
-  background: #131316;
+  background: #F1F3F5;
   border-radius: var(--radius-md);
-  border: 1rpx solid #1f262f;
+  border: 1rpx solid #E5E7EB;
 }
 .items-row {
   display: flex;
@@ -225,7 +225,7 @@
   color: #5fd3a8;
   min-width: 72rpx;
   text-align: center;
-  background: #1a1a1e;
+  background: #FFFFFF;
   border-radius: var(--radius-sm);
   padding: var(--space-0-5) 6rpx;
 }
@@ -240,8 +240,8 @@
   width: 44rpx;
   height: 32rpx;
   border-radius: var(--radius-sm);
-  border: 1rpx solid #2a323d;
-  background: #1a1a1e;
+  border: 1rpx solid #E5E7EB;
+  background: #FFFFFF;
 }
 .item-slot {
   display: inline-flex;
@@ -251,8 +251,8 @@
   font-size: var(--fs-badge);
   line-height: 32rpx;
   color: #4a525d;
-  background: #1a1a1e;
-  border: 1rpx solid #2a323d;
+  background: #FFFFFF;
+  border: 1rpx solid #E5E7EB;
   border-radius: var(--radius-sm);
   padding: 0 6rpx;
   max-width: 96rpx;
@@ -266,9 +266,9 @@
 .chart-card {
   margin: var(--space-1) 0 var(--space-4);
   padding: var(--space-2-5) var(--space-2) var(--space-2);
-  background: #131316;
+  background: #F1F3F5;
   border-radius: var(--radius-md);
-  border: 1rpx solid #1f262f;
+  border: 1rpx solid #E5E7EB;
 }
 .chart-legend {
   display: flex;
@@ -282,7 +282,7 @@
   align-items: center;
   gap: var(--space-1);
   font-size: var(--fs-caption);
-  color: #c9d2dd;
+  color: var(--text-3);
 }
 .lg-dot {
   width: 16rpx;
@@ -304,7 +304,7 @@
   margin: var(--space-2) 0;
   padding: 22rpx var(--space-3);
   border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, rgba(200, 169, 81, 0.16) 0%, #1a1a1e 100%);
+  background: linear-gradient(135deg, rgba(200, 169, 81, 0.16) 0%, #FFFFFF 100%);
   border: 1rpx solid rgba(200, 169, 81, 0.35);
 }
 .h2h-cta--hover { opacity: 0.82; }
@@ -312,7 +312,7 @@
 .h2h-cta-title {
   font-size: var(--fs-emphasis);
   font-weight: 700;
-  color: #e8eef6;
+  color: var(--text-1);
 }
 .h2h-cta-sub {
   margin-top: 6rpx;

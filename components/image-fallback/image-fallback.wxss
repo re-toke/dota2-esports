@@ -12,7 +12,7 @@
   position: relative;
   width: 100%;
   height: 100%;
-  background: var(--card-bg-inset, #131316);
+  background: var(--card-bg-inset, #F1F3F5);
   overflow: hidden;
 }
 .imgfb--round { border-radius: 50%; }
@@ -42,8 +42,8 @@
   font-weight: 800;
   color: var(--dota-gold, #C8A951);
   font-family: var(--font-mono, monospace);
-  /* 文字阴影：暗底上增强对比度，避免金字"陷进"暗背景 */
-  text-shadow: 0 1rpx 3rpx rgba(0, 0, 0, 0.8);
+  /* 雾峰雪 v2.0：亮底金字，去掉强阴影，只留极淡描边 */
+  text-shadow: 0 1rpx 2rpx rgba(0, 0, 0, 0.08);
   letter-spacing: 1rpx;
 }
 .imgfb-img {

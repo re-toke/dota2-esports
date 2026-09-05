@@ -5,14 +5,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--td-mask-background, rgba(14, 17, 22, 0.96));
+  background: var(--td-mask-background, rgba(248, 249, 250, 0.92));
   padding: var(--space-6);
 }
 .ob-card {
   width: 100%;
   max-width: 560rpx;
-  background: var(--card-bg-elevated, #222226);
-  border: 1rpx solid #2e2e30;
+  background: var(--card-bg-elevated, #F1F3F5);
+  border: 1rpx solid #D1D5DB;
   border-radius: var(--radius-lg, 16rpx);
   padding: var(--space-6) var(--space-5) var(--space-5);
   display: flex;
@@ -29,7 +29,7 @@
   width: 16rpx;
   height: 16rpx;
   border-radius: 50%;
-  background: #2e2e30;
+  background: #D1D5DB;
   transition: all 0.2s;
 }
 .ob-dot--on {
@@ -72,7 +72,7 @@
   text-align: center;
   font-size: var(--fs-subhead);
   font-weight: 600;
-  color: #121015;
+  color: #7A6520;
   background: var(--dota-gold, #C8A951);
   border-radius: var(--radius-md, 12rpx);
 }
