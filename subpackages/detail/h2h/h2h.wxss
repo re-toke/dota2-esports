@@ -255,7 +255,7 @@
   content: '';
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 50%, transparent 100%);
+  background: linear-gradient(90deg, transparent 0%, #E5E7EB 50%, transparent 100%);
   transform: translateX(-100%);
   animation: sk-shimmer 1.4s ease-in-out infinite;
 }
@@ -283,7 +283,7 @@
 /* ===== 3.3 近期状态雷达卡 ===== */
 .radar-card {
   background: var(--card-bg, #FFFFFF);
-  border: 1rpx solid var(--border, rgba(255, 255, 255, 0.08));
+  border: 1rpx solid var(--border, #E5E7EB);
   border-radius: var(--radius-lg);
   padding: var(--space-2) var(--space-1) var(--space-1-5);
   margin-bottom: var(--space-2);

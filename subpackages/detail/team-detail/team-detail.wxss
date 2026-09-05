@@ -273,13 +273,13 @@
   margin-right: var(--space-1);
 }
 .priority-badge.priority-ti {
-  background: rgba(255, 207, 92, 0.18);
+  background: rgba(200, 169, 81, 0.18);
   color: var(--dota-gold-strong);
-  border: 1rpx solid rgba(255, 207, 92, 0.4);
+  border: 1rpx solid rgba(200, 169, 81, 0.4);
 }
 .priority-badge.priority-s {
   background: var(--tier-s-soft);
-  color: var(--tier-s);
+  color: var(--dota-gold-strong);
   border: 1rpx solid var(--tier-s-line);
 }
 

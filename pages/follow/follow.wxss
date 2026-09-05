@@ -91,9 +91,9 @@
 .uc-stats {
   display: flex;
   align-items: center;
-  margin-top: var(--space-2-5);
-  padding-top: var(--space-2-5);
-  border-top: 1rpx solid rgba(255, 255, 255, 0.06);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1rpx solid #E5E7EB;
 }
 .stat-cell {
   flex: 1;
@@ -104,7 +104,7 @@
   transition: background 120ms ease;
 }
 .stat-cell:active {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--td-bg-color-component-active, #E5E7EB);
   border-radius: var(--radius-sm);
 }
 /* 数字格：tnum 数字字体（§11.3 第一/二格保持数字） */
@@ -125,7 +125,7 @@
 .stat-divider {
   width: 1rpx;
   height: 48rpx;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.04);
   flex-shrink: 0;
 }
 /* ===== 第三格提醒徽章（§11.3：已开启红脉冲 / 未开启灰静态） ===== */
@@ -150,14 +150,14 @@
   color: var(--text-2);
 }
 .rem-badge--on {
-  background: rgba(255, 91, 82, 0.14);
+  background: rgba(239, 68, 68, 0.14);
 }
 .rem-badge--on .rem-dot {
-  background: var(--status-live, #FF5B52);
+  background: var(--status-live, #EF4444);
   animation: signal-dot var(--dur-breath) var(--ease-in-out) infinite;
 }
 .rem-badge--on .rem-text {
-  color: var(--status-live, #FF5B52);
+  color: var(--status-live, #EF4444);
 }
 @media (prefers-reduced-motion: reduce) {
   .rem-badge--on .rem-dot { animation: none; }
@@ -169,7 +169,7 @@
   font-weight: 600;
   color: var(--text-2);
   letter-spacing: 1rpx;
-  margin: var(--space-2-5) 0 var(--space-1);
+  margin: var(--space-3) 0 var(--space-1);
   padding-left: var(--space-0-5);
 }
 
@@ -438,7 +438,7 @@
   align-items: center;
   gap: var(--space-1-5);
   padding: 10rpx 0;
-  border-bottom: 1rpx solid rgba(255,255,255,0.04);
+  border-bottom: 1rpx solid #E5E7EB;
 }
 .sl-status {
   font-size: var(--fs-micro);
@@ -483,7 +483,7 @@
   background: var(--card-bg, #FFFFFF);
   border-radius: var(--radius-lg, 16rpx);
   padding: var(--space-3);
-  margin-bottom: var(--space-2-5);
+  margin-bottom: var(--space-3);
   border: 1rpx solid #E5E7EB;
 }
 .reminder-block { margin: var(--space-2) 0; }
@@ -502,7 +502,7 @@
   font-size: var(--fs-body);
   padding: 10rpx 22rpx;
   border-radius: var(--radius-pill, 999rpx);
-  background: rgba(255,255,255,0.05);
+  background: rgba(0, 0, 0, 0.02);
   color: var(--text-2);
   border: 1rpx solid transparent;
 }
@@ -535,7 +535,7 @@
   background: var(--card-bg, #FFFFFF);
 }
 .settings-item + .settings-item {
-  border-top: 1rpx solid rgba(255,255,255,0.04);
+  border-top: 1rpx solid #E5E7EB;
 }
 .settings-icon {
   display: flex;

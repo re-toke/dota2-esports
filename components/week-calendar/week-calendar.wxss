@@ -24,7 +24,7 @@
   border-radius: var(--radius-md);
 }
 .wk-arrow--pressed {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.03);
 }
 .wk-arrow-glyph {
   font-size: 40rpx;
@@ -50,7 +50,7 @@
 }
 
 .wk-cell--pressed {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(0, 0, 0, 0.02);
 }
 
 /* 今日：金色描边（不填充，视觉权重让位 LIVE/选中） */
@@ -109,7 +109,7 @@
   font-size: var(--fs-badge);
   font-weight: 600;
   font-feature-settings: 'tnum';
-  color: var(--tier-s);
+  color: var(--dota-gold-strong);
   line-height: 1.4;
   text-align: center;
 }

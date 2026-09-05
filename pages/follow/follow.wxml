@@ -17,18 +17,18 @@
     </view>
     <!-- 统计行（内嵌，无独立分隔线卡） -->
     <view class="uc-stats">
-      <view class="stat-cell" bindtap="switchTab" data-key="teams">
+      <view class="stat-cell" bindtap="switchTab" data-key="teams" hover-class="tap-scale">
         <text class="stat-value stat-value--num">{{counts.teams}}</text>
         <text class="stat-label">关注战队</text>
       </view>
       <view class="stat-divider"></view>
-      <view class="stat-cell" bindtap="switchTab" data-key="leagues">
+      <view class="stat-cell" bindtap="switchTab" data-key="leagues" hover-class="tap-scale">
         <text class="stat-value stat-value--num">{{counts.leagues}}</text>
         <text class="stat-label">关注赛事</text>
       </view>
       <view class="stat-divider"></view>
       <!-- 第三格：提醒开关徽章（§11.3 已开启=红脉冲点 / 未开启=灰静态点） -->
-      <view class="stat-cell" bindtap="scrollToReminder">
+      <view class="stat-cell" bindtap="scrollToReminder" hover-class="tap-scale">
         <view class="rem-badge {{subStatus && subStatus.subscribed ? 'rem-badge--on' : ''}}">
           <view class="rem-dot" />
           <text class="rem-text">{{subStatus && subStatus.subscribed ? '已开启' : '未开启'}}</text>

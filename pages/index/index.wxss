@@ -26,7 +26,7 @@
 
 /* ===== v4.1：快捷入口分区（从页面底部上移，常驻入口带） ===== */
 .quick-section {
-  margin: var(--space-2-5) 0 var(--space-0-5);
+  margin: var(--space-3) 0 var(--space-0-5);
 }
 .quick-section-label {
   display: block;
@@ -38,7 +38,7 @@
 
 /* ===== 关注卡片流（2.1，从 leagues 迁入） ===== */
 .follow-flow {
-  margin: var(--space-2-5) 0 var(--space-0-5);
+  margin: var(--space-3) 0 var(--space-0-5);
 }
 .ff-head {
   display: flex;
@@ -192,10 +192,10 @@
   display: flex;
   align-items: center;
   gap: 18rpx;
-  margin: var(--space-2-5) 0 var(--space-0-5);
+  margin: var(--space-3) 0 var(--space-0-5);
   padding: 22rpx var(--space-3);
-  background: linear-gradient(135deg, rgba(255,209,92,0.10), rgba(200,169,81,0.04));
-  border: 1rpx solid rgba(255,209,92,0.22);
+  background: linear-gradient(135deg, rgba(200,169,81,0.10), rgba(200,169,81,0.04));
+  border: 1rpx solid rgba(200,169,81,0.22);
   border-radius: var(--radius-lg);
 }
 .fg-icon { font-size: var(--fs-mega); }
@@ -217,7 +217,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  margin: var(--space-2-5) 0 var(--space-1);
+  margin: var(--space-3) 0 var(--space-1);
 }
 .match-skeleton {
   padding: var(--space-0-5) 0;
@@ -237,7 +237,7 @@
   gap: 10rpx;
   padding: var(--space-3-5) 0;
   background: var(--card-grad);
-  border: 1rpx solid rgba(255,255,255,0.08);
+  border: 1rpx solid #E5E7EB;
   border-radius: var(--radius-lg);
   box-shadow: var(--card-inner-shadow);
 }

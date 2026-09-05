@@ -36,7 +36,7 @@ function tagThemeOf(grade) {
 // 批次1 §9.2：LIVE/进行中统一红 --status-live；已结束 --text-3
 // 批次3 §10.1：即将到来改琥珀 --status-upcoming #f0aa28（此前亮金与 LIVE 红难区分）
 function statusBadgeOf(status) {
-  if (status === 'ongoing') return { text: '正在交锋', color: '#FF5B52' };
+  if (status === 'ongoing') return { text: '正在交锋', color: '#EF4444' };
   if (status === 'upcoming') return { text: '即将到来', color: '#f0aa28' };
   return { text: '战局已定', color: '#6b7280' };
 }

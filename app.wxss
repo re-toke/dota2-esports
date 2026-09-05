@@ -877,12 +877,12 @@ page {
 
 /* ① LIVE 脉冲呼吸（赛事列表/详情页进行中卡片）
    节奏：吸气(0→35%) → 峰值保持(35→55%) → 呼气(55→90%) → 静息(90→100%)，模拟真实呼吸而非急促闪烁。
-   批次1 §9.2：光晕绿→红（--status-live 同步改红）。 */
+   雾峰雪 v2.0：光晕色统一 --status-live #EF4444（red-500，4.0:1 过 WCAG-AA）。 */
 @keyframes pulse-glow {
-  0%       { box-shadow: 0 0 4rpx  rgba(255, 91, 82, 0.2); }
-  35%, 55% { box-shadow: 0 0 14rpx rgba(255, 91, 82, 0.5); }
-  90%      { box-shadow: 0 0 4rpx  rgba(255, 91, 82, 0.2); }
-  100%     { box-shadow: 0 0 4rpx  rgba(255, 91, 82, 0.2); }
+  0%       { box-shadow: 0 0 4rpx  rgba(239, 68, 68, 0.20); }
+  35%, 55% { box-shadow: 0 0 14rpx rgba(239, 68, 68, 0.50); }
+  90%      { box-shadow: 0 0 4rpx  rgba(239, 68, 68, 0.20); }
+  100%     { box-shadow: 0 0 4rpx  rgba(239, 68, 68, 0.20); }
 }
 .live-pulse {
   animation: pulse-glow var(--dur-breath) var(--ease-in-out) infinite;
@@ -908,10 +908,13 @@ page {
   animation: fade-up var(--dur-normal) var(--ease-out) both;
 }
 
-/* ④ 触控按压反馈（规范 §1.4.2 标准版，区别于上面 .tap-scale 静态 scale） */
+/* ④ 触控按压反馈（规范 §1.4.2 标准版，区别于上面 .tap-scale 静态 scale）
+   雾峰雪 v2.0：亮色系下 opacity 反馈不明显，增加填底 + scale 复合反馈 */
 .tap-scale:active {
-  transform: scale(0.96);
-  transition: transform var(--dur-fast) var(--ease-spring);
+  transform: scale(0.97);
+  background: var(--td-bg-color-component-active, #E5E7EB);
+  transition: transform var(--dur-fast) var(--ease-spring),
+              background var(--dur-fast) var(--ease-out);
 }
 
 /* ⑤ 关注星标填充动画（从空心→实心） */

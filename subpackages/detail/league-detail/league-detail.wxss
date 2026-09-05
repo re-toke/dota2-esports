@@ -322,8 +322,8 @@
   font-size: var(--fs-hero);
 }
 .series-live .series-score {
-  border-color: rgba(255, 91, 82, 0.3);
-  background: rgba(255, 91, 82, 0.04);
+  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.04);
 }
 /* v11 聚光灯 Phase 6.4：LIVE 比分阵营色——天辉方绿 / 夜魇方红（当前直播比分）
    天辉方 = scoreACls 含 'win' 且为 radiant 胜者时由 JS 注入阵营类 */
@@ -393,8 +393,8 @@
   animation: live-pulse var(--dur-sway) var(--ease-in-out) infinite;
 }
 @keyframes live-pulse {
-  0%, 100% { opacity: 1; text-shadow: 0 0 4rpx rgba(255, 91, 82, 0.6); }
-  50% { opacity: 0.6; text-shadow: 0 0 2rpx rgba(255, 91, 82, 0.3); }
+  0%, 100% { opacity: 1; text-shadow: 0 0 4rpx rgba(239, 68, 68, 0.6); }
+  50% { opacity: 0.6; text-shadow: 0 0 2rpx rgba(239, 68, 68, 0.3); }
 }
 .series-time {
   font-size: var(--fs-caption);
@@ -451,7 +451,7 @@
   display: flex;
   align-items: center;
   gap: 6rpx;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(0, 0, 0, 0.02);
   padding: var(--space-0-5) 10rpx;
   border-radius: var(--radius-sm, 8rpx);
 }
@@ -845,7 +845,7 @@
 .team-chip-region {
   font-size: var(--fs-badge);
   color: var(--text-2);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(0, 0, 0, 0.02);
   border-radius: var(--radius-xs);
   padding: 1rpx var(--space-1);
   line-height: var(--lh-relaxed);
@@ -858,7 +858,7 @@
 .team-chip-badge {
   font-size: var(--fs-micro);
   color: var(--text-2);
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.03);
   border-radius: var(--radius-sm);
   padding: 2rpx var(--space-1);
   flex-shrink: 0;
@@ -928,13 +928,13 @@
   font-size: var(--fs-caption);
   color: var(--text-2);
   padding: var(--space-0-5) var(--space-1-5);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(0, 0, 0, 0.02);
   border-radius: var(--radius-sm);
 }
 /* LIVE 段：红色色条（批次1 §9.2 LIVE 统一红） */
 .phase-divider-live .phase-divider-bar {
   background: var(--status-live);
-  box-shadow: 0 0 12rpx rgba(255, 91, 82, 0.4);
+  box-shadow: 0 0 12rpx rgba(239, 68, 68, 0.4);
 }
 .phase-divider-live .phase-divider-text {
   color: var(--status-live);
@@ -964,7 +964,7 @@
 /* LIVE 段：红色左边框 + 轻微发光（批次1 §9.2 LIVE 统一红） */
 .series-card.series-live {
   border-left: 3rpx solid var(--status-live);
-  box-shadow: 0 0 24rpx -8rpx rgba(255, 91, 82, 0.25);
+  box-shadow: 0 0 24rpx -8rpx rgba(239, 68, 68, 0.25);
 }
 /* LIVE 标签已有样式（series-live-tag），这里仅强化脉冲 */
 .series-card.series-live .series-live-tag {
@@ -1177,7 +1177,7 @@
   color: var(--text-3);
 }
 .lp-team-placement.up { color: #7ee787; background: rgba(126, 231, 135, 0.12); }
-.lp-team-placement.down { color: var(--dire); background: rgba(255, 123, 114, 0.12); }
+.lp-team-placement.down { color: var(--dire); background: rgba(239, 68, 68, 0.12); }
 
 .lp-bracket-card {
   background: var(--card-bg, #FFFFFF);
