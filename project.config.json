@@ -361,6 +361,22 @@
       {
         "type": "folder",
         "value": "/miniprogram_npm/tdesign-miniprogram/textarea"
+      },
+      {
+        "type": "folder",
+        "value": "/supabase"
+      },
+      {
+        "type": "folder",
+        "value": "/.github"
+      },
+      {
+        "type": "folder",
+        "value": "/.trae"
+      },
+      {
+        "type": "folder",
+        "value": "/.husky"
       }
     ],
     "include": []

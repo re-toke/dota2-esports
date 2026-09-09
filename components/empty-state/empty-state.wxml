@@ -1,5 +1,5 @@
 <view class="es {{type === 'error' ? 'es--error' : ''}}">
-  <image class="es-illustration" src="/assets/illustrations/empty-{{illustration}}.png" mode="aspectFit" />
+  <image class="es-illustration" src="/assets/illustrations/empty-{{illustration}}.webp" mode="aspectFit" />
   <view class="es-title">{{title}}</view>
   <view class="es-desc" wx:if="{{desc}}">{{desc}}</view>
   <view class="es-action" wx:if="{{actionText}}">
