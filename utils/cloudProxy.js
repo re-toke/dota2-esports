@@ -55,7 +55,61 @@ function timeoutFor(action) {
   return (ACTION_TIMEOUT_MS[action] != null) ? ACTION_TIMEOUT_MS[action] : ACTION_TIMEOUT_MS._default;
 }
 
+// ===== M2.4（2026-09-09）：Supabase 数据代理路由 =====
+// supabase.enabled=true 时，下列 action 走 Supabase Edge Function（香港，带 Postgres 缓存），
+// 失败自动回落云开发链路（callCloud）。EF 返回形状 {data, source} 与云函数一致。
+// ⚠️ 未列入的 action（liquipediaLeagueMeta/ScheduledMatches/TeamLogo/ListTournaments、
+//    haglundUpcoming、getUpcomingSchedule、getLeagueDetailBundle、health 等）契约不兼容
+//    （云函数端含解析/聚合逻辑，EF 薄代理只回 raw wikitext）——继续走云开发，分阶段迁移。
+var EDGE_ACTIONS = {
+  // OpenDota 11+ action → opendota-proxy
+  getLeagues: 'opendota-proxy',
+  getLeagueWindows: 'opendota-proxy',
+  getLeagueMatches: 'opendota-proxy',
+  searchTeams: 'opendota-proxy',
+  getTeam: 'opendota-proxy',
+  getTeamPlayers: 'opendota-proxy',
+  getTeamMatches: 'opendota-proxy',
+  getPlayer: 'opendota-proxy',
+  getPlayerMatches: 'opendota-proxy',
+  getHeroes: 'opendota-proxy',
+  getProMatches: 'opendota-proxy',
+  getLiveMatches: 'opendota-proxy',
+  // Steam / STRATZ / Liquipedia 薄代理
+  steamProxy: 'steam-proxy',
+  steamLeagueScheduled: 'steam-proxy',
+  stratzGql: 'stratz-proxy',
+  liquipediaFetchRawWikitext: 'liquipedia-proxy'
+};
+
+// 懒加载（防循环依赖：api.js ←→ cloudProxy 已有环，supabaseClient 只依赖 config 安全）
+function _sbEfAvailable() {
+  try {
+    var c = require('./config.js').supabase || {};
+    if (!(c.enabled && c.url && c.anonKey)) return false;
+    return require('./supabaseClient.js').efAvailable();
+  } catch (e) { return false; }
+}
+
 function call(action, params, extra) {
+  // ★ M2.4：Supabase 数据代理优先；EF 熔断打开或失败 → 回落云开发
+  var efName = EDGE_ACTIONS[action];
+  if (efName && _sbEfAvailable()) {
+    var sbPayload = { action: action, params: params || {} };
+    if (extra && typeof extra === 'object' && extra.force != null) sbPayload.force = !!extra.force;
+    return require('./supabaseClient.js').edge(efName, sbPayload).then(function (r) {
+      // EF 形状 { data, source } / { error } —— 与云函数 res.result 对齐，取 .data
+      if (r && r.data !== undefined) return r.data;
+      throw new Error((r && r.error) || 'ef empty');
+    }).catch(function (efErr) {
+      console.info('[cloudProxy] EF ' + efName + ' fail(' + (efErr && efErr.message) + ') → 回落云开发');
+      return callCloud(action, params, extra);
+    });
+  }
+  return callCloud(action, params, extra);
+}
+
+function callCloud(action, params, extra) {
   if (!isAvailable()) {
     return Promise.reject(new Error('cloud proxy unavailable'));
   }
