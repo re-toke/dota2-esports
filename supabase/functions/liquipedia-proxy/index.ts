@@ -26,7 +26,7 @@ import { SLUGMAP_MAPPINGS } from "./slugmap.ts";
 const LP_BASE = "https://liquipedia.net/dota2/api.php";
 // UA 改用浏览器指纹（见 lpHeaders，v8.19）
 const RATE_LIMIT_MS = 2200;               // LP 官方 ≥2s，留 200ms 余量
-const META_TTL_MS = 6 * 3600 * 1000;      // 对齐 config.liquipedia.cacheTtl
+
 const SCHEDULE_TTL_MS = 24 * 3600 * 1000; // 对齐 cacheStaleTtlSchedule（24h）
 
 // ===== slug 映射（与云函数 liquipediaSlugFor 同源） =====
@@ -93,6 +93,15 @@ async function setCache(key: string, value: any, ttlMs: number): Promise<void> {
   }, { onConflict: "key" }).then(r => { if (r.error) console.warn("[setCache]", r.error.message); });
 }
 
+// ★ v8.22：读表不过滤过期——LP 数据 TTL 由 sync 脚本管理，EF 纯读
+async function getAnyCache(key: string): Promise<any | null> {
+  const client = await db();
+  const { data } = await client
+    .from("aggregation_cache").select("payload")
+    .eq("key", key).maybeSingle();
+  return data ? data.payload : null;
+}
+
 // ===== action 处理 =====
 async function handle(body: any): Promise<any> {
   const action = body.action;
@@ -104,13 +113,14 @@ async function handle(body: any): Promise<any> {
     if (!pageName) return { error: "pageName required" };
     const slug = slugFor(pageName);
     const cacheKey = "lp:w:" + slug;
-    if (!force) {
-      const cached = await getCache(cacheKey);
-      if (cached) return { data: { wikitext: cached }, source: "cache" };
-    }
+    // ★ v8.22（单后端终态）：LP 数据生命周期完全由 sync 脚本管理（GH Actions/本地
+    //   定时灌表），EF 变成纯读表——不过滤 expire_at（表里有就用，旧数据也好过 500）。
+    //   表里没有才尝试现抓（Supabase 出口当前被 LP Cloudflare 拦，会 500 → 客户端回退云开发）。
+    const cached = await getAnyCache(cacheKey);
+    if (cached) return { data: { wikitext: cached }, source: "cache" };
     const wikitext = await fetchWikitext(slug);
     if (!wikitext) return { data: null, source: "liquipedia" };
-    await setCache(cacheKey, wikitext, META_TTL_MS);
+    await setCache(cacheKey, wikitext, SCHEDULE_TTL_MS);
     return { data: { wikitext }, source: "liquipedia" };
   }
 
