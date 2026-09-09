@@ -129,8 +129,14 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
     const result = await handle(body);
+    if (result.error) {
+      // ★ v8.16：业务错误也打日志（Dashboard Logs 可见），方便远程诊断
+      console.error("[liquipedia] action failed:", body.action, "→", result.error);
+    }
     return Response.json(result, { status: result.error ? 500 : 200 });
   } catch (e) {
+    // ★ v8.16：未捕获异常打全堆栈（此前 catch 静默 → Dashboard 只见 500 不见原因）
+    console.error("[liquipedia] unhandled:", (e as Error).message, "\n", (e as Error).stack);
     return Response.json({ error: (e as Error).message }, { status: 500 });
   }
 });
