@@ -78,8 +78,10 @@ var EDGE_ACTIONS = {
   // Steam / STRATZ / Liquipedia 薄代理
   steamProxy: 'steam-proxy',
   steamLeagueScheduled: 'steam-proxy',
-  stratzGql: 'stratz-proxy',
-  liquipediaFetchRawWikitext: 'liquipedia-proxy'
+  stratzGql: 'stratz-proxy'
+  // ⚠️ liquipediaFetchRawWikitext 暂摘（2026-09-09）：liquipedia-proxy 500 待修
+  //   （疑似 LP Cloudflare 拦 Supabase 出口，等 Dashboard 日志确诊），修复后挂回：
+  //   liquipediaFetchRawWikitext: 'liquipedia-proxy'
 };
 
 // 懒加载（防循环依赖：api.js ←→ cloudProxy 已有环，supabaseClient 只依赖 config 安全）
