@@ -24,7 +24,7 @@ import { cors, db } from "../_shared/auth.ts";
 import { SLUGMAP_MAPPINGS } from "./slugmap.ts";
 
 const LP_BASE = "https://liquipedia.net/dota2/api.php";
-const LP_UA = "DOTA2-Esports-Hub/1.0 (WeChat Mini Program; contact: dev@local)";
+// UA 改用浏览器指纹（见 lpHeaders，v8.19）
 const RATE_LIMIT_MS = 2200;               // LP 官方 ≥2s，留 200ms 余量
 const META_TTL_MS = 6 * 3600 * 1000;      // 对齐 config.liquipedia.cacheTtl
 const SCHEDULE_TTL_MS = 24 * 3600 * 1000; // 对齐 cacheStaleTtlSchedule（24h）
@@ -38,14 +38,22 @@ function slugFor(name: string): string {
 // ===== 全局限流队列（2.2s 串行，实例级） =====
 let _lastLpFetch = 0;
 let _queue: Promise<void> = Promise.resolve();
+// ★ v8.19（方案 1）：补齐浏览器指纹头——此前只带 UA+gzip 裸请求被 LP Cloudflare
+//   挑战（返回 HTML 挑战页）。补 Accept/Accept-Language 提升 IP+指纹综合评分。
+function lpHeaders(): Record<string, string> {
+  return {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    "Accept": "application/json",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip"
+  };
+}
 function rateLimitedFetch(path: string): Promise<any> {
   const job = _queue.then(async () => {
     const wait = _lastLpFetch + RATE_LIMIT_MS - Date.now();
     if (wait > 0) await new Promise(r => setTimeout(r, wait));
     _lastLpFetch = Date.now();
-    const res = await fetch(LP_BASE, {
-      headers: { "User-Agent": LP_UA, "Accept-Encoding": "gzip" }
-    });
+    const res = await fetch(LP_BASE, { headers: lpHeaders() });
     if (!res.ok) throw new Error("Liquipedia " + res.status);
     // Deno fetch 自动解压 gzip
     return await res.json();
