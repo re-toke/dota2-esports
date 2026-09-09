@@ -94,6 +94,8 @@ async function lpFetch(slug) {
 }
 
 (async () => {
+  // ★ v8.21 启动横幅：确认执行的是修复版（斜杠保留 + 退避）
+  console.log('=== sync v8.21（斜杠保留版）启动 | slugs:', slugs.length, '| UA:', LP_UA.slice(0, 40) + '... ===');
   let ok = 0, fail = 0, empty = 0, consecFail = 0;
   const t0 = Date.now();
   for (const slug of slugs) {
