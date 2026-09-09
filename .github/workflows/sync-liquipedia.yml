@@ -1,0 +1,32 @@
+# ============================================================
+# Liquipedia 缓存定时同步（方案 2：绕开 Supabase 出口被 LP Cloudflare 拦）
+# 每日 02:00 / 14:00 UTC（北京时间 10:00 / 22:00）各同步一次
+#
+# 前置配置（GitHub 仓库 → Settings → Secrets and variables → Actions）：
+#   SUPABASE_URL          https://gkticzdaicpdtxheyxsd.supabase.co
+#   SUPABASE_SERVICE_KEY  service_role key（Supabase Dashboard → Settings → API）
+#
+# 手动触发：Actions 页 → 选本 workflow → Run workflow
+# ============================================================
+name: Sync Liquipedia Cache
+
+on:
+  schedule:
+    - cron: '0 2,14 * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run sync script
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node scripts/sync-liquipedia-cache.js
