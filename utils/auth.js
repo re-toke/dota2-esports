@@ -12,6 +12,8 @@
 // 点击「开启提醒」时 isLoggedIn() 命中 → 同步弹授权；未命中 → toast 引导不异步弹。
 
 var OPENID_KEY = 'dota2_openid';
+// 方案 C+（2026-09-09）：业务 JWT 存储 key（wechat-auth EF 签发，30 天有效）
+var JWT_KEY = 'dota2_jwt';
 
 // ===== 纯函数（可单测，R5）=====
 
@@ -61,7 +63,10 @@ function isLoggedIn() {
 }
 
 /**
- * 确保有可用的 openid。优先本地缓存（零请求），未命中调云函数 getOpenId（静默无感）。
+ * 确保有可用的 openid。优先本地缓存（零请求），未命中走登录链路（静默无感）。
+ * 双分支（方案 C+ 灰度，2026-09-09）：
+ *   - config.supabase.enabled=true：wx.login → Edge Function wechat-auth（拿 openid + JWT）
+ *   - 否则/失败回退：wx.cloud.callFunction getOpenId（云开发原链路，灰度期保命）
  * @param {boolean} [fresh=false] 强制刷新（忽略缓存）
  * @returns {Promise<string|null>} openid 或 null
  */
@@ -71,19 +76,60 @@ function ensureOpenId(fresh) {
       var cached = getOpenIdSync();
       if (cached) { resolve(cached); return; }
     }
-    if (typeof wx === 'undefined' || !wx.cloud || !wx.cloud.callFunction) { resolve(null); return; }
-    wx.cloud.callFunction({
-      name: 'aggregation',
-      data: { action: 'getOpenId' },
-      success: function (res) {
-        var oid = ((res && res.result) && res.result.openid) || null;
-        if (oid) {
-          try { wx.setStorageSync(OPENID_KEY, oid); } catch (e) {}
-        }
-        resolve(oid);
-      },
-      fail: function () { resolve(null); }
-    });
+
+    // ★ Supabase 分支：wx.login 拿 code → wechat-auth 换 openid + JWT
+    if (_sbEnabled()) {
+      wx.login({
+        success: function (lr) {
+          if (!lr.code) { _cloudFallback(resolve); return; }
+          _sbClient().edge(_sbCfg().functions.auth, { code: lr.code })
+            .then(function (data) {
+              var oid = (data && data.openid) || null;
+              if (oid) {
+                try { wx.setStorageSync(OPENID_KEY, oid); } catch (e) {}
+                // JWT 供 follow-profile / smart-reminders 使用（30 天有效）
+                if (data && data.token) {
+                  try { wx.setStorageSync(JWT_KEY, data.token); } catch (e) {}
+                }
+              }
+              resolve(oid);
+            })
+            .catch(function () { _cloudFallback(resolve); });  // EF 失败回退云开发
+        },
+        fail: function () { _cloudFallback(resolve); }
+      });
+      return;
+    }
+
+    _cloudFallback(resolve);
+  });
+}
+
+// ---- 方案 C+ 内部辅助（懒加载防循环依赖：subscribe → auth → config 无环；cloudCache 不 require auth）----
+
+function _sbCfg() {
+  try { return require('./config.js').supabase || {}; } catch (e) { return {}; }
+}
+function _sbEnabled() {
+  var c = _sbCfg();
+  return !!(c.enabled && c.url && c.anonKey);
+}
+function _sbClient() { return require('./supabaseClient.js'); }
+
+/** 云开发回退路径（灰度期保留，原实现原样） */
+function _cloudFallback(resolve) {
+  if (typeof wx === 'undefined' || !wx.cloud || !wx.cloud.callFunction) { resolve(null); return; }
+  wx.cloud.callFunction({
+    name: 'aggregation',
+    data: { action: 'getOpenId' },
+    success: function (res) {
+      var oid = ((res && res.result) && res.result.openid) || null;
+      if (oid) {
+        try { wx.setStorageSync(OPENID_KEY, oid); } catch (e) {}
+      }
+      resolve(oid);
+    },
+    fail: function () { resolve(null); }
   });
 }
 
@@ -101,15 +147,29 @@ function ensureLogin(fresh) {
  */
 function clearOpenId() {
   try { wx.removeStorageSync(OPENID_KEY); } catch (e) {}
+  try { wx.removeStorageSync(JWT_KEY); } catch (e) {}   // JWT 一并清除
+}
+
+/**
+ * 读取本地缓存的业务 JWT（方案 C+，follow-profile / smart-reminders 用）
+ * @returns {string|null}
+ */
+function getJwtSync() {
+  try {
+    var t = wx.getStorageSync(JWT_KEY);
+    return (typeof t === 'string' && t.length > 20) ? t : null;
+  } catch (e) { return null; }
 }
 
 module.exports = {
   OPENID_KEY: OPENID_KEY,
+  JWT_KEY: JWT_KEY,
   isValidOpenId: isValidOpenId,
   mergeSubs: mergeSubs,
   getOpenIdSync: getOpenIdSync,
   isLoggedIn: isLoggedIn,
   ensureOpenId: ensureOpenId,
   ensureLogin: ensureLogin,
-  clearOpenId: clearOpenId
+  clearOpenId: clearOpenId,
+  getJwtSync: getJwtSync
 };

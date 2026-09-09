@@ -968,7 +968,7 @@ Page({
         this.mergeHaglundUpcoming(results, now, gen).then(() => {
           if (gen !== this._upcomingGen) return;
           results.sort((a, b) => (a.startDate || 0) - (b.startDate || 0));
-          this.upcomingList = results;
+          this._writeUpcomingList(results);   // ★ v8.13：统一走守卫入口（含实时落地清提示）
           this.setData({ upcomingLoading: false, upcomingProgress: '' });
           this.applyAndSlice(true);
         });
@@ -1047,6 +1047,33 @@ Page({
     return mo + '月' + da + '日';
   },
 
+  // ★ 2026-09-09（快照空覆盖修复 · 补齐 v8.1 设计意图）：
+  //   写回 upcomingList 的统一入口——结果非空时整体替换（实时数据优先）；
+  //   结果为空时保留现有 upcomingList（过期快照降权渲染的数据），绝不闪空。
+  //   根因：tryLocalUpcoming 过期快照（>7 天）按 v8.1 设计「渲染后返回 false 放行串行查询」，
+  //   但串行查询三源全 miss（OpenDota 无未来记录 + curation 未收录 + STRATZ schema 失效）时
+  //   results=[] 无条件覆盖 → 快照渲染的 6 个真实即将赛事被抹掉 →「即将到来」tab 空白，
+  //   而「全部」tab（mergeAllWithUpcoming 引用的还是渲染期数据）仍有卡——口径脱节。
+  //   注释意图见 tryLocalUpcoming L990-991（「无结果时保留快照渲染不闪空」），本次补齐实现。
+  _writeUpcomingList(results) {
+    const n = (results && results.length) || 0;
+    if (n) {
+      console.log('[leagues] upcoming 写回: 替换为', n, '个赛事（实时数据）');
+      this.upcomingList = results;
+      // ★ 2026-09-09（v8.13 补刀）：实时数据落地 → 清除过期快照提示。
+      //   v8.1 遗漏：upcomingDataAsOf 只在 tryLocalUpcoming 设置，实时刷新完成后
+      //   无任何路径清除 →「本地赛程数据截至 X，正在后台刷新实时数据…」永远挂着。
+      if (this.data.upcomingDataAsOf) {
+        this.setData({ upcomingDataAsOf: '' });
+      }
+    } else {
+      // results 为空：保留 this.upcomingList 现值（快照/云缓存/前序链路渲染的数据）
+      // 此时 upcomingDataAsOf 同步保留（快照仍是当前数据源，陈旧提示有效）
+      console.log('[leagues] upcoming 写回: 串行结果为空，保留现有',
+        (this.upcomingList || []).length, '个赛事（快照/缓存兜底）★v8.13');
+    }
+  },
+
   // 串行查询回退：逐个赛事查赛程（STRATZ 2s 限流，首次较慢）
   // 优化：
   //   1. 先从 allLeagues 中找出 earliest 在未来的赛事（OpenDota 已有未来比赛记录），直接添加
@@ -1102,7 +1129,8 @@ Page({
     if (results.length > 0) {
       results.sort((a, b) => (a.startDate || 0) - (b.startDate || 0));
       this.upcomingList = results.slice();
-      this.setData({ upcomingLoading: false, upcomingProgress: '' });
+      // ★ v8.13：实时数据落地 → 清除过期快照提示
+      this.setData({ upcomingLoading: false, upcomingProgress: '', upcomingDataAsOf: '' });
       this.applyAndSlice(true);
     }
 
@@ -1112,8 +1140,7 @@ Page({
     this.mergeHaglundUpcoming(results, nowSec, haglundGen).then(() => {
       if (haglundGen !== this._upcomingGen) return;
       results.sort((a, b) => (a.startDate || 0) - (b.startDate || 0));
-      this.upcomingList = results.slice();
-      this.applyAndSlice(true);
+      this._writeUpcomingList(results);
     });
 
     // 3. 串行查询剩余赛事（earliest 不在未来的），作为后台补充
@@ -1139,7 +1166,7 @@ Page({
 
     if (total === 0) {
       // 无候选需要查询：explorer + curation 结果（若有）已显示，否则为空
-      this.upcomingList = results;
+      this._writeUpcomingList(results);
       this.setData({ upcomingLoading: false, upcomingProgress: '' });
       this.applyAndSlice(true);
       return;
@@ -1149,7 +1176,7 @@ Page({
       if (i >= total) {
         // 完成：按开赛时间升序
         results.sort((a, b) => (a.startDate || 0) - (b.startDate || 0));
-        this.upcomingList = results;
+        this._writeUpcomingList(results);
         this.setData({ upcomingLoading: false, upcomingProgress: '' });
         this.applyAndSlice(true);
         return;
@@ -1456,7 +1483,21 @@ Page({
     let arr;
     if (f === 'upcoming') {
       // 仅显示「即将到来」状态：已开赛的进行中赛事归入「进行中」tab，不在此重复出现
-      arr = (this.upcomingList || []).filter((x) => gradeMatch(x) && x.status === 'upcoming').slice();
+      const fromList = (this.upcomingList || []).filter((x) => gradeMatch(x) && x.status === 'upcoming').slice();
+      // ★ 2026-09-09（三源 miss 兜底 · 口径脱节修复）：upcomingList 的回退链
+      //   （云函数预热缓存 → 本地快照 → 串行查询）全 miss 时（如 curation 未收录 9 月赛事、
+      //   STRATZ schema 失效、LP slug 缺失），allLeagues 中 OpenDota earliest 在未来的赛事
+      //   （status='upcoming'，真实排期数据）此前只出现在「全部」tab——「全部」能看到、
+      //   「即将到来」却为空。修复：将 allLeagues 的 upcoming 赛事并入本 tab（按 leagueid 去重，
+      //   与「进行中」分支合并模式一致）。
+      const _seenUp = {};
+      fromList.forEach((x) => { _seenUp[String(x.leagueid)] = true; });
+      const fromAll = (this.allLeagues || []).filter((x) =>
+        x.status === 'upcoming' && gradeMatch(x) && !_seenUp[String(x.leagueid)]);
+      // ★ v8.13 诊断：upcoming tab 数据流透出（确认战队筛选豁免已生效）
+      console.log('[leagues] upcoming tab: 快照/实时卡', fromList.length,
+        '+ allLeagues 兜底', fromAll.length, '| 战队筛选已豁免 ★v8.13');
+      arr = fromList.concat(fromAll);
     } else if (f === 'ongoing') {
       // 主源：OpenDota 已收录且状态为进行中的赛事
       const ong = (this.allLeagues || []).filter((x) => x.status === 'ongoing' && gradeMatch(x));
@@ -1518,8 +1559,12 @@ Page({
 
     // 战队筛选：取选中战队「参与过的联赛并集」（OR 逻辑，非 AND）与当前结果取交集
     // （spec A.AC-A3：列表仅显示参赛方含选中战队中任一方的赛事）
+    // ★ 2026-09-09（「即将到来」空列表修复 · 第三刀）：战队筛选**跳过 upcoming tab**——
+    //   未来赛事（预选赛/未开赛锦标赛）参赛队未定，用「历史参与过的联赛并集」过滤
+    //   必然误杀全部 upcoming 卡（用户看到的：「全部」有 7 个 S 级赛事、「即将到来」空白）。
+    //   历史类 tab（全部/进行中/已结束）保持原有过滤行为。
     const tl = this.teamLeagueIds;
-    if (tl) {
+    if (tl && f !== 'upcoming') {
       arr = arr.filter((x) => tl[x.leagueid]);
     }
 

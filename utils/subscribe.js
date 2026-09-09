@@ -298,6 +298,39 @@ function backoffMs(attempt) {
 function sendOnce(opts) {
   if (!TMPL_ID) return Promise.resolve({ ok: false, error: 'no_template', errorType: 'no_template' });
 
+  // ★ 方案 C+ 双分支（2026-09-09）：Supabase 启用时走 subscribe-send EF，
+  //   失败回退云开发（返回 network 类型交给上层重试逻辑，行为一致）。
+  var sbCfg = config.supabase || {};
+  if (sbCfg.enabled && sbCfg.url && sbCfg.anonKey) {
+    var sbClient = require('./supabaseClient.js');
+    return sbClient.edge(sbCfg.functions.subscribe, {
+      touser: opts.toUser,
+      template_id: TMPL_ID,
+      // ★ 微信 HTTPS 接口 page 不带前导斜杠（云开发路径才带 /），必须剥掉，否则 41030
+      page: (opts.page || '/pages/index/index').replace(/^\//, ''),
+      miniprogram_state: opts.miniprogramState || 'formal',
+      data: opts.data
+    }).then(function (result) {
+      var ok = result.errcode === 0 || result.errcode === undefined;
+      return {
+        ok: ok,
+        msgid: result.msgid,
+        errcode: result.errcode,
+        errmsg: result.errmsg || '',
+        errorType: ok ? 'ok' : 'errcode'
+      };
+    }).catch(function (err) {
+      // EF 侧失败（熔断打开/网络）→ 交云开发重发（errorType 'network' 命中重试白名单）
+      console.warn('[subscribe] supabase send fail, fallback cloud:', err && err.message);
+      return _cloudSendOnce(opts);
+    });
+  }
+
+  return _cloudSendOnce(opts);
+}
+
+/** 云开发原链路（灰度回退用，原实现原样保留） */
+function _cloudSendOnce(opts) {
   var payload = {
     action: 'sendSubscribeMessage',
     params: {

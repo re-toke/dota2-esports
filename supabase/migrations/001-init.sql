@@ -114,19 +114,20 @@ ALTER TABLE public.keep_alive ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "anon_insert_keep_alive" ON public.keep_alive
   FOR INSERT TO anon WITH CHECK (true);
 
--- ---------- 4. 扩展与定时任务 ----------
-
-CREATE EXTENSION IF NOT EXISTS cron;
-CREATE EXTENSION IF NOT EXISTS pg_net;
-
--- 缓存过期清理（每日 4 点 UTC）
-SELECT cron.schedule('clean-agg-cache', '0 4 * * *',
-  $$DELETE FROM public.aggregation_cache WHERE expire_at < now()$$);
-
--- 订阅日志保留 30 天（每日 4:10 UTC）
-SELECT cron.schedule('clean-sub-logs', '10 4 * * *',
-  $$DELETE FROM public.subscribe_logs WHERE created_at < now() - interval '30 days'$$);
-
+-- ---------- 4. 定时任务（v1.1 修正：pg_cron 扩展在部分免费项目不可用）----------
+--
+-- 原方案用 pg_cron 做缓存/日志清理。实测报错：
+--   ERROR 0A000: extension "cron" is not available
+-- 替代方案（全部不依赖 pg_cron）：
+--   ① 清理任务：改为「读取时惰性跳过 + 每周手动跑一次清理 SQL」（见下方 CLEANUP.sql 注释）
+--   ② refresh-wx-token 定时预热：在 cron-job.org 加第 2 个 Job（每小时 GET 一次 EF），
+--      复用已有账号，零新增依赖
+--   ③ 未来若需要服务端扫描类任务：Supabase Dashboard → Edge Functions → 选函数 →
+--      Schedules 页签可直接配置定时（免费版可用）
+--
+-- 每周清理 SQL（周日晚手动跑一次，或加进 cron-job.org 提醒）：
+--   DELETE FROM public.aggregation_cache WHERE expire_at < now();
+--   DELETE FROM public.subscribe_logs    WHERE created_at < now() - interval '30 days';
 -- ============================================================
 -- 验证（单独执行）：
 --   SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY 1;

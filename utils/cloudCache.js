@@ -26,11 +26,54 @@ function localKey(key) {
   return api._v() + key;
 }
 
+// ===== 方案 C+：follow_profile_ 前缀走 Supabase follow-profile EF（2026-09-09）=====
+// O-26 白名单里 follow_profile_ 是唯一的个人画像 key；Supabase 启用时该前缀
+// 切换到 follow-profile EF（JWT 鉴权，openid 从签发凭证信任），其余 key 仍走云开发。
+// 失败自动回退云开发原路径（灰度保命）。
+
+function _sbFollowEnabled() {
+  try {
+    var c = require('./config.js').supabase || {};
+    return !!(c.enabled && c.url && c.anonKey);
+  } catch (e) { return false; }
+}
+
+/** follow_profile 读：EF {profile} 形态 → 适配成 getCached 的值语义 */
+function _sbFollowGet(key) {
+  var auth = require('./auth.js');
+  var sb = require('./supabaseClient.js');
+  var jwt = auth.getJwtSync();
+  if (!jwt) return Promise.resolve(null);   // 无 JWT → 让上层回退本地/云开发
+  return sb.edge('follow-profile', { op: 'get' }, { jwt: jwt })
+    .then(function (r) {
+      var v = (r && r.profile) || null;
+      if (v) {
+        try { cache.set(localKey(key), v, LOCAL_TTL); } catch (e) {}
+      }
+      return v;
+    });
+}
+
+/** follow_profile 写：EF save；失败抛错由调用方回退云开发 */
+function _sbFollowSet(key, value, ttlSec) {
+  var auth = require('./auth.js');
+  var sb = require('./supabaseClient.js');
+  var jwt = auth.getJwtSync();
+  if (!jwt) return Promise.reject(new Error('no_jwt'));
+  // 注意：Supabase 侧统一 30 天过期（EF 内定死），客户端 ttlSec 参数在此路径不生效
+  return sb.edge('follow-profile', { op: 'save', profile: value }, { jwt: jwt })
+    .then(function () { return true; });
+}
+
 // ===== 通用缓存 =====
 // 返回缓存值；云端与本地均无则返回 null。
 // 注意：key 透传云端（裸），本地兜底用 localKey(key)（带版本前缀）。
 function getCached(key) {
   if (!key) return Promise.resolve(null);
+  if (_sbFollowEnabled() && key.indexOf('follow_profile_') === 0) {
+    return _sbFollowGet(key)
+      .catch(() => cache.get(localKey(key), LOCAL_TTL));   // EF 失败 → 本地兜底
+  }
   return cloudProxy.call('getCached', { key })
     .then((r) => {
       if (r && r.hit) {
@@ -47,6 +90,11 @@ function getCached(key) {
 function setCached(key, value, ttlSec) {
   if (!key) return Promise.resolve(false);
   try { cache.set(localKey(key), value, ttlSec || LOCAL_TTL); } catch (e) {}
+  if (_sbFollowEnabled() && key.indexOf('follow_profile_') === 0) {
+    return _sbFollowSet(key, value, ttlSec)
+      .catch(() => cloudProxy.call('setCached', { key: key, value: value, ttlSec: ttlSec || LOCAL_TTL })
+        .then(() => true).catch(() => false));   // EF 失败 → 云开发回退
+  }
   return cloudProxy.call('setCached', { key: key, value: value, ttlSec: ttlSec || LOCAL_TTL })
     .then(() => true)
     .catch(() => false);

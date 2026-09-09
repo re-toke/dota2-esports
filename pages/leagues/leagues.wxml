@@ -127,13 +127,17 @@
     </view>
   </block>
 
-  <!-- P1-4（v8.1）：过期快照提示——数据截至日期（仅本地快照 >7 天时显示，串行实时数据到位前提醒） -->
+  <!-- P1-4（v8.1）：过期快照提示——数据截至日期（仅本地快照 >7 天时显示，串行实时数据到位前提醒）
+       ★ 2026-09-09（v8.13 修复·终极真凶）：此提示条原写法用 wx:if 开启了条件链，
+       下方的「空态/列表」成了它的 wx:elif/wx:else 互斥分支——快照一过期（>7 天）
+       upcomingDataAsOf 非空 → 提示条命中 → 列表被 elif 链整体屏蔽，出现「提示显示、
+       列表消失」。修复：提示条独立渲染，列表链以 wx:if 重新开链，两者并存。 -->
   <view wx:if="{{filter==='upcoming' && !upcomingLoading && upcomingDataAsOf}}" class="upcoming-asof-bar">
     <text class="asof-text">本地赛程数据截至 {{upcomingDataAsOf}}，正在后台刷新实时数据…</text>
   </view>
 
   <!-- 即将到来为空：赛程来自 STRATZ / Liquipedia（云端代理），本地精选兜底 -->
-  <view wx:elif="{{filter==='upcoming' && list.length === 0}}" class="empty-hint">
+  <view wx:if="{{filter==='upcoming' && !upcomingLoading && list.length === 0}}" class="empty-hint">
     <empty-state type="nostart" title="暂无即将到来的赛事" desc="切换筛选条件或下拉刷新试试" />
     <view class="hint-card-enhanced">
       <view class="hint-title">启用 STRATZ 即可获取更多即将到来的赛程</view>
@@ -144,7 +148,7 @@
   </view>
 
   <empty-state
-    wx:elif="{{list.length === 0}}"
+    wx:elif="{{!loading && !error && !upcomingLoading && list.length === 0}}"
     type="empty"
     title="{{filter==='upcoming' ? '暂无未来两个月内开赛的赛事' : '暂无符合条件的赛事'}}"
     desc="{{teamActive ? '所选战队近期暂无匹配的赛事' : '试试切换筛选条件或下拉刷新'}}"
@@ -152,7 +156,7 @@
     bind:action="onEmptyAction"
   />
 
-  <block wx:else>
+  <block wx:elif="{{!loading && !error && !upcomingLoading && list.length > 0}}">
     <!-- 批次3（2026-08-30）· PRD §10.1 行式卡三层结构：
          名称行（名称+等级+状态徽章，≤2 枚；Valve官方为信任信号保留）
          meta 行（日期 · 场次 · 奖金池 ≤3 项 + 来源胶囊行尾右对齐；主办方/赛区移入详情页）

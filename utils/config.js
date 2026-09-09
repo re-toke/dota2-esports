@@ -201,6 +201,29 @@ module.exports = {
     circuitBreakerThreshold: 3
   },
 
+  // ★ Supabase 单后端（方案 C+，2026-09-04 决策 / 2026-09-09 后端就绪）。
+  // enabled=false 时全部走微信云开发（现状，零行为变化）；
+  // enabled=true 时以下 3 条链路切 Supabase，失败自动回退云开发（灰度保命）：
+  //   ① 登录 openid      → auth.js ensureOpenId → Edge Function wechat-auth
+  //   ② 订阅消息发送     → subscribe.js sendOnce → Edge Function subscribe-send
+  //   ③ follow_profile   → cloudCache.js（follow_profile_ 前缀）→ Edge Function follow-profile（带 JWT）
+  // 赛事数据（OpenDota/Steam/LP 代理）仍走云开发——对应数据代理 EF 尚未开发（M2.4）。
+  supabase: {
+    // ★ 灰度开关：true=微信能力走 Supabase（2026-09-09 联调开启）；false=全走云开发（回滚用）
+    enabled: true,
+    url: 'https://gkticzdaicpdtxheyxsd.supabase.co',
+    // anon key（公开密钥，RLS 保护；service_role 绝不出现在客户端）
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdrdGljemRhaWNwZHR4aGV5eHNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0OTI4NTIsImV4cCI6MjEwNDA2ODg1Mn0.ZzdBSKZskLI-GO-Tz3BsviNg_qNL8OhC1WV9jTJkAe8',
+    // Edge Function 名（部署在 supabase/functions/ 下）
+    functions: {
+      auth: 'wechat-auth',
+      subscribe: 'subscribe-send',
+      followProfile: 'follow-profile'
+    },
+    // 业务 JWT 本地存储 key（wechat-auth 签发，30 天有效；follow-profile 用）
+    jwtKey: 'dota2_jwt'
+  },
+
   // 北京时间偏移（秒）。O-7（2026-08-15）：原 league-detail.js 5 处硬编码 8*3600
   // 收敛为单一常量（零行为提取，值必须保持 8*3600 不变）。
   // 用途：按北京时间计算「今天/明天/更早」的日界分组（dateGroup/timeLayer 等）。
