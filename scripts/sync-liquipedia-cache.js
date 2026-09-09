@@ -21,7 +21,7 @@ const zlib = require('zlib');
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 const LP_BASE = 'https://liquipedia.net/dota2/api.php';
-const LP_UA = 'DOTA2-Esports-Hub/1.0 (sync job; contact: dev@local)';
+const LP_UA = 'DOTA2-Esports-Hub/1.0 (WeChat Mini Program; contact: dev@local)';
 const RATE_LIMIT_MS = 2200;
 const TTL_SEC = 26 * 3600;
 
@@ -83,7 +83,7 @@ async function lpFetch(slug) {
   const wait = _last + RATE_LIMIT_MS - Date.now();
   if (wait > 0) await sleep(wait);
   _last = Date.now();
-  const url = LP_BASE + '?action=query&format=json&prop=revisions&rvprop=content&titles=' + encodeURIComponent(slug);
+  const url = LP_BASE + '?action=query&format=json&prop=revisions&rvprop=content&titles=' + encodeURIComponent(slug).replace(/%2F/g, '/');
   const { status, json, html } = await fetchJson(url, { 'User-Agent': LP_UA, 'Accept-Encoding': 'gzip' });
   if (status !== 200) throw new Error('LP HTTP ' + status);
   if (html !== undefined) throw new Error('LP 返回 HTML（挑战页）: ' + html);
@@ -94,23 +94,34 @@ async function lpFetch(slug) {
 }
 
 (async () => {
-  let ok = 0, fail = 0, empty = 0;
+  let ok = 0, fail = 0, empty = 0, consecFail = 0;
   const t0 = Date.now();
   for (const slug of slugs) {
+    // ★ v8.21：连续失败退避——防高频触发 LP 限流（3 连败后歇 30s，重置计数）
+    if (consecFail >= 3) {
+      console.warn('⏸ 连续失败', consecFail, '次，退避 30s...');
+      await sleep(30000);
+      consecFail = 0;
+    }
     try {
       const w = await lpFetch(slug);
+      consecFail = 0;
       if (w) {
         await upsertCache('lp:w:' + slug, w);
         ok++;
-      } else { empty++; }
+      } else {
+        empty++;
+        console.warn('○', slug, '页面空（missing 或无 revisions）');
+      }
     } catch (e) {
       fail++;
-      console.warn('✗', slug, e.message);
+      consecFail++;
+      console.warn('✗', slug, '→', e.message);
     }
   }
   console.log('同步完成:', ok, '成功 /', empty, '空页面 /', fail, '失败, 耗时', Math.round((Date.now() - t0) / 1000) + 's');
   if (fail > slugs.length * 0.5) {
-    console.error('失败率超 50%，疑似 LP 拦 GitHub 出口——检查日志');
+    console.error('失败率超 50%——查看上方 ✗ 行的具体错误（403/429=被限流，需加长退避）');
     process.exit(2);
   }
 })();
