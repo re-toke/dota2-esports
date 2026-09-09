@@ -1,4 +1,4 @@
-/* components/empty-state/empty-state.wxss · V3 统一空态 */
+/* components/empty-state/empty-state.wxss · V4 插画空态（AI 生成电竞主题插画） */
 .es {
   display: flex;
   flex-direction: column;
@@ -6,21 +6,11 @@
   text-align: center;
   padding: 64rpx var(--space-6);
 }
-.es-icon {
-  width: 140rpx;
-  height: 140rpx;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(200, 169, 81, 0.12);
-  border: 2rpx solid rgba(200, 169, 81, 0.32);
+/* 插画容器：1024x768 (4:3) 与 240x180rpx 同比例，aspectFit 无裁切 */
+.es-illustration {
+  width: 240rpx;
+  height: 180rpx;
   margin-bottom: var(--space-3-5);
-}
-/* v11 聚光灯 Phase 7：error 态红色调（区别于常规金色空态） */
-.es--error .es-icon {
-  background: rgba(232, 68, 59, 0.10);
-  border-color: rgba(232, 68, 59, 0.28);
 }
 .es-title {
   font-size: var(--fs-emphasis);

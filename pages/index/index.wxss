@@ -175,18 +175,6 @@
   background: var(--card-bg-elevated, #F1F3F5);
   flex-shrink: 0;
 }
-.ff-empty {
-  display: flex;
-  flex-direction: column;
-  gap: 6rpx;
-  padding: var(--space-3-5) var(--space-2);
-  background: var(--card-grad);
-  border-radius: var(--radius-lg);
-  border: 1rpx dashed var(--td-border-level-1-color, #E5E7EB);
-}
-.ff-empty-text { font-size: var(--fs-label); color: var(--text-2); font-weight: 600; }
-.ff-empty-sub { font-size: var(--fs-caption); color: var(--text-3); }
-
 /* 未关注态引导卡（B+D：增强金色渐变质感） */
 .follow-guide {
   display: flex;

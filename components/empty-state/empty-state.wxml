@@ -1,7 +1,5 @@
 <view class="es {{type === 'error' ? 'es--error' : ''}}">
-  <view class="es-icon">
-    <t-icon name="{{iconName}}" size="88rpx" color="{{type === 'error' ? '#e8443b' : '#C8A951'}}" />
-  </view>
+  <image class="es-illustration" src="/assets/illustrations/empty-{{illustration}}.png" mode="aspectFit" />
   <view class="es-title">{{title}}</view>
   <view class="es-desc" wx:if="{{desc}}">{{desc}}</view>
   <view class="es-action" wx:if="{{actionText}}">

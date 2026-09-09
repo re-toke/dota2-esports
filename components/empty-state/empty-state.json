@@ -1,7 +1,6 @@
 {
   "component": true,
   "usingComponents": {
-    "t-button": "tdesign-miniprogram/button/button",
-    "t-icon": "tdesign-miniprogram/icon/icon"
+    "t-button": "tdesign-miniprogram/button/button"
   }
 }

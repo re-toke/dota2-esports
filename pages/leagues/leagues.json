@@ -10,7 +10,6 @@
     "t-tag": "tdesign-miniprogram/tag/tag",
     "t-icon": "tdesign-miniprogram/icon/icon",
     "t-button": "tdesign-miniprogram/button/button",
-    "t-empty": "tdesign-miniprogram/empty/empty",
     "t-skeleton": "tdesign-miniprogram/skeleton/skeleton",
     "empty-state": "../../components/empty-state/empty-state",
     "skeleton": "../../components/skeleton/skeleton"

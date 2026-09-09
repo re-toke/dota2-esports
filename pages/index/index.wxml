@@ -100,10 +100,7 @@
       </view>
     </scroll-view>
 
-    <view wx:else class="ff-empty">
-      <text class="ff-empty-text">暂无近期赛事</text>
-      <text class="ff-empty-sub">关注的战队近期没有赛程，继续关注更多战队吧</text>
-    </view>
+    <empty-state wx:else type="nostart" title="暂无近期赛事" desc="关注的战队近期没有赛程，继续关注更多战队吧" />
   </view>
 
   <!-- 未关注态引导卡（spec C.AC-C1） -->

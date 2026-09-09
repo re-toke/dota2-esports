@@ -134,7 +134,7 @@
 
   <!-- 即将到来为空：赛程来自 STRATZ / Liquipedia（云端代理），本地精选兜底 -->
   <view wx:elif="{{filter==='upcoming' && list.length === 0}}" class="empty-hint">
-    <t-empty icon="info-circle" description="即将到来的赛程暂时为空" />
+    <empty-state type="nostart" title="暂无即将到来的赛事" desc="切换筛选条件或下拉刷新试试" />
     <view class="hint-card-enhanced">
       <view class="hint-title">启用 STRATZ 即可获取更多即将到来的赛程</view>
       <view class="hint-desc">即将到来的赛事主要来自 STRATZ 或 Liquipedia 实时数据（经云函数聚合，无需客户端持有 key）。若云端未部署或网络不可用，已知重大赛事（如 TI 2026）仍会通过本地精选兜底展示。</view>

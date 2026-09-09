@@ -9,6 +9,7 @@
     "t-icon": "../../miniprogram_npm/tdesign-miniprogram/icon/icon",
     "skeleton": "../../components/skeleton/skeleton",
     "week-calendar": "../../components/week-calendar/week-calendar",
-    "match-flow": "../../components/match-flow/match-flow"
+    "match-flow": "../../components/match-flow/match-flow",
+    "empty-state": "../../components/empty-state/empty-state"
   }
 }
