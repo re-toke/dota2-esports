@@ -19,8 +19,9 @@
 // ============================================================
 import { cors, db } from "../_shared/auth.ts";
 
-// @ts-ignore: JSON import（Deno 原生支持）
-import slugmapData from "./slugmap.json" with { type: "json" };
+// ★ v8.16：slugmap 改为 TS 内联常量（Supabase EF 运行时对 `with { type: "json" }`
+//   import attributes 支持不稳，导致 500 启动错误）。由 scripts/gen-slugmap-ts.js 生成。
+import { SLUGMAP_MAPPINGS } from "./slugmap.ts";
 
 const LP_BASE = "https://liquipedia.net/dota2/api.php";
 const LP_UA = "DOTA2-Esports-Hub/1.0 (WeChat Mini Program; contact: dev@local)";
@@ -30,7 +31,7 @@ const SCHEDULE_TTL_MS = 24 * 3600 * 1000; // 对齐 cacheStaleTtlSchedule（24h�
 
 // ===== slug 映射（与云函数 liquipediaSlugFor 同源） =====
 function slugFor(name: string): string {
-  const m = (slugmapData as any).mappings || {};
+  const m = SLUGMAP_MAPPINGS || {};
   return m[name] || name;
 }
 
@@ -107,7 +108,7 @@ async function handle(body: any): Promise<any> {
 
   if (action === "liquipediaPrewarm") {
     // 预热 slugmap 全量（串行限流；冷启动后由 cron-job.org/客户端触发）
-    const m = (slugmapData as any).mappings || {};
+    const m = SLUGMAP_MAPPINGS || {};
     const slugs = Array.from(new Set(Object.values(m))) as string[];
     let ok = 0;
     for (const slug of slugs.slice(0, 30)) {   // 单次调用上限 30 个（LP 限流 + EF 30s 超时）
