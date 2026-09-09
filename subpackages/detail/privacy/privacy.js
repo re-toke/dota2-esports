@@ -4,8 +4,8 @@
 
 Page({
   data: {
-    version: '1.0.0',
-    updatedAt: '2026-07-24'
+    version: '2.0.0',
+    updatedAt: '2026-09-09'
   },
 
   onShareAppMessage() {
