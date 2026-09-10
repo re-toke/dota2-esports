@@ -224,9 +224,12 @@ Page({
     this.upcomingList = null;  // 即将到来列表（null=未加载，[]=已加载无结果）
     this.teamLeagueIds = null;
     // 2026-08-07（v1.4）：缓存屏幕高度，供 onPageScroll 检测「上滚超一屏」解除 ARMED 态
+    // ★ 2026-09-10（隐私合规）：原用 wx.getSystemInfoSync()（已废弃，官方说明其
+    //   「会获取系统权限，可能触发授权弹窗」，建议改用 wx.getWindowInfo）。
+    //   windowHeight 字段归 wx.getWindowInfo，此处优先新接口，旧接口仅作极旧基础库兜底。
     try {
-      const sysInfo = wx.getSystemInfoSync();
-      this._winH = sysInfo.windowHeight || sysInfo.screenHeight || 667;
+      const wi = wx.getWindowInfo ? wx.getWindowInfo() : wx.getSystemInfoSync();
+      this._winH = wi.windowHeight || wi.screenHeight || 667;
     } catch (e) { this._winH = 667; }
     // 2026-08-07（v1.1，B 层渲染分阶段优化）：
     //   _normalizeGen 代际标记——onHide / onPullDownRefresh / retry 时递增，
