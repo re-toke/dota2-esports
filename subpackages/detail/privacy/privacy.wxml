@@ -57,6 +57,9 @@
       <view class="list-item">· 多源数据交叉验证，提升信息准确性（标注数据来源与可信度）</view>
       <view class="list-item">· 本地缓存以降低网络请求量、支持离线浏览</view>
     </view>
+    <view class="section-body">
+      <view class="para">本小程序将在本协议所明示的用途内使用收集的信息。如使用您的信息超出本协议目的或合理范围，本小程序将在变更使用目的或范围前，再次以<text class="em">弹窗方式</text>告知并征得您的明示同意。</view>
+    </view>
   </view>
 
   <view class="section">
