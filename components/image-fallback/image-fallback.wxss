@@ -43,7 +43,7 @@
   color: var(--dota-gold, #C8A951);
   font-family: var(--font-mono, monospace);
   /* 雾峰雪 v2.0：亮底金字，去掉强阴影，只留极淡描边 */
-  text-shadow: 0 1rpx 2rpx rgba(0, 0, 0, 0.08);
+  text-shadow: 0 1rpx 2rpx var(--overlay-08);
   letter-spacing: 1rpx;
 }
 .imgfb-img {

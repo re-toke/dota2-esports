@@ -1,7 +1,7 @@
 /* components/skeleton/skeleton.wxss */
 /* §8.3 自定义骨架屏（2026-07-29）
    - shimmer 动画：渐变高光从左到右扫过，循环 1.4s
-   - 雾峰雪 v2.0 主题：base var(--td-bg-color-component) → highlight rgba(0,0,0,0.05)
+   - 雾峰雪 v2.0 主题：base var(--td-bg-color-component) → highlight var(--overlay-05)
    - 匹配项目设计 token（--card-bg / --card-bg-elevated）
 */
 
@@ -22,7 +22,7 @@
   background: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(0, 0, 0, 0.05) 50%,
+    var(--overlay-05) 50%,
     transparent 100%
   );
   transform: translateX(-100%);
@@ -196,7 +196,7 @@
   background: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(0, 0, 0, 0.05) 50%,
+    var(--overlay-05) 50%,
     transparent 100%
   );
   transform: translateX(-100%);

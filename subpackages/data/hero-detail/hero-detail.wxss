@@ -51,7 +51,7 @@
 .matchup-group { margin-bottom: var(--space-2); }
 .matchup-head { display: block; font-size: var(--fs-caption); font-weight: 700; margin-bottom: var(--space-1); }
 .matchup-head.best { color: var(--radiant); }
-.matchup-head.worst { color: #e0533d; }
+.matchup-head.worst { color: var(--status-worst); }
 .matchup-item {
   display: flex;
   align-items: center;
@@ -64,7 +64,7 @@
 .matchup-bar-wrap { flex: 1; height: 14rpx; background: var(--td-bg-color-component); border-radius: var(--radius-sm); overflow: hidden; }
 .matchup-bar { height: 100%; border-radius: var(--radius-sm); }
 .matchup-bar.best { background: var(--radiant); }
-.matchup-bar.worst { background: #e0533d; }
+.matchup-bar.worst { background: var(--status-worst); }
 .matchup-rate { width: 80rpx; text-align: right; font-size: var(--fs-body); font-weight: 700; color: var(--text-1); font-family: var(--font-mono, monospace); }
 
 .detail-foot {

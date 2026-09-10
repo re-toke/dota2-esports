@@ -250,7 +250,7 @@
 .item-fallback {
   font-size: var(--fs-badge);
   line-height: 32rpx;
-  color: #4a525d;
+  color: var(--slate-text);
   background: var(--td-bg-color-container);
   border: 1rpx solid var(--td-border-level-1-color);
   border-radius: var(--radius-sm);
@@ -260,7 +260,7 @@
   var(--td-bg-color-container)-space: nowrap;
   text-overflow: ellipsis;
 }
-.items-empty { font-size: var(--fs-caption); color: #4a525d; }
+.items-empty { font-size: var(--fs-caption); color: var(--slate-text); }
 
 /* ===== 经济/经验差曲线（V4 折线图卡片） ===== */
 .chart-card {

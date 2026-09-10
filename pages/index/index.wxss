@@ -193,7 +193,7 @@
 .fg-btn {
   padding: var(--space-1-5) var(--space-3-5);
   background: linear-gradient(135deg, var(--dota-gold), var(--dota-gold));
-  color: #7A6520;
+  color: var(--tier-s-text);
   font-size: var(--fs-label);
   font-weight: 700;
   border-radius: var(--radius-pill);

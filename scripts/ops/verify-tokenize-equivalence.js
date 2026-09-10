@@ -68,8 +68,15 @@ function resolveVars(text) {
 }
 
 function colorCounts(text) {
+  // ★ 必须剔除 token 定义行（`--xxx: #fff;`）——否则 Phase 2 新增 token 时，
+  //   定义里的字面量会被当成「新增色值」误报（本脚本踩过一次）。
+  //   与 audit 脚本同口径：只统计「使用处」的颜色。
   const out = {};
-  (resolveVars(text).match(COLOR) || []).map(norm).forEach((v) => { out[v] = (out[v] || 0) + 1; });
+  const src = String(text)
+    .split('\n')
+    .filter((l) => !/^\s*--[\w-]+\s*:/.test(l))
+    .join('\n');
+  (resolveVars(src).match(COLOR) || []).map(norm).forEach((v) => { out[v] = (out[v] || 0) + 1; });
   return out;
 }
 

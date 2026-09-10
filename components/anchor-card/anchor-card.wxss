@@ -57,7 +57,7 @@
 
 .ac-name {
   font-size: var(--fs-label);
-  color: #b9b9b9;
+  color: var(--text-faint-2);
   margin: 6rpx 0;
   text-align: center;
   max-width: 100%;
@@ -137,7 +137,7 @@
 }
 .ac-big-label {
   font-size: var(--fs-body);
-  color: #b9b9b9;
+  color: var(--text-faint-2);
   margin-top: var(--space-0-5);
 }
 

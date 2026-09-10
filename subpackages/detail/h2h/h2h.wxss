@@ -150,7 +150,7 @@
   border: 1rpx solid rgba(242, 92, 84, 0.4);
 }
 .h2h-tag--even {
-  color: #9bb0c9;
+  color: var(--text-muted);
   background: rgba(155, 176, 201, 0.12);
   border: 1rpx solid rgba(155, 176, 201, 0.35);
 }

@@ -104,7 +104,7 @@
 .quality-high { background: rgba(95, 211, 168, 0.12); color: var(--status-verified); }
 .quality-high .q-dot { background: var(--status-verified); }
 .quality-medium { background: rgba(255, 207, 92, 0.12); color: var(--dota-gold-strong); }
-.quality-medium .q-dot { background: #ffcf5c; }
+.quality-medium .q-dot { background: var(--amber-bright); }
 .quality-low { background: rgba(107, 114, 128, 0.16); color: var(--text-2); }
 .quality-low .q-dot { background: var(--text-2); }
 
@@ -249,7 +249,7 @@
   justify-content: center;
 }
 .h2h-win { color: var(--radiant); }
-.h2h-lose { color: #e74c3c; }
+.h2h-lose { color: var(--status-negative); }
 .h2h-sep { color: var(--text-4); }
 .h2h-meta {
   display: flex;
@@ -261,7 +261,7 @@
 .h2h-games { font-size: var(--fs-caption); color: var(--text-3); }
 .h2h-winrate { font-size: var(--fs-body); font-weight: 600; }
 .h2h-winrate.positive { color: var(--radiant); }
-.h2h-winrate.negative { color: #e74c3c; }
+.h2h-winrate.negative { color: var(--status-negative); }
 
 /* S-Tier / TI 优先级徽标（头部） */
 .priority-badge {

@@ -121,7 +121,7 @@
   var(--td-bg-color-container)-space: nowrap;
   color: var(--text-3);
 }
-.date-range { color: #9bb0c9; }
+.date-range { color: var(--text-muted); }
 .league-sub .src-inline { flex-shrink: 0; }
 
 /* 即将到来：倒计时高亮（批次1 §9.2：绿→琥珀 --status-upcoming） */
@@ -175,7 +175,7 @@
 /* v1.4：ARMED 确认态——金色边框高亮 + 呼吸动画，提示「可加载」 */
 .loadmore-bar--armed {
   border: 1rpx solid rgba(255, 209, 92, 0.6);
-  box-shadow: inset 0 2rpx 0 rgba(0,0,0,0.12), inset 0 -2rpx 0 rgba(0,0,0,0.08), 0 0 16rpx rgba(255, 209, 92, 0.12);
+  box-shadow: inset 0 2rpx 0 var(--overlay-12), inset 0 -2rpx 0 var(--overlay-08), 0 0 16rpx rgba(255, 209, 92, 0.12);
   animation: lmArmedGlow var(--dur-sway) var(--ease-in-out) infinite;
 }
 @keyframes lmArmedGlow {
@@ -371,7 +371,7 @@
 /* ── 选中态：雾峰雪 v2.0 实色浅底 + 深字（弃用渐变/阴影/光晕） ── */
 .gc--active {
   border-color: transparent;
-  box-shadow: 0 1rpx 4rpx rgba(0,0,0,0.04);
+  box-shadow: 0 1rpx 4rpx var(--overlay-04);
   transform: translateY(-2rpx);
 }
 .gc--active:active {
@@ -391,7 +391,7 @@
   background: var(--dota-gold-soft);
 }
 .gc--s.gc--active .gc__label {
-  color: #7A6520;
+  color: var(--tier-s-text);
 }
 
 /* A 选中：indigo 浅底（雾峰雪 v2.0） */
@@ -399,7 +399,7 @@
   background: var(--tier-a-soft);
 }
 .gc--a.gc--active .gc__label {
-  color: #3730A3;
+  color: var(--tier-a-text);
 }
 
 /* B 选中：蓝浅底（雾峰雪 v2.0） */
@@ -407,10 +407,10 @@
   background: var(--tier-b-soft);
 }
 .gc--b.gc--active .gc__label {
-  color: #1E40AF;
+  color: var(--tier-b-text);
 }
 .gc--b.gc--active .gc__label {
-  color: #1E40AF;
+  color: var(--tier-b-text);
 }
 
 /* 来源高亮徽标（Valve 官方，信任信号保留） */
@@ -424,7 +424,7 @@
   font-weight: 600;
   flex-shrink: 0;
 }
-.hl-valve { color: #7A6520; background: var(--dota-gold-soft); border: 1rpx solid rgba(200, 169, 81, 0.4); }
+.hl-valve { color: var(--tier-s-text); background: var(--dota-gold-soft); border: 1rpx solid rgba(200, 169, 81, 0.4); }
 
 /* ===== 焦点卡：重点运营节点（雾峰雪 v2.0 · 白卡 + 品牌金点缀） =====
    弃用暗色渐变 / 重阴影；改用白卡 + 金色径向晕染 + 极淡外阴影。 */
@@ -460,7 +460,7 @@
 .focus-badges { display: flex; align-items: center; gap: 10rpx; flex-wrap: wrap; }
 .focus-valve {
   font-size: var(--fs-micro); font-weight: 700;
-  color: #7A6520; background: var(--dota-gold-soft);
+  color: var(--tier-s-text); background: var(--dota-gold-soft);
   padding: 3rpx var(--space-1-5); border-radius: var(--radius-sm);
   border: 1rpx solid rgba(200,169,81,0.4);
 }
@@ -516,7 +516,7 @@
   margin-top: 14rpx;
   display: flex; align-items: center; gap: 14rpx; flex-wrap: wrap;
 }
-.focus-date { font-size: var(--fs-body); color: #9bb0c9; }
+.focus-date { font-size: var(--fs-body); color: var(--text-muted); }
 .focus-prize {
   font-size: var(--fs-caption); font-weight: 600; color: var(--status-verified);
   background: rgba(95,211,168,0.10); border: 1rpx solid rgba(95,211,168,0.35);
@@ -607,7 +607,7 @@
 .tf-mask {
   position: fixed;
   left: 0; top: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.40);
+  background: var(--scrim-40);
   z-index: 100;
   display: flex;
   align-items: flex-end;
@@ -620,7 +620,7 @@
   padding: var(--space-3-5) var(--space-3-5) calc(28rpx + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
-  box-shadow: 0 -4rpx 24rpx rgba(0,0,0,0.04);
+  box-shadow: 0 -4rpx 24rpx var(--overlay-04);
 }
 .tf-sheet-head {
   display: flex;
@@ -931,7 +931,7 @@
 .fp-mask {
   position: fixed;
   left: 0; top: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.40);
+  background: var(--scrim-40);
   z-index: 100;
   display: flex;
   align-items: flex-end;
@@ -944,7 +944,7 @@
   padding: var(--space-3-5) var(--space-3-5) calc(28rpx + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
-  box-shadow: 0 -4rpx 24rpx rgba(0,0,0,0.04);
+  box-shadow: 0 -4rpx 24rpx var(--overlay-04);
 }
 .fp-head {
   display: flex;
@@ -1034,6 +1034,6 @@
   color: var(--text-3);
 }
 .src-curation { color: var(--dota-gold); }
-.src-liquipedia { color: #9bb0c9; }
+.src-liquipedia { color: var(--text-muted); }
 .src-stratz { color: var(--status-verified); }
 .src-opendota { color: var(--text-2); }

@@ -125,7 +125,7 @@
 .stat-divider {
   width: 1rpx;
   height: 48rpx;
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--overlay-04);
   flex-shrink: 0;
 }
 /* ===== 第三格提醒徽章（§11.3：已开启红脉冲 / 未开启灰静态） ===== */
@@ -502,7 +502,7 @@
   font-size: var(--fs-body);
   padding: 10rpx 22rpx;
   border-radius: var(--radius-pill, 999rpx);
-  background: rgba(0, 0, 0, 0.02);
+  background: var(--overlay-02);
   color: var(--text-2);
   border: 1rpx solid transparent;
 }

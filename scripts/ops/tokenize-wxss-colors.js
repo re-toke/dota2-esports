@@ -85,7 +85,33 @@ const MAP = {
   'rgba(95,211,95,0.12)': { bg: '--radiant-soft', fallback: '--radiant-soft' },
   'rgba(45,212,167,0.14)': { bg: '--h2h-a-soft', fallback: '--h2h-a-soft' },
   'rgba(242,92,84,0.14)': { bg: '--h2h-b-soft', fallback: '--h2h-b-soft' },
-  'rgba(232,68,59,0.18)': { bg: '--td-error-color-light-active', fallback: '--td-error-color-light-active' }
+  'rgba(232,68,59,0.18)': { bg: '--td-error-color-light-active', fallback: '--td-error-color-light-active' },
+  // ── Phase 2（2026-09-10）：新增语义 token 后补入 ──
+  // ① 黑 tint → overlay 档位（暗色主题需翻转为白色微透）
+  'rgba(0,0,0,0.02)': { bg: '--overlay-02', fallback: '--overlay-02' },
+  'rgba(0,0,0,0.03)': { bg: '--overlay-03', fallback: '--overlay-03' },
+  'rgba(0,0,0,0.04)': { bg: '--overlay-04', fallback: '--overlay-04' },
+  'rgba(0,0,0,0.05)': { bg: '--overlay-05', fallback: '--overlay-05' },
+  'rgba(0,0,0,0.06)': { bg: '--overlay-06', fallback: '--overlay-06' },
+  'rgba(0,0,0,0.08)': { bg: '--overlay-08', fallback: '--overlay-08' },
+  'rgba(0,0,0,0.12)': { bg: '--overlay-12', fallback: '--overlay-12' },
+  'rgba(0,0,0,0.40)': { bg: '--scrim-40', fallback: '--scrim-40' },
+  'rgba(0,0,0,0.4)': { bg: '--scrim-40', fallback: '--scrim-40' },
+  // ② 不透明语义色（≥2 处复用）
+  '#ffcf5c': { text: '--amber-bright', bg: '--amber-bright', border: '--amber-bright', fallback: '--amber-bright' },
+  '#9bb0c9': { text: '--text-muted', fallback: '--text-muted' },
+  '#5b9bff': { text: '--link', fallback: '--link' },
+  '#3a4250': { text: '--slate-deep', border: '--slate-deep', fallback: '--slate-deep' },
+  '#4a525d': { text: '--slate-text', fallback: '--slate-text' },
+  '#5a6068': { bg: '--slate-bar', fallback: '--slate-bar' },
+  '#c0c4cc': { text: '--text-faint', fallback: '--text-faint' },
+  '#b9b9b9': { text: '--text-faint-2', fallback: '--text-faint-2' },
+  '#e0533d': { text: '--status-worst', bg: '--status-worst', fallback: '--status-worst' },
+  '#e74c3c': { text: '--status-negative', bg: '--status-negative', fallback: '--status-negative' },
+  '#7a6520': { text: '--tier-s-text', fallback: '--tier-s-text' },
+  '#3730a3': { text: '--tier-a-text', fallback: '--tier-a-text' },
+  '#1e40af': { text: '--tier-b-text', fallback: '--tier-b-text' },
+  '#374151': { text: '--tier-c-text', fallback: '--tier-c-text' }
 };
 
 // ===== 读 token 值表 =====

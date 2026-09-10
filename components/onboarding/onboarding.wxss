@@ -72,7 +72,7 @@
   text-align: center;
   font-size: var(--fs-subhead);
   font-weight: 600;
-  color: #7A6520;
+  color: var(--tier-s-text);
   background: var(--dota-gold, #C8A951);
   border-radius: var(--radius-md, 12rpx);
 }

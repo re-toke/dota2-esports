@@ -168,11 +168,11 @@ view, text { box-sizing: border-box; }
   border-radius: 8rpx;
   line-height: var(--lh-relaxed);
 }
-.tag-sss { background: var(--dota-gold-soft); color: #7A6520; }
-.tag-s { background: var(--dota-gold-soft); color: #7A6520; }
-.tag-a { background: var(--tier-a-soft); color: #3730A3; }
-.tag-b { background: var(--tier-b-soft); color: #1E40AF; }
-.tag-c { background: var(--tier-c-soft); color: #374151; }
+.tag-sss { background: var(--dota-gold-soft); color: var(--tier-s-text); }
+.tag-s { background: var(--dota-gold-soft); color: var(--tier-s-text); }
+.tag-a { background: var(--tier-a-soft); color: var(--tier-a-text); }
+.tag-b { background: var(--tier-b-soft); color: var(--tier-b-text); }
+.tag-c { background: var(--tier-c-soft); color: var(--tier-c-text); }
 
 /* 胜负色：天辉绿=胜 / 夜魇红=负 */
 .win { color: var(--radiant); }
@@ -229,7 +229,7 @@ view, text { box-sizing: border-box; }
   border-radius: 12rpx;
 }
 .filter-bar .chip.active {
-  color: #7A6520;
+  color: var(--tier-s-text);
   background: var(--dota-gold-soft);
   border-color: rgba(200,169,81,0.4);
 }
@@ -262,7 +262,7 @@ view, text { box-sizing: border-box; }
 }
 .seg-item.active {
   background: var(--dota-gold-soft);
-  color: #7A6520;
+  color: var(--tier-s-text);
   font-weight: 600;
 }
 
@@ -333,6 +333,54 @@ page {
   --source-steam: #1b2838;
   --source-liquipedia: #ffcf5c;
   --source-curation: #9bb0c9;
+
+  /* ===================================================================
+     ★ 2026-09-10（P3 token 化 Phase 2）：补齐此前「无同值 token」的语义色
+     来源：audit:colors 审计出的剩余硬编码色中「主题相关」的两类
+       ① 黑 tint（暗色主题需翻转为白色微透，否则黑叠黑不可见）
+       ② 不透明语义色（≥2 处复用）
+     未纳入：半透明装饰色（金色/品牌色 alpha 变体）—— 叠在亮/暗底上表现一致，
+       属主题无关，保留字面量；单次使用的装饰色同理。
+     =================================================================== */
+
+  /* --- 叠加层黑 tint（暗色主题需翻转为 --overlay-* 的白色对应档） --- */
+  --overlay-02: rgba(0, 0, 0, 0.02);   /* 极淡底纹 / hover（最常用） */
+  --overlay-03: rgba(0, 0, 0, 0.03);
+  --overlay-04: rgba(0, 0, 0, 0.04);
+  --overlay-05: rgba(0, 0, 0, 0.05);
+  --overlay-06: rgba(0, 0, 0, 0.06);
+  --overlay-08: rgba(0, 0, 0, 0.08);
+  --overlay-12: rgba(0, 0, 0, 0.12);
+  --scrim-40:   rgba(0, 0, 0, 0.40);   /* 模态/抽屉遮罩 */
+
+  /* --- 琥珀亮色（比赛流「即将到来」分隔条 / 质量点 / 近期边框） ---
+     注意：与 --source-liquipedia 同值但**语义不同**，故独立定义 */
+  --amber-bright: #ffcf5c;
+
+  /* --- 弱化次要文字（日期范围 / 焦点日期 / H2H 辅助文案） --- */
+  --text-muted: #9bb0c9;
+
+  /* --- 链接 / 可点击文字 --- */
+  --link: #5b9bff;
+
+  /* --- 深灰蓝（详情页正文次级色 + 对阵未定节点） --- */
+  --slate-deep: #3a4250;
+  --slate-text: #4a525d;
+  --slate-bar: #5a6068;             /* 分段条底色 */
+
+  /* --- 极浅文字（占位/辅助，比 --text-4 更淡） --- */
+  --text-faint: #c0c4cc;
+  --text-faint-2: #b9b9b9;
+
+  /* --- 胜负/趋势（H2H、英雄克制） --- */
+  --status-worst: #e0533d;          /* 英雄克制最差组 */
+  --status-negative: #e74c3c;       /* H2H 负向 / 胜率负值 */
+
+  /* --- Tier 软底上的深色文字（背景 token 已存在，此处补文字侧） --- */
+  --tier-s-text: #7a6520;           /* 浅金底上的深金字（.tag-sss/.tag-s） */
+  --tier-a-text: #3730a3;           /* 浅靛底上的深靛字（.tag-a） */
+  --tier-b-text: #1e40af;           /* 浅蓝底上的深蓝字（.tag-b） */
+  --tier-c-text: #374151;           /* 浅灰底上的深灰字（.tag-c） */
 
   /* ===== 卡片层级（雾峰雪：纯白卡 + 极淡边框 + 极淡外阴影，弃用渐变/inner-shadow） ===== */
   --card-bg: #FFFFFF;
@@ -573,7 +621,7 @@ page {
   margin-left: 8rpx;
   font-size: var(--fs-badge);
   font-weight: 700;
-  color: #7A6520;
+  color: var(--tier-s-text);
   background: var(--dota-gold-soft);
   border: 1rpx solid rgba(200,169,81,0.4);
   border-radius: 999rpx;
