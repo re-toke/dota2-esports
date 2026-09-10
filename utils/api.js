@@ -245,7 +245,7 @@ function fetchedAtOf(name, arg) {
   else if (name === 'playerMatches') path = '/players/' + arg + '/matches';
   else if (name === 'leagueMatches') path = '/leagues/' + arg + '/matches';
   else if (name === 'leagueWindows') {
-    path = '/explorer?sql=' + encodeURIComponent(sqlFragments.LEAGUE_WINDOWS_SQL);
+    path = '/explorer?sql=' + encodeURIComponent(sqlFragments.LEAGUE_WINDOWS_SQL());
   }
   if (!path) return 0;
   const meta = cache.peek(path + '|{}');
@@ -380,7 +380,7 @@ function cloudEnabled() {
 //      其余方法 data 为 null → |{} 形态。两者都必须与 direct 侧完全一致。
 const ACTION_MAP = {
   getLeagues: function () { return { action: 'getLeagues', params: {}, path: '/leagues', ttlKey: 'leagues' }; },
-  getLeagueWindows: function () { return { action: 'getLeagueWindows', params: {}, path: '/explorer?sql=' + encodeURIComponent(sqlFragments.LEAGUE_WINDOWS_SQL), ttlKey: 'leagueWindows' }; },
+  getLeagueWindows: function () { return { action: 'getLeagueWindows', params: {}, path: '/explorer?sql=' + encodeURIComponent(sqlFragments.LEAGUE_WINDOWS_SQL()), ttlKey: 'leagueWindows' }; },
   getLeagueMatches: function (id) { return { action: 'getLeagueMatches', params: { leagueId: id }, path: '/leagues/' + id + '/matches', ttlKey: 'leagueMatches' }; },
   getMatch: function (id) { return { action: 'getMatch', params: { matchId: id }, path: '/matches/' + id, ttlKey: 'match' }; },
   searchTeams: function (name) { return { action: 'searchTeams', params: { q: name }, path: '/search', data: { q: name }, ttlKey: 'search' }; },
@@ -484,13 +484,13 @@ function transformLeagueWindows(data) {
 // 修复：封装为单一函数，复用与写入侧完全一致的 key 构造，根治 key 漂移。
 function invalidateLeagues() {
   const leaguesKey = _v() + '/leagues|{}';
-  const windowsKey = _v() + '/explorer?sql=' + encodeURIComponent(sqlFragments.LEAGUE_WINDOWS_SQL) + '|{}';
+  const windowsKey = _v() + '/explorer?sql=' + encodeURIComponent(sqlFragments.LEAGUE_WINDOWS_SQL()) + '|{}';
   cache.remove(leaguesKey);
   cache.remove(windowsKey);
 }
 
 function getLeagueWindows() {
-  const path = '/explorer?sql=' + encodeURIComponent(sqlFragments.LEAGUE_WINDOWS_SQL);
+  const path = '/explorer?sql=' + encodeURIComponent(sqlFragments.LEAGUE_WINDOWS_SQL());
   return tryCloudOrDirect('getLeagueWindows', [],
     function () { return cached(path, null, config.cacheTTL.leagueWindows).then(transformLeagueWindows); },
     transformLeagueWindows);

@@ -21,11 +21,23 @@ import { cors, db } from "../_shared/auth.ts";
 const OD_BASE = "https://api.opendota.com/api";
 
 // ===== 路由表（与原云函数 buildPath 一致） =====
-const LEAGUE_WINDOWS_SQL =
-  "SELECT leagueid, min(start_time) AS earliest, max(start_time) AS latest, " +
-  "max(start_time + duration) AS last_end, count(*) AS n " +
-  "FROM matches WHERE start_time > extract(epoch FROM now() - interval '6 months') " +
-  "GROUP BY leagueid";
+// ★ v8.31（赛事页 4s 优化）：SQL 改为「整数秒下界」动态生成——原 `extract(epoch FROM now()
+//   - interval '6 months')` 是函数表达式，Postgres 无法走 start_time 索引 → 全表扫描 →
+//   OpenDota explorer 14-16s 后 400 "Query read timeout"（列表页 leagueWindows 长期静默降级）。
+//   窗口同时 6 个月 → 3 个月（列表只需近 90 天活跃 + curation 窗口）。
+//   实测 16566ms/500 → 1215ms/200。
+//   ⚠️ G14 双源镜像：与 utils/sqlFragments.js、cloudfunctions/aggregation/index.js 保持同源。
+//   ★ 下界对齐到当日 00:00 UTC —— 若用实时 now-90d，SQL 文本每秒变化 → EF/api 缓存 key
+//     每秒漂移 → 永远 miss（实测 source=fresh 永不命中）。对齐后 24h 内 key 恒定。
+const LEAGUE_WINDOWS_WINDOW_DAYS = 90;
+function leagueWindowsSql(nowSec?: number): string {
+  const now = (typeof nowSec === "number" && nowSec > 0) ? nowSec : Math.floor(Date.now() / 1000);
+  const dayStart = Math.floor(now / 86400) * 86400;
+  const floor = dayStart - LEAGUE_WINDOWS_WINDOW_DAYS * 86400;
+  return "SELECT leagueid, min(start_time) AS earliest, max(start_time) AS latest, " +
+    "max(start_time + duration) AS last_end, count(*) AS n " +
+    "FROM matches WHERE start_time > " + floor + " GROUP BY leagueid";
+}
 
 function buildPath(action: string, params: any): string | null {
   const p = params || {};
@@ -39,7 +51,7 @@ function buildPath(action: string, params: any): string | null {
     case "getPlayerMatches": return "/players/" + p.accountId + "/matches";
     case "getHeroes":        return "/heroes";
     case "searchTeams":      return "/search?q=" + encodeURIComponent(p.q || "");
-    case "getLeagueWindows": return "/explorer?sql=" + encodeURIComponent(LEAGUE_WINDOWS_SQL);
+    case "getLeagueWindows": return "/explorer?sql=" + encodeURIComponent(leagueWindowsSql());
     case "getProMatches":    return "/proMatches";
     case "getLiveMatches":   return "/live";
     default: return null;
@@ -124,6 +136,56 @@ async function getStaleCache(key: string): Promise<any | null> {
   return data ? data.payload : null;
 }
 
+// ===== ★ v8.31（赛事页 4s 优化 · 核心）：getLeagues 服务端裁剪 =====
+// 问题：OpenDota /leagues 返回 **10176 条 / 1001 KB** 全量历史（含 7314 条 tier=excluded），
+//   这是 loadLeagues 网络段 4 秒的主因——1MB 跨网传输 + 客户端 JSON.parse 都极慢。
+//   而客户端只用：leagueid / tier / name（banner、ticket 全未使用），且只展示 rank>=1。
+// 方案：EF 侧裁剪 payload（缓存里存**裁剪后**的，命中即直发小体积）：
+//   ① 丢弃 tier=excluded 与 none（客户端 unifiedTier 判 rank=0 必被 filter 掉）；
+//   ② 只保留 leagueid / tier / name 三字段（去掉 banner/ticket）；
+//   ③ name 为空的行丢弃（无法展示）。
+// 实测预期：1001 KB → ~223 KB（2968 条；原始 10176 条）。
+// ⚠️ 关键安全约束（实测踩坑，务必保留）：
+//   ① **不能只按 tier 裁剪**——`The International` 自身 tier=excluded，纯 tier 裁剪会删掉 TI！
+//   ② 也不能自造白名单——首版自造关键词漏了 EPL，导致 2 条**活跃**赛事
+//      （European Pro League 2025-2026 Season / EPL World Series: SEA）被误删。
+//   ③ 正解：对 excluded/none 条目跑**与客户端 tiers.js COMMUNITY_TIERS 完全同源**的正则。
+//      实测这样「丢失 rank>=1 条目 = 0」（零行为回归），同时压到 223KB。
+// ⚠️ 镜像维护：下列正则须与 utils/tiers.js 的 COMMUNITY_TIERS 保持同源（改动同步三处：
+//   utils/tiers.js / 本文件 / cloudfunctions/aggregation/index.js）。
+// ⚠️ 缓存兼容：裁剪在**写入缓存前**做，老缓存（未裁剪）命中时也走一次 trim（幂等）。
+const KEEP_LEAGUE_TIERS: Record<string, number> = { professional: 1, premium: 1, amateur: 1 };
+const COMMUNITY_TIER_RES: RegExp[] = [
+  /the\s+international/i,
+  /(riyadh\s+masters|esports\s+world\s+cup|ewc)/i,
+  /major(?!.*minor)(?!\s+(meme|fun|league|cup|scrim|trial|challenge|show|march|madness|monday))/i,
+  /(esl\s+one|dreamleague|pgl|blast\s+slam|fissure|betboom|elite\s+league)/i,
+  /premier/i,
+  /(clavision|the\s+summit|g\s+dexter|games\s+of\s+the\s+future)/i,
+  /(cct\s+series|cct\b|pinnacle\s+cup|pinnacle\b|1win\s+(series|essence|duel|standoff|motion))/i,
+  /(european\s+pro\s+league|\bepl\b|moonstorm|resurrection|heroic\s+league|1win\s+not\s+int)/i,
+  /\bminor\b(?!(\s+(league|scrim|scrims|cup|series|weekly|daily|challenge|fun|meme|trial|show|madness)))/i,
+  /(division\s*(i\b|1\b|one\b)|super\s*group|甲级组|upper\s*division)/i,
+  /(division\s*(ii\b|2\b|two\b)|乙级组|lower\s*division)/i,
+  /(triton|mega\s+arena|world\s+invitational)/i,
+  /(dreamleague\s+(division|div)\s*2|dl\s+div\s*2|d2cl|cosmic\s+clash|winline|perfect\s+world\s+league\s+2)/i
+];
+function communityTierHits(name: string): boolean {
+  for (const re of COMMUNITY_TIER_RES) { if (re.test(name)) return true; }
+  return false;
+}
+
+function trimLeagues(payload: any): any {
+  if (!Array.isArray(payload)) return payload;
+  const out: any[] = [];
+  for (const l of payload) {
+    if (!l || !l.leagueid || !l.name) continue;
+    if (!KEEP_LEAGUE_TIERS[l.tier] && !communityTierHits(l.name)) continue;
+    out.push({ leagueid: l.leagueid, tier: l.tier, name: l.name });
+  }
+  return out;
+}
+
 // ===== HTTP 请求（原生 fetch 替代 got） =====
 async function fetchOd(path: string): Promise<any> {
   const res = await fetch(OD_BASE + path, {
@@ -150,18 +212,28 @@ async function handleAction(action: string, params: any, force?: boolean): Promi
   const cacheKey = "od:" + path;
   if (!force) {
     const cached = await getCache(cacheKey);
-    if (cached !== null) return { data: cached, source: "cache" };
+    if (cached !== null) {
+      // ★ v8.31：老缓存兼容——裁剪前写入的历史缓存命中时补一次 trim（幂等，小数据跳过）
+      if (action === "getLeagues" && Array.isArray(cached) && cached.length > 4000) {
+        const trimmed = trimLeagues(cached);
+        await setCache(cacheKey, trimmed, resolveTtl(action));   // 回写裁剪版（下次秒发小包）
+        return { data: trimmed, source: "cache_trimmed" };
+      }
+      return { data: cached, source: "cache" };
+    }
   }
 
   try {
-    const data = await fetchOd(path);
+    let data = await fetchOd(path);
+    // ★ v8.31：裁剪在写入缓存前做（缓存里存小包，命中即直发）
+    if (action === "getLeagues") data = trimLeagues(data);
     const ttl = resolveTtl(action);
     await setCache(cacheKey, data, ttl);
     return { data, source: "fresh" };
   } catch (e) {
     // 兜底：失败时返回 stale 缓存（与云函数语义一致）
     const stale = await getStaleCache(cacheKey);
-    if (stale) return { data: stale, source: "cache_fallback" };
+    if (stale) return { data: action === "getLeagues" ? trimLeagues(stale) : stale, source: "cache_fallback" };
     return { error: (e as Error).message };
   }
 }
@@ -171,7 +243,9 @@ async function preheat(): Promise<void> {
   const hotPaths = ["/leagues", "/heroes", "/proMatches"];
   for (const path of hotPaths) {
     try {
-      const data = await fetchOd(path);
+      let data = await fetchOd(path);
+      // ★ v8.31：/leagues 预热同样裁剪（保证缓存里恒为小包，命中即直发 ~150KB）
+      if (path === "/leagues") data = trimLeagues(data);
       await setCache("od:" + path, data, path === "/proMatches" ? 5 * 60 * 1000 : 6 * 3600 * 1000);
     } catch (e) {
       console.warn("[preheat]", path, "failed:", (e as Error).message);

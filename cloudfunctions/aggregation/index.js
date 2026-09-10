@@ -27,8 +27,65 @@ const GOT = require('got');
 const BASE = 'https://api.opendota.com/api';
 // Keep in sync with utils/sqlFragments.js (single source of truth)
 // 增加 max(start_time + duration) AS last_end：真实比赛结束时间，用于列表"进行中"准确判定
-const LEAGUE_WINDOWS_SQL = "SELECT leagueid, min(start_time) AS earliest, max(start_time) AS latest, max(start_time + duration) AS last_end, count(*) AS n FROM matches WHERE start_time > extract(epoch FROM now() - interval '6 months') GROUP BY leagueid";
+// ★ v8.31（赛事页 4s 优化，G14 双源镜像）：改为「整数秒下界」动态生成。
+//   原 `start_time > extract(epoch FROM now() - interval '6 months')` 是函数表达式，
+//   Postgres 无法走索引 → 全表扫描 → explorer 14-16s 后 400 Query read timeout。
+//   窗口 6 个月 → 3 个月。实测 16566ms/500 → 1215ms/200。
+//   ★ 下界对齐到当日 00:00 UTC —— 若用实时 now-90d，SQL 文本每秒变化 → 缓存 key 每秒漂移
+//     → 永远 miss。对齐后 24h 内 key 恒定。
+const LEAGUE_WINDOWS_WINDOW_DAYS = 90;
+function leagueWindowsSql(nowSec) {
+  const now = (typeof nowSec === 'number' && nowSec > 0) ? nowSec : Math.floor(Date.now() / 1000);
+  const dayStart = Math.floor(now / 86400) * 86400;
+  const floor = dayStart - LEAGUE_WINDOWS_WINDOW_DAYS * 86400;
+  return "SELECT leagueid, min(start_time) AS earliest, max(start_time) AS latest, " +
+    "max(start_time + duration) AS last_end, count(*) AS n " +
+    "FROM matches WHERE start_time > " + floor + " GROUP BY leagueid";
+}
 const CACHE_COLL = 'aggregation_cache';
+
+// ===== ★ v8.31（赛事页 4s 优化 · G14 双源镜像）：getLeagues 服务端裁剪 =====
+// OpenDota /leagues = 10176 条 / 1001 KB（含 7314 条 tier=excluded），客户端只用
+// leagueid/tier/name 且只展示 rank>=1（unifiedTier 对 excluded/none 判 rank=0 必被过滤）。
+// 裁剪后 ~223KB（2968 条；原始 10176 条）。与 supabase/functions/opendota-proxy
+// 的 trimLeagues 同口径，改动须同步。
+// ⚠️ 关键安全约束（实测踩坑）：
+//   ① **不能只按 tier 裁剪**——`The International` 自身 tier=excluded，纯 tier 裁剪会删掉 TI！
+//   ② 也不能自造白名单——首版自造关键词漏了 EPL，导致 2 条**活跃**赛事被误删。
+//   ③ 正解：对 excluded/none 条目跑**与 utils/tiers.js COMMUNITY_TIERS 完全同源**的正则。
+//      实测「丢失 rank>=1 条目 = 0」（零行为回归），同时压到 223KB。
+const KEEP_LEAGUE_TIERS = { professional: 1, premium: 1, amateur: 1 };
+const COMMUNITY_TIER_RES = [
+  /the\s+international/i,
+  /(riyadh\s+masters|esports\s+world\s+cup|ewc)/i,
+  /major(?!.*minor)(?!\s+(meme|fun|league|cup|scrim|trial|challenge|show|march|madness|monday))/i,
+  /(esl\s+one|dreamleague|pgl|blast\s+slam|fissure|betboom|elite\s+league)/i,
+  /premier/i,
+  /(clavision|the\s+summit|g\s+dexter|games\s+of\s+the\s+future)/i,
+  /(cct\s+series|cct\b|pinnacle\s+cup|pinnacle\b|1win\s+(series|essence|duel|standoff|motion))/i,
+  /(european\s+pro\s+league|\bepl\b|moonstorm|resurrection|heroic\s+league|1win\s+not\s+int)/i,
+  /\bminor\b(?!(\s+(league|scrim|scrims|cup|series|weekly|daily|challenge|fun|meme|trial|show|madness)))/i,
+  /(division\s*(i\b|1\b|one\b)|super\s*group|甲级组|upper\s*division)/i,
+  /(division\s*(ii\b|2\b|two\b)|乙级组|lower\s*division)/i,
+  /(triton|mega\s+arena|world\s+invitational)/i,
+  /(dreamleague\s+(division|div)\s*2|dl\s+div\s*2|d2cl|cosmic\s+clash|winline|perfect\s+world\s+league\s+2)/i
+];
+function communityTierHits(name) {
+  for (let i = 0; i < COMMUNITY_TIER_RES.length; i++) {
+    if (COMMUNITY_TIER_RES[i].test(name)) return true;
+  }
+  return false;
+}
+function trimLeagues(payload) {
+  if (!Array.isArray(payload)) return payload;
+  const out = [];
+  for (const l of payload) {
+    if (!l || !l.leagueid || !l.name) continue;
+    if (!KEEP_LEAGUE_TIERS[l.tier] && !communityTierHits(l.name)) continue;
+    out.push({ leagueid: l.leagueid, tier: l.tier, name: l.name });
+  }
+  return out;
+}
 
 // 赛事展示名规范覆盖（G4 单一数据源）。
 // 与小程序共用同一份生成映射：league-canon-map.js + curation-shared.json，
@@ -2392,7 +2449,7 @@ function buildPath(action, params) {
     case 'getPlayerMatches':   return '/players/' + p.accountId + '/matches';
     case 'getHeroes':          return '/heroes';
     case 'searchTeams':        return '/search?q=' + encodeURIComponent(p.q || '');
-    case 'getLeagueWindows':   return '/explorer?sql=' + encodeURIComponent(LEAGUE_WINDOWS_SQL);
+    case 'getLeagueWindows':   return '/explorer?sql=' + encodeURIComponent(leagueWindowsSql());
     // ★ 2026-09-01（P0-1）：首页比赛流两大数据源接入云代理（国内加速 + 云端共享缓存）。
     //   此前客户端直连 OpenDota 海外源（1-3s+）；改云代理后冷启动命中云端缓存（200-500ms）。
     case 'getProMatches':      return '/proMatches';
@@ -2454,13 +2511,15 @@ async function handleTimer() {
   const hotEndpoints = [
     '/leagues',
     '/heroes',
-    '/explorer?sql=' + encodeURIComponent(LEAGUE_WINDOWS_SQL)
+    '/explorer?sql=' + encodeURIComponent(leagueWindowsSql())
   ];
   const results = [];
   for (const path of hotEndpoints) {
     // OpenDota 热端点不参与退避（核心数据源，瞬时抖动由 safeFetch 重试兜底）
     try {
-      const data = await fetch(path);
+      let data = await fetch(path);
+      // ★ v8.31：/leagues 热端点同样裁剪（保证缓存里恒为小包）
+      if (path === '/leagues') data = trimLeagues(data);
       await setCache(path, data, 6 * 3600 * 1000);
       results.push({ path, ok: true });
     } catch (e) {
@@ -2718,7 +2777,11 @@ exports.main = async (event, context) => {
 
   // 代理请求 OpenDota
   try {
-    const data = await fetch(path);
+    let data = await fetch(path);
+    // ★ v8.31（赛事页 4s 优化 · G14 双源镜像）：/leagues 全量 10176 条 / 1001 KB，
+    //   客户端只用 leagueid/tier/name 且只展示 rank>=1 → 服务端裁剪后再回传/缓存。
+    //   与 supabase/functions/opendota-proxy 的 trimLeagues 同口径。
+    if (action === 'getLeagues') data = trimLeagues(data);
     // 后台缓存（不阻塞返回）
     setCache(cacheKey, data, resolveTtl(action)).catch(() => {});
     const r = { data: data, source: 'fresh' };

@@ -86,14 +86,14 @@ function transformWindows(data) {
 
   // ② explorer windows（与客户端/云函数同款 SQL，权威源 utils/sqlFragments.js）
   //   explorer 全表 group-by 较重（实测本地直连 >15s）→ 45s 超时 + 一次重试
-  const winUrl = OD_BASE + '/explorer?sql=' + encodeURIComponent(sqlFragments.LEAGUE_WINDOWS_SQL);
+  const winUrl = OD_BASE + '/explorer?sql=' + encodeURIComponent(sqlFragments.LEAGUE_WINDOWS_SQL());
   let winData = null;
   for (let attempt = 1; attempt <= 2; attempt++) {
     try { winData = await getJson(winUrl, 45000); break; }
     catch (e) { console.warn('[fetch:leagues] explorer 第 ' + attempt + ' 次失败: ' + (e && e.message)); }
   }
   if (!winData) {
-    console.error('[fetch:leagues] explorer windows 两次均失败（SQL: ' + sqlFragments.LEAGUE_WINDOWS_SQL.slice(0, 60) + '…）');
+    console.error('[fetch:leagues] explorer windows 两次均失败（SQL: ' + sqlFragments.LEAGUE_WINDOWS_SQL().slice(0, 60) + '…）');
     process.exit(1);
   }
   const windows = transformWindows(winData);
