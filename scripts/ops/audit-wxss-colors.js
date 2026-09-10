@@ -41,7 +41,9 @@ function walk(dir, out) {
 }
 
 // 颜色匹配：hex / rgb() / rgba() / 常见具名色
-const RE = /#[0-9a-fA-F]{3,8}\b|\brgba?\([^)]*\)|\b(?:white|black|red|blue|green|gray|grey|silver|orange|yellow|purple|pink|brown|cyan|magenta|lime|navy|teal|olive|maroon|aqua|fuchsia)\b/g;
+// ★ 2026-09-10：具名色匹配加标识符边界断言（`white-space` 的 white 不得计入色值，
+//   同理 `.is-white` 等类名）。与 tokenize/verify 两处 COLOR_RE 保持同款口径。
+const RE = /#[0-9a-fA-F]{3,8}\b|\brgba?\([^)]*\)|(?<![\w-])(?:white|black|red|blue|green|gray|grey|silver|orange|yellow|purple|pink|brown|cyan|magenta|lime|navy|teal|olive|maroon|aqua|fuchsia)(?![\w-])/g;
 
 /**
  * 判断下标是否落在 var(...) 内部。

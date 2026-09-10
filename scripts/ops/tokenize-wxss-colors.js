@@ -135,7 +135,28 @@ function channelOf(lineText, matchIndex) {
   return 'fallback';
 }
 
-const COLOR_RE = /#[0-9a-fA-F]{3,8}\b|\brgba?\([^)]*\)|\b(?:white|black)\b/g;
+// ★★ 2026-09-10 根因修复：具名色 `white`/`black` 必须做**标识符边界**判断。
+//   原用 `\b(?:white|black)\b` —— 但 `-` 是词边界字符，于是 `white-space` 里的 `white`
+//   也被匹配 → 替换成 `var(--td-bg-color-container)-space` → 全项目 52 处 / 18 个文件
+//   WXSS 编译报 `unexpected '('`（app.wxss 阻断编译）。教训：**CSS 属性名里可能包含
+//   颜色关键字**，`\b` 挡不住「关键字 + 连字符」的组合；
+//   同理 `.is-white` 的 white 前面是 `-`，`\b` 也成立 → 类名会被破坏。
+//   双层防护：
+//     ① 正则层（本行）：前后用 `(?<![\w-])` / `(?![\w-])` 排除紧邻连字符/单词字符的情况
+//        —— CSS 中颜色关键字作为独立值使用时，前后必为空白 / 逗号 / 分号 / 括号边界；
+//     ② 代码层：`isBareNamedColor()` 在替换前二次拦截（见下方调用点）。
+const COLOR_RE = /#[0-9a-fA-F]{3,8}\b|\brgba?\([^)]*\)|(?<![\w-])(?:white|black)(?![\w-])/g;
+const IDENT_CHAR = /[A-Za-z0-9_-]/;
+
+/** 具名色守卫：排除 `white-space` / `black-list` 这类「关键字作为标识符前缀/后缀」 */
+function isBareNamedColor(line, idx, lit) {
+  if (lit !== 'white' && lit !== 'black') return true;   // 仅具名色需要判断
+  const before = idx > 0 ? line[idx - 1] : '';
+  const after = line[idx + lit.length] || '';
+  if (before && IDENT_CHAR.test(before)) return false;
+  if (after && IDENT_CHAR.test(after)) return false;
+  return true;
+}
 
 /** 判断某下标是否落在 var(...) 内部（避免把 fallback 替换成嵌套 var） */
 function insideVarSpan(line, idx) {
@@ -181,10 +202,12 @@ function processFile(file, tokens, apply, verbose) {
     // ── 步骤 A：处理 `var(--未定义, #色)` 构造 ──
     // 外层名未定义时该构造恒等于 fallback，故整体替换为语义 token（比留嵌套 var 干净）。
     // 外层名已定义则不动（否则会改变优先级行为）。
-    let cur = line.replace(/var\(\s*(--[\w-]+)\s*,\s*(#[0-9a-fA-F]{3,8}|rgba?\([^)]*\)|white|black)\s*\)/g,
+    let cur = line.replace(/var\(\s*(--[\w-]+)\s*,\s*(#[0-9a-fA-F]{3,8}|rgba?\([^)]*\)|(?:white|black)(?![\w-]))\s*\)/g,
       (full, outer, fb) => {
         if (tokens[outer]) return full;                  // 外层已定义 → 保留原样
-        const pick = pickToken(fb, line, line.indexOf(full), tokens);
+        const at = line.indexOf(full);
+        if (!isBareNamedColor(line, at, fb)) return full;   // ★ 具名色守卫
+        const pick = pickToken(fb, line, at, tokens);
         if (!pick.tokenName) {
           refused.push({ lit: fb, tokenName: outer, reason: '构造内 fallback 不可映射(' + pick.reason + ')' });
           return full;
@@ -201,6 +224,7 @@ function processFile(file, tokens, apply, verbose) {
     let m;
     while ((m = COLOR_RE.exec(cur)) !== null) {
       if (insideVarSpan(cur, m.index)) continue;         // var() 内部的 fallback 不动
+      if (!isBareNamedColor(cur, m.index, m[0])) continue;  // ★ 具名色守卫（防 `white-space`）
       const pick = pickToken(m[0], cur, m.index, tokens);
       if (!pick.tokenName) {
         (pick.reason === '映射表未收录' ? skipped : refused).push({ lit: m[0], tokenName: null, reason: pick.reason });

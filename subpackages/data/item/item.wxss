@@ -3,7 +3,7 @@
 .search { margin-bottom: var(--space-2); }
 
 /* 分类筛选（横向滚动） */
-.cat-bar { var(--td-bg-color-container)-space: nowrap; margin-bottom: var(--space-1-5); }
+.cat-bar { white-space: nowrap; margin-bottom: var(--space-1-5); }
 .cat {
   display: inline-block;
   font-size: var(--fs-body);
@@ -75,14 +75,14 @@
   color: var(--text-1);
   overflow: hidden;
   text-overflow: ellipsis;
-  var(--td-bg-color-container)-space: nowrap;
+  white-space: nowrap;
 }
 .item-sub {
   font-size: var(--fs-micro);
   color: var(--text-3);
   overflow: hidden;
   text-overflow: ellipsis;
-  var(--td-bg-color-container)-space: nowrap;
+  white-space: nowrap;
 }
 
 .item-tags { display: flex; flex-wrap: wrap; gap: var(--space-1); }

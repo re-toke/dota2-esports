@@ -60,7 +60,7 @@
   transition: opacity 0.12s ease;
 }
 .matchup-item--hover { opacity: 0.7; }
-.matchup-name { width: 150rpx; font-size: var(--fs-body); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; var(--td-bg-color-container)-space: nowrap; }
+.matchup-name { width: 150rpx; font-size: var(--fs-body); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .matchup-bar-wrap { flex: 1; height: 14rpx; background: var(--td-bg-color-component); border-radius: var(--radius-sm); overflow: hidden; }
 .matchup-bar { height: 100%; border-radius: var(--radius-sm); }
 .matchup-bar.best { background: var(--radiant); }

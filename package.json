@@ -6,7 +6,7 @@
     "lint": "eslint --rulesdir scripts/eslint-rules utils/ pages/ subpackages/ cloudfunctions/ scripts/ --ext .js",
     "lint:fix": "eslint --rulesdir scripts/eslint-rules utils/ pages/ subpackages/ cloudfunctions/ scripts/ --ext .js --fix",
     "test": "node scripts/test/test-canonical.js && node scripts/test/test-bo.js",
-    "test:all": "node scripts/test/test-sources.js && node scripts/test/test-consensus.js && node scripts/test/test-canonical.js && node scripts/test/test-bo.js && node scripts/test/test-formatters.js && node scripts/test/test-incremental.js && node scripts/test/test-remote-curation.js && node scripts/test/test-search-history.js && node scripts/test/test-bo3-merge-split.js && node scripts/test/test-haglund-circuit.js && node scripts/test/test-image.js",
+    "test:all": "node scripts/test/test-sources.js && node scripts/test/test-consensus.js && node scripts/test/test-canonical.js && node scripts/test/test-bo.js && node scripts/test/test-formatters.js && node scripts/test/test-incremental.js && node scripts/test/test-remote-curation.js && node scripts/test/test-search-history.js && node scripts/test/test-bo3-merge-split.js && node scripts/test/test-haglund-circuit.js && node scripts/test/test-image.js && node scripts/ops/check-token-overreach.js",
     "sync:canon": "node scripts/sync/sync-canon-map.js",
     "sync:parse": "node scripts/sync/sync-liquipedia-parse.js",
     "sync:slugmap": "node scripts/sync/sync-slugmap.js",
@@ -29,7 +29,8 @@
     "tokenize:colors": "node scripts/ops/tokenize-wxss-colors.js",
     "tokenize:colors:apply": "node scripts/ops/tokenize-wxss-colors.js --apply",
     "verify:tokenize": "node scripts/ops/verify-tokenize-equivalence.js",
-    "check:handlers": "node scripts/ops/check-page-handlers.js"
+    "check:handlers": "node scripts/ops/check-page-handlers.js",
+    "check:token-overreach": "node scripts/ops/check-token-overreach.js"
   },
   "dependencies": {
     "tdesign-miniprogram": "^1.15.3",

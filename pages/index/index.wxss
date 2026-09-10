@@ -17,7 +17,7 @@
   color: var(--text-3);
   overflow: hidden;
   text-overflow: ellipsis;
-  var(--td-bg-color-container)-space: nowrap;
+  white-space: nowrap;
 }
 .search-bar--pressed {
   opacity: 0.82;
@@ -59,7 +59,7 @@
 }
 .ff-scroll {
   width: 100%;
-  var(--td-bg-color-container)-space: nowrap;
+  white-space: nowrap;
 }
 .ff-track {
   display: inline-flex;
@@ -115,7 +115,7 @@
   color: var(--text-2);
   overflow: hidden;
   text-overflow: ellipsis;
-  var(--td-bg-color-container)-space: nowrap;
+  white-space: nowrap;
 }
 .ff-vs {
   display: flex;
@@ -131,7 +131,7 @@
   max-width: 110rpx;
   overflow: hidden;
   text-overflow: ellipsis;
-  var(--td-bg-color-container)-space: nowrap;
+  white-space: nowrap;
 }
 .ff-team.win { color: var(--h2h-a, #2DD4A7); }
 .ff-vs-sym {

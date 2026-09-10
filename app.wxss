@@ -239,7 +239,7 @@ view, text { box-sizing: border-box; }
   margin-left: auto;
   align-self: center;
   font-size: var(--fs-caption);
-  var(--td-bg-color-container)-space: nowrap;
+  white-space: nowrap;
   padding-left: 8rpx;
 }
 
@@ -469,7 +469,7 @@ page {
   font-family: var(--font-numeric);
   line-height: var(--lh-normal);
   word-break: break-word;
-  var(--td-bg-color-container)-space: normal;
+  white-space: normal;
 }
 .kpi-value.is-empty {
   color: var(--text-4);
@@ -605,7 +605,7 @@ page {
   color: var(--text-1);
   overflow: hidden;
   text-overflow: ellipsis;
-  var(--td-bg-color-container)-space: nowrap;
+  white-space: nowrap;
   max-width: 200rpx;
 }
 .vs-score {
@@ -647,7 +647,7 @@ page {
   font-size: var(--fs-micro);
   color: var(--text-3);
   font-family: var(--font-mono);
-  var(--td-bg-color-container)-space: nowrap;
+  white-space: nowrap;
 }
 
 /* ===================================================================
@@ -668,7 +668,7 @@ page {
   color: var(--text-2);
   overflow: hidden;
   text-overflow: ellipsis;
-  var(--td-bg-color-container)-space: nowrap;
+  white-space: nowrap;
 }
 .stat-bar {
   height: 12rpx;
@@ -855,7 +855,7 @@ page {
   color: var(--text-2);
   overflow: hidden;
   text-overflow: ellipsis;
-  var(--td-bg-color-container)-space: nowrap;
+  white-space: nowrap;
 }
 .brand-search {
   margin-left: auto;

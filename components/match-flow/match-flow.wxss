@@ -40,7 +40,7 @@
   font-size: var(--fs-caption);
   color: var(--text-2);
   font-feature-settings: 'tnum';
-  var(--td-bg-color-container)-space: nowrap;
+  white-space: nowrap;
 }
 .mf-chip--active .mf-chip-text {
   color: var(--dota-gold);
@@ -155,7 +155,7 @@
   font-size: var(--fs-label);
   font-weight: 500;
   color: var(--text-1);
-  var(--td-bg-color-container)-space: nowrap;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -219,7 +219,7 @@
   color: var(--text-1);
   text-align: center;
   line-height: 1.3;
-  var(--td-bg-color-container)-space: nowrap;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }

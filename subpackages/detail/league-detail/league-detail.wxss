@@ -220,7 +220,7 @@
   color: var(--text-3);
   overflow: hidden;
   text-overflow: ellipsis;
-  var(--td-bg-color-container)-space: nowrap;
+  white-space: nowrap;
   letter-spacing: 0.5rpx;
 }
 /* 已结束胜负标识（金色强调，区别于 .win 绿阵营语义）：
@@ -569,7 +569,7 @@
   flex-shrink: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  var(--td-bg-color-container)-space: nowrap;
+  white-space: nowrap;
 }
 .hero-side.radiant .hero-side-label { color: var(--status-ongoing, #5fd35f); }
 .hero-side.dire .hero-side-label { color: var(--dire); }
@@ -664,7 +664,7 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  var(--td-bg-color-container)-space: nowrap;
+  white-space: nowrap;
   padding: 0 var(--space-1);
 }
 .col-num {
@@ -808,7 +808,7 @@
   color: var(--text-3);
   overflow: hidden;
   text-overflow: ellipsis;
-  var(--td-bg-color-container)-space: nowrap;
+  white-space: nowrap;
 }
 /* 2026-07-28：参赛队伍 chip 信息区（队名 + 标签行）与赛区/分组标签 */
 .team-chip-info {
@@ -851,7 +851,7 @@
   line-height: var(--lh-relaxed);
   overflow: hidden;
   text-overflow: ellipsis;
-  var(--td-bg-color-container)-space: nowrap;
+  white-space: nowrap;
   max-width: 160rpx;
 }
 /* 2026-07-28：参赛队伍 chip 状态徽标（直邀/预选）与待公布样式 */
@@ -1170,7 +1170,7 @@
   color: var(--text-1);
   overflow: hidden;
   text-overflow: ellipsis;
-  var(--td-bg-color-container)-space: nowrap;
+  white-space: nowrap;
 }
 .lp-team-placement {
   flex-shrink: 0;
@@ -1219,7 +1219,7 @@
   color: var(--text-1);
   overflow: hidden;
   text-overflow: ellipsis;
-  var(--td-bg-color-container)-space: nowrap;
+  white-space: nowrap;
 }
 .lp-match-team.winner .lp-match-team-name { font-weight: 700; color: var(--dota-gold-strong); }
 .lp-match-score {

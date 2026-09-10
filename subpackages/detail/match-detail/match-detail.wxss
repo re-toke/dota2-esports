@@ -176,7 +176,7 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  var(--td-bg-color-container)-space: nowrap;
+  white-space: nowrap;
   padding: 0 var(--space-1);
 }
 .c-kda {
@@ -257,7 +257,7 @@
   padding: 0 6rpx;
   max-width: 96rpx;
   overflow: hidden;
-  var(--td-bg-color-container)-space: nowrap;
+  white-space: nowrap;
   text-overflow: ellipsis;
 }
 .items-empty { font-size: var(--fs-caption); color: var(--slate-text); }

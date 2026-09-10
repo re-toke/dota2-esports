@@ -72,7 +72,7 @@
   color: var(--text-1);
   overflow: hidden;
   text-overflow: ellipsis;
-  var(--td-bg-color-container)-space: nowrap;
+  white-space: nowrap;
   flex: 1;
   min-width: 0;
 }
@@ -118,7 +118,7 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  var(--td-bg-color-container)-space: nowrap;
+  white-space: nowrap;
   color: var(--text-3);
 }
 .date-range { color: var(--text-muted); }
@@ -508,7 +508,7 @@
   font-size: var(--fs-body); color: var(--text-2);
   overflow: hidden;
   text-overflow: ellipsis;
-  var(--td-bg-color-container)-space: nowrap;
+  white-space: nowrap;
 }
 .focus-meta {
   position: relative;
@@ -676,7 +676,7 @@
   color: var(--text-1);
   overflow: hidden;
   text-overflow: ellipsis;
-  var(--td-bg-color-container)-space: nowrap;
+  white-space: nowrap;
 }
 .tf-empty {
   flex: 1;
@@ -736,7 +736,7 @@
 }
 .ff-scroll {
   width: 100%;
-  var(--td-bg-color-container)-space: nowrap;
+  white-space: nowrap;
 }
 .ff-track {
   display: inline-flex;
@@ -786,7 +786,7 @@
   color: var(--text-2);
   overflow: hidden;
   text-overflow: ellipsis;
-  var(--td-bg-color-container)-space: nowrap;
+  white-space: nowrap;
 }
 .ff-vs {
   display: flex;
@@ -802,7 +802,7 @@
   max-width: 110rpx;
   overflow: hidden;
   text-overflow: ellipsis;
-  var(--td-bg-color-container)-space: nowrap;
+  white-space: nowrap;
 }
 .ff-team.win { color: var(--h2h-a, #2DD4A7); }
 .ff-vs-sym {
@@ -884,7 +884,7 @@
 .filter-bar .chip-scroll {
   flex: 1;
   min-width: 0;
-  var(--td-bg-color-container)-space: nowrap;
+  white-space: nowrap;
 }
 .filter-bar .chip-group {
   display: inline-flex;
