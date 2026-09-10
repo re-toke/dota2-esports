@@ -64,14 +64,41 @@ function rateLimitedFetch(path: string): Promise<any> {
 }
 
 // ===== 抓取 wikitext（action=query&prop=revisions，与云函数同参数） =====
+// ★ 2026-09-10 修复：补 `redirects=1`。
+//   此前 EF 漏了该参数，而云函数（aggregation L549）与客户端本地路径（liquipedia.js L251）
+//   都带 —— EF 注释里「与云函数同参数」实际已不成立。
+//   后果（实测确认）：LP 上不少赛事主页面是重定向页（如 `The International 2026` 实测
+//   仅 36 字节 `#REDIRECT [[...]]`）。EF 抓到这种页面会把 36B 重定向文本写进
+//   `lp:w:<slug>` 缓存（TTL 24h），而读取端 getAnyCache **不过滤 expire_at**（v8.22 设计）
+//   → 该 key 被永久污染 → 客户端 parseScheduledMatches 找不到任何 {{Match}} → 赛程空白。
+//   当前因 EF 出口被 LP 限流（429）而极少写入，属**潜伏缺陷**；一旦限流解除即静默发作。
+// ===== wikitext 可用性判定（★ 2026-09-10）=====
+// 重定向占位文本 / 空文本 一律视为**不可用**——读写两侧共用同一判定：
+//   · 写侧（fetchWikitext）：不可用则不返回、不入缓存；
+//   · 读侧（handle）：不可用则视为 miss（继续尝试现抓；仍失败则返回 null，由客户端回落）。
+// 这样即便表里已存在修复前写入的污染条目，也不会再被读出。
+function isUsableWikitext(wt: any): boolean {
+  if (typeof wt !== "string") return false;
+  if (!wt.trim()) return false;
+  // #REDIRECT 占位（正常页面内容不会以它开头且这么短）
+  if (/^\s*#redirect\s/i.test(wt) && wt.length < 500) return false;
+  return true;
+}
+
 async function fetchWikitext(pageTitle: string): Promise<string | null> {
-  const url = LP_BASE + "?action=query&format=json&prop=revisions&rvprop=content&titles=" +
-              encodeURIComponent(pageTitle);
+  const url = LP_BASE + "?action=query&format=json&prop=revisions&rvprop=content" +
+              "&redirects=1" +   // ★ 跟随 #REDIRECT，返回最终页面内容（与云函数/客户端同口径）
+              "&titles=" + encodeURIComponent(pageTitle);
   const j = await rateLimitedFetch(url);
   const pages = j && j.query && j.query.pages;
   if (!pages) return null;
   const p = Object.values(pages)[0] as any;
-  return (p && p.revisions && p.revisions[0] && p.revisions[0]["*"]) || null;
+  const wt = (p && p.revisions && p.revisions[0] && p.revisions[0]["*"]) || null;
+  if (!isUsableWikitext(wt)) {
+    if (wt) console.warn("[liquipedia] 拒绝不可用文本(len=" + String(wt).length + "): " + pageTitle);
+    return null;
+  }
+  return wt;
 }
 
 // ===== 缓存（key: lp:<slug>，TTL 按用途） =====
@@ -117,7 +144,10 @@ async function handle(body: any): Promise<any> {
     //   定时灌表），EF 变成纯读表——不过滤 expire_at（表里有就用，旧数据也好过 500）。
     //   表里没有才尝试现抓（Supabase 出口当前被 LP Cloudflare 拦，会 500 → 客户端回退云开发）。
     const cached = await getAnyCache(cacheKey);
-    if (cached) return { data: { wikitext: cached }, source: "cache" };
+    // ★ 2026-09-10：读侧同样过 isUsableWikitext —— 表里可能存有修复前写入的重定向占位条目
+    //   （写入时不过滤过期、读取时也不过滤 → 本会永久污染）。不可用则视为 miss，继续走现抓。
+    if (isUsableWikitext(cached)) return { data: { wikitext: cached }, source: "cache" };
+    if (cached) console.warn("[liquipedia] 缓存内容不可用，按 miss 处理: " + cacheKey);
     const wikitext = await fetchWikitext(slug);
     if (!wikitext) return { data: null, source: "liquipedia" };
     await setCache(cacheKey, wikitext, SCHEDULE_TTL_MS);
