@@ -524,7 +524,9 @@ Page({
         }; })())
         .slice(0, 5);                                     // 请求量上限（3→5，A2）
     } catch (e) { return Promise.resolve([]); }
-    if (!events.length) return Promise.resolve([]);
+    if (!events.length) { console.log('[index][⑥段] 候选为空（curation 无窗口内赛事）'); return Promise.resolve([]); }
+    // ★ v8.28：⑥ 段候选透出（诊断 upcoming 卡缺失——候选名单决定查谁的排期）
+    console.log('[index][⑥段] 候选', events.length, '个:', events.map(e => e.name + '(' + e.leagueId + ')').join(' | '));
     // ★ 2026-09-01 修复「卡头显示『职业赛事』」：
     //   parseScheduledMatches 的输出**不含 leagueName/leagueId**（只有 team1Name/team2Name/
     //   startTime/boType…），mergeLiquipediaGroup 与 buildLpUpcomingSeries 只是透传该空值，
