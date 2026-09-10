@@ -1692,6 +1692,10 @@ async function handleSendSubscribeMessage(event) {
     const result = await cloud.openapi.subscribeMessage.send({
       touser: String(touser),
       template_id: String(template_id),
+      // ⚠️ 2026-09-10 收尾核查：此处保留前导斜杠（与 utils/subscribe.js L309 注释一致——
+      //   「HTTPS 接口 page 不带前导斜杠（云开发路径才带 /）」）。EF 侧 subscribe-send L62
+      //   会剥离斜杠，两条链路对同一微信 API 传参不同。**未验证**云开发侧带斜杠是否必要，
+      //   故不在收尾阶段改动行为——列入「待真机推送验证」项，实测后用真实结果统一两条链路。
       page: String(page || '/pages/index/index'),
       miniprogram_state: String(miniprogram_state || 'formal'),
       data: data || {}
