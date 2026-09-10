@@ -1,8 +1,8 @@
 .live-card {
   margin: var(--space-2) var(--space-3);
   padding: var(--space-2-5) var(--space-3);
-  background: #FFFFFF;
-  border: 1rpx solid #E5E7EB;
+  background: var(--td-bg-color-container);
+  border: 1rpx solid var(--td-border-level-1-color);
   border-radius: var(--radius-lg);
 }
 
@@ -35,7 +35,7 @@
 .live-title {
   font-size: var(--fs-subhead);
   font-weight: 600;
-  color: #1F2937;
+  color: var(--text-1);
   margin-right: var(--space-2);
 }
 

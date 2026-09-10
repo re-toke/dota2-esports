@@ -15,7 +15,7 @@
   overflow: hidden;
   flex-shrink: 0;
   background: var(--card-bg-inset, #F1F3F5);
-  border: 1rpx solid #E5E7EB;
+  border: 1rpx solid var(--td-border-level-1-color);
 }
 .head-info { flex: 1; min-width: 0; }
 .head-info .title {
@@ -35,9 +35,9 @@
 .head-meta .sub { font-size: var(--fs-body); color: var(--text-2); }
 .tag-tag {
   font-size: var(--fs-caption);
-  color: #4B5563;
-  background: #F1F3F5;
-  border: 1rpx solid #E5E7EB;
+  color: var(--text-2);
+  background: var(--td-bg-color-component);
+  border: 1rpx solid var(--td-border-level-1-color);
   border-radius: var(--radius-xs);
   padding: 2rpx var(--space-1);
   font-family: var(--font-mono, monospace);
@@ -46,7 +46,7 @@
   font-size: var(--fs-micro);
   padding: 2rpx 10rpx;
   border-radius: var(--radius-pill, 999rpx);
-  background: rgba(95, 211, 95, 0.12);
+  background: var(--radiant-soft);
   color: var(--radiant);
   border: 1rpx solid rgba(95, 211, 95, 0.3);
   font-family: var(--font-mono, monospace);
@@ -152,7 +152,7 @@
   overflow: hidden;
   flex-shrink: 0;
   background: var(--card-bg-inset, #F1F3F5);
-  border: 1rpx solid #E5E7EB;
+  border: 1rpx solid var(--td-border-level-1-color);
 }
 .member-body { flex: 1; min-width: 0; }
 .member-name-row {
@@ -167,7 +167,7 @@
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  var(--td-bg-color-container)-space: nowrap;
 }
 
 /* 多源核实徽标 */
@@ -190,7 +190,7 @@
   font-weight: 700;
   color: var(--text-2);
   background: var(--card-bg-inset, #F1F3F5);
-  border: 1rpx solid #E5E7EB;
+  border: 1rpx solid var(--td-border-level-1-color);
 }
 
 /* ===== 通用 ===== */
@@ -202,7 +202,7 @@
 /* ===== 对战记录 H2H ===== */
 .h2h-list {
   margin-top: var(--space-1-5);
-  background: #FFFFFF;
+  background: var(--td-bg-color-container);
   border-radius: var(--radius-lg);
   overflow: hidden;
 }
@@ -211,10 +211,10 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--space-2-5) var(--space-3);
-  border-bottom: 1rpx solid #E5E7EB;
+  border-bottom: 1rpx solid var(--td-border-level-1-color);
 }
 .h2h-row:last-child { border-bottom: none; }
-.h2h-row-hover { background: #F1F3F5; }
+.h2h-row-hover { background: var(--td-bg-color-component); }
 .h2h-opp {
   display: flex;
   align-items: center;
@@ -225,8 +225,8 @@
 .h2h-opp-tag {
   font-size: var(--fs-micro);
   font-weight: 700;
-  color: #5fd3a8;
-  background: #F1F3F5;
+  color: var(--status-verified);
+  background: var(--td-bg-color-component);
   border-radius: var(--radius-sm);
   padding: var(--space-0-5) var(--space-1);
   min-width: 56rpx;
@@ -234,10 +234,10 @@
 }
 .h2h-opp-name {
   font-size: var(--fs-label);
-  color: #1F2937;
+  color: var(--text-1);
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  var(--td-bg-color-container)-space: nowrap;
 }
 .h2h-record {
   display: flex;

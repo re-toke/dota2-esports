@@ -1,15 +1,15 @@
 /* pages/privacy/privacy.wxss */
 .container {
   padding: var(--space-4) var(--space-4) 64rpx;
-  background: #F8F9FA;
+  background: var(--td-bg-color-page);
   min-height: 100vh;
-  color: #1F2937;
+  color: var(--text-1);
 }
 
 .header {
   margin-bottom: var(--space-5);
   padding-bottom: var(--space-3);
-  border-bottom: 1rpx solid #E5E7EB;
+  border-bottom: 1rpx solid var(--td-border-level-1-color);
 }
 .title {
   font-size: var(--fs-mega);
@@ -28,7 +28,7 @@
 .section-title {
   font-size: var(--fs-emphasis);
   font-weight: 600;
-  color: #1F2937;
+  color: var(--text-1);
   margin-bottom: var(--space-2);
   padding-left: var(--space-2);
   border-left: 6rpx solid var(--dota-gold);
@@ -56,7 +56,7 @@
 .footer {
   margin-top: var(--space-6);
   padding: var(--space-3);
-  background: #FFFFFF;
+  background: var(--td-bg-color-container);
   border-radius: var(--radius-md);
   display: flex;
   align-items: flex-start;

@@ -17,7 +17,7 @@
   color: var(--text-3);
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  var(--td-bg-color-container)-space: nowrap;
 }
 .search-bar--pressed {
   opacity: 0.82;
@@ -59,7 +59,7 @@
 }
 .ff-scroll {
   width: 100%;
-  white-space: nowrap;
+  var(--td-bg-color-container)-space: nowrap;
 }
 .ff-track {
   display: inline-flex;
@@ -104,7 +104,7 @@
 .ff-tier {
   font-size: var(--fs-micro);
   font-weight: 700;
-  color: #1F2937;
+  color: var(--text-1);
   background: var(--dota-gold, #C8A951);
   padding: 2rpx 10rpx;
   border-radius: var(--radius-sm);
@@ -115,7 +115,7 @@
   color: var(--text-2);
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  var(--td-bg-color-container)-space: nowrap;
 }
 .ff-vs {
   display: flex;
@@ -131,7 +131,7 @@
   max-width: 110rpx;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  var(--td-bg-color-container)-space: nowrap;
 }
 .ff-team.win { color: var(--h2h-a, #2DD4A7); }
 .ff-vs-sym {
@@ -148,7 +148,7 @@
 .ff-cd {
   font-size: var(--fs-body);
   font-weight: 700;
-  color: #C8A951;
+  color: var(--dota-gold);
   font-family: var(--font-numeric, sans-serif);
   letter-spacing: 0.5rpx;
 }
@@ -192,7 +192,7 @@
 .fg-sub { font-size: var(--fs-caption); color: var(--text-2); }
 .fg-btn {
   padding: var(--space-1-5) var(--space-3-5);
-  background: linear-gradient(135deg, #C8A951, #C8A951);
+  background: linear-gradient(135deg, var(--dota-gold), var(--dota-gold));
   color: #7A6520;
   font-size: var(--fs-label);
   font-weight: 700;
@@ -225,7 +225,7 @@
   gap: 10rpx;
   padding: var(--space-3-5) 0;
   background: var(--card-grad);
-  border: 1rpx solid #E5E7EB;
+  border: 1rpx solid var(--td-border-level-1-color);
   border-radius: var(--radius-lg);
   box-shadow: var(--card-inner-shadow);
 }

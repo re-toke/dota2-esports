@@ -39,7 +39,7 @@
   text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  var(--td-bg-color-container)-space: nowrap;
   max-width: 100%;
 }
 /* 3.4 队名 + 核实标记行：flex 布局，队名溢出省略 + 标记常驻 */
@@ -59,8 +59,8 @@
   flex-shrink: 0;
   font-size: var(--fs-badge);
   font-weight: 600;
-  color: #2DD4A7;
-  background: rgba(45, 212, 167, 0.14);
+  color: var(--h2h-a);
+  background: var(--h2h-a-soft);
   padding: 2rpx 10rpx;
   border-radius: var(--radius-pill);
   line-height: var(--lh-relaxed);
@@ -97,7 +97,7 @@
   color: var(--text-2);
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  var(--td-bg-color-container)-space: nowrap;
   max-width: 60%;
 }
 .h2h-num {
@@ -188,8 +188,8 @@
 .h2h-key-flag {
   font-size: var(--fs-micro);
   font-weight: 700;
-  color: #1F2937;
-  background: #C8A951;
+  color: var(--text-1);
+  background: var(--dota-gold);
   padding: 2rpx 10rpx;
   border-radius: var(--radius-pill);
   flex-shrink: 0;
@@ -206,7 +206,7 @@
   color: var(--text-1);
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  var(--td-bg-color-container)-space: nowrap;
   flex: 1;
   min-width: 0;
 }
@@ -255,7 +255,7 @@
   content: '';
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: linear-gradient(90deg, transparent 0%, #E5E7EB 50%, transparent 100%);
+  background: linear-gradient(90deg, transparent 0%, var(--td-bg-color-component-active) 50%, transparent 100%);
   transform: translateX(-100%);
   animation: sk-shimmer 1.4s ease-in-out infinite;
 }
@@ -283,7 +283,7 @@
 /* ===== 3.3 近期状态雷达卡 ===== */
 .radar-card {
   background: var(--card-bg, #FFFFFF);
-  border: 1rpx solid var(--border, #E5E7EB);
+  border: 1rpx solid var(--td-border-level-1-color);
   border-radius: var(--radius-lg);
   padding: var(--space-2) var(--space-1) var(--space-1-5);
   margin-bottom: var(--space-2);

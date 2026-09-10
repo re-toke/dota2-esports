@@ -50,7 +50,7 @@
   box-shadow: 0 0 16rpx rgba(95,211,95,0.08), var(--card-inner-shadow, 0 1rpx 4rpx rgba(0,0,0,0.04));
   animation: pulse-glow var(--dur-breath) var(--ease-in-out) infinite;
 }
-.league-item--ongoing .league-name { color: #1F2937; }
+.league-item--ongoing .league-name { color: var(--text-1); }
 /* 已结束：分元素衰减（文字 85% 可读 / 装饰 45% 渐暗） */
 .league-item--ended { opacity: 0.85; }
 .league-item--ended::before { opacity: 0.45; }
@@ -72,7 +72,7 @@
   color: var(--text-1);
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  var(--td-bg-color-container)-space: nowrap;
   flex: 1;
   min-width: 0;
 }
@@ -118,7 +118,7 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  var(--td-bg-color-container)-space: nowrap;
   color: var(--text-3);
 }
 .date-range { color: #9bb0c9; }
@@ -163,7 +163,7 @@
   max-width: 520rpx;
   background: var(--card-grad);
   box-shadow: var(--card-inner-shadow);
-  border: 1rpx solid #E5E7EB;
+  border: 1rpx solid var(--td-border-level-1-color);
   border-radius: var(--radius-pill);          /* 胶囊形 */
   transition: transform 0.12s ease;
 }
@@ -188,7 +188,7 @@
   letter-spacing: 0.5rpx;
 }
 .lm-text--armed {
-  color: #C8A951;
+  color: var(--dota-gold);
   font-weight: 500;
 }
 .lm-text--loading {
@@ -210,8 +210,8 @@
 .lm-spinner {
   width: 28rpx;
   height: 28rpx;
-  border: 3rpx solid #D1D5DB;
-  border-top-color: #C8A951;
+  border: 3rpx solid var(--td-component-border);
+  border-top-color: var(--dota-gold);
   border-radius: 50%;
   animation: lmSpin 0.7s linear infinite;
 }
@@ -229,14 +229,14 @@
 .spinner {
   width: 56rpx;
   height: 56rpx;
-  border: 4rpx solid #E5E7EB;
+  border: 4rpx solid var(--td-border-level-1-color);
   border-top-color: var(--dota-gold);
   border-radius: 50%;
   animation: spin 0.9s linear infinite;
   margin-bottom: var(--space-3);
 }
 @keyframes spin { to { transform: rotate(360deg); } }
-.progress-text { font-size: var(--fs-subhead); color: #1F2937; margin-bottom: var(--space-1-5); }
+.progress-text { font-size: var(--fs-subhead); color: var(--text-1); margin-bottom: var(--space-1-5); }
 .progress-tip { font-size: var(--fs-caption); color: var(--text-3); text-align: center; }
 
 /* ===== v8.1 P1-4：过期快照「数据截至」提示条（非模态、不打断浏览）===== */
@@ -282,8 +282,8 @@
   width: 100%;
   margin-top: var(--space-3);
   padding: var(--space-4) var(--space-3-5);
-  background: #FFFFFF;
-  border: 1rpx solid #E5E7EB;
+  background: var(--td-bg-color-container);
+  border: 1rpx solid var(--td-border-level-1-color);
   border-left: 6rpx solid var(--dota-gold, #C8A951);
   border-radius: var(--radius-lg);
   box-sizing: border-box;
@@ -308,8 +308,8 @@
 }
 .hint-code {
   font-family: monospace;
-  color: #5fd3a8;
-  background: #F1F3F5;
+  color: var(--status-verified);
+  background: var(--td-bg-color-component);
   padding: 2rpx 10rpx;
   border-radius: var(--radius-sm);
   font-size: var(--fs-caption);
@@ -334,8 +334,8 @@
   padding: 0 var(--space-3-5);
   border-radius: var(--radius-lg);
   font-size: 0;
-  background: #FFFFFF;
-  border: 1.5rpx solid #D1D5DB;
+  background: var(--td-bg-color-container);
+  border: 1.5rpx solid var(--td-component-border);
   cursor: pointer;
   overflow: hidden;
   transition:
@@ -380,15 +380,15 @@
 
 /* ALL 选中：中性雾灰浅底 */
 .gc--all.gc--active {
-  background: #F1F3F5;
+  background: var(--td-bg-color-component);
 }
 .gc--all.gc--active .gc__label {
-  color: #1F2937;
+  color: var(--text-1);
 }
 
 /* S 选中：金浅底（雾峰雪 v2.0） */
 .gc--s.gc--active {
-  background: #FDF6E3;
+  background: var(--dota-gold-soft);
 }
 .gc--s.gc--active .gc__label {
   color: #7A6520;
@@ -396,7 +396,7 @@
 
 /* A 选中：indigo 浅底（雾峰雪 v2.0） */
 .gc--a.gc--active {
-  background: #EEF0FB;
+  background: var(--tier-a-soft);
 }
 .gc--a.gc--active .gc__label {
   color: #3730A3;
@@ -404,7 +404,7 @@
 
 /* B 选中：蓝浅底（雾峰雪 v2.0） */
 .gc--b.gc--active {
-  background: #EBF4FE;
+  background: var(--tier-b-soft);
 }
 .gc--b.gc--active .gc__label {
   color: #1E40AF;
@@ -424,7 +424,7 @@
   font-weight: 600;
   flex-shrink: 0;
 }
-.hl-valve { color: #7A6520; background: #FDF6E3; border: 1rpx solid rgba(200, 169, 81, 0.4); }
+.hl-valve { color: #7A6520; background: var(--dota-gold-soft); border: 1rpx solid rgba(200, 169, 81, 0.4); }
 
 /* ===== 焦点卡：重点运营节点（雾峰雪 v2.0 · 白卡 + 品牌金点缀） =====
    弃用暗色渐变 / 重阴影；改用白卡 + 金色径向晕染 + 极淡外阴影。 */
@@ -437,7 +437,7 @@
   background:
     radial-gradient(120% 140% at 0% 0%, rgba(200,169,81,0.10) 0%, rgba(200,169,81,0) 55%),
     var(--card-bg, #FFFFFF);
-  border: 1rpx solid #E5E7EB;
+  border: 1rpx solid var(--td-border-level-1-color);
   box-shadow: var(--card-inner-shadow, 0 1rpx 4rpx rgba(0,0,0,0.04));
 }
 /* Tier 色浸染：伪元素铺满整卡（角部光斑 focus-glow 已删，浸染更贴 PRD 视觉） */
@@ -460,7 +460,7 @@
 .focus-badges { display: flex; align-items: center; gap: 10rpx; flex-wrap: wrap; }
 .focus-valve {
   font-size: var(--fs-micro); font-weight: 700;
-  color: #7A6520; background: #FDF6E3;
+  color: #7A6520; background: var(--dota-gold-soft);
   padding: 3rpx var(--space-1-5); border-radius: var(--radius-sm);
   border: 1rpx solid rgba(200,169,81,0.4);
 }
@@ -508,7 +508,7 @@
   font-size: var(--fs-body); color: var(--text-2);
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  var(--td-bg-color-container)-space: nowrap;
 }
 .focus-meta {
   position: relative;
@@ -518,7 +518,7 @@
 }
 .focus-date { font-size: var(--fs-body); color: #9bb0c9; }
 .focus-prize {
-  font-size: var(--fs-caption); font-weight: 600; color: #5fd3a8;
+  font-size: var(--fs-caption); font-weight: 600; color: var(--status-verified);
   background: rgba(95,211,168,0.10); border: 1rpx solid rgba(95,211,168,0.35);
   padding: 2rpx var(--space-1-5); border-radius: var(--radius-sm);
 }
@@ -588,7 +588,7 @@
   padding: 0 var(--space-1);
   border-radius: var(--radius-pill);
   background: var(--dota-gold, #C8A951);
-  color: #1F2937;
+  color: var(--text-1);
   font-size: var(--fs-micro);
   font-weight: 800;
   line-height: 30rpx;
@@ -641,7 +641,7 @@
   align-items: center;
   gap: var(--space-2);
   padding: 22rpx var(--space-1-5);
-  border-bottom: 1rpx solid #E5E7EB;
+  border-bottom: 1rpx solid var(--td-border-level-1-color);
 }
 .tf-cell--checked { background: rgba(200,169,81,0.06); }
 .tf-check {
@@ -676,7 +676,7 @@
   color: var(--text-1);
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  var(--td-bg-color-container)-space: nowrap;
 }
 .tf-empty {
   flex: 1;
@@ -710,7 +710,7 @@
 }
 .tf-btn--confirm {
   background: var(--dota-gold, #C8A951);
-  color: #1F2937;
+  color: var(--text-1);
 }
 
 /* ===== 首页「我的关注」横向卡片流（spec C.2.1）===== */
@@ -736,7 +736,7 @@
 }
 .ff-scroll {
   width: 100%;
-  white-space: nowrap;
+  var(--td-bg-color-container)-space: nowrap;
 }
 .ff-track {
   display: inline-flex;
@@ -775,7 +775,7 @@
 .ff-tier {
   font-size: var(--fs-micro);
   font-weight: 700;
-  color: #1F2937;
+  color: var(--text-1);
   background: var(--dota-gold, #C8A951);
   padding: 2rpx 10rpx;
   border-radius: var(--radius-sm);
@@ -786,7 +786,7 @@
   color: var(--text-2);
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  var(--td-bg-color-container)-space: nowrap;
 }
 .ff-vs {
   display: flex;
@@ -802,7 +802,7 @@
   max-width: 110rpx;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  var(--td-bg-color-container)-space: nowrap;
 }
 .ff-team.win { color: var(--h2h-a, #2DD4A7); }
 .ff-vs-sym {
@@ -864,7 +864,7 @@
 .fg-btn {
   padding: var(--space-1-5) var(--space-3-5);
   background: var(--dota-gold, #C8A951);
-  color: #1F2937;
+  color: var(--text-1);
   font-size: var(--fs-label);
   font-weight: 700;
   border-radius: var(--radius-pill);
@@ -884,7 +884,7 @@
 .filter-bar .chip-scroll {
   flex: 1;
   min-width: 0;
-  white-space: nowrap;
+  var(--td-bg-color-container)-space: nowrap;
 }
 .filter-bar .chip-group {
   display: inline-flex;
@@ -902,8 +902,8 @@
   align-items: center;
   gap: 6rpx;
   padding: 14rpx 22rpx;
-  background: #FFFFFF;
-  border: 1rpx solid #E5E7EB;
+  background: var(--td-bg-color-container);
+  border: 1rpx solid var(--td-border-level-1-color);
   border-radius: var(--radius-md);
   color: var(--text-2);
   font-size: var(--fs-label);
@@ -920,7 +920,7 @@
   padding: 0 var(--space-1);
   border-radius: var(--radius-pill);
   background: var(--dota-gold, #C8A951);
-  color: #1F2937;
+  color: var(--text-1);
   font-size: var(--fs-micro);
   font-weight: 800;
   line-height: 30rpx;
@@ -956,7 +956,7 @@
 .fp-reset { font-size: var(--fs-label); color: var(--dota-gold, #C8A951); }
 .fp-section {
   padding: var(--space-2-5) 0;
-  border-bottom: 1rpx solid #E5E7EB;
+  border-bottom: 1rpx solid var(--td-border-level-1-color);
 }
 .fp-label {
   display: block;
@@ -987,8 +987,8 @@
   flex: 1;
   padding: var(--space-2) 0;
   border-radius: var(--radius-lg);
-  background: #FFFFFF;
-  border: 1rpx solid #E5E7EB;
+  background: var(--td-bg-color-container);
+  border: 1rpx solid var(--td-border-level-1-color);
   color: var(--text-2);
   font-size: var(--fs-label);
 }
@@ -1015,7 +1015,7 @@
 }
 .fp-btn--confirm {
   background: var(--dota-gold, #C8A951);
-  color: #1F2937;
+  color: var(--text-1);
 }
 
 /* ====================== B-2 列表表格化（压缩密度） ====================== */
@@ -1033,7 +1033,7 @@
   font-size: var(--fs-micro);
   color: var(--text-3);
 }
-.src-curation { color: #C8A951; }
+.src-curation { color: var(--dota-gold); }
 .src-liquipedia { color: #9bb0c9; }
-.src-stratz { color: #5fd3a8; }
+.src-stratz { color: var(--status-verified); }
 .src-opendota { color: var(--text-2); }

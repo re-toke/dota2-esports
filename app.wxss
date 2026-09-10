@@ -92,15 +92,15 @@ page {
 
   /* 全局背景与文字（雾峰雪方案：冷雾纸面底）
      注：战场图背景层已移除（v2.0 §阶段 4），不再使用 bg-page / bg-page-dim */
-  background: #F8F9FA;
-  color: #1F2937;
+  background: var(--td-bg-color-page);
+  color: var(--text-1);
   font-family: -apple-system, "PingFang SC", "Helvetica Neue", Helvetica, Arial, sans-serif;
   font-size: var(--fs-subhead);
 }
 
 /* ===== 雾峰雪 v2.0：战场图背景层 + 上下暗化遮罩全部移除（§阶段 4）
    原 .bg-page / .bg-page-dim / .bg-mask-top / .bg-mask-bottom 样式不再需要；
-   页面背景统一由 page {} 的 #F8F9FA 纯色承载，不再有任何暗化层。 */
+   页面背景统一由 page {} 的 var(--td-bg-color-page) 纯色承载，不再有任何暗化层。 */
 
 /* ===== 全局 Tier 用色 Token 工具类（雾峰雪 v2.0：彩条改实色，弃用双色渐变） =====
    仅定义实色，几何尺寸（彩条宽度/定位）由各卡片 .tier-* 容器自身的 ::before 提供。
@@ -120,7 +120,7 @@ page {
 /* 胜率颜色分级工具类（全局：teams / league-detail 共用，统一收敛到 kpi Token，禁止本地散落定义） */
 .wr-high { color: var(--kpi-primary, #5fd35f); }
 .wr-mid  { color: var(--kpi-warning, #f0aa28); }
-.wr-low  { color: #9CA3AF; }
+.wr-low  { color: var(--text-4); }
 
 view, text { box-sizing: border-box; }
 
@@ -144,7 +144,7 @@ view, text { box-sizing: border-box; }
 .card {
   background: var(--card-grad);
   border-radius: 14rpx;
-  border: 0.5rpx solid #E5E7EB;
+  border: 0.5rpx solid var(--td-border-level-1-color);
   padding: 24rpx;
   margin-bottom: 16rpx;
   box-shadow: var(--card-inner-shadow);
@@ -155,9 +155,9 @@ view, text { box-sizing: border-box; }
 .row-between { display: flex; align-items: center; justify-content: space-between; }
 
 /* 文字（雾峰雪 v2.0：亮底深字） */
-.title { font-size: var(--fs-heading); font-weight: 600; color: #1F2937; }
-.sub { font-size: var(--fs-body); color: #4B5563; }
-.muted { color: #6B7280; }
+.title { font-size: var(--fs-heading); font-weight: 600; color: var(--text-1); }
+.sub { font-size: var(--fs-body); color: var(--text-2); }
+.muted { color: var(--text-3); }
 .bold { font-weight: 600; }
 
 /* 等级标签（雾峰雪 v2.0：实色浅底 + 深字，弃用半透明叠加） */
@@ -168,21 +168,21 @@ view, text { box-sizing: border-box; }
   border-radius: 8rpx;
   line-height: var(--lh-relaxed);
 }
-.tag-sss { background: #FDF6E3; color: #7A6520; }
-.tag-s { background: #FDF6E3; color: #7A6520; }
-.tag-a { background: #EEF0FB; color: #3730A3; }
-.tag-b { background: #EBF4FE; color: #1E40AF; }
-.tag-c { background: #F1F5F9; color: #374151; }
+.tag-sss { background: var(--dota-gold-soft); color: #7A6520; }
+.tag-s { background: var(--dota-gold-soft); color: #7A6520; }
+.tag-a { background: var(--tier-a-soft); color: #3730A3; }
+.tag-b { background: var(--tier-b-soft); color: #1E40AF; }
+.tag-c { background: var(--tier-c-soft); color: #374151; }
 
 /* 胜负色：天辉绿=胜 / 夜魇红=负 */
-.win { color: #5fd35f; }
-.lose { color: #e8443b; }
+.win { color: var(--radiant); }
+.lose { color: var(--dire); }
 
 /* 加载 / 空态 */
-.center { text-align: center; color: #6B7280; padding: 80rpx 0; }
+.center { text-align: center; color: var(--text-3); padding: 80rpx 0; }
 
 /* ===== v11 聚光灯 Phase 7：Error 错误态 =====
-   用法：<view class="error-strip"><t-icon name="error-circle" color="#e8443b"/> <text>信号中断，正在重连…</text><t-button size="small" theme="primary" bindtap="retry">重试</t-button></view> */
+   用法：<view class="error-strip"><t-icon name="error-circle" color="var(--dire)"/> <text>信号中断，正在重连…</text><t-button size="small" theme="primary" bindtap="retry">重试</t-button></view> */
 .error-strip {
   display: flex;
   align-items: center;
@@ -196,7 +196,7 @@ view, text { box-sizing: border-box; }
 .error-strip text {
   flex: 1;
   font-size: var(--fs-body);
-  color: #e8443b;
+  color: var(--dire);
 }
 
 /* 搜索框（TDesign 之外的兜底 · 雾峰雪 v2.0：纯白底 + 极淡边框） */
@@ -204,13 +204,13 @@ view, text { box-sizing: border-box; }
   display: flex;
   align-items: center;
   background: var(--card-grad);
-  border: 1rpx solid #E5E7EB;
+  border: 1rpx solid var(--td-border-level-1-color);
   border-radius: 12rpx;
   padding: 12rpx 20rpx;
   margin-bottom: 20rpx;
   box-shadow: var(--card-inner-shadow);
 }
-.search-bar input { flex: 1; margin-left: 12rpx; color: #1F2937; }
+.search-bar input { flex: 1; margin-left: 12rpx; color: var(--text-1); }
 
 /* 分段选择（筛选条）—— 暗色运动风：选中=品牌金 */
 .filter-bar {
@@ -223,14 +223,14 @@ view, text { box-sizing: border-box; }
   text-align: center;
   padding: 14rpx 0;
   font-size: var(--fs-label);
-  color: #6B7280;
-  background: #F1F3F5;
-  border: 1rpx solid #E5E7EB;
+  color: var(--text-3);
+  background: var(--td-bg-color-component);
+  border: 1rpx solid var(--td-border-level-1-color);
   border-radius: 12rpx;
 }
 .filter-bar .chip.active {
   color: #7A6520;
-  background: #FDF6E3;
+  background: var(--dota-gold-soft);
   border-color: rgba(200,169,81,0.4);
 }
 
@@ -239,15 +239,15 @@ view, text { box-sizing: border-box; }
   margin-left: auto;
   align-self: center;
   font-size: var(--fs-caption);
-  white-space: nowrap;
+  var(--td-bg-color-container)-space: nowrap;
   padding-left: 8rpx;
 }
 
 /* 分段选择（通用，用于 现役/历史、关注分类等 · 雾峰雪 v2.0：雾灰底 + 金浅底激活） */
 .seg {
   display: flex;
-  background: #F8F9FA;
-  border: 1rpx solid #E5E7EB;
+  background: var(--td-bg-color-page);
+  border: 1rpx solid var(--td-border-level-1-color);
   border-radius: 14rpx;
   padding: 6rpx;
   margin-bottom: 20rpx;
@@ -256,12 +256,12 @@ view, text { box-sizing: border-box; }
   flex: 1;
   text-align: center;
   font-size: var(--fs-subhead);
-  color: #6B7280;
+  color: var(--text-3);
   padding: 14rpx 0;
   border-radius: 10rpx;
 }
 .seg-item.active {
-  background: #FDF6E3;
+  background: var(--dota-gold-soft);
   color: #7A6520;
   font-weight: 600;
 }
@@ -273,7 +273,7 @@ view, text { box-sizing: border-box; }
 .radiant-dire-bar {
   height: 6rpx;
   border-radius: 6rpx;
-  background: linear-gradient(90deg, #5fd35f 0%, #C8A951 50%, #e8443b 100%);
+  background: linear-gradient(90deg, var(--radiant) 0%, var(--dota-gold) 50%, var(--dire) 100%);
   margin-bottom: 20rpx;
 }
 
@@ -409,7 +409,7 @@ page {
 }
 .kpi-label {
   font-size: var(--fs-caption);
-  color: #6B7280;
+  color: var(--text-3);
   text-transform: uppercase;
   letter-spacing: 1rpx;
   line-height: var(--lh-normal);
@@ -417,14 +417,14 @@ page {
 .kpi-value {
   font-size: var(--fs-emphasis);
   font-weight: 600;
-  color: #1F2937;
+  color: var(--text-1);
   font-family: var(--font-numeric);
   line-height: var(--lh-normal);
   word-break: break-word;
-  white-space: normal;
+  var(--td-bg-color-container)-space: normal;
 }
 .kpi-value.is-empty {
-  color: #9CA3AF;
+  color: var(--text-4);
   font-weight: 400;
 }
 .kpi-value.accent { color: var(--kpi-primary); }
@@ -432,7 +432,7 @@ page {
 .kpi-value.info { color: var(--kpi-info); }
 .kpi-unit {
   font-size: var(--fs-caption);
-  color: #6B7280;
+  color: var(--text-3);
   font-weight: 400;
   margin-left: 4rpx;
 }
@@ -448,8 +448,8 @@ page {
   font-size: var(--fs-micro);
   padding: 2rpx 10rpx;
   border-radius: var(--radius-pill);
-  background: #F1F3F5;
-  color: #6B7280;
+  background: var(--td-bg-color-component);
+  color: var(--text-3);
   line-height: var(--lh-relaxed);
   border: 1rpx solid transparent;
 }
@@ -485,7 +485,7 @@ page {
   align-items: center;
   gap: 6rpx;
   font-size: var(--fs-micro);
-  color: #6b7280;
+  color: var(--text-3);
   font-family: var(--font-mono);
   line-height: var(--lh-normal);
 }
@@ -496,7 +496,7 @@ page {
 /* D1 赛程更新时间（2026-08-03）：与 OpenDota 数据新鲜度标签并排时留间距 + 更淡色区分 */
 .schedule-fresh-label {
   margin-left: 16rpx;
-  color: #9ca3af;
+  color: var(--text-4);
 }
 .schedule-fresh-label::before {
   content: '🕒';
@@ -554,10 +554,10 @@ page {
 .vs-team-name {
   font-size: var(--fs-subhead);
   font-weight: 500;
-  color: #1F2937;
+  color: var(--text-1);
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  var(--td-bg-color-container)-space: nowrap;
   max-width: 200rpx;
 }
 .vs-score {
@@ -574,7 +574,7 @@ page {
   font-size: var(--fs-badge);
   font-weight: 700;
   color: #7A6520;
-  background: #FDF6E3;
+  background: var(--dota-gold-soft);
   border: 1rpx solid rgba(200,169,81,0.4);
   border-radius: 999rpx;
   padding: 2rpx 12rpx;
@@ -591,15 +591,15 @@ page {
 }
 .vs-vs {
   font-size: var(--fs-caption);
-  color: #6b7280;
+  color: var(--text-3);
   font-weight: 600;
   letter-spacing: 1rpx;
 }
 .vs-meta {
   font-size: var(--fs-micro);
-  color: #6b7280;
+  color: var(--text-3);
   font-family: var(--font-mono);
-  white-space: nowrap;
+  var(--td-bg-color-container)-space: nowrap;
 }
 
 /* ===================================================================
@@ -617,10 +617,10 @@ page {
 }
 .stat-label {
   font-size: var(--fs-body);
-  color: #4B5563;
+  color: var(--text-2);
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  var(--td-bg-color-container)-space: nowrap;
 }
 .stat-bar {
   height: 12rpx;
@@ -639,7 +639,7 @@ page {
 .stat-value {
   font-size: var(--fs-body);
   font-weight: 600;
-  color: #1F2937;
+  color: var(--text-1);
   font-family: var(--font-numeric);
   text-align: right;
 }
@@ -677,7 +677,7 @@ page {
 .hero-title {
   font-size: var(--fs-mega);
   font-weight: 700;
-  color: #1F2937;
+  color: var(--text-1);
   font-family: var(--font-display);
   /* 雾峰雪 v2.0：亮底去掉强阴影 */
   line-height: var(--lh-tight);
@@ -759,12 +759,12 @@ page {
 .section-title {
   font-size: var(--fs-subhead);
   font-weight: 600;
-  color: #1F2937;
+  color: var(--text-1);
   letter-spacing: 1rpx;
 }
 .section-action {
   font-size: var(--fs-caption);
-  color: #6b7280;
+  color: var(--text-3);
   font-family: var(--font-mono);
 }
 
@@ -798,16 +798,16 @@ page {
 .brand-title {
   font-size: var(--fs-display);
   font-weight: 700;
-  color: #1F2937;
+  color: var(--text-1);
   font-family: var(--font-display, sans-serif);
   line-height: var(--lh-tight);
 }
 .brand-sub {
   font-size: var(--fs-caption);
-  color: #4B5563;
+  color: var(--text-2);
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  var(--td-bg-color-container)-space: nowrap;
 }
 .brand-search {
   margin-left: auto;
@@ -817,8 +817,8 @@ page {
   width: 64rpx;
   height: 64rpx;
   border-radius: 16rpx;
-  background: #F1F3F5;
-  border: 1rpx solid #E5E7EB;
+  background: var(--td-bg-color-component);
+  border: 1rpx solid var(--td-border-level-1-color);
 }
 
 /* ===================================================================
@@ -897,7 +897,7 @@ page {
 
 /* ① LIVE 脉冲呼吸（赛事列表/详情页进行中卡片）
    节奏：吸气(0→35%) → 峰值保持(35→55%) → 呼气(55→90%) → 静息(90→100%)，模拟真实呼吸而非急促闪烁。
-   雾峰雪 v2.0：光晕色统一 --status-live #EF4444（red-500，4.0:1 过 WCAG-AA）。 */
+   雾峰雪 v2.0：光晕色统一 --status-live var(--status-live)（red-500，4.0:1 过 WCAG-AA）。 */
 @keyframes pulse-glow {
   0%       { box-shadow: 0 0 4rpx  rgba(239, 68, 68, 0.20); }
   35%, 55% { box-shadow: 0 0 14rpx rgba(239, 68, 68, 0.50); }

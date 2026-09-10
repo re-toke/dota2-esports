@@ -12,9 +12,9 @@
 .hist-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .chip {
   padding: 10rpx var(--space-3);
-  background: #F1F3F5;
-  color: #4B5563;
-  border: 1rpx solid #E5E7EB;
+  background: var(--td-bg-color-component);
+  color: var(--text-2);
+  border: 1rpx solid var(--td-border-level-1-color);
   border-radius: 28rpx;
   font-size: var(--fs-label);
 }
@@ -56,7 +56,7 @@
   overflow: hidden;
   flex-shrink: 0;
   background: var(--card-bg-inset, #F1F3F5);
-  border: 1rpx solid #E5E7EB;
+  border: 1rpx solid var(--td-border-level-1-color);
 }
 .team-logo-img {
   width: 100%;
@@ -95,14 +95,14 @@
   color: var(--text-1);
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  var(--td-bg-color-container)-space: nowrap;
   font-family: var(--font-display, -apple-system, sans-serif);
 }
 .country-badge {
   font-size: var(--fs-micro);
   padding: 2rpx 10rpx;
   border-radius: var(--radius-pill, 999rpx);
-  background: rgba(95, 211, 95, 0.12);
+  background: var(--radiant-soft);
   color: var(--radiant);
   border: 1rpx solid rgba(95, 211, 95, 0.3);
   font-family: var(--font-mono, monospace);
@@ -137,7 +137,7 @@
   align-items: center;
   margin-top: var(--space-2);
   padding-top: var(--space-2);
-  border-top: 1rpx solid #E5E7EB;
+  border-top: 1rpx solid var(--td-border-level-1-color);
 }
 .stat-mini {
   flex: 1;
@@ -162,7 +162,7 @@
 .stat-mini-divider {
   width: 1rpx;
   height: 36rpx;
-  background: #E5E7EB;
+  background: var(--td-bg-color-component-active);
   flex-shrink: 0;
 }
 
@@ -197,13 +197,13 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--space-2-5) var(--space-3);
-  background: #FFFFFF;
+  background: var(--td-bg-color-container);
   border-radius: var(--radius-md);
   margin-bottom: var(--space-1-5);
-  border: 1rpx solid #E5E7EB;
+  border: 1rpx solid var(--td-border-level-1-color);
   transition: transform 0.12s ease, background 0.12s ease;
 }
-.card-hover { background: #F1F3F5; transform: scale(0.99); }
+.card-hover { background: var(--td-bg-color-component); transform: scale(0.99); }
 .player-info {
   display: flex;
   flex-direction: column;
@@ -211,7 +211,7 @@
 }
 .player-name {
   font-size: var(--fs-subhead);
-  color: #1F2937;
+  color: var(--text-1);
   font-weight: 500;
 }
 .player-id {
@@ -258,8 +258,8 @@
 
 /* ===== 实时联想下拉 ===== */
 .sug-list {
-  background: #FFFFFF;
-  border: 1rpx solid #E5E7EB;
+  background: var(--td-bg-color-container);
+  border: 1rpx solid var(--td-border-level-1-color);
   border-radius: var(--radius-lg);
   margin: 10rpx 0 var(--space-0-5);
   overflow: hidden;
@@ -269,16 +269,16 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--space-2-5) var(--space-3);
-  border-bottom: 1rpx solid #F1F3F5;
+  border-bottom: 1rpx solid var(--td-bg-color-component);
 }
 .sug-item:last-child { border-bottom: none; }
-.sug-item:active { background: #F1F3F5; }
-.sug-name { font-size: var(--fs-subhead); color: #1F2937; }
+.sug-item:active { background: var(--td-bg-color-component); }
+.sug-name { font-size: var(--fs-subhead); color: var(--text-1); }
 .sug-tag {
   font-size: var(--fs-caption);
   color: var(--text-2);
-  background: #F1F3F5;
-  border: 1rpx solid #E5E7EB;
+  background: var(--td-bg-color-component);
+  border: 1rpx solid var(--td-border-level-1-color);
   border-radius: var(--radius-sm);
   padding: 2rpx var(--space-1-5);
 }

@@ -24,7 +24,11 @@
     "coverage": "node scripts/ops/curation-coverage.js",
     "coverage:offline": "node scripts/ops/curation-coverage.js --offline",
     "prepare": "husky",
-    "precommit": "node scripts/ops/check-syntax.js && npx eslint --rulesdir scripts/eslint-rules && npm test"
+    "precommit": "node scripts/ops/check-syntax.js && npx eslint --rulesdir scripts/eslint-rules && npm test",
+    "audit:colors": "node scripts/ops/audit-wxss-colors.js",
+    "tokenize:colors": "node scripts/ops/tokenize-wxss-colors.js",
+    "tokenize:colors:apply": "node scripts/ops/tokenize-wxss-colors.js --apply",
+    "verify:tokenize": "node scripts/ops/verify-tokenize-equivalence.js"
   },
   "dependencies": {
     "tdesign-miniprogram": "^1.15.3",

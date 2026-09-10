@@ -7,14 +7,14 @@
   overflow: hidden;
   margin-bottom: var(--space-2);
   height: 180rpx;
-  background: linear-gradient(135deg, #F1F3F5 0%, #F8F9FA 100%);
+  background: linear-gradient(135deg, var(--td-bg-color-component) 0%, var(--td-bg-color-page) 100%);
 }
 .report-hero.radiant-win {
-  background: linear-gradient(135deg, rgba(95, 211, 95, 0.18) 0%, #F8F9FA 80%);
+  background: linear-gradient(135deg, rgba(95, 211, 95, 0.18) 0%, var(--td-bg-color-page) 80%);
   border-left: 6rpx solid var(--radiant);
 }
 .report-hero.dire-win {
-  background: linear-gradient(135deg, rgba(232, 68, 59, 0.18) 0%, #F8F9FA 80%);
+  background: linear-gradient(135deg, var(--td-error-color-light-active) 0%, var(--td-bg-color-page) 80%);
   border-left: 6rpx solid var(--dire);
 }
 .hero-overlay {
@@ -134,7 +134,7 @@
   text-transform: uppercase;
 }
 .kda-row {
-  border-top: 1rpx solid #E5E7EB;
+  border-top: 1rpx solid var(--td-border-level-1-color);
   font-size: var(--fs-label);
   color: var(--text-1);
   transition: background 120ms ease;
@@ -150,7 +150,7 @@
   height: 56rpx;
   border-radius: var(--radius-sm, 8rpx);
   background: var(--card-bg-inset, #F1F3F5);
-  border: 1rpx solid #E5E7EB;
+  border: 1rpx solid var(--td-border-level-1-color);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -163,7 +163,7 @@
   width: 56rpx;
   height: 56rpx;
   border-radius: var(--radius-sm, 8rpx);
-  border: 1rpx solid #E5E7EB;
+  border: 1rpx solid var(--td-border-level-1-color);
   background: var(--card-bg-inset, #F1F3F5);
 }
 .hero-box.win-side {
@@ -176,7 +176,7 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  var(--td-bg-color-container)-space: nowrap;
   padding: 0 var(--space-1);
 }
 .c-kda {
@@ -209,9 +209,9 @@
 .items-block {
   margin: var(--space-1) 0 var(--space-3);
   padding: var(--space-1-5) var(--space-2);
-  background: #F1F3F5;
+  background: var(--td-bg-color-component);
   border-radius: var(--radius-md);
-  border: 1rpx solid #E5E7EB;
+  border: 1rpx solid var(--td-border-level-1-color);
 }
 .items-row {
   display: flex;
@@ -222,10 +222,10 @@
 .items-hero {
   font-size: var(--fs-micro);
   font-weight: 600;
-  color: #5fd3a8;
+  color: var(--status-verified);
   min-width: 72rpx;
   text-align: center;
-  background: #FFFFFF;
+  background: var(--td-bg-color-container);
   border-radius: var(--radius-sm);
   padding: var(--space-0-5) 6rpx;
 }
@@ -240,8 +240,8 @@
   width: 44rpx;
   height: 32rpx;
   border-radius: var(--radius-sm);
-  border: 1rpx solid #E5E7EB;
-  background: #FFFFFF;
+  border: 1rpx solid var(--td-border-level-1-color);
+  background: var(--td-bg-color-container);
 }
 .item-slot {
   display: inline-flex;
@@ -251,13 +251,13 @@
   font-size: var(--fs-badge);
   line-height: 32rpx;
   color: #4a525d;
-  background: #FFFFFF;
-  border: 1rpx solid #E5E7EB;
+  background: var(--td-bg-color-container);
+  border: 1rpx solid var(--td-border-level-1-color);
   border-radius: var(--radius-sm);
   padding: 0 6rpx;
   max-width: 96rpx;
   overflow: hidden;
-  white-space: nowrap;
+  var(--td-bg-color-container)-space: nowrap;
   text-overflow: ellipsis;
 }
 .items-empty { font-size: var(--fs-caption); color: #4a525d; }
@@ -266,9 +266,9 @@
 .chart-card {
   margin: var(--space-1) 0 var(--space-4);
   padding: var(--space-2-5) var(--space-2) var(--space-2);
-  background: #F1F3F5;
+  background: var(--td-bg-color-component);
   border-radius: var(--radius-md);
-  border: 1rpx solid #E5E7EB;
+  border: 1rpx solid var(--td-border-level-1-color);
 }
 .chart-legend {
   display: flex;
@@ -304,7 +304,7 @@
   margin: var(--space-2) 0;
   padding: 22rpx var(--space-3);
   border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, rgba(200, 169, 81, 0.16) 0%, #FFFFFF 100%);
+  background: linear-gradient(135deg, rgba(200, 169, 81, 0.16) 0%, var(--td-bg-color-container) 100%);
   border: 1rpx solid rgba(200, 169, 81, 0.35);
 }
 .h2h-cta--hover { opacity: 0.82; }
@@ -321,7 +321,7 @@
 }
 .h2h-cta-arrow {
   font-size: var(--fs-mega);
-  color: #C8A951;
+  color: var(--dota-gold);
   font-weight: 700;
   line-height: 1;
 }

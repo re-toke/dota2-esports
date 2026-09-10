@@ -1,7 +1,7 @@
 /* components/skeleton/skeleton.wxss */
 /* §8.3 自定义骨架屏（2026-07-29）
    - shimmer 动画：渐变高光从左到右扫过，循环 1.4s
-   - 雾峰雪 v2.0 主题：base #F1F3F5 → highlight rgba(0,0,0,0.05)
+   - 雾峰雪 v2.0 主题：base var(--td-bg-color-component) → highlight rgba(0,0,0,0.05)
    - 匹配项目设计 token（--card-bg / --card-bg-elevated）
 */
 
@@ -42,7 +42,7 @@
 /* ===== card：卡片列表骨架 ===== */
 .sk-card {
   background: var(--card-bg, #FFFFFF);
-  border: 1rpx solid #E5E7EB;
+  border: 1rpx solid var(--td-border-level-1-color);
   border-radius: var(--radius-lg);
   padding: var(--space-3);
   margin-bottom: var(--space-2);
@@ -92,7 +92,7 @@
   gap: var(--space-2-5);
   padding: var(--space-3);
   background: var(--card-bg, #FFFFFF);
-  border: 1rpx solid #E5E7EB;
+  border: 1rpx solid var(--td-border-level-1-color);
   border-radius: var(--radius-lg);
   margin-bottom: var(--space-2);
 }
@@ -155,7 +155,7 @@
 }
 .sk-detail-card {
   background: var(--card-bg, #FFFFFF);
-  border: 1rpx solid #E5E7EB;
+  border: 1rpx solid var(--td-border-level-1-color);
   border-radius: var(--radius-lg);
   padding: var(--space-3);
   margin-bottom: var(--space-2);
@@ -226,7 +226,7 @@
   gap: var(--space-2-5);
   padding: var(--space-3);
   background: var(--card-bg, #FFFFFF);
-  border: 1rpx solid #E5E7EB;
+  border: 1rpx solid var(--td-border-level-1-color);
   border-radius: var(--radius-lg);
   margin-bottom: var(--space-1-5);
 }

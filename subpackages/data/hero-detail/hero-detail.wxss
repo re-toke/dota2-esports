@@ -13,25 +13,25 @@
   flex-shrink: 0;
 }
 .head-initial { font-size: var(--fs-hero); font-weight: 800; font-family: var(--font-mono, monospace); }
-.head-avatar { width: 106rpx; height: 106rpx; border-radius: var(--radius-lg); display: block; background: #F1F3F5; }
+.head-avatar { width: 106rpx; height: 106rpx; border-radius: var(--radius-lg); display: block; background: var(--td-bg-color-component); }
 .head-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6rpx; }
 .head-name { font-size: var(--fs-display); font-weight: 800; color: var(--text-1); }
 .head-meta { display: flex; align-items: center; gap: var(--space-1); font-size: var(--fs-body); }
 .head-attr { font-weight: 700; }
 .head-attr2 { color: var(--text-2); }
-.head-dot { color: #4b5563; }
+.head-dot { color: var(--text-2); }
 .head-roles { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-top: var(--space-0-5); }
 .role-tag {
   font-size: var(--fs-micro);
   color: var(--text-2);
-  background: #FFFFFF;
-  border: 1rpx solid #E5E7EB;
+  background: var(--td-bg-color-container);
+  border: 1rpx solid var(--td-border-level-1-color);
   border-radius: var(--radius-sm);
   padding: 2rpx 10rpx;
 }
 
 /* ===== 区块 ===== */
-.block { background: var(--card-bg, #FFFFFF); border: 1rpx solid #E5E7EB; border-radius: var(--radius-lg, 16rpx); padding: var(--space-2-5) var(--space-3); margin-bottom: var(--space-2); }
+.block { background: var(--card-bg, #FFFFFF); border: 1rpx solid var(--td-border-level-1-color); border-radius: var(--radius-lg, 16rpx); padding: var(--space-2-5) var(--space-3); margin-bottom: var(--space-2); }
 .block-title { font-size: var(--fs-label); font-weight: 700; color: var(--text-1); margin-bottom: var(--space-2); }
 
 /* 职业赛场 */
@@ -42,7 +42,7 @@
 
 /* 属性网格 */
 .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-1-5); }
-.stat-cell { display: flex; flex-direction: column; gap: var(--space-0-5); background: #F1F3F5; border-radius: var(--radius-md); padding: 14rpx var(--space-2); }
+.stat-cell { display: flex; flex-direction: column; gap: var(--space-0-5); background: var(--td-bg-color-component); border-radius: var(--radius-md); padding: 14rpx var(--space-2); }
 .stat-label { font-size: var(--fs-micro); color: var(--text-2); }
 .stat-value { font-size: var(--fs-label); font-weight: 700; color: var(--text-1); font-family: var(--font-mono, monospace); }
 .stat-gain { font-size: var(--fs-micro); color: var(--dota-gold, #C8A951); font-weight: 600; }
@@ -60,8 +60,8 @@
   transition: opacity 0.12s ease;
 }
 .matchup-item--hover { opacity: 0.7; }
-.matchup-name { width: 150rpx; font-size: var(--fs-body); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.matchup-bar-wrap { flex: 1; height: 14rpx; background: #F1F3F5; border-radius: var(--radius-sm); overflow: hidden; }
+.matchup-name { width: 150rpx; font-size: var(--fs-body); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; var(--td-bg-color-container)-space: nowrap; }
+.matchup-bar-wrap { flex: 1; height: 14rpx; background: var(--td-bg-color-component); border-radius: var(--radius-sm); overflow: hidden; }
 .matchup-bar { height: 100%; border-radius: var(--radius-sm); }
 .matchup-bar.best { background: var(--radiant); }
 .matchup-bar.worst { background: #e0533d; }

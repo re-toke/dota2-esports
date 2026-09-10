@@ -12,7 +12,7 @@
   width: 100%;
   max-width: 560rpx;
   background: var(--card-bg-elevated, #F1F3F5);
-  border: 1rpx solid #D1D5DB;
+  border: 1rpx solid var(--td-component-border);
   border-radius: var(--radius-lg, 16rpx);
   padding: var(--space-6) var(--space-5) var(--space-5);
   display: flex;
@@ -29,7 +29,7 @@
   width: 16rpx;
   height: 16rpx;
   border-radius: 50%;
-  background: #D1D5DB;
+  background: var(--td-component-border);
   transition: all 0.2s;
 }
 .ob-dot--on {
