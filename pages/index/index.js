@@ -512,8 +512,16 @@ Page({
       //   现按 tier.rank 降序（S 级优先）后取前 5——请求量仍受控（每赛事一次云调用，
       //   云端 30min 缓存；5 个赛事最坏 5 次，可接受），覆盖显著扩大。
       events = (sources.getUpcomingFromCuration(now) || [])
-        .filter((ev) => ev.leagueId && ev.leagueId > 0)   // 有 OpenDota leagueId 才能走 Steam 云代理路径
+        // ★ 2026-09-10（upcoming 卡缺失修复）：去掉 leagueId>0 过滤——9 月新赛事
+        //   （RES 预选/PGL Wallachia 等）未开赛无 OpenDota leagueId，原过滤把它们
+        //   全部挡在 ⑥ 段外 → 首页「即将开始」卡片全缺。无 leagueId 的候选由
+        //   getScheduledMatches 内部自动跳过 Steam（L516 守卫），走 LP/haglund 链。
         .sort((a, b) => ((b.tier && b.tier.rank) || 0) - ((a.tier && a.tier.rank) || 0))  // S 级优先
+        // ★ v8.27：按 name 去重（Set 版，不依赖相邻性）——本地 CURATED_EVENTS 与云端
+        //   curation_events 的窗口/分级版本可能并存，去重避免浪费 ⑥ 段查询名额（上限 5）。
+        .filter((function () { const seen = new Set(); return function (ev) {
+          if (seen.has(ev.name)) return false; seen.add(ev.name); return true;
+        }; })())
         .slice(0, 5);                                     // 请求量上限（3→5，A2）
     } catch (e) { return Promise.resolve([]); }
     if (!events.length) return Promise.resolve([]);
