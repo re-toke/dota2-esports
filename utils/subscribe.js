@@ -17,6 +17,8 @@ const config = require('./config.js');
 // ★ 2026-08-07（审核 R1）：openid 管理上移至 utils/auth.js（单点实现），此处转发兼容导出
 const auth = require('./auth.js');
 const cloudCache = require('./cloudCache.js');
+// ★ 2026-09-10（账号体系重构）：云同步开关的唯一判定源（未开启 = 不上传）
+const cloudSync = require('./cloudSync.js');
 const sources = require('./sources.js');
 
 const TMPL_ID = config.subscribeTemplateId;
@@ -527,6 +529,8 @@ function clearOpenId() { return auth.clearOpenId(); }
  * @returns {Promise<{ok:boolean}>}
  */
 function syncSubStatus() {
+  // ★ 2026-09-10：同步未开启时不上传（订阅态属云端画像内容）
+  if (!cloudSync.isEnabled()) return Promise.resolve({ ok: false, reason: 'sync_off' });
   return ensureOpenId().then(function (openid) {
     if (!openid) return { ok: false, reason: 'no_openid' };
     var key = 'follow_profile_' + openid;
@@ -564,15 +568,84 @@ function restoreSubFromCloud() {
 // 把「关注战队 id 列表 + 提醒策略」上传到云端（按 openid 分桶），
 // 供云函数 saveFollowProfile / sendSmartReminders 服务端批量推送使用。
 // 客户端赛前提醒仍走 checkPreMatchReminders（本地策略评估），此处为服务端引擎补齐数据。
-function saveFollowProfile(teamIds, strategy, subs) {
+//
+// ★★ 2026-09-10（账号体系重构 · P0-2）：**未开启云同步时不得上传**。
+//   重构前此函数在 5 处被无条件调用（关注变更/提醒变更×3/onShow）→ 用户无显式同意即上云。
+//   现在以 cloudSync.isEnabled() 为唯一守卫：未开启 = 零请求（本地功能不受影响）。
+function saveFollowProfile(teamIds, strategy, subs, teamItems) {
+  if (!cloudSync.isEnabled()) {
+    return Promise.resolve({ ok: false, reason: 'sync_off' });
+  }
   return ensureOpenId().then(function (openid) {
-    if (!openid) return { ok: false, reason: 'no_openid' };
+    if (!openid) { cloudSync.markFailed('no_openid'); return { ok: false, reason: 'no_openid' }; }
     return cloudCache.setCached(
       'follow_profile_' + openid,
-      { teams: teamIds || [], strategy: strategy || null, subs: subs || null, savedAt: Date.now() },
+      {
+        // teams：**保持 ID 数组**（smart-reminders EF 依赖 `for (tid of profile.teams)`
+        // 调 /teams/{tid}/matches，改成对象会破坏该服务端链路）
+        teams: teamIds || [],
+        // ★ P1 新增：对象数组，供客户端「换机恢复关注」用。
+        //   必要性：enrichTeamLogo 只回 logo 不回名字，仅凭 ID 恢复出来的关注会没有队名。
+        //   兼容：老数据无此字段 → 恢复时降级为仅 ID（见 restoreFollowFromCloud）。
+        teamItems: (teamItems || []).map(function (t) {
+          return { id: t && t.id, name: (t && t.name) || '', logo: (t && t.logo) || '' };
+        }),
+        strategy: strategy || null,
+        subs: subs || null,
+        savedAt: Date.now()
+      },
       30 * 24 * 3600
-    ).then(function () { return { ok: true, openid: openid }; });
-  }).catch(function () { return { ok: false, reason: 'error' }; });
+    ).then(function () {
+      cloudSync.markSynced();
+      return { ok: true, openid: openid };
+    });
+  }).catch(function (err) {
+    cloudSync.markFailed((err && (err.errMsg || err.message)) || 'error');
+    return { ok: false, reason: 'error' };
+  });
+}
+
+/**
+ * ★ P1：从云端**恢复关注列表**（2026-09-10 新增）。
+ *
+ * 背景：此前云端 `profile.teams` **上传了却从不读回** —— 唯一消费者是服务端推送
+ * （smart-reminders），「换机恢复关注」这个用户价值根本不存在。本函数补齐该能力，
+ * 让「云同步」的价值主张成立。
+ *
+ * 语义：**并集合并**（云端 ∪ 本地），不覆盖 —— 换机场景本地为空则等价全量恢复；
+ * 同机场景不会误删用户刚在本地新增的关注。返回新增条数供 UI 提示。
+ *
+ * @returns {Promise<{ok:boolean, restored:number, reason?:string}>}
+ */
+function restoreFollowFromCloud() {
+  if (!cloudSync.isEnabled()) return Promise.resolve({ ok: false, restored: 0, reason: 'sync_off' });
+  return ensureOpenId().then(function (openid) {
+    if (!openid) return { ok: false, restored: 0, reason: 'no_openid' };
+    return cloudCache.getCached('follow_profile_' + openid).then(function (profile) {
+      if (!profile) return { ok: true, restored: 0 };
+      // 优先用 teamItems（含队名/队标）；老数据只有 teams（纯 ID）→ 降级仅恢复 ID
+      var items = (profile.teamItems && profile.teamItems.length)
+        ? profile.teamItems
+        : (profile.teams || []).map(function (id) { return { id: id, name: '', logo: '' }; });
+      if (!items.length) return { ok: true, restored: 0 };
+
+      var follow = require('./follow.js');
+      var local = follow.list('teams') || [];
+      var localIds = {};
+      local.forEach(function (t) { if (t && t.id != null) localIds[String(t.id)] = true; });
+
+      var added = 0;
+      items.forEach(function (it) {
+        if (!it || it.id == null) return;
+        var key = String(it.id);
+        if (localIds[key]) return;
+        var name = it.name || ('战队 ' + key);   // 老数据无队名时的可读占位
+        follow.follow('teams', { id: it.id, name: name, logo: it.logo || '' });
+        added++;
+      });
+      return { ok: true, restored: added };
+    });
+  }).catch(function () { return { ok: false, restored: 0, reason: 'error' }; });
 }
 
 module.exports = {
@@ -612,6 +685,8 @@ module.exports = {
   // ★ 2026-08-07（R3）：订阅授权状态上云 / 云端恢复
   syncSubStatus: syncSubStatus,
   restoreSubFromCloud: restoreSubFromCloud,
+  // ★ P1（2026-09-10）：换机恢复关注列表（此前云端 teams 上传了却从不读回）
+  restoreFollowFromCloud: restoreFollowFromCloud,
   // ★ 2026-08-15：取消比赛开始提醒（清本地 + 同步云端）
   unsubscribe: unsubscribe,
 

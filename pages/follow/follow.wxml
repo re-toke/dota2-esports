@@ -12,7 +12,23 @@
         <input class="uc-name-input" type="nickname" value="{{profile.nickname}}"
                placeholder="点击设置昵称" placeholder-class="uc-name-ph"
                maxlength="12" bindblur="onNicknameBlur" />
-        <text class="user-status">{{profile.nickname ? '资料仅保存在本机 · 换机不同步' : '点击设置头像与昵称'}}</text>
+        <text class="user-status">资料仅保存在本机</text>
+      </view>
+    </view>
+
+    <!-- ★ 2026-09-10（账号体系重构）：云同步开关
+         把原来「隐式自动上云」改为「显式开关 + 四态可见 + 可撤回」。
+         对外不叫「微信登录」—— 该概念已不存在（getUserInfo/getUserProfile 被回收，
+         openid 只能静默获取、无授权界面），改叫「云同步」= 换设备可恢复关注与提醒。 -->
+    <view class="uc-sync">
+      <view class="uc-sync-main" bindtap="onSyncToggle" hover-class="uc-sync-hover">
+        <view class="uc-sync-text">
+          <text class="uc-sync-title">云同步</text>
+          <text class="uc-sync-sub">{{sync.enabled ? (sync.status === 'syncing' ? '正在同步…' : (sync.status === 'failed' ? '同步失败，点击重试' : '最近同步：' + sync.lastSyncText)) : '开启后换设备也能恢复关注与提醒'}}</text>
+        </view>
+        <view class="uc-sync-switch {{sync.enabled ? 'on' : ''}} {{sync.status === 'syncing' ? 'busy' : ''}}">
+          <view class="uc-sync-knob"></view>
+        </view>
       </view>
     </view>
     <!-- 统计行（内嵌，无独立分隔线卡） -->

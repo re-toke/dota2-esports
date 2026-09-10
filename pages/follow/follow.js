@@ -6,6 +6,8 @@ const reminderStrategy = require('../../utils/reminderStrategy.js');
 const sources = require('../../utils/sources.js');
 // ★ 2026-08-07（审核 R1/R2）：账号登录态（ensureOpenId 上移单点实现 + 预登录前置）
 const auth = require('../../utils/auth.js');
+// ★ 2026-09-10（账号体系重构）：云同步开关状态（替代原「隐式自动上云」）
+const cloudSync = require('../../utils/cloudSync.js');
 
 const TABS = [
   { key: 'teams', label: '战队' },
@@ -13,6 +15,18 @@ const TABS = [
 ];
 
 const LABELS = { teams: '战队', leagues: '赛事' };
+
+/** 相对时间文案（同步时间展示用） */
+function formatLastSync(ts) {
+  if (!ts) return '';
+  const diff = Date.now() - ts;
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return '刚刚';
+  if (min < 60) return min + ' 分钟前';
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return hr + ' 小时前';
+  return Math.floor(hr / 24) + ' 天前';
+}
 
 Page({
   data: {
@@ -43,6 +57,10 @@ Page({
     // ★ 批次4（2026-08-30）· PRD §11.2：用户卡身份升级为 chooseAvatar + 昵称 input，
     //   仅存本地 storage（无服务端账号体系）。openid 登录保留（订阅前置），不再驱动用户卡 UI。
     profile: { avatarUrl: '', nickname: '' },
+    // ★ 2026-09-10（账号体系重构）：云同步四态（off/syncing/synced/failed）
+    //   对外不叫「微信登录」—— 该概念已不存在（getUserInfo/getUserProfile 被回收，
+    //   openid 只能静默获取、无授权界面），改叫「云同步」= 换设备可恢复关注与提醒。
+    sync: { enabled: false, status: 'off', lastSyncText: '' },
     // ★ 批次4 §11.1：推送记录默认折叠（sendLogExpanded）
     sendLogExpanded: false,
     // 每日推送上限（O2/V1：subscribe.js DAILY_LIMIT 未导出，WXML 无法访问模块对象，故硬编码）
@@ -78,6 +96,8 @@ Page({
     // ★ 2026-08-07（R2）：预登录预热 + 云端订阅态恢复（fire-and-forget，缓存命中零请求）
     auth.ensureLogin().catch(() => {});
     subscribe.restoreSubFromCloud().catch(() => {});
+    // ★ 2026-09-10：刷新云同步状态（四态展示）
+    this._refreshSyncState();
 
     const patch = {
       ctaVariant: ctaVariant,
@@ -333,6 +353,25 @@ Page({
     // ★ 2026-08-07（R2 预登录前置，手势红线）：订阅授权必须用户点击手势内同步调用。
     //   openid 缓存命中（onShow/app onLaunch 已预热）→ 直接弹（手势内）；
     //   未命中（首次弱网）→ toast 引导 + 后台补登录，绝不在网络回调后弹授权（会被微信手势校验拒绝）。
+    // ★★ P0-4（2026-09-10 账号体系重构）：**服务端推送必须上云** ——
+    //   所以这里就是「云同步」最自然的开启时机（用户想要提醒 → 提醒本就依赖云端），
+    //   不需要凭空弹一个「要不要开启同步」的框。同时符合微信「不得强制授权」规范：
+    //   拒绝开启只是不能推送，浏览/关注等全部功能照常。
+    if (!cloudSync.isEnabled()) {
+      wx.showModal({
+        title: '赛事提醒需要云同步',
+        content: '开赛提醒由服务端推送，需要把你的关注战队同步到云端（可在「我的」随时关闭并删除）。是否开启？',
+        confirmText: '开启同步',
+        cancelText: '暂不开启',
+        success: (r) => {
+          if (!r.confirm) return;
+          this._enableSync();
+          wx.showToast({ title: '开启后请再次点击提醒开关', icon: 'none' });
+        }
+      });
+      return;
+    }
+
     if (!auth.isLoggedIn()) {
       wx.showToast({ title: '正在登录…请稍后重试', icon: 'none' });
       // ★ 2026-09-10（真机登录问题）：补失败分支——此前登录失败会**静默回到同一状态**，
@@ -439,7 +478,97 @@ Page({
 
   // 把关注战队 + 策略上传云端（#20 服务端策略引擎数据层）
   syncProfile() {
-    const teamIds = (follow.list('teams') || []).map((t) => String(t.id));
-    subscribe.saveFollowProfile(teamIds, this.data.reminder).catch(() => {});
+    // ★ 2026-09-10（账号体系重构 · P0-2）：未开启云同步时**零请求**直接返回。
+    //   守卫同时存在于 subscribe.saveFollowProfile（双保险，防其他调用点漏改）。
+    if (!cloudSync.isEnabled()) return;
+    const teams = follow.list('teams') || [];
+    const teamIds = teams.map((t) => String(t.id));
+    // teamItems：云端额外存对象（含队名/队标），供「换机恢复关注」用 —— 仅凭 ID 恢复会没队名
+    const teamItems = teams.map((t) => ({ id: t.id, name: t.name, logo: t.logo }));
+    subscribe.saveFollowProfile(teamIds, this.data.reminder, undefined, teamItems)
+      .then(() => this._refreshSyncState())
+      .catch(() => this._refreshSyncState());
+  },
+
+  // ===== ★ 2026-09-10（账号体系重构）：云同步开关 =====
+  //   把原来「隐式自动上云」改为「显式开关 + 四态可见 + 可撤回」。
+  //   对外不叫「微信登录」（该概念已不存在：getUserInfo/getUserProfile 被回收，
+  //   openid 只能静默获取），而叫「云同步」，价值主张 = 换设备可恢复关注与提醒。
+
+  /** 读同步状态写入 data（UI 渲染用） */
+  _refreshSyncState() {
+    const s = cloudSync.getState();
+    this.setData({
+      sync: {
+        enabled: s.enabled,
+        status: s.status,
+        lastSyncText: formatLastSync(s.lastSyncAt)
+      }
+    });
+  },
+
+  /** 开关切换 */
+  onSyncToggle() {
+    const s = cloudSync.getState();
+    if (s.status === 'syncing') return;                  // 进行中防重
+    if (!s.enabled) return this._enableSync();
+
+    wx.showModal({
+      title: '关闭云同步',
+      content: '将删除云端保存的关注与提醒数据，换设备后不再恢复。本机数据不受影响。',
+      confirmText: '关闭并删除',
+      confirmColor: '#E8443B',
+      success: (r) => {
+        if (!r.confirm) return;
+        this.setData({ 'sync.status': 'syncing' });
+        cloudSync.disable().then((res) => {
+          this._refreshSyncState();
+          wx.showToast({
+            title: res.ok ? '已关闭并删除云端数据' : '已关闭（云端删除失败，可重试）',
+            icon: res.ok ? 'success' : 'none'
+          });
+        });
+      }
+    });
+  },
+
+  /** 开启同步：登录 → 全量上传 → 尝试恢复云端关注 */
+  _enableSync() {
+    this.setData({ 'sync.status': 'syncing' });
+    cloudSync.enable().then((r) => {
+      if (!r.ok) {
+        this._refreshSyncState();
+        wx.showToast({ title: '开启失败，请检查网络后重试', icon: 'none' });
+        return;
+      }
+      // ① 先把本地现状推上去（含队名/队标）
+      const teams = follow.list('teams') || [];
+      const teamIds = teams.map((t) => String(t.id));
+      const teamItems = teams.map((t) => ({ id: t.id, name: t.name, logo: t.logo }));
+      subscribe.saveFollowProfile(teamIds, this.data.reminder, undefined, teamItems)
+        .then(() => {
+          // ② 再把云端已有的关注并回本地（换机场景：本地为空 → 等价全量恢复）
+          return subscribe.restoreFollowFromCloud();
+        })
+        .then((res) => {
+          this._refreshSyncState();
+          this.reload();
+          if (res && res.restored > 0) {
+            wx.showToast({ title: '已同步，恢复 ' + res.restored + ' 个关注', icon: 'none' });
+          } else {
+            wx.showToast({ title: '云同步已开启', icon: 'success' });
+          }
+        })
+        .catch(() => {
+          this._refreshSyncState();
+          wx.showToast({ title: '已开启，首次同步稍后重试', icon: 'none' });
+        });
+    });
+  },
+
+  /** 同步失败时点击重试 */
+  onSyncRetry() {
+    if (cloudSync.getState().enabled) this.syncProfile();
+    else this._enableSync();
   },
 });

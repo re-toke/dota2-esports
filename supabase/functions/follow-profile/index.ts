@@ -30,6 +30,18 @@ Deno.serve(async (req) => {
     return Response.json({ ok: true });
   }
 
+  // 2b. ★ delete（2026-09-10 新增）：用户「关闭云同步」= 撤回同意 → 必须真实删除云端画像。
+  //   此前只有 save/get，**无法删除** —— 而隐私协议承诺了删除权（原路径「联系开发者」，
+  //   但小程序内并无反馈功能）→ 属合规缺口。删除按 key 精确删（openid 来自 JWT，无法越权）。
+  if (op === "delete") {
+    const { error } = await client.from("aggregation_cache").delete().eq("key", cacheKey);
+    if (error) {
+      console.error("[follow-profile] delete failed:", error.message);
+      return Response.json({ ok: false, error: error.message }, { status: 500 });
+    }
+    return Response.json({ ok: true, deleted: cacheKey });
+  }
+
   // 3. get：过期则删（对齐原 getCache 行为）
   const { data } = await client.from("aggregation_cache")
     .select("payload, expire_at").eq("key", cacheKey).maybeSingle();

@@ -72,7 +72,7 @@
       <view class="list-item">· 卸载小程序将自动清除所有本地数据</view>
     </view>
     <view class="section-body">
-      <view class="para">如需彻底删除云端保存的您的数据（OpenID 关联的关注列表与订阅状态），可通过「意见反馈」联系开发者，我们将在 7 个工作日内删除。</view>
+      <view class="para">如需彻底删除云端保存的您的数据（OpenID 关联的关注列表与订阅状态），可在「我的 → 云同步」<text class="em">关闭云同步</text>，关闭时将<text class="em">同时删除</text>云端保存的您的全部数据；也可通过「意见反馈」联系开发者协助处理，我们将在 7 个工作日内完成。</view>
     </view>
   </view>
 

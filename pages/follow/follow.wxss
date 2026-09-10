@@ -553,3 +553,59 @@
   font-size: var(--fs-caption);
   color: var(--text-3);
 }
+
+/* ===== ★ 2026-09-10（账号体系重构）：云同步开关 =====
+   设计要点：与用户卡同一容器内的次级行；开关用纯 CSS 实现（无第三方组件依赖）；
+   状态差异靠 --dota-gold（已同步=品牌金实心）/ 灰（未开启）区分，避免引入新色。 */
+.uc-sync {
+  margin-top: 20rpx;
+  padding-top: 20rpx;
+  border-top: 1rpx solid var(--td-border-level-1-color);
+}
+.uc-sync-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.uc-sync-hover { opacity: 0.7; }
+.uc-sync-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.uc-sync-title {
+  font-size: var(--fs-label);
+  color: var(--text-1);
+  font-weight: 600;
+}
+.uc-sync-sub {
+  margin-top: 6rpx;
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+}
+/* 开关本体 */
+.uc-sync-switch {
+  position: relative;
+  flex-shrink: 0;
+  margin-left: 20rpx;
+  width: 76rpx;
+  height: 44rpx;
+  border-radius: 22rpx;
+  background: var(--td-bg-color-component-active);
+  transition: background 0.2s ease;
+}
+.uc-sync-switch.on { background: var(--dota-gold); }
+.uc-sync-switch.busy { opacity: 0.5; }
+.uc-sync-knob {
+  position: absolute;
+  top: 4rpx;
+  left: 4rpx;
+  width: 36rpx;
+  height: 36rpx;
+  border-radius: 50%;
+  background: var(--td-bg-color-container);
+  box-shadow: 0 1rpx 4rpx var(--overlay-12);
+  transition: transform 0.2s ease;
+}
+.uc-sync-switch.on .uc-sync-knob { transform: translateX(32rpx); }
