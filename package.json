@@ -1,6 +1,6 @@
 {
   "name": "dota2-esports",
-  "version": "1.1.0",
+  "version": "1.1.2",
   "description": "DOTA2赛事微信小程序（TDesign 版）",
   "scripts": {
     "lint": "eslint --rulesdir scripts/eslint-rules utils/ pages/ subpackages/ cloudfunctions/ scripts/ --ext .js",
