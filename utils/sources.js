@@ -379,7 +379,13 @@ function getUpcomingFromCuration(now) {
     // 原 `ev.start > now` 严格未来过滤会把「已开赛但 OpenDota 尚未收录」的 curation 赛事
     //（如 TI 2026 开赛日）滤掉，导致「进行中」tab 补充路径（mergeCurationUpcoming）漏该赛事。
     // 改为允许已开赛但未结束（end >= now），与 2026-07-30 修复口径一致。
-    if (ev.start <= horizon && (!ev.end || ev.end >= now)) {
+    // ★ v8.30（EPL II 当天消失修复）：end 比较改**日粒度**——窗口的 end 是日期语义
+    //   （条目常存为当天 00:00 UTC），秒级比较会在 end 当天上午（UTC 0 点后）就把
+    //   「今天还在打」的赛事判成已结束（实测 EPL Masters II end=9/10T00:00Z，
+    //   北京时间 9/10 上午 10 点被滤掉 → ⑥ 段候选无 EPL II → 当天两场对局不显示）。
+    const endDay = ev.end ? Math.floor(ev.end / 86400) : null;
+    const todayDay = Math.floor(now / 86400);
+    if (ev.start <= horizon && (!ev.end || endDay >= todayDay)) {
       // 防御守卫：已开赛（start <= now）但缺 end 的条目无法判定是否结束，跳过
       // （下游 mergeCurationUpcoming 的 cardStatus 判定要求 startDate && endDate 都存在，
       //   缺 end 会落到 'upcoming'，导致已开赛赛事误进「即将到来」tab）。
@@ -2406,8 +2412,8 @@ function buildLpUpcomingSeries(lpMatches, now) {
     var n1 = String(m.team1Name || '').trim();
     var n2 = String(m.team2Name || '').trim();
     if (!n1 && !n2) return false;
-    if (TBD_RE.test(n1)) { n1 = '待定'; m.team1Name = n1; }
-    if (TBD_RE.test(n2)) { n2 = '待定'; m.team2Name = n2; }
+    if (TBD_RE.test(n1)) { n1 = 'TBD'; m.team1Name = n1; }
+    if (TBD_RE.test(n2)) { n2 = 'TBD'; m.team2Name = n2; }
     m.team1Name = n1; m.team2Name = n2;
     return true;
   });

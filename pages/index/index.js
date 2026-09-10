@@ -516,7 +516,15 @@ Page({
         //   （RES 预选/PGL Wallachia 等）未开赛无 OpenDota leagueId，原过滤把它们
         //   全部挡在 ⑥ 段外 → 首页「即将开始」卡片全缺。无 leagueId 的候选由
         //   getScheduledMatches 内部自动跳过 Steam（L516 守卫），走 LP/haglund 链。
-        .sort((a, b) => ((b.tier && b.tier.rank) || 0) - ((a.tier && a.tier.rank) || 0))  // S 级优先
+        // ★ v8.30：排序改「进行中优先 → 开赛日升序」——原纯 rank 排序把今天有对局的
+        //   A 级赛事（EPL Masters II，rank 2）挤出前 5（S 级 rank 3 候选过多），而
+        //   「今天要打」的赛事才是用户最需要提前看到排期的。进行中判定：start<=now<=end。
+        .sort((a, b) => {
+          const ongoingOf = (e) => (e.startDate <= now && e.endDate && e.endDate >= now) ? 0 : 1;
+          const oa = ongoingOf(a), ob = ongoingOf(b);
+          if (oa !== ob) return oa - ob;
+          return (a.startDate || 0) - (b.startDate || 0);
+        })
         // ★ v8.27：按 name 去重（Set 版，不依赖相邻性）——本地 CURATED_EVENTS 与云端
         //   curation_events 的窗口/分级版本可能并存，去重避免浪费 ⑥ 段查询名额（上限 5）。
         .filter((function () { const seen = new Set(); return function (ev) {
