@@ -28,7 +28,8 @@
     "audit:colors": "node scripts/ops/audit-wxss-colors.js",
     "tokenize:colors": "node scripts/ops/tokenize-wxss-colors.js",
     "tokenize:colors:apply": "node scripts/ops/tokenize-wxss-colors.js --apply",
-    "verify:tokenize": "node scripts/ops/verify-tokenize-equivalence.js"
+    "verify:tokenize": "node scripts/ops/verify-tokenize-equivalence.js",
+    "check:handlers": "node scripts/ops/check-page-handlers.js"
   },
   "dependencies": {
     "tdesign-miniprogram": "^1.15.3",

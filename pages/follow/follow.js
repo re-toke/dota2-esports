@@ -8,6 +8,8 @@ const sources = require('../../utils/sources.js');
 const auth = require('../../utils/auth.js');
 // ★ 2026-09-10（账号体系重构）：云同步开关状态（替代原「隐式自动上云」）
 const cloudSync = require('../../utils/cloudSync.js');
+// ★ 2026-09-10（复核 A2）：本机存储分类清理（替代原 wx.clearStorageSync 一刀切）
+const storageReset = require('../../utils/storageReset.js');
 
 const TABS = [
   { key: 'teams', label: '战队' },
@@ -61,6 +63,9 @@ Page({
     //   对外不叫「微信登录」—— 该概念已不存在（getUserInfo/getUserProfile 被回收，
     //   openid 只能静默获取、无授权界面），改叫「云同步」= 换设备可恢复关注与提醒。
     sync: { enabled: false, status: 'off', lastSyncText: '' },
+    // ★ 2026-09-10（复核 A4）：隐私授权状态——未授权时 <input type="nickname"> 会
+    //   降级为普通文本框（官方行为），用户会误以为「填不出微信昵称 = 坏了」
+    privacyNeedAuth: false,
     // ★ 批次4 §11.1：推送记录默认折叠（sendLogExpanded）
     sendLogExpanded: false,
     // 每日推送上限（O2/V1：subscribe.js DAILY_LIMIT 未导出，WXML 无法访问模块对象，故硬编码）
@@ -98,6 +103,15 @@ Page({
     subscribe.restoreSubFromCloud().catch(() => {});
     // ★ 2026-09-10：刷新云同步状态（四态展示）
     this._refreshSyncState();
+    // ★ 2026-09-10（复核 A4）：查询隐私授权状态（未授权时昵称填充会降级）
+    this._checkPrivacy();
+    // ★ 2026-09-10（复核修正）：已开启同步时自动恢复云端关注 ——
+    //   补上这一步，「清本地缓存后云端数据会自动恢复」这句文案才成立（原方案前提不成立）
+    if (cloudSync.isEnabled()) {
+      subscribe.restoreFollowFromCloud().then((r) => {
+        if (r && r.restored > 0) this.reload();
+      }).catch(() => {});
+    }
 
     const patch = {
       ctaVariant: ctaVariant,
@@ -193,24 +207,111 @@ Page({
     wx.navigateTo({ url: '/subpackages/detail/privacy/privacy' });
   },
 
-  // ★ v11 系统配置：清除本地缓存
-  clearCache() {
+  // ===== ★ 2026-09-10（复核 A2）：数据管理拆三项 =====
+  //   原实现用 wx.clearStorageSync() 一刀切：**连同步开关状态一起清掉却不动云端**
+  //   → 造出「云端孤儿」（本地显示未开启、云端仍在，且删除入口点不动）。
+  //   现改为三类独立操作，且「删除云端数据」恒定可用（与开关状态无关）。
+
+  /** ① 只清缓存（保留关注/资料/凭证/同步开关） */
+  onClearCache() {
     wx.showModal({
-      title: '确认清空本地数据？',
-      content: '此操作不可撤销，将清除关注列表、缓存数据与登录态。',
-      confirmText: '清空',
-      confirmColor: '#e8443b',
+      title: '清除本机缓存',
+      content: '仅清除赛事数据缓存与搜索历史，不影响你的关注、资料与登录状态。',
+      confirmText: '清除',
       success: (res) => {
         if (!res.confirm) return;
-        try {
-          wx.clearStorageSync();
-          this.onShow();
-          wx.showToast({ title: '已清空', icon: 'success' });
-        } catch (e) {
-          wx.showToast({ title: '清空失败', icon: 'none' });
-        }
+        const r = storageReset.clearCacheOnly();
+        this.onShow();
+        wx.showToast({ title: '已清除 ' + r.removed + ' 项缓存', icon: 'none' });
       }
     });
+  },
+
+  /** ② 删除云端数据（★ 恒定可用 —— 专治「同步已关但云端仍有数据」的孤儿） */
+  onDeleteCloud() {
+    wx.showModal({
+      title: '删除云端数据',
+      content: '将删除云端保存的关注与提醒数据。本机数据不受影响。删除后换设备将无法恢复。',
+      confirmText: '删除',
+      confirmColor: '#E8443B',
+      success: (res) => {
+        if (!res.confirm) return;
+        wx.showLoading({ title: '删除中…', mask: true });
+        cloudSync.deleteCloudData().then((r) => {
+          wx.hideLoading();
+          this._refreshSyncState();
+          wx.showToast({ title: r.ok ? '云端数据已删除' : '删除失败，请检查网络后重试', icon: 'none' });
+        });
+      }
+    });
+  },
+
+  /** ③ 重置全部：先删云端 → 成功才清本机（顺序不可颠倒） */
+  onResetAll() {
+    const hasCloud = cloudSync.getState().enabled;
+    wx.showModal({
+      title: '重置全部数据',
+      content: hasCloud
+        ? '将删除云端数据，并清空本机的关注、资料与登录状态。此操作不可撤销。'
+        : '将清空本机的关注、资料与登录状态。此操作不可撤销。',
+      confirmText: '重置全部',
+      confirmColor: '#E8443B',
+      success: (res) => {
+        if (!res.confirm) return;
+        wx.showLoading({ title: '处理中…', mask: true });
+        storageReset.resetAll().then((r) => {
+          wx.hideLoading();
+          if (!r.ok) {
+            // ★ 云端删除失败 → 中止，不清本机（避免制造新的不一致）
+            wx.showModal({
+              title: '未能完成',
+              content: '云端数据删除失败（可能是网络问题），为避免数据状态不一致，本机数据**未**清除。请稍后重试。',
+              showCancel: false,
+              confirmText: '知道了'
+            });
+            return;
+          }
+          this.onShow();
+          wx.showToast({ title: '已重置', icon: 'success' });
+        });
+      }
+    });
+  },
+
+  /** ★ A3：重置本机资料（头像/昵称）—— 此前无入口，选错了只能再选一次 */
+  onProfileReset() {
+    wx.showModal({
+      title: '重置头像与昵称',
+      content: '将清除本机保存的头像与昵称（不影响关注与提醒）。',
+      confirmText: '重置',
+      success: (res) => {
+        if (!res.confirm) return;
+        this._saveProfile({ avatarUrl: '', nickname: '' });
+        wx.showToast({ title: '已重置', icon: 'success' });
+      }
+    });
+  },
+
+  // ===== ★ A4：隐私授权状态 =====
+  //   官方行为：隐私未授权时 <input type="nickname"> 会**降级为普通文本框**，
+  //   用户点击后看不到「微信昵称一键填充」，会误以为是 bug → 需显式提示。
+  _checkPrivacy() {
+    if (typeof wx.getPrivacySetting !== 'function') return;
+    wx.getPrivacySetting({
+      success: (res) => {
+        this.setData({ privacyNeedAuth: !!res.needAuthorization });
+      },
+      fail: () => {}
+    });
+  },
+
+  /** 打开隐私协议（官方入口，未授权时用于完成同意） */
+  onOpenPrivacyContract() {
+    if (typeof wx.openPrivacyContract === 'function') {
+      wx.openPrivacyContract({ fail: () => this.openPrivacy() });
+    } else {
+      this.openPrivacy();
+    }
   },
 
   // refresh 保留给显式调用（如取消关注后），onShow 不再调用
@@ -515,7 +616,9 @@ Page({
 
     wx.showModal({
       title: '关闭云同步',
-      content: '将删除云端保存的关注与提醒数据，换设备后不再恢复。本机数据不受影响。',
+      // ★ B9′（复核修正）：如实说明影响范围 —— 影响的是**恢复能力**，不是推送本身。
+      //   原方案误判为「推送会失效」（实际推送走客户端触发链路，不依赖云端 profile）。
+      content: '将删除云端保存的关注与提醒数据。本机的关注与提醒**不受影响**，但换设备或清缓存后无法自动恢复。',
       confirmText: '关闭并删除',
       confirmColor: '#E8443B',
       success: (r) => {
@@ -523,10 +626,17 @@ Page({
         this.setData({ 'sync.status': 'syncing' });
         cloudSync.disable().then((res) => {
           this._refreshSyncState();
-          wx.showToast({
-            title: res.ok ? '已关闭并删除云端数据' : '已关闭（云端删除失败，可重试）',
-            icon: res.ok ? 'success' : 'none'
-          });
+          if (res.ok) {
+            wx.showToast({ title: '已关闭并删除云端数据', icon: 'success' });
+          } else {
+            // ★ 不得报假成功：明确告知「云端数据可能仍在」
+            wx.showModal({
+              title: '云端数据未能删除',
+              content: '已停止同步，但云端数据删除失败（可能是网络问题）。可稍后点「删除云端数据」重试。',
+              showCancel: false,
+              confirmText: '知道了'
+            });
+          }
         });
       }
     });

@@ -1,7 +1,7 @@
 <view class="container with-tab-bar">
-  <!-- ===== 段一 · 身份区（批次4 · PRD §11.1/11.2/11.3 紧凑头部卡） =====
-       用户卡 + 统计行合并为单卡：chooseAvatar 头像（96rpx 暗金描边环）+ 昵称 input
-       （微信一键填充）+ 内嵌统计行（前两格 tnum 数字，第三格提醒开关徽章）。 -->
+  <!-- ===== 段一A · 我的资料（本机） =====
+       ★ 2026-09-10（复核 A5）：与「云同步」**拆成两张卡** —— 物理分组让用户一眼看出
+       「头像是本机的、关注是可上云的」，解决原单卡内三类语义（本机资料/账号能力/统计）混淆。 -->
   <view class="user-card">
     <view class="uc-top">
       <button class="uc-avatar-btn" open-type="chooseAvatar" bindchooseavatar="onChooseAvatar">
@@ -12,25 +12,22 @@
         <input class="uc-name-input" type="nickname" value="{{profile.nickname}}"
                placeholder="点击设置昵称" placeholder-class="uc-name-ph"
                maxlength="12" bindblur="onNicknameBlur" />
-        <text class="user-status">资料仅保存在本机</text>
+        <!-- ★ A1（复核修正）：原写「资料仅保存在本机」，这里的「资料」只指头像/昵称，
+             而它们**确实永远本机** —— 问题是「资料」一词太宽会被读成「我的全部数据」。
+             改为明确范围表述。 -->
+        <text class="user-status">头像与昵称仅保存在本机，不上传</text>
       </view>
+      <!-- ★ A3：新增资料重置入口（此前选错头像/昵称只能再选一次，无法清空） -->
+      <view class="uc-reset" bindtap="onProfileReset" hover-class="tap-scale">重置</view>
     </view>
 
-    <!-- ★ 2026-09-10（账号体系重构）：云同步开关
-         把原来「隐式自动上云」改为「显式开关 + 四态可见 + 可撤回」。
-         对外不叫「微信登录」—— 该概念已不存在（getUserInfo/getUserProfile 被回收，
-         openid 只能静默获取、无授权界面），改叫「云同步」= 换设备可恢复关注与提醒。 -->
-    <view class="uc-sync">
-      <view class="uc-sync-main" bindtap="onSyncToggle" hover-class="uc-sync-hover">
-        <view class="uc-sync-text">
-          <text class="uc-sync-title">云同步</text>
-          <text class="uc-sync-sub">{{sync.enabled ? (sync.status === 'syncing' ? '正在同步…' : (sync.status === 'failed' ? '同步失败，点击重试' : '最近同步：' + sync.lastSyncText)) : '开启后换设备也能恢复关注与提醒'}}</text>
-        </view>
-        <view class="uc-sync-switch {{sync.enabled ? 'on' : ''}} {{sync.status === 'syncing' ? 'busy' : ''}}">
-          <view class="uc-sync-knob"></view>
-        </view>
-      </view>
+    <!-- ★ A4：隐私未授权时 <input type="nickname"> 会降级为普通文本框（官方行为）
+         → 用户会误以为「填不出微信昵称 = 坏了」，需显式提示并给同意入口 -->
+    <view wx:if="{{privacyNeedAuth}}" class="uc-privacy-tip" bindtap="onOpenPrivacyContract" hover-class="tap-scale">
+      <text>需先同意隐私协议，才能使用微信昵称一键填充</text>
+      <text class="uc-privacy-link">去同意 ›</text>
     </view>
+
     <!-- 统计行（内嵌，无独立分隔线卡） -->
     <view class="uc-stats">
       <view class="stat-cell" bindtap="switchTab" data-key="teams" hover-class="tap-scale">
@@ -54,7 +51,132 @@
     </view>
   </view>
 
-  <!-- ===== 段二 · 关注阵容（页面主体，保留） ===== -->
+  <!-- ===== 段一B · 云同步（独立卡） =====
+       ★ 2026-09-10（复核 A5/A6）：从资料卡中拆出，并补「同步内容明细」——
+       用户对「上云」有顾虑却看不到范围，不利于转化。**明确写出不含头像昵称**是最容易被误解的点。 -->
+  <view class="user-card">
+    <view class="uc-sync">
+      <view class="uc-sync-main" bindtap="onSyncToggle" hover-class="uc-sync-hover">
+        <view class="uc-sync-text">
+          <text class="uc-sync-title">云同步</text>
+          <text class="uc-sync-sub">{{sync.enabled ? (sync.status === 'syncing' ? '正在同步…' : (sync.status === 'failed' ? '同步失败，点击重试' : '最近同步：' + sync.lastSyncText)) : '开启后换设备也能恢复关注与提醒'}}</text>
+        </view>
+        <view class="uc-sync-switch {{sync.enabled ? 'on' : ''}} {{sync.status === 'syncing' ? 'busy' : ''}}">
+          <view class="uc-sync-knob"></view>
+        </view>
+      </view>
+    </view>
+    <view class="uc-scope">
+      <text class="uc-scope-title">同步内容</text>
+      <text class="uc-scope-item">· 关注的战队</text>
+      <text class="uc-scope-item">· 提醒策略（提前量 / 级别）</text>
+      <text class="uc-scope-item">· 订阅授权状态</text>
+      <text class="uc-scope-note">不含头像与昵称（仅保存在本机）</text>
+    </view>
+  </view>
+
+  <!-- ===== 段二 · 赛前提醒（★ P1 上移：原在关注列表之后） =====
+       sub-card（订阅状态）+ reminder-card（智能设置）合并为单张卡：
+       卡头 = 订阅状态徽章 + 开关 pill；卡身 = 提前量/级别 chips（已订阅才展开）。
+       subReady=false 降级态：单行引导文案（保留原 tip 语义）。 -->
+  <view class="section-label" id="sec-reminder">赛前提醒</view>
+
+  <view class="footer">
+    <view class="reminder-card" wx:if="{{subReady}}">
+      <view class="sub-card-head">
+        <view class="rc-head-left">
+          <text class="sub-card-title">{{tmplTitle || '赛前提醒'}}</text>
+          <view class="sub-badge {{subStatus.subscribed ? 'sub-badge--on' : 'sub-badge--off'}}">
+            {{subStatus.subscribed ? '已开启' : '未开启'}}
+          </view>
+        </view>
+        <view class="rc-toggle {{subStatus.subscribed ? 'rc-toggle--on' : ''}}" bindtap="onToggleReminder" hover-class="tap-scale">
+          <text>{{subStatus.subscribed ? '关闭' : '开启'}}</text>
+        </view>
+      </view>
+
+      <view wx:if="{{subStatus.subscribed}}" class="sub-card-body">
+        <!-- ★ B5（复核修正）：原只写「今日推送 X/Y 条」—— 用户不知道何时恢复额度。
+             且原实现按 **UTC 日**过滤（北京用户实际 08:00 重置）→ 已改为北京时间 0 点。 -->
+        <text class="sub-info">今日已推送 {{todayCount}} / {{dailyLimit}} 条（每日 0 点重置）</text>
+      </view>
+
+      <!-- ★ B2（复核修正）：提前量/级别改为**常显且可编辑** ——
+           原方案曾拟「未订阅时置灰」，但该策略同时驱动首页本地检查（reminderStrategy），
+           置灰等于能力倒退。未订阅时靠状态徽章区分即可。 -->
+      <block>
+        <view class="reminder-block">
+          <text class="reminder-label">提前量</text>
+          <view class="reminder-chips">
+            <view
+              wx:for="{{leadOptions}}"
+              wx:key="sec"
+              class="rc-chip {{reminder.leadSec === item.sec ? 'rc-chip--on' : ''}}"
+              data-sec="{{item.sec}}"
+              bindtap="onLeadChange"
+            >{{item.label}}</view>
+          </view>
+        </view>
+        <view class="reminder-block">
+          <text class="reminder-label">提醒级别</text>
+          <view class="reminder-chips">
+            <view
+              wx:for="{{tierOptions}}"
+              wx:key="grade"
+              class="rc-chip {{item.selected ? 'rc-chip--on' : ''}}"
+              data-grade="{{item.grade}}"
+              bindtap="onTierToggle"
+            >{{item.label}}</view>
+          </view>
+        </view>
+        <text class="reminder-hint">仅对选中级别、赛前 {{reminder.leadSec / 60}} 分钟推送，降低打扰</text>
+        <!-- ★ B3（复核文案修正）：原「重新授权 ›」含义含糊 —— 说明授权什么、为何可能需要重新授权 -->
+        <text class="rc-reauth" bindtap="onSubscribe">{{subStatus.subscribed ? '重新授权微信提醒（授权有有效期，失效后需重新同意）›' : '点击开启提醒 ›'}}</text>
+      </block>
+      <view wx:if="{{!subStatus.subscribed}}" class="sub-card-body">
+        <text class="sub-info sub-muted">开启后，关注的战队赛前将收到微信提醒</text>
+      </view>
+    </view>
+
+    <!-- 降级态：模板未配置（§11.1 复核新增）
+         ★ B6（复核修正）：原 bindtap="openPrivacy" 属**语义错位** ——
+         「模板未配置」是开发者侧状态，跳隐私页解决不了任何事。
+         改为静态说明行（且该分支在当前配置下不可达：subscribeTemplateId 已配置）。 -->
+    <view class="reminder-card rc-degraded">
+      <text class="rc-degraded-text">赛事提醒暂未开放</text>
+    </view>
+
+    <!-- 推送记录（折叠，默认收起一行） -->
+    <view class="send-log" wx:if="{{sendHistory.length > 0}}">
+      <view class="sl-fold" bindtap="toggleSendLog" hover-class="tap-scale">
+        <text class="send-log-title">推送记录 {{sendHistory.length}} 条</text>
+        <t-icon name="{{sendLogExpanded ? 'chevron-up' : 'chevron-down'}}" size="28rpx" color="#9aa4b2" />
+      </view>
+      <block wx:if="{{sendLogExpanded}}">
+        <view class="send-log-item" wx:for="{{sendHistory}}" wx:key="time">
+          <view class="sl-status {{item.status === 'ok' ? 'sl-ok' : 'sl-fail'}}">
+            {{item.status === 'ok' ? '成功' : '失败'}}
+          </view>
+          <view class="sl-detail">
+            <text class="sl-league">{{item.displayName || item.leagueName || '赛事提醒'}}</text>
+            <text class="sl-time">{{item.time}}</text>
+          </view>
+        </view>
+      </block>
+    </view>
+
+    <!-- ★ A1（复核修正 · 合规必需）：原两行都固定写「关注数据仅保存在本机」，
+         但**开启云同步后关注数据已在云端** → 属不实告知。现随同步状态动态化。 -->
+    <view class="tip muted" wx:if="{{!subReady}}">
+      {{sync.enabled ? '关注数据已同步至云端（可在上方关闭并删除）。' : '关注数据仅保存在本机。'}}
+    </view>
+    <view class="tip muted" wx:else>
+      {{sync.enabled ? '关注数据已同步至云端，可在上方关闭并删除。' : '关注数据仅保存在本机。'}}订阅消息每日上限 {{dailyLimit}} 条。
+    </view>
+  </view>
+
+
+  <!-- ===== 段三 · 关注阵容（页面主体，保留） ===== -->
   <view class="section-label">关注阵容</view>
 
   <!-- 分段控件 -->
@@ -98,101 +220,42 @@
     <view wx:elif="{{items.length > pageSize}}" class="center muted">— 已显示全部 {{items.length}} 项 —</view>
   </view>
 
-  <!-- ===== 段三 · 赛前提醒（批次4 · PRD §11.1 合并卡） =====
-       sub-card（订阅状态）+ reminder-card（智能设置）合并为单张卡：
-       卡头 = 订阅状态徽章 + 开关 pill；卡身 = 提前量/级别 chips（已订阅才展开）。
-       subReady=false 降级态：单行引导文案（保留原 tip 语义）。 -->
-  <view class="section-label" id="sec-reminder">赛前提醒</view>
-
-  <view class="footer">
-    <view class="reminder-card" wx:if="{{subReady}}">
-      <view class="sub-card-head">
-        <view class="rc-head-left">
-          <text class="sub-card-title">{{tmplTitle || '赛前提醒'}}</text>
-          <view class="sub-badge {{subStatus.subscribed ? 'sub-badge--on' : 'sub-badge--off'}}">
-            {{subStatus.subscribed ? '已开启' : '未开启'}}
-          </view>
-        </view>
-        <view class="rc-toggle {{subStatus.subscribed ? 'rc-toggle--on' : ''}}" bindtap="onToggleReminder" hover-class="tap-scale">
-          <text>{{subStatus.subscribed ? '关闭' : '开启'}}</text>
-        </view>
+  <!-- ===== 数据管理（★ A2 复核修正：原「清除本地缓存」用 wx.clearStorageSync 一刀切，
+       连同步开关状态一起清掉却不动云端 → 造出「云端孤儿」且删除入口点不动。
+       现拆为三项独立操作，其中「删除云端数据」**恒定可用**。） ===== -->
+  <view class="section-label">数据管理</view>
+  <view class="settings-card">
+    <view class="settings-item" bindtap="onClearCache" hover-class="follow-card-hover">
+      <view class="settings-icon"><t-icon name="refresh" size="40rpx" color="#6b6b73" /></view>
+      <view class="settings-main">
+        <text class="settings-title">清除本机缓存</text>
+        <text class="settings-desc">仅赛事数据缓存与搜索历史，不影响关注与登录状态</text>
       </view>
-
-      <block wx:if="{{subStatus.subscribed}}">
-        <view class="sub-card-body">
-          <text class="sub-info">今日推送：{{todayCount}} / {{dailyLimit}} 条</text>
-        </view>
-        <view class="reminder-block">
-          <text class="reminder-label">提前量</text>
-          <view class="reminder-chips">
-            <view
-              wx:for="{{leadOptions}}"
-              wx:key="sec"
-              class="rc-chip {{reminder.leadSec === item.sec ? 'rc-chip--on' : ''}}"
-              data-sec="{{item.sec}}"
-              bindtap="onLeadChange"
-            >{{item.label}}</view>
-          </view>
-        </view>
-        <view class="reminder-block">
-          <text class="reminder-label">提醒级别</text>
-          <view class="reminder-chips">
-            <view
-              wx:for="{{tierOptions}}"
-              wx:key="grade"
-              class="rc-chip {{item.selected ? 'rc-chip--on' : ''}}"
-              data-grade="{{item.grade}}"
-              bindtap="onTierToggle"
-            >{{item.label}}</view>
-          </view>
-        </view>
-        <text class="reminder-hint">仅对选中级别、赛前 {{reminder.leadSec / 60}} 分钟推送，降低打扰</text>
-        <text class="rc-reauth" bindtap="onSubscribe">重新授权 ›</text>
-      </block>
-      <view wx:else class="sub-card-body">
-        <text class="sub-info sub-muted">开启后，关注的战队赛前将收到微信提醒</text>
+      <t-icon name="chevron-right" size="32rpx" color="#6b7280" />
+    </view>
+    <view class="settings-item" bindtap="onDeleteCloud" hover-class="follow-card-hover">
+      <view class="settings-icon"><t-icon name="cloud-upload" size="40rpx" color="#6b6b73" /></view>
+      <view class="settings-main">
+        <text class="settings-title">删除云端数据</text>
+        <text class="settings-desc">删除云端保存的关注与提醒，本机数据保留</text>
       </view>
+      <t-icon name="chevron-right" size="32rpx" color="#6b7280" />
     </view>
-
-    <!-- 降级态：模板未配置（§11.1 复核新增） -->
-    <view class="reminder-card rc-degraded" wx:else bindtap="openPrivacy" hover-class="tap-scale">
-      <text class="rc-degraded-text">配置提醒模板后开启赛前推送 ›</text>
-    </view>
-
-    <!-- 推送记录（折叠，默认收起一行） -->
-    <view class="send-log" wx:if="{{sendHistory.length > 0}}">
-      <view class="sl-fold" bindtap="toggleSendLog" hover-class="tap-scale">
-        <text class="send-log-title">推送记录 {{sendHistory.length}} 条</text>
-        <t-icon name="{{sendLogExpanded ? 'chevron-up' : 'chevron-down'}}" size="28rpx" color="#9aa4b2" />
+    <view class="settings-item" bindtap="onResetAll" hover-class="follow-card-hover">
+      <view class="settings-icon"><t-icon name="delete" size="40rpx" color="#6b6b73" /></view>
+      <view class="settings-main">
+        <text class="settings-title">重置全部数据</text>
+        <text class="settings-desc">删除云端数据并清空本机关注、资料与登录状态</text>
       </view>
-      <block wx:if="{{sendLogExpanded}}">
-        <view class="send-log-item" wx:for="{{sendHistory}}" wx:key="time">
-          <view class="sl-status {{item.status === 'ok' ? 'sl-ok' : 'sl-fail'}}">
-            {{item.status === 'ok' ? '成功' : '失败'}}
-          </view>
-          <view class="sl-detail">
-            <text class="sl-league">{{item.displayName || item.leagueName || '赛事提醒'}}</text>
-            <text class="sl-time">{{item.time}}</text>
-          </view>
-        </view>
-      </block>
+      <t-icon name="chevron-right" size="32rpx" color="#6b7280" />
     </view>
-
-    <view class="tip muted" wx:if="{{!subReady}}">关注数据仅保存在本机。需在公众平台配置订阅模板后可开启赛事临近提醒。</view>
-    <view class="tip muted" wx:else>关注数据仅保存在本机。订阅消息由微信云开发推送，每日上限 {{dailyLimit}} 条。</view>
   </view>
 
-  <!-- 分区标签：系统配置（v11 新增） -->
-  <view class="section-label">系统配置</view>
+  <view class="section-label">关于</view>
   <view class="settings-card">
     <view class="settings-item" bindtap="openPrivacy" hover-class="follow-card-hover">
       <view class="settings-icon"><t-icon name="lock-on" size="40rpx" color="#6b6b73" /></view>
       <text class="settings-title">隐私与协议</text>
-      <t-icon name="chevron-right" size="32rpx" color="#6b7280" />
-    </view>
-    <view class="settings-item" bindtap="clearCache" hover-class="follow-card-hover">
-      <view class="settings-icon"><t-icon name="refresh" size="40rpx" color="#6b6b73" /></view>
-      <text class="settings-title">清除本地缓存</text>
       <t-icon name="chevron-right" size="32rpx" color="#6b7280" />
     </view>
     <view class="settings-item" hover-class="follow-card-hover">

@@ -167,12 +167,25 @@ function recordSend(rec) {
 /**
  * 获取今日发送次数
  */
+/**
+ * ★ 2026-09-10（复核 B5）：把时间戳归一为**北京时间**的 YYYY-MM-DD。
+ *
+ * 原实现用 `new Date(ts).toISOString().slice(0,10)` —— 那是 **UTC 日**，
+ * 对北京用户而言「今日配额」实际在**次日 08:00** 才重置，与文案「每日重置」的直觉不符。
+ * 改为按北京时间（config.time.bjOffsetSec 单一来源）划日 → 0 点重置。
+ */
+function bjDateStr(ts) {
+  var off = 8 * 3600;
+  try { off = (config.time && config.time.bjOffsetSec) || off; } catch (e) {}
+  return new Date(ts + off * 1000).toISOString().slice(0, 10);
+}
+
 function getTodayCount() {
   const log = readLog();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = bjDateStr(Date.now());
   return log.filter((r) => {
     if (!r.time) return false;
-    return new Date(r.time).toISOString().slice(0, 10) === today && r.status === 'ok';
+    return bjDateStr(new Date(r.time).getTime()) === today && r.status === 'ok';
   }).length;
 }
 

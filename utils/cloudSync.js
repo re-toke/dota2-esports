@@ -112,13 +112,18 @@ function enable() {
 
 /**
  * 关闭云同步 = **撤回同意**：删除云端画像后置为未开启。
- * ★ 必须真实删除（对应协议承诺的删除权）；删除失败仍会关闭本地开关，
- *   但状态置 failed 让用户可重试（避免「以为删了其实没删」）。
- * @returns {Promise<{ok:boolean, reason?:string}>}
+ *
+ * ★★ 2026-09-10 修复（复核发现的缺陷）：**无 JWT 时不得报假成功**。
+ *   原实现 `if (!jwt) { finishLocal(); return {ok:true} }` —— 若本地 JWT 被清
+ *   （执行过清缓存 / 30 天过期）而**云端仍有数据**，会返回成功、UI 提示「已删除云端数据」，
+ *   但云端**根本没删** → 虚假承诺，且直接违反隐私协议的删除权条款。
+ *   现改为：无 JWT 时**先尝试登录取回**（同一用户 openid 不变，能拿回），
+ *   拿到 → 正常删除；拿不到 → 本地可关，但返回 ok:false 并如实报「云端数据未能删除」。
+ *
+ * @returns {Promise<{ok:boolean, reason?:string}>} ok:false 表示**云端未删除**
  */
 function disable() {
   var auth = require('./auth.js');
-  var jwt = auth.getJwtSync();
   var s = _read();
 
   function finishLocal() {
@@ -127,34 +132,78 @@ function disable() {
     _persist();
   }
 
-  if (!jwt) {
-    // 无 JWT 说明云端从未建立过画像（或已过期）→ 直接关本地即可
-    finishLocal();
-    _setStatus('off');
-    return Promise.resolve({ ok: true, reason: 'no_jwt' });
-  }
-
   _setStatus('syncing');
-  var sb = require('./supabaseClient.js');
-  var name = '';
-  try { name = (require('./config.js').supabase.functions || {}).followProfile; } catch (e) {}
-  if (!name) name = 'follow-profile';
 
-  return sb.edge(name, { op: 'delete' }, { jwt: jwt }).then(function (r) {
-    if (r && r.ok) {
+  // ① 取 JWT：优先本地，没有则尝试重新登录取回（不能因为本地没凭证就假装删成功）
+  var jwtPromise = Promise.resolve(auth.getJwtSync()).then(function (jwt) {
+    if (jwt) return jwt;
+    // 本地无凭证 → 尝试登录取回（同一用户 openid 不变，能拿回）
+    return auth.ensureLogin().then(function () { return auth.getJwtSync() || null; });
+  });
+
+  return jwtPromise.then(function (jwt) {
+    if (!jwt) {
+      // 拿不到凭证 → 无法删除云端。本地仍按用户意愿关闭，但**如实报失败**。
       finishLocal();
-      _setStatus('off');
-      return { ok: true };
+      _setStatus('failed', 'no_credential');
+      console.warn('[cloudSync] 无可用凭证，云端数据未能删除');
+      return { ok: false, reason: 'no_credential' };
     }
-    // 云端删除失败：本地仍关闭（尊重用户撤回意图），但状态置 failed 供重试
-    finishLocal();
-    _setStatus('failed', 'delete_failed');
-    return { ok: false, reason: 'delete_failed' };
+
+    var sb = require('./supabaseClient.js');
+    var name = '';
+    try { name = (require('./config.js').supabase.functions || {}).followProfile; } catch (e) {}
+    if (!name) name = 'follow-profile';
+
+    return sb.edge(name, { op: 'delete' }, { jwt: jwt }).then(function (r) {
+      if (r && r.ok) {
+        finishLocal();
+        _setStatus('off');
+        return { ok: true };
+      }
+      // 云端删除失败：本地仍关闭（尊重撤回意图），但状态置 failed 供重试
+      finishLocal();
+      _setStatus('failed', 'delete_failed');
+      return { ok: false, reason: 'delete_failed' };
+    });
   }).catch(function (err) {
     finishLocal();
     _setStatus('failed', (err && (err.errMsg || err.message)) || 'delete_error');
     return { ok: false, reason: 'delete_error' };
   });
+}
+
+/**
+ * ★ 2026-09-10（复核漏洞 1）：**恒定可用**的「删除云端数据」—— 与开关状态无关。
+ *
+ * 为什么需要：A2 曾导致「云端孤儿」（本地开关被清成 off，但云端画像还在），
+ * 而原设计的删除入口只在开关为开启态时可点 → 孤儿**永远删不掉**。
+ * 本函数不读开关状态，直接登录 + 删云端，用于清理孤儿。
+ *
+ * @returns {Promise<{ok:boolean, reason?:string}>}
+ */
+function deleteCloudData() {
+  var auth = require('./auth.js');
+  return auth.ensureLogin().then(function (oid) {
+    var jwt = auth.getJwtSync();
+    if (!oid || !jwt) return { ok: false, reason: 'no_credential' };
+    var sb = require('./supabaseClient.js');
+    var name = '';
+    try { name = (require('./config.js').supabase.functions || {}).followProfile; } catch (e) {}
+    if (!name) name = 'follow-profile';
+    return sb.edge(name, { op: 'delete' }, { jwt: jwt }).then(function (r) {
+      if (r && r.ok) {
+        // 云端删了 → 本地开关也应回到 off（否则状态与事实不符）
+        var s = _read();
+        s.enabled = false;
+        s.lastSyncAt = 0;
+        _persist();
+        _setStatus('off');
+        return { ok: true };
+      }
+      return { ok: false, reason: 'delete_failed' };
+    });
+  }).catch(function () { return { ok: false, reason: 'error' }; });
 }
 
 /** 标记一次成功同步（由上传方在成功后调用） */
@@ -190,6 +239,8 @@ module.exports = {
   isEnabled: isEnabled,
   enable: enable,
   disable: disable,
+  // ★ 2026-09-10（复核漏洞 1）：恒定可用的「删除云端数据」（清理云端孤儿，与开关状态无关）
+  deleteCloudData: deleteCloudData,
   markSynced: markSynced,
   markFailed: markFailed,
   onChange: onChange,
