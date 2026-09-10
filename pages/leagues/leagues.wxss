@@ -243,11 +243,29 @@
 .upcoming-asof-bar {
   margin: 0 var(--space-2) var(--space-2);
   padding: var(--space-1) var(--space-2);
-  background: var(--bg-2);
+  background: var(--td-bg-color-component);
   border-radius: var(--radius-sm);
   text-align: center;
 }
 .asof-text {
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+  line-height: 1.5;
+}
+
+/* ★ v8.31（赛事页 4s 感知优化）：快照 + 网络刷新并存期的「同步中」脉冲条。
+   左对齐 + 呼吸圆点 = 明确的活动指示（比静止文字提示的等待感更低）。
+   .sync-dot / @keyframes sync-pulse 定义在 app.wxss（全局共享，详情页同款）。 */
+.sync-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0 var(--space-2) var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  background: var(--td-bg-color-component);
+  border-radius: var(--radius-sm);
+}
+.sync-text {
   font-size: var(--fs-caption);
   color: var(--text-3);
   line-height: 1.5;

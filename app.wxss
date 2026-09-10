@@ -724,6 +724,26 @@ page {
   color: #d97757;
 }
 
+/* ★ v8.31（详情页感知优化）：加载期「同步中」脉冲点（与 leagues 页 sync-bar 同款视觉语言）。
+   明确的活动指示比静止文字提示的感知等待时间更短。 */
+.sync-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.sync-dot {
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 50%;
+  background: var(--dota-gold, #C8A951);
+  flex-shrink: 0;
+  animation: sync-pulse 1.2s ease-in-out infinite;
+}
+@keyframes sync-pulse {
+  0%, 100% { opacity: 0.35; transform: scale(0.85); }
+  50%      { opacity: 1;    transform: scale(1.15); }
+}
+
 /* ===================================================================
    共享组件 9：Section Header（统一区块标题）
    用法：<view class="section-header"><text class="section-title">近期战绩</text>

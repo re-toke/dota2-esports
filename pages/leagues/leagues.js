@@ -467,7 +467,7 @@ Page({
           this.setData({
             loading: false,
             error: '',
-            leaguesAsOfText: '本地数据截至 ' + this._formatSnapshotDate(snap.generatedAt) + '，正在后台刷新实时数据…'
+            leaguesAsOfText: '本地数据 ' + this._formatSnapshotDate(snap.generatedAt) + ' · 正在同步实时赛程'
           });
           console.info('[leagues][perf] P2-2 快照秒开：' + this.allLeagues.length + ' 个联赛先上');
         }

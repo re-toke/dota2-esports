@@ -128,7 +128,10 @@
     <!-- ★ 2026-08-13（首页推荐位跳转优化）：骨架提前后 series 尚未到达，用 scheduleLoading 区分
          「赛程加载中」与「真暂无数据」，避免骨架阶段误显示"暂无比赛数据"闪烁 -->
     <view wx:elif="{{scheduleLoading && series.length === 0}}" class="hint-card-enhanced">
-      <view class="hint-title">赛程加载中…</view>
+      <view class="sync-row">
+        <view class="sync-dot"></view>
+        <text class="hint-title">赛程同步中…</text>
+      </view>
       <view class="hint-desc">正在查询对阵数据，请稍候</view>
     </view>
     <view wx:elif="{{series.length === 0}}" class="hint-card-enhanced">

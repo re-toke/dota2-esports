@@ -58,9 +58,11 @@
     </view>
   </view>
 
-  <!-- P2-2（2026-09-01）：快照提示条——build-time 快照秒开后显示，实时数据到位自动清除；刷新失败时保留并提示 -->
-  <view wx:if="{{leaguesAsOfText}}" class="upcoming-asof-bar">
-    <text class="asof-text">{{leaguesAsOfText}}</text>
+  <!-- ★ v8.31（赛事页 4s 感知优化）：快照已渲染 + 网络仍在刷 → 顶部「同步中」脉冲条。
+       比骨架屏更有效：用户看到列表 + 明确的活动指示，感知等待时间显著下降。 -->
+  <view wx:if="{{leaguesAsOfText}}" class="sync-bar">
+    <view class="sync-dot"></view>
+    <text class="sync-text">{{leaguesAsOfText}}</text>
   </view>
 
   <!-- B-1 筛选抽屉：等级 / 排序 / 战队 收拢于此

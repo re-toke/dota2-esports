@@ -95,22 +95,73 @@ function _sbEfAvailable() {
   } catch (e) { return false; }
 }
 
+// ===== ★ v8.31（赛事页 4s 感知优化）：EF 读放大缓存 =====
+// 问题：EF 路由下 `call()` 每次进页面都发一次跨网请求（香港 EF + Postgres 往返 ≈
+//   1.5-2.5s），即便 EF 侧有缓存也要付满 RTT。用户「切走再回来」仍等 2s+。
+// 方案：EF 返回的**读类**结果在客户端内存留一份**短 TTL 热缓存**（仅本会话，不落 storage）：
+//   - 热缓存命中 → **立即 resolve 旧值**（页面首屏 0 RTT），同时按新鲜度条件触发后台刷新；
+//   - 旧值 < HOT_TTL（5min）→ 视为新鲜，后台不刷新（省一次跨网，防切页抖动）；
+//   - 旧值 ≥ HOT_TTL → 后台静默刷新，下次进页面即最新（写回热缓存 + writeThrough 本地缓存）。
+//   - 命中过期/失败 → 静默丢弃，不影响主链路（保持现有 EF 失败 → 云开发回落语义）。
+// 仅对**无参数/参数稳定**且 EF 提供缓存语义的 action 生效（getLeagues 带 windows 一并缓存）。
+var HOT_TTL_SEC = 5 * 60;
+var HOT_ACTIONS = {
+  getLeagues: 1, getLeagueWindows: 1, getHeroes: 1,
+  getProMatches: 1, getLiveMatches: 1
+};
+var _hotCache = {};   // { [action]: { data, ts } }，会话级（小程序自杀即清）
+
+function _hotGet(action) {
+  var h = _hotCache[action];
+  if (!h) return null;
+  return h;
+}
+
 function call(action, params, extra) {
   // ★ M2.4：Supabase 数据代理优先；EF 熔断打开或失败 → 回落云开发
   var efName = EDGE_ACTIONS[action];
   if (efName && _sbEfAvailable()) {
     var sbPayload = { action: action, params: params || {} };
     if (extra && typeof extra === 'object' && extra.force != null) sbPayload.force = !!extra.force;
-    return require('./supabaseClient.js').edge(efName, sbPayload).then(function (r) {
-      // EF 形状 { data, source } / { error } —— 与云函数 res.result 对齐，取 .data
-      if (r && r.data !== undefined) return r.data;
-      throw new Error((r && r.error) || 'ef empty');
-    }).catch(function (efErr) {
-      console.info('[cloudProxy] EF ' + efName + ' fail(' + (efErr && efErr.message) + ') → 回落云开发');
-      return callCloud(action, params, extra);
-    });
+
+    // ★ v8.31：热缓存秒回（非 force 请求）
+    var _force = !!(extra && extra.force);
+    if (!_force && HOT_ACTIONS[action]) {
+      var h = _hotGet(action);
+      if (h) {
+        var ageSec = Math.floor((Date.now() - h.ts) / 1000);
+        if (ageSec >= HOT_TTL_SEC) {
+          // 旧值 + 后台静默刷新（结果写回热缓存，本次调用立即返回旧值）
+          _efRefresh(action, efName, sbPayload);
+        }
+        console.info('[cloudProxy] 热缓存秒回 ' + action + '（' + ageSec + 's 前）');
+        return Promise.resolve(h.data);
+      }
+    }
+    return _efCall(action, efName, sbPayload);
   }
   return callCloud(action, params, extra);
+}
+
+// EF 单次调用（含云开发回落 + 热缓存写回）
+function _efCall(action, efName, sbPayload) {
+  return require('./supabaseClient.js').edge(efName, sbPayload).then(function (r) {
+    // EF 形状 { data, source } / { error } —— 与云函数 res.result 对齐，取 .data
+    if (r && r.data !== undefined) {
+      if (HOT_ACTIONS[action]) _hotCache[action] = { data: r.data, ts: Date.now() };
+      return r.data;
+    }
+    throw new Error((r && r.error) || 'ef empty');
+  }).catch(function (efErr) {
+    console.info('[cloudProxy] EF ' + efName + ' fail(' + (efErr && efErr.message) + ') → 回落云开发');
+    return callCloud(action, sbPayload.params, sbPayload.force != null ? { force: sbPayload.force } : null);
+  });
+}
+
+// 后台静默刷新（不阻塞调用方；失败静默——旧值仍可用）
+function _efRefresh(action, efName, sbPayload) {
+  console.info('[cloudProxy] 热缓存过期 ' + action + ' → 后台刷新');
+  _efCall(action, efName, sbPayload).catch(function () { /* 静默：旧值仍可用 */ });
 }
 
 function callCloud(action, params, extra) {
