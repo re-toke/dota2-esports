@@ -131,7 +131,7 @@ function getEffectiveEvents() {
 // 增量更新：客户端传 clientVersion，若与云端一致 → 云函数返回 { unchanged: true }，
 //   零数据传输，仅刷新缓存时间戳。
 function load(force) {
-  if (!cloudProxy.isAvailable()) { ensure(); return Promise.resolve(false); }
+  if (!(cloudProxy.isAvailable() || cloudProxy.efAvailable())) { ensure(); return Promise.resolve(false); }
   const meta = cache.getStale(CACHE_KEY, config.remoteCuration.ttlSec, config.remoteCuration.ttlSec);
   if (!force && meta.value) { ensure(); return Promise.resolve(false); }
   if (loadingPromise) return loadingPromise;

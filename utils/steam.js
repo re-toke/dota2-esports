@@ -44,7 +44,7 @@ function getDirect(path, params) {
 // 统一入口：云代理优先（key 安全），直连兜底（需本地 apiKey）。
 function get(path, params) {
   if (!ENABLED) return Promise.resolve(null);
-  if (cloudProxy.isAvailable()) {
+  if ((cloudProxy.isAvailable() || cloudProxy.efAvailable())) {
     return cloudProxy.steamProxy(path, params)
       .catch(() => getDirect(path, params));
   }

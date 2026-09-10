@@ -142,7 +142,7 @@ function gqlDirect(query, variables) {
 // 客户端不存 key，适合上线环境。失败返回 null，由上层回退到直连或降级。
 function gqlCloud(query, variables) {
   // 熔断态下直接跳过云调用（避免无云环境时每次都失败一次）
-  if (!cloudProxy.isAvailable()) return Promise.resolve(null);
+  if (!(cloudProxy.isAvailable() || cloudProxy.efAvailable())) return Promise.resolve(null);
   try {
     return wx.cloud.callFunction({
       name: 'aggregation',

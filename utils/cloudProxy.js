@@ -80,7 +80,10 @@ var EDGE_ACTIONS = {
   steamLeagueScheduled: 'steam-proxy',
   stratzGql: 'stratz-proxy',
   // ★ v8.22 挂回：liquipedia-proxy 已改纯读表模式（sync 脚本灌缓存，EF 零 LP 请求）
-  liquipediaFetchRawWikitext: 'liquipedia-proxy'
+  liquipediaFetchRawWikitext: 'liquipedia-proxy',
+  // ★ v8.25（M2.4 收尾）：详情页聚合 + haglund 兜底源
+  getLeagueDetailBundle: 'bundle-aggregator',
+  haglundUpcoming: 'haglund-proxy'
 };
 
 // 懒加载（防循环依赖：api.js ←→ cloudProxy 已有环，supabaseClient 只依赖 config 安全）
@@ -269,6 +272,8 @@ proxy.health = function () {
 
 // 暴露给其它模块（api.js / stratz.js / leagues.js 复用）
 proxy.isAvailable = isAvailable;
+// ★ v8.25：EF 可用性（供调用方守卫使用——云熔断打开但 EF 可用时不应拦代理路径）
+proxy.efAvailable = function () { try { return _sbEfAvailable(); } catch (e) { return false; } };
 proxy.call = call;
 
 module.exports = proxy;

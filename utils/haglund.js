@@ -311,7 +311,7 @@ function fetchUpcoming(opts) {
   //    云代理不可用（未开云开发/熔断）时直接走直连（开发态 urlCheck:false 可用；
   //    正式版直连会被白名单拦截，属预期——此时靠 stale 缓存兜底）。
   function fetchRaw() {
-    if (typeof wx !== 'undefined' && wx.cloud && cloudProxy.isAvailable()) {
+    if (typeof wx !== 'undefined' && wx.cloud && (cloudProxy.isAvailable() || cloudProxy.efAvailable())) {
       return cloudProxy.haglundUpcomingProxy(false)
         .then(function (data) { return { data: data, source: 'cloud' }; })
         .catch(function (e) {

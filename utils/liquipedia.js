@@ -225,7 +225,7 @@ function fetchPageWikitext(pageName) {
   // 云代理优先：通过云函数（got + UA + redirects:1）代理抓取 raw wikitext，
   // 规避 wx.request 禁设 User-Agent 的限制（Liquipedia 要求合规 UA 才返回数据）。
   // 仅当 wx.cloud 存在且熔断器放行时才走云代理；测试/纯本地环境下回退本地。
-  if (typeof wx !== 'undefined' && wx.cloud && cloudProxy.isAvailable()) {
+  if (typeof wx !== 'undefined' && wx.cloud && (cloudProxy.isAvailable() || cloudProxy.efAvailable())) {
     return cloudProxy.liquipediaFetchRawWikitextProxy(pageName).then(function (remote) {
       if (remote && remote.wikitext) return remote.wikitext;
       return fetchPageWikitextLocal(pageName);
@@ -295,7 +295,7 @@ function getLeagueMetadata(name) {
   // 云代理优先：通过云函数（Node.js 环境，可自由设置 User-Agent + gzip）代理 Liquipedia 请求，
   // 规避 wx.request 禁止设置 User-Agent 的限制（Liquipedia 官方强制要求描述性 UA）。
   // 仅当 wx.cloud 存在且熔断器放行时才走云代理；测试 / 纯本地环境下 wx.cloud 未定义 → 走本地回退。
-  if (typeof wx !== 'undefined' && wx.cloud && cloudProxy.isAvailable()) {
+  if (typeof wx !== 'undefined' && wx.cloud && (cloudProxy.isAvailable() || cloudProxy.efAvailable())) {
     return cloudProxy.liquipediaProxy(name).then(function (remote) {
       if (remote) {
         cache.set(cacheKey, remote, CACHE_TTL);
@@ -525,7 +525,7 @@ function getScheduledMatches(name, opts) {
     if (steamTried) return null;
     steamTried = true;
     if (!leagueId) return null;
-    if (typeof wx === 'undefined' || !wx.cloud || !cloudProxy.isAvailable()) return null;
+    if (typeof wx === 'undefined' || !wx.cloud || !(cloudProxy.isAvailable() || cloudProxy.efAvailable())) return null;
     return cloudProxy.steamLeagueScheduledProxy(leagueId, force).then(function (res) {
       var norm = normalizeScheduled(res);
       // Steam 命中（有 LIVE 或 UPCOMING 数据）→ 直接返回
@@ -562,7 +562,7 @@ function getScheduledMatches(name, opts) {
     });
   }
 
-  if (typeof wx !== 'undefined' && wx.cloud && cloudProxy.isAvailable()) {
+  if (typeof wx !== 'undefined' && wx.cloud && (cloudProxy.isAvailable() || cloudProxy.efAvailable())) {
     // Steam 与 Liquipedia/haglund 并行拉取，合并两源的 matches（互补覆盖 LIVE/UPCOMING）
     var steamPromise = trySteamFirst();
     var liqPromise = fetchLiquipediaChain();
@@ -728,7 +728,7 @@ function getTeamLogo(name) {
   if (cached) return Promise.resolve(cached);
 
   // 云代理优先（Node.js 可设 UA + gzip）
-  if (typeof wx !== 'undefined' && wx.cloud && cloudProxy.isAvailable()) {
+  if (typeof wx !== 'undefined' && wx.cloud && (cloudProxy.isAvailable() || cloudProxy.efAvailable())) {
     return cloudProxy.liquipediaTeamLogoProxy(name).then(function (remote) {
       if (remote && remote.logo) {
         cache.set(cacheKey, remote, CACHE_TTL);
