@@ -2394,15 +2394,21 @@ function buildLpUpcomingSeries(lpMatches, now) {
   if (!Array.isArray(lpMatches) || !lpMatches.length) return [];
   now = now || Math.floor(Date.now() / 1000);
   var TBD_RE = /^(tbd|tba|待定|待公布|unknown)$/i;
-  // ① 过滤：未开赛（start 在未来）且双方均为确定队名（TBD/TBA 不渲染——无法展示对阵且参与
-  //    聚合会误并「TBD vs A」「TBD vs B」，与详情页 §9 P0-D2 同口径）
+  // ① 过滤：未开赛（start 在未来）。★ v8.29：TBD 对阵不再整卡过滤——预选赛对阵未定是
+  //    常态，原过滤导致「即将开始」永远为空（RES 预选 4 场全含 TBD 被丢弃）。只丢弃
+  //    双方均无名字的无信息卡；TBD 侧改写为「待定」渲染。
+  //    聚合键安全核查：groupLiquipediaMatches 兜底键为「归一化队名对 + 同日桶」，
+  //    「待定|nemesis」与「待定|其他」键不同不会误并；TBD vs TBD 多场合一张可接受。
   var upcoming = lpMatches.filter(function (m) {
     if (!m) return false;
     var st = m.startTime || m.start_time || 0;
     if (!st || st <= now) return false;
     var n1 = String(m.team1Name || '').trim();
     var n2 = String(m.team2Name || '').trim();
-    if (!n1 || !n2 || TBD_RE.test(n1) || TBD_RE.test(n2)) return false;
+    if (!n1 && !n2) return false;
+    if (TBD_RE.test(n1)) { n1 = '待定'; m.team1Name = n1; }
+    if (TBD_RE.test(n2)) { n2 = '待定'; m.team2Name = n2; }
+    m.team1Name = n1; m.team2Name = n2;
     return true;
   });
   if (!upcoming.length) return [];
