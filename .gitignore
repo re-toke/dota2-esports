@@ -15,3 +15,6 @@ Thumbs.db
 # Generated output from scripts
 scripts/output/
 scripts/export/
+
+# 开发者工具预览二维码（临时产物，约 25 分钟过期）
+preview-*.png
