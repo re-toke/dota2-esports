@@ -24,12 +24,13 @@
       <view class="para">本小程序在本地存储的数据（仅保存在用户设备，不上传服务器）：</view>
       <view class="list-item">· 搜索历史关键词（最多 10 条，可手动清除）</view>
       <view class="list-item">· 赛事数据的本地缓存（用于离线浏览与降低请求量，含 TTL 自动过期）</view>
+      <view class="list-item">· 您的关注列表（赛事/战队/选手）与提醒设置</view>
     </view>
     <view class="section-body">
-      <view class="para">开启「赛前通知」后，以下数据将<span class="em">同步至云端</span>用于为您提供提醒服务（详见第六、七条）：</view>
-      <view class="list-item">· 您的微信用户标识 OpenID（用于标识您的账号）</view>
-      <view class="list-item">· 关注的赛事/战队/选手列表（用于计算向您推送哪些比赛提醒）</view>
-      <view class="list-item">· 提醒策略与订阅授权状态（如您设置的提前提醒时长）</view>
+      <view class="para">为识别您的账号并实现跨设备同步，以下数据将<span class="em">上传至云端</span>（详见第六、七条）：</view>
+      <view class="list-item">· 您的微信用户标识 OpenID（用于标识您的账号，<text class="em">小程序启动时</text>经微信登录接口获取）</view>
+      <view class="list-item">· 关注的战队列表与提醒策略（在关注功能中操作时上传，用于计算向您推送哪些比赛提醒）</view>
+      <view class="list-item">· 订阅授权状态（开启「赛前通知」后上传，用于判断您是否同意接收推送）</view>
     </view>
   </view>
 
@@ -41,9 +42,10 @@
       <view class="list-item">· <text class="em">STRATZ</text>（api.stratz.com）—— DOTA2 GraphQL API，需 API Key（开发者持有）</view>
       <view class="list-item">· <text class="em">Steam Web API</text>（api.steampowered.com）—— Valve 官方接口，需 API Key（开发者持有）</view>
       <view class="list-item">· <text class="em">Liquipedia</text>（liquipedia.net）—— 人工策展电竞 wiki，遵循其服务条款</view>
+      <view class="list-item">· <text class="em">haglund.dev</text>（dota.haglund.dev）—— 公开赛事赛程聚合接口</view>
     </view>
     <view class="section-body">
-      <view class="para">所有第三方 API 调用均由小程序直接发起（不经过自有服务器），请求参数仅含赛事/战队/选手 ID 等公开标识，<text class="em">不含任何用户身份信息</text>。第三方 API 的 API Key 由开发者持有，不随小程序分发给用户。</view>
+      <view class="para">为加速访问、降低第三方接口压力并提供离线缓存，上述请求可能由开发者自有的云服务（<text class="em">微信云开发云函数</text>与 <text class="em">Supabase Edge Function</text>，详见第七条）代为转发或缓存；转发内容仅含赛事/战队/选手 ID 等公开标识，<text class="em">不含任何用户身份信息</text>。第三方 API 的 API Key 由开发者持有，不随小程序分发给用户。</view>
     </view>
   </view>
 
@@ -77,15 +79,15 @@
       本小程序的所有网络请求均使用 HTTPS 加密传输。第三方 API Key 由开发者保管，不随小程序代码分发给终端用户。本地存储数据保存在微信小程序沙箱内，其他应用无法访问。
     </view>
     <view class="section-body">
-      登录信息说明：开启「赛前通知」时，小程序通过微信官方登录接口获取您的微信 OpenID（用户身份标识），仅用于绑定您的关注与提醒订阅状态、跨设备同步、并向您本人推送赛前提醒。OpenID 不包含您的昵称、头像、手机号等个人信息，不会向任何第三方提供或用于广告。
+      登录信息说明：小程序<text class="em">启动时</text>通过微信官方登录接口（wx.login）获取您的微信 OpenID（用户身份标识），仅用于绑定您的关注与提醒订阅状态、跨设备同步、并向您本人推送赛前提醒。OpenID 不包含您的昵称、头像、手机号等个人信息，不会向任何第三方提供或用于广告。关注列表与提醒策略仅在您使用关注/提醒功能时上传，订阅授权状态仅在您开启「赛前通知」后上传。
     </view>
   </view>
 
   <view class="section">
     <view class="section-title">七、数据存储位置与跨境传输</view>
     <view class="section-body">
-      <view class="para">为实现跨设备同步与比赛提醒推送，开启「赛前通知」的用户的上述数据（OpenID、关注列表、订阅授权状态）存储于 <text class="em">Supabase 云服务平台（腾讯云海外节点，位于中国香港）</text>。</view>
-      <view class="para">该传输仅包含实现提醒功能所必需的上述信息，<text class="em">不包含</text>您的昵称、头像、地理位置、设备信息等其他个人信息，属于一般个人信息出境场景，依据《促进和规范数据跨境流动规定》无需申报。数据传输全程 HTTPS 加密，云端数据库启用行级安全策略（RLS），仅您的登录凭证可读写您自己的数据。</view>
+      <view class="para">为实现账号标识、跨设备同步与比赛提醒推送，第二条所述上传数据（OpenID、关注列表与提醒策略、订阅授权状态）存储于 <text class="em">Supabase 云服务平台（腾讯云海外节点，位于中国香港）</text>。</view>
+      <view class="para">该传输仅包含实现上述功能所必需的信息，<text class="em">不包含</text>您的昵称、头像、地理位置、设备信息等其他个人信息，属于一般个人信息出境场景，依据《促进和规范数据跨境流动规定》无需申报。数据传输全程 HTTPS 加密，云端数据库启用行级安全策略（RLS），仅您的登录凭证可读写您自己的数据。</view>
     </view>
     <view class="section-body">
       <view class="para">赛事、战队、选手等公开电竞数据（不含任何用户个人信息）亦经该云服务缓存与代理，用于加速页面加载。</view>
