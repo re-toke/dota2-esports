@@ -15,16 +15,17 @@ const MAX_SEEN = 300;
 
 function inDevtools() {
   try {
-    // 2026-07-28：wx.getSystemInfoSync 已废弃，改用细分 API。
-    //   platform 字段归 wx.getDeviceInfo / wx.getAppBaseInfo（两者均含 platform）。
-    //   优先用新 API，回退到旧 API 仅在极旧基础库下使用（不再触发废弃警告的常规路径）。
+    // 2026-07-28：platform 字段归 wx.getDeviceInfo / wx.getAppBaseInfo（两者均含 platform）。
+    // ★ 2026-09-10（隐私指引审核整改）：**移除 wx.getSystemInfoSync 兜底** ——
+    //   该旧接口官方说明「会获取系统权限，可能触发授权弹窗」，是审核驳回
+    //   「设备信息接口说明不符合使用场景」的疑似诱因之一。
+    //   本函数仅用于「是否开发者工具」判断（内部埋点开关），拿不到就返回 false（走保守分支），
+    //   故去掉兜底无功能影响 —— 换取代码中零引用该废弃接口。
     let platform = '';
     if (wx.getDeviceInfo) {
       platform = wx.getDeviceInfo().platform || '';
     } else if (wx.getAppBaseInfo) {
       platform = wx.getAppBaseInfo().platform || '';
-    } else if (wx.getSystemInfoSync) {
-      platform = (wx.getSystemInfoSync() || {}).platform || '';
     }
     return platform === 'devtools';
   } catch (e) {

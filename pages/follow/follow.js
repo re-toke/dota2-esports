@@ -335,7 +335,15 @@ Page({
     //   未命中（首次弱网）→ toast 引导 + 后台补登录，绝不在网络回调后弹授权（会被微信手势校验拒绝）。
     if (!auth.isLoggedIn()) {
       wx.showToast({ title: '正在登录…请稍后重试', icon: 'none' });
-      auth.ensureLogin().catch(() => {});
+      // ★ 2026-09-10（真机登录问题）：补失败分支——此前登录失败会**静默回到同一状态**，
+      //   用户反复点击只看到同一句 toast，无法区分「首次预热」与「登录链路挂了」。
+      auth.ensureLogin().then((oid) => {
+        if (!oid) {
+          wx.showToast({ title: '登录失败，请检查网络后重试', icon: 'none' });
+        }
+      }).catch(() => {
+        wx.showToast({ title: '登录失败，请检查网络后重试', icon: 'none' });
+      });
       return;
     }
     subscribe.requestSubscribe({ force: true }).then((r) => {

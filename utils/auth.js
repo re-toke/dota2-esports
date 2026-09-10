@@ -77,11 +77,26 @@ function ensureOpenId(fresh) {
       if (cached) { resolve(cached); return; }
     }
 
+    // ★ 2026-09-10（真机登录问题诊断）：补结构化日志。
+    //   此前 ensureOpenId 全程静默——真机登录失败时无从判断卡在哪一步
+    //   （wx.login 失败 / EF 失败 / 云函数回退也失败）。加日志后可据 Console 定位。
+    var _t0 = Date.now();
+    function _ok(oid, src) {
+      console.log('[auth] openid ' + (oid ? 'OK' : 'NULL') + ' via=' + src +
+                  ' (' + (Date.now() - _t0) + 'ms) oid=' + (oid ? String(oid).slice(0, 8) + '…' : 'null'));
+      resolve(oid);
+    }
+
     // ★ Supabase 分支：wx.login 拿 code → wechat-auth 换 openid + JWT
     if (_sbEnabled()) {
       wx.login({
         success: function (lr) {
-          if (!lr.code) { _cloudFallback(resolve); return; }
+          if (!lr.code) {
+            console.warn('[auth] wx.login 返回无 code，回退云开发');
+            _cloudFallback(resolve);
+            return;
+          }
+          console.log('[auth] wx.login OK，调 Edge Function wechat-auth…');
           _sbClient().edge(_sbCfg().functions.auth, { code: lr.code })
             .then(function (data) {
               var oid = (data && data.openid) || null;
@@ -91,16 +106,26 @@ function ensureOpenId(fresh) {
                 if (data && data.token) {
                   try { wx.setStorageSync(JWT_KEY, data.token); } catch (e) {}
                 }
+                _ok(oid, data.token ? 'supabase+jwt' : 'supabase');
+              } else {
+                console.warn('[auth] wechat-auth 返回无 openid，回退云开发:', JSON.stringify(data).slice(0, 200));
+                _cloudFallback(resolve);
               }
-              resolve(oid);
             })
-            .catch(function () { _cloudFallback(resolve); });  // EF 失败回退云开发
+            .catch(function (err) {
+              console.warn('[auth] wechat-auth EF 失败，回退云开发:', (err && (err.errMsg || err.message)) || err);
+              _cloudFallback(resolve);
+            });  // EF 失败回退云开发
         },
-        fail: function () { _cloudFallback(resolve); }
+        fail: function (lr) {
+          console.warn('[auth] wx.login 失败，回退云开发:', (lr && lr.errMsg) || lr);
+          _cloudFallback(resolve);
+        }
       });
       return;
     }
 
+    console.log('[auth] supabase 未启用，直接走云开发 getOpenId');
     _cloudFallback(resolve);
   });
 }
@@ -118,7 +143,12 @@ function _sbClient() { return require('./supabaseClient.js'); }
 
 /** 云开发回退路径（灰度期保留，原实现原样） */
 function _cloudFallback(resolve) {
-  if (typeof wx === 'undefined' || !wx.cloud || !wx.cloud.callFunction) { resolve(null); return; }
+  if (typeof wx === 'undefined' || !wx.cloud || !wx.cloud.callFunction) {
+    console.warn('[auth] 云开发不可用（wx.cloud 缺失），openid 无法获取');
+    resolve(null);
+    return;
+  }
+  var _t0 = Date.now();
   wx.cloud.callFunction({
     name: 'aggregation',
     data: { action: 'getOpenId' },
@@ -127,9 +157,14 @@ function _cloudFallback(resolve) {
       if (oid) {
         try { wx.setStorageSync(OPENID_KEY, oid); } catch (e) {}
       }
+      console.log('[auth] 云开发 getOpenId ' + (oid ? 'OK' : 'NULL') +
+                  ' (' + (Date.now() - _t0) + 'ms) result=' + JSON.stringify(res && res.result).slice(0, 160));
       resolve(oid);
     },
-    fail: function () { resolve(null); }
+    fail: function (err) {
+      console.error('[auth] 云开发 getOpenId 失败:', (err && err.errMsg) || err);
+      resolve(null);
+    }
   });
 }
 
