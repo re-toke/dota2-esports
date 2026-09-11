@@ -577,40 +577,50 @@ function getScheduledMatches(name, opts) {
   //   若 Steam 命中后短路返回，UPCOMING 段永远拿不到数据。
   //   新策略：Steam 与 Liquipedia/haglund 并行拉取 → 按 phase 合并（Steam 补 LIVE，haglund 补 UPCOMING）。
   //   phase 区分由 sources.groupLiquipediaMatches / buildSeriesFromSources 下游天然处理。
-  // ★★ 2026-09-11（**回退「本地解析优先」——实测无效且有害**）：
+  // ★★ 2026-09-11（**重新启用「本地解析优先」—— 前提已满足**）：
   //
-  // 曾改为「fetchScheduledLocal 优先 → 云函数 → haglund」，前提假设是
-  // 「客户端已有本地解析路径，只差表有数据」。**实测推翻了这个假设**：
-  //   · 表里存的是 slugmap 的**赛事主页面** slug（样例 `EPL/Masters/2`、`BLAST/SLAM/8/Europe`）；
-  //     而 `getScheduledMatches` 用的 slug 来自 curation 的 `scheduledMatchesSlug`
-  //     （如 `The_International/2026/Group_Stage`）—— **对阵在子页面，表里没有**（实测 3/3 MISS）。
-  //   · 即便取回主页面，`LiquiParse.parseScheduledMatches` 解析结果为 **0 场**
-  //     （主页面本就不含 {{Match}} 模板）。
-  //   → 该顺序**必然落空**，却要在每次云函数调用前先白等 0.5~1.7s（EF cacheOnly 往返）。故回退。
+  // 时间线：v8.44 曾启用 → v8.45 实测发现「表里只有主 slug、对阵在子页面」而回退 →
+  //         v8.46 扩展 sync 灌表范围 → 用户已灌表成功（183 成功/0 失败）→ **现在重新启用**。
   //
-  // ★ 要让赛程真正走 EF，前提是 **sync 脚本把「对阵子页面 slug」也纳入灌表范围**
-  //   （即遍历 curation 的 scheduledMatchesSlug，而非只遍历 slugmap 主 slug）——
-  //   那是 GH Actions 打通之后的事，见「迁移未落地清单」。
+  // ★ 灌表后的实测（用 EF 真实缓存数据）：
+  //   · EPL/Masters/2（主 slug，无 scheduledMatchesSlug）→ 本地解析 **32 场** ✅
+  //     → 证明「主页面也可能含对阵」，**不能用 scheduledMatchesSlug 是否存在来门控**
+  //       （门控会把 EPL 这类排除掉，反而错失收益最大的场景）。
+  //   · The_International/2026/Group_Stage → HIT 但 0 场 —— 页面里全是 `{{Match}}` **空占位**
+  //     （小组赛未填对阵），解析 0 场是**正确数据**而非错误。
+  //
+  // 成本评估：`fetchScheduledLocal` 会把结果（含空）写入 6h 缓存 → 多余的 EF 往返
+  //   **每个赛事每 6 小时最多一次**，可控。
+  //
+  // 顺序：本地解析（EF raw + LiquiParse，表命中时**零云开发调用**）→ 云函数 → haglund。
   function fetchLiquipediaChain() {
-    return cloudProxy.liquipediaScheduledProxy(name, force).then(function (res) {
-      var norm = normalizeScheduled(res);
-      if (norm.matches.length) {
-        console.log('[liquipedia] 赛程取到（云函数）：' + norm.matches.length + ' 场');
-        return norm;
+    return fetchScheduledLocal(slug, cacheKey).then(function (local) {
+      if (local && local.matches && local.matches.length) {
+        console.log('[liquipedia] 赛程走 EF 缓存 + 本地解析（' + local.matches.length + ' 场，零云开发）');
+        return local;
       }
-      // ★ Liquipedia 云代理返回空 → 回退 haglund 第三方源 → 最后本地
-      return tryHaglundFallback(name, force, cacheKey).then(function (hf) {
-        if (hf && hf.matches.length) {
-          console.log('[liquipedia] 赛程取到（haglund 兜底）：' + hf.matches.length + ' 场');
-          return hf;
+      // 本地无对阵（页面无 {{Match}} 或全是空占位）→ 云函数兜底
+      console.log('[liquipedia] EF 缓存未命中或无对阵 → 云函数兜底：' + name);
+      return cloudProxy.liquipediaScheduledProxy(name, force).then(function (res) {
+        var norm = normalizeScheduled(res);
+        if (norm.matches.length) {
+          console.log('[liquipedia] 赛程取到（云函数）：' + norm.matches.length + ' 场');
+          return norm;
         }
-        return fetchScheduledLocal(slug, cacheKey);
-      });
-    }).catch(function () {
-      // ★ Liquipedia 云代理失败 → 回退 haglund 第三方源 → 最后本地
-      return tryHaglundFallback(name, force, cacheKey).then(function (hf) {
-        if (hf && hf.matches.length) return hf;
-        return fetchScheduledLocal(slug, cacheKey);
+        // 云函数返回空 → haglund 第三方源
+        return tryHaglundFallback(name, force, cacheKey).then(function (hf) {
+          if (hf && hf.matches.length) {
+            console.log('[liquipedia] 赛程取到（haglund 兜底）：' + hf.matches.length + ' 场');
+            return hf;
+          }
+          console.warn('[liquipedia] 赛程三条路径均为空：' + name);
+          return { matches: [], boFormat: null };
+        });
+      }).catch(function () {
+        // 云函数失败 → haglund 第三方源
+        return tryHaglundFallback(name, force, cacheKey).then(function (hf) {
+          return (hf && hf.matches.length) ? hf : { matches: [], boFormat: null };
+        });
       });
     });
   }
