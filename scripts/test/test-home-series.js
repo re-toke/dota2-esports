@@ -255,13 +255,22 @@ function mkLp(id, sId, t1, t2, st, extra) {
     mkLp(503, 'lp_M03', 'Team E', 'Team F', now - 3600),    // 已开赛 → 排除
     mkLp(504, 'lp_M04', 'TBD', 'Team G', now + 7200)        // TBD 对手 → 排除
   ], now);
-  assert('H7: 两场 upcoming 独立成 2 个系列（已开赛/TBD 排除）', list.length === 2,
+  // ★ 2026-09-11 断言同步（原断言自 v8.29 起长期红，掩盖真回归风险）：
+  //   v8.29 把「TBD 对阵整卡过滤」改为「**保留 + 渲染 TBD**」（预选赛对阵未定是常态，
+  //   原过滤会导致「即将开始」段永远为空）→ 已开赛仍排除，**TBD 不再排除**。
+  //   故 4 条输入 = 3 个系列（A/B、C/D、TBD/G）。
+  assert('H7: 三场 upcoming 独立成 3 个系列（已开赛排除 / TBD 保留）', list.length === 3,
     '实际系列数: ' + list.length + ' -> ' + JSON.stringify(list.map(function (s) {
       return s.radiantName + ' vs ' + s.direName;
     })));
-  const s = list[0];
-  assert('H7: 映射 radiantName/direName（队名透传）', s.radiantName === 'Team A' && s.direName === 'Team B',
-    '实际: ' + s.radiantName + ' vs ' + s.direName);
+  // ★ 新增：显式守护「TBD 保留」这一行为（正是 v8.29 的意图，此前无断言覆盖）
+  assert('H7: TBD 对阵被保留（不整卡过滤）', list.some(function (x) {
+    return /TBD|TBA/i.test(String(x.radiantName) + String(x.direName));
+  }), '实际: ' + JSON.stringify(list.map(function (x) { return x.radiantName + ' vs ' + x.direName; })));
+  // 按名定位而不是依赖数组顺序（TBD 卡可能排在前）
+  const s = list.filter(function (x) { return x.radiantName === 'Team A'; })[0];
+  assert('H7: 映射 radiantName/direName（队名透传）', !!s && s.radiantName === 'Team A' && s.direName === 'Team B',
+    '实际: ' + (s ? s.radiantName + ' vs ' + s.direName : '(未找到 Team A 系列)'));
   assert('H7: phase=upcoming + isUpcoming=true', s.phase === 'upcoming' && s.isUpcoming === true,
     '实际: ' + s.phase);
   assert('H7: 比分 0:0（未开赛不显示比分）', s.scoreA === 0 && s.scoreB === 0,
@@ -271,7 +280,7 @@ function mkLp(id, sId, t1, t2, st, extra) {
     '实际: ' + JSON.stringify(s.leagueName));
   assert('H7: series key 为 lpup_ 前缀且互不相同', list.every(function (x) {
     return typeof x.key === 'string' && x.key.indexOf('lpup_') === 0;
-  }) && new Set(list.map(function (x) { return x.key; })).size === 2,
+  }) && new Set(list.map(function (x) { return x.key; })).size === 3,
     '实际键: ' + list.map(function (x) { return x.key; }).join(','));
 })();
 
@@ -299,9 +308,10 @@ function mkLp(id, sId, t1, t2, st, extra) {
   assert('H7b: 全部已开赛 → []', sources.buildLpUpcomingSeries([
     mkLp(601, 'lp_X1', 'Team F', 'Team G', now - 120)
   ], now).length === 0, '');
-  assert('H7b: 全部 TBD → []', sources.buildLpUpcomingSeries([
+  // ★ 2026-09-11 断言同步：v8.29 起 TBD 对阵**保留**（不再整卡过滤）→ 期望 1 个而非 0 个
+  assert('H7b: 全部 TBD → 保留 1 个（v8.29 起不整卡过滤）', sources.buildLpUpcomingSeries([
     mkLp(602, 'lp_X2', 'TBA', 'Team H', now + 3600)
-  ], now).length === 0, '');
+  ], now).length === 1, '');
 })();
 
 // H7d（v5.1 ⑥ 源块）：applyBo 权威覆盖 —— Steam 风格「仅 series_type 无 boType」

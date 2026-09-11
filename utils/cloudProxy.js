@@ -123,6 +123,9 @@ function call(action, params, extra) {
   if (efName && _sbEfAvailable()) {
     var sbPayload = { action: action, params: params || {} };
     if (extra && typeof extra === 'object' && extra.force != null) sbPayload.force = !!extra.force;
+    // ★ 2026-09-11（LP 服务迁 EF）：cacheOnly 透传 —— 让 EF「未命中立即返回」，
+    //   客户端据此实现「EF 缓存优先 → 未命中回落云函数」而不用付 7s 的 429 超时。
+    if (extra && typeof extra === 'object' && extra.cacheOnly != null) sbPayload.cacheOnly = !!extra.cacheOnly;
 
     // ★ v8.31：热缓存秒回（非 force 请求）
     var _force = !!(extra && extra.force);
@@ -287,21 +290,28 @@ proxy.liquipediaTeamLogoProxy = function (teamName) {
   return call('liquipediaTeamLogo', { teamName: teamName });
 };
 
-// §9 Liquipedia 赛事主动枚举云代理（2026-07-30）：
-// 调云函数 action=liquipediaListTournaments，云端用 categorymembers API 分页枚举
-// Category:Tournaments 下全量赛事页面（仅页面标题，不抓 HTML，符合 Liquipedia API 条款）。
-// 返回 [{ slug, title }] 或 reject（由调用方 catch 降级为空数组）。
-// 云端缓存 7 天 + 月度主动刷新，降频降低 Liquipedia 负载。
-proxy.liquipediaListTournamentsProxy = function () {
-  return call('liquipediaListTournaments', {});
-};
-
+// ★ 2026-09-11（LP 服务迁 EF · 清理）：`liquipediaListTournamentsProxy` 已删除。
+//   原因：其唯一调用方 `listAllTournaments` 已于 O-11（2026-08-15）移除，
+//   此后 **0 业务引用** —— 属死代码。对应云函数 action 亦无客户端调用。
+//   （云函数侧 action 未删，避免影响服务端定时任务；如需彻底清理可另行处理。）
 // §9 P1（2026-07-30）Liquipedia raw wikitext 代理抓取
 // 调云函数 action=liquipediaFetchRawWikitext，返回 { wikitext: string }。
 // 用于 getTeamRoster/getPlayerProfile 等客户端本地解析的场景，
 // 云函数侧仅做合规抓取（设 UA+gzip），不解析，减少云函数负担。
-proxy.liquipediaFetchRawWikitextProxy = function (pageName) {
-  return call('liquipediaFetchRawWikitext', { pageName: pageName });
+// ★ 2026-09-11：新增 cacheOnly 参数。
+//   cacheOnly=true → EF 仅查 `lp:w:*` 表，未命中**立即**返回 null（不尝试现抓 LP）。
+//   用途：客户端「EF 缓存优先」策略 —— 命中走快路径，未命中立刻回落云函数。
+// ★ 2026-09-11：**强制走云函数**的 LP raw 抓取 —— 用于「EF 缓存未命中」时的显式回落。
+//   为什么需要单独入口：`call()` 只在 EF **抛错**时才回落云开发；而 cacheOnly 未命中时
+//   EF 返回的是 `{data:null}`（正常响应，不抛错）→ 不会自动回落，故需显式调用。
+//   云函数是**唯一能现抓 LP 的出口**（WeChat 出口可访问；Supabase 出口被 429）。
+proxy.liquipediaFetchRawWikitextCloud = function (pageName) {
+  return callCloud('liquipediaFetchRawWikitext', { pageName: pageName });
+};
+
+proxy.liquipediaFetchRawWikitextProxy = function (pageName, cacheOnly) {
+  return call('liquipediaFetchRawWikitext', { pageName: pageName },
+              cacheOnly ? { cacheOnly: true } : null);
 };
 
 // P0-3③（2026-09-01）：赛事详情页聚合 bundle —— 一次 callFunction 返回

@@ -219,21 +219,52 @@ function attempt(params, retryCount) {
 // 禁设 UA 的限制），失败回退本地 wx.request。
 // 所有基于 fetchPageWikitext 的方法（getTeamRoster / getPlayerProfile / 等）自动受益。
 
+// ★ 2026-09-11：**会话级「EF 表已知未命中」备忘**。
+//   背景：EF cacheOnly 未命中虽已比现抓快得多（实测 707ms vs 2044~7262ms），
+//   但每次冷查仍要付这 0.7s。而同一会话内反复查同一个未收录页面毫无意义
+//   （表由 GH Actions 每日灌，会话期间不会变）→ 记住它直接跳过 EF，省掉这笔开销。
+var _efMissMemo = {};
+var EF_MISS_MEMO_MAX = 200;   // 简单容量上限，防无限增长
+
 function fetchPageWikitext(pageName) {
   if (!pageName) return Promise.resolve(null);
+  var knownMiss = !!_efMissMemo[pageName];
 
   // 云代理优先：通过云函数（got + UA + redirects:1）代理抓取 raw wikitext，
   // 规避 wx.request 禁设 User-Agent 的限制（Liquipedia 要求合规 UA 才返回数据）。
   // 仅当 wx.cloud 存在且熔断器放行时才走云代理；测试/纯本地环境下回退本地。
   if (typeof wx !== 'undefined' && wx.cloud && (cloudProxy.isAvailable() || cloudProxy.efAvailable())) {
-    return cloudProxy.liquipediaFetchRawWikitextProxy(pageName).then(function (remote) {
+    // ★★ 2026-09-11（LP 服务迁 EF · 第一步）：原实现直接调 EF（非 cacheOnly）——
+    //   未命中时 EF 会去现抓 LP，而 Supabase 出口被持续 429 → **白等约 7s 才失败**。
+    //   现改为三级链路：
+    //     ① EF **cacheOnly**（命中 `lp:w:*` 表 → 立即返回，**零云开发调用**）
+    //     ② 未命中 → **云函数** raw 抓取（唯一能现抓 LP 的出口，可靠）
+    //     ③ 云函数也失败 → 本地 wx.request（开发态兜底；真机必被 LP 拦）
+    //   → 热门/已知赛事走快路径；冷门赛事由云函数兜底，且**整体比原来更快**
+    //     （原来无论命中与否都要先等 EF 的 7s 超时）。
+    // 已知未命中 → 跳过 EF，直接走云函数（省掉 0.7s）
+    if (knownMiss) return _viaCloudFn(pageName);
+
+    return cloudProxy.liquipediaFetchRawWikitextProxy(pageName, true).then(function (remote) {
       if (remote && remote.wikitext) return remote.wikitext;
-      return fetchPageWikitextLocal(pageName);
+      // 记住这次未命中（会话内不再重试 EF），随后显式回落云函数
+      if (Object.keys(_efMissMemo).length < EF_MISS_MEMO_MAX) _efMissMemo[pageName] = 1;
+      return _viaCloudFn(pageName);
     }).catch(function () {
-      return fetchPageWikitextLocal(pageName);
+      return _viaCloudFn(pageName);
     });
   }
   return fetchPageWikitextLocal(pageName);
+}
+
+/** EF 未命中时的显式回落：云函数 raw 抓取（唯一能现抓 LP 的可靠出口）→ 本地兜底 */
+function _viaCloudFn(pageName) {
+  return cloudProxy.liquipediaFetchRawWikitextCloud(pageName).then(function (c) {
+    if (c && c.wikitext) return c.wikitext;
+    return fetchPageWikitextLocal(pageName);
+  }).catch(function () {
+    return fetchPageWikitextLocal(pageName);
+  });
 }
 
 // 本地抓取（wx.request 路径，云代理不可用/失败时兜底）
@@ -542,22 +573,39 @@ function getScheduledMatches(name, opts) {
   //   若 Steam 命中后短路返回，UPCOMING 段永远拿不到数据。
   //   新策略：Steam 与 Liquipedia/haglund 并行拉取 → 按 phase 合并（Steam 补 LIVE，haglund 补 UPCOMING）。
   //   phase 区分由 sources.groupLiquipediaMatches / buildSeriesFromSources 下游天然处理。
+  // ★★ 2026-09-11（LP 服务迁 EF · 第二步）：**本地解析优先**，云函数降为兜底。
+  //
+  // 原顺序：云函数（服务端抓+解析）→ haglund → fetchScheduledLocal（EF raw + 本地解析）
+  // 新顺序：fetchScheduledLocal（EF raw + 本地解析）→ 云函数 → haglund
+  //
+  // 为什么换序（这是「LP 服务迁 EF」的核心一步）：
+  //   · fetchScheduledLocal 走 fetchPageWikitext 的三级链路 —— **EF `lp:w:*` 表命中时
+  //     完全不需要云开发**（本地解析零跨网），直接达成「数据面走 Supabase」；
+  //   · 未命中时它内部会自动回落云函数 raw 抓取，**可靠性不变**（仍有 Cloud fn 兜底）；
+  //   · 解析逻辑是 `LiquiParse.parseScheduledMatches` —— 与云函数**同源镜像**
+  //     （G14 双源测试覆盖），数据口径一致。
+  //
+  // 收益：热门/已知赛事（GH Actions 灌过表的）**不再消耗云开发调用**，
+  //       且少了「服务端解析 + 回传」一趟，首屏更快；冷门赛事行为与原来一致。
   function fetchLiquipediaChain() {
-    return cloudProxy.liquipediaScheduledProxy(name, force).then(function (res) {
-      var norm = normalizeScheduled(res);
-      if (norm.matches.length) {
-        return norm;
+    return fetchScheduledLocal(slug, cacheKey).then(function (local) {
+      if (local && local.matches && local.matches.length) {
+        console.log('[liquipedia] 赛程走 EF 缓存 + 本地解析（' + local.matches.length + ' 场，零云开发）');
+        return local;
       }
-      // ★ Liquipedia 云代理返回空 → 回退 haglund 第三方源
-      return tryHaglundFallback(name, force, cacheKey).then(function (hf) {
-        if (hf && hf.matches.length) return hf;
-        return fetchScheduledLocal(slug, cacheKey);
-      });
-    }).catch(function () {
-      // ★ Liquipedia 云代理失败 → 回退 haglund 第三方源
-      return tryHaglundFallback(name, force, cacheKey).then(function (hf) {
-        if (hf && hf.matches.length) return hf;
-        return fetchScheduledLocal(slug, cacheKey);
+      // ① 本地不可得 → 云函数（服务端抓 + 解析；有 30s 节流与服务端缓存）
+      return cloudProxy.liquipediaScheduledProxy(name, force).then(function (res) {
+        var norm = normalizeScheduled(res);
+        if (norm.matches.length) return norm;
+        // ② 云函数返回空 → haglund 第三方源
+        return tryHaglundFallback(name, force, cacheKey).then(function (hf) {
+          return (hf && hf.matches.length) ? hf : { matches: [], boFormat: null };
+        });
+      }).catch(function () {
+        // ③ 云函数失败 → haglund 第三方源
+        return tryHaglundFallback(name, force, cacheKey).then(function (hf) {
+          return (hf && hf.matches.length) ? hf : { matches: [], boFormat: null };
+        });
       });
     });
   }

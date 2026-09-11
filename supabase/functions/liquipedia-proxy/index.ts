@@ -134,6 +134,8 @@ async function handle(body: any): Promise<any> {
   const action = body.action;
   const params = body.params || {};
   const force = !!body.force;
+  // ★ 2026-09-11：cacheOnly 支持顶层与 params 两种传法（客户端走顶层，便于统一透传）
+  const cacheOnly = !!(body.cacheOnly || params.cacheOnly);
 
   if (action === "liquipediaFetchRawWikitext") {
     const pageName = params.pageName || params.name || null;
@@ -148,6 +150,17 @@ async function handle(body: any): Promise<any> {
     //   （写入时不过滤过期、读取时也不过滤 → 本会永久污染）。不可用则视为 miss，继续走现抓。
     if (isUsableWikitext(cached)) return { data: { wikitext: cached }, source: "cache" };
     if (cached) console.warn("[liquipedia] 缓存内容不可用，按 miss 处理: " + cacheKey);
+
+    // ★★ 2026-09-11（LP 服务迁 EF 第一步）：cacheOnly —— 未命中**立即返回**，不尝试现抓。
+    //
+    // 为什么需要：Supabase 出口抓 LP 被**持续 429**（共享 IP 限流），现抓必然失败且要等约 7s。
+    //   这 7s 让「EF 缓存优先」策略变得毫无价值 —— 未命中时反而比直接走云函数更慢。
+    //   加上本参数后：未命中 <100ms 返回，客户端可安全地「EF 缓存优先 → 未命中回落云函数」：
+    //     · 热门/已知赛事（GH Actions 已灌表）→ 走 EF 快路径，零云开发调用
+    //     · 冷门/新赛事 → 立即回落云函数（可靠的 LP 出口），无额外延迟
+    //   → 这是**不依赖 GitHub 打通**就能拿到的收益，且零回归风险。
+    if (cacheOnly) return { data: null, source: "cache-miss", cacheOnly: true };
+
     const wikitext = await fetchWikitext(slug);
     if (!wikitext) return { data: null, source: "liquipedia" };
     await setCache(cacheKey, wikitext, SCHEDULE_TTL_MS);
