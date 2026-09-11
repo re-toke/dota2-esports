@@ -339,7 +339,8 @@ const CURATED_EVENTS = [
   // 日期为 UTC，与 Liquipedia 公布一致；时间以 Liquipedia 为准，此处用于"即将到来"判定。
   // PGL Wallachia Season 9：9月17-27日，布加勒斯特，$1,000,000
   { canonical: 'PGL Wallachia Season 9', tier: { grade: 'S', rank: 3, label: 'S级' },
-    aliases: ['pglwallachiaseason9', 'pglwallachia9', 'wallachia2026', 'pglwallachia2026'], year: 2026,
+    aliases: ['pglwallachiaseason9', 'pglwallachia9', 'wallachia2026', 'pglwallachia2026',
+             'wallachia season 9', 'pgl wallachia s9'], year: 2026,
     start: 1789603200, end: 1790467200,
     prizePool: '$1,000,000', organizer: 'PGL', region: '罗马尼亚·布加勒斯特', format: '双败淘汰',
     participants: 16, status: '即将到来', liquipediaSlug: 'PGL/Wallachia/9',
@@ -596,12 +597,10 @@ const CURATED_EVENTS = [
     start: Math.floor(Date.UTC(2026, 8, 12) / 1000),
     end: Math.floor(Date.UTC(2026, 8, 13, 23, 59, 59) / 1000),
     liquipediaSlug: 'BLAST/SLAM/9/Southeast Asia' },
-  { canonical: 'PGL Wallachia Season 9', tier: { grade: 'S', rank: 3, label: 'S级' },
-    aliases: ['pgl wallachia 9', 'wallachia season 9', 'pgl wallachia s9'],
-    year: 2026,
-    start: Math.floor(Date.UTC(2026, 8, 17) / 1000),
-    end: Math.floor(Date.UTC(2026, 8, 27, 23, 59, 59) / 1000),
-    liquipediaSlug: 'PGL/Wallachia/Season_9' },
+  // ★ 2026-09-11：此处原有一条重复的「PGL Wallachia Season 9」条目
+  //   （liquipediaSlug 误写为 'PGL/Wallachia/Season_9'，LP 上不存在该页 → 实测 MISS）。
+  //   与上方 L341 正确条目（'PGL/Wallachia/9'）冲突，且重复注册 lookup 会让错误 slug 覆盖正确值
+  //   → 已删除，独有别名并入上方条目。这就是 PGL Wallachia 赛程走 EF 失败、只能云函数兜底的根因。
   { canonical: 'BLAST SLAM IX China Closed Qualifier', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['blast slam ix china qualifier', 'blast slam 9 china'],
     year: 2026,

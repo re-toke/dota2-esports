@@ -226,8 +226,27 @@ function attempt(params, retryCount) {
 var _efMissMemo = {};
 var EF_MISS_MEMO_MAX = 200;   // 简单容量上限，防无限增长
 
+// ★ 2026-09-11：**会话级 wikitext 备忘（10min TTL）**。
+//   动机：同一页面的 wikitext 会被多个功能消费（元数据/等级/赛制/参赛队/结构），
+//   原实现每次都重新打 EF（即使刚取过）。加 memo 后 getLeagueMetadata + getLeagueTier
+//   这类「同页多解析」组合只打一次 EF（实测 2 → 1）。
+//   10min TTL：LP 更新低频，10min 内复用安全；容量上限防内存膨胀。
+var _wtMemo = {};
+var WT_MEMO_TTL = 10 * 60 * 1000;
+var WT_MEMO_MAX = 300;
+
+function _wtRemember(pageName, wikitext) {
+  if (wikitext) {
+    if (Object.keys(_wtMemo).length >= WT_MEMO_MAX) _wtMemo = {};
+    _wtMemo[pageName] = { wikitext: wikitext, ts: Date.now() };
+  }
+  return wikitext;
+}
+
 function fetchPageWikitext(pageName) {
   if (!pageName) return Promise.resolve(null);
+  var memo = _wtMemo[pageName];
+  if (memo && Date.now() - memo.ts < WT_MEMO_TTL) return Promise.resolve(memo.wikitext);
   var knownMiss = !!_efMissMemo[pageName];
 
   // 云代理优先：通过云函数（got + UA + redirects:1）代理抓取 raw wikitext，
@@ -243,18 +262,18 @@ function fetchPageWikitext(pageName) {
     //   → 热门/已知赛事走快路径；冷门赛事由云函数兜底，且**整体比原来更快**
     //     （原来无论命中与否都要先等 EF 的 7s 超时）。
     // 已知未命中 → 跳过 EF，直接走云函数（省掉 0.7s）
-    if (knownMiss) return _viaCloudFn(pageName);
+    if (knownMiss) return _viaCloudFn(pageName).then(function (w) { return _wtRemember(pageName, w); });
 
     return cloudProxy.liquipediaFetchRawWikitextProxy(pageName, true).then(function (remote) {
-      if (remote && remote.wikitext) return remote.wikitext;
+      if (remote && remote.wikitext) return _wtRemember(pageName, remote.wikitext);
       // 记住这次未命中（会话内不再重试 EF），随后显式回落云函数
       if (Object.keys(_efMissMemo).length < EF_MISS_MEMO_MAX) _efMissMemo[pageName] = 1;
-      return _viaCloudFn(pageName);
+      return _viaCloudFn(pageName).then(function (w) { return _wtRemember(pageName, w); });
     }).catch(function () {
-      return _viaCloudFn(pageName);
+      return _viaCloudFn(pageName).then(function (w) { return _wtRemember(pageName, w); });
     });
   }
-  return fetchPageWikitextLocal(pageName);
+  return fetchPageWikitextLocal(pageName).then(function (w) { return _wtRemember(pageName, w); });
 }
 
 /** EF 未命中时的显式回落：云函数 raw 抓取（唯一能现抓 LP 的可靠出口）→ 本地兜底 */
@@ -323,30 +342,47 @@ function getLeagueMetadata(name) {
   var cached = cache.get(cacheKey, CACHE_TTL);
   if (cached) return Promise.resolve(cached);
 
-  // 云代理优先：通过云函数（Node.js 环境，可自由设置 User-Agent + gzip）代理 Liquipedia 请求，
-  // 规避 wx.request 禁止设置 User-Agent 的限制（Liquipedia 官方强制要求描述性 UA）。
-  // 仅当 wx.cloud 存在且熔断器放行时才走云代理；测试 / 纯本地环境下 wx.cloud 未定义 → 走本地回退。
+  // ★ 2026-09-11（LP 服务迁 EF · 第三步）：**本地解析优先**，云函数降为兜底。
+  //   原顺序：云函数 liquipediaLeagueMeta（服务端抓+解析）→ 本地。
+  //   现 fetchPageWikitext 已是三级链路（EF 缓存命中 → 零云开发），且本地解析
+  //   已补齐 liquipediaTier（见 fetchAndParseLeague）→ 与云函数产出字段对齐。
+  //   本地无 wikitext / 解析失败时回落云函数，可靠性不变。
   if (typeof wx !== 'undefined' && wx.cloud && (cloudProxy.isAvailable() || cloudProxy.efAvailable())) {
-    return cloudProxy.liquipediaProxy(name).then(function (remote) {
-      if (remote) {
-        cache.set(cacheKey, remote, CACHE_TTL);
-        return remote;
+    return fetchAndParseLeague(slug, cacheKey, name).then(function (local) {
+      if (local) {
+        console.log('[liquipedia] 元数据走 EF 缓存 + 本地解析（' + (local.canonical || name) + '）');
+        return local;
       }
-      // 云代理无结果（如页面不存在）→ 回退本地 wx.request（兜底，一般不会走到）
-      return fetchAndParseLeague(slug, cacheKey, name);
-    }).catch(function () {
-      return fetchAndParseLeague(slug, cacheKey, name);
+      return cloudProxy.liquipediaProxy(name).then(function (remote) {
+        if (remote) {
+          cache.set(cacheKey, remote, CACHE_TTL);
+          return remote;
+        }
+        return null;
+      }).catch(function () { return null; });
     });
   }
   return fetchAndParseLeague(name, cacheKey);
 }
 
 // 本地抓取 + 解析（wx.request 路径，云代理不可用时兜底）
+// ★ 2026-09-11（LP 服务迁 EF · 第三步）：本地路径补齐 `liquipediaTier` ——
+//   原本地解析只有 parseLeagueMetadata（不含 tier），导致 getLeagueTier 必须依赖
+//   云函数返回的 meta.liquipediaTier。现用 parseLeagueTier 合并（注意其返回
+//   `{ tier: num }` 对象，需取 `.tier` 数字与云函数口径一致），
+//   使「元数据 + 等级」都能走 EF 缓存 + 本地解析（零云开发）。
 function fetchAndParseLeague(slug, cacheKey, fallbackName) {
   return fetchPageWikitext(slug).then(function (wikitext) {
     if (!wikitext) return null;
     var meta = LiquiParse.parseLeagueMetadata(wikitext, fallbackName || slug);
-    if (meta) cache.set(cacheKey, meta, CACHE_TTL);
+    if (!meta) return null;
+    if (meta.liquipediaTier == null) {
+      try {
+        var t = LiquiParse.parseLeagueTier(wikitext);
+        if (t && t.tier != null) meta.liquipediaTier = t.tier;
+      } catch (e) { /* tier 解析失败不影响元数据 */ }
+    }
+    cache.set(cacheKey, meta, CACHE_TTL);
     return meta;
   }).catch(function () { return null; });
 }

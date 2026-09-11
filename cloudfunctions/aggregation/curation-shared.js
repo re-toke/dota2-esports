@@ -5,9 +5,9 @@
 // cannot load .json directly).
 module.exports = {
   "version": 3,
-  "generatedAt": "2026-08-31T08:11:20.313Z",
+  "generatedAt": "2026-09-11T07:24:21.964Z",
   "source": "utils/curation.js#CURATED_EVENTS",
-  "eventCount": 251,
+  "eventCount": 271,
   "map": {
     "theinternational2025": "The International 2025",
     "ti2025": "The International 2025",
@@ -91,6 +91,8 @@ module.exports = {
     "pglwallachia9": "PGL Wallachia Season 9",
     "wallachia2026": "PGL Wallachia Season 9",
     "pglwallachia2026": "PGL Wallachia Season 9",
+    "wallachiaseason9": "PGL Wallachia Season 9",
+    "pglwallachias9": "PGL Wallachia Season 9",
     "blastslamviii": "BLAST SLAM VIII",
     "blastslam8": "BLAST SLAM VIII",
     "blastslam2026viii": "BLAST SLAM VIII",
@@ -201,7 +203,15 @@ module.exports = {
     "gamesofthefuture2026": "Games of the Future 2026",
     "gamesofthefuture": "Games of the Future 2026",
     "future2026": "Games of the Future 2026",
-    "gotf2026": "Games of the Future 2026"
+    "gotf2026": "Games of the Future 2026",
+    "resunchained6europe": "RES Unchained 6: BLAST SLAM IX Europe Closed Qualifier",
+    "blastslamixeuropequalifier": "RES Unchained 6: BLAST SLAM IX Europe Closed Qualifier",
+    "resunchainedblastslamixeurope": "RES Unchained 6: BLAST SLAM IX Europe Closed Qualifier",
+    "blastslamixsoutheastasiaqualifier": "RES Unchained 6: BLAST SLAM IX Southeast Asia Closed Qualifier",
+    "resunchainedblastslamixsea": "RES Unchained 6: BLAST SLAM IX Southeast Asia Closed Qualifier",
+    "blastslamixchinaqualifier": "BLAST SLAM IX China Closed Qualifier",
+    "blastslam9china": "BLAST SLAM IX China Closed Qualifier",
+    "esportsnationscup": "Esports Nations Cup 2026"
   },
   "leagueIdMap": {
     "19719": "The International 2026",
@@ -209,5 +219,5 @@ module.exports = {
     "20142": "RES Unchained 5: BLAST SLAM VIII Europe Qualifier",
     "20143": "RES Unchained 5: BLAST SLAM VIII SEA Qualifier"
   },
-  "dataVersion": "1788163880311"
+  "dataVersion": "1789111461956"
 };
