@@ -10,10 +10,12 @@
 //   SUPABASE_URL        https://gkticzdaicpdtxheyxsd.supabase.co
 //   SUPABASE_SERVICE_KEY  service_role key（Dashboard → Settings → API）
 //
-// 数据范围：slugmap 全量（178 条，每日 2 次足够——赛程低频变化）
+// 数据范围：slugmap 主 slug ∪ curation 的 scheduledMatchesSlug/structureSlug/liquipediaSlug
+//           （2026-09-11 扩展：原仅主 slug，导致**赛程对阵页不在表内** → 赛程无法命中 EF）
 // 写入表：  aggregation_cache（key=lp:w:<slug>, TTL 26h——比 24h 陈旧阈值略长）
 //
 // 本地测试：SUPABASE_URL=... SUPABASE_SERVICE_KEY=... node scripts/sync-liquipedia-cache.js
+// 查看范围：node scripts/sync-liquipedia-cache.js --list（不发请求，无需凭证）
 // ============================================================
 const https = require('https');
 const zlib = require('zlib');
@@ -25,14 +27,55 @@ const LP_UA = 'DOTA2-Esports-Hub/1.0 (WeChat Mini Program; contact: dev@local)';
 const RATE_LIMIT_MS = 2200;
 const TTL_SEC = 26 * 3600;
 
+const slugmap = require('./../cloudfunctions/aggregation/liquipedia-slugmap.json');
+
+// ★★ 2026-09-11（关键修复）：抓取范围扩展 —— 原有范围**无法让赛程命中**。
+//
+// 问题（实测确认）：
+//   · 原范围 = slugmap 的 178 条**赛事主页面** slug（如 `EPL/Masters/2`）；
+//   · 但 `getScheduledMatches` 用的 slug 来自 curation 的 `scheduledMatchesSlug`
+//     （如 `The_International/2026/Group_Stage`）—— **对阵在子页面**；
+//   · 且主页面本就不含 `{{Match}}` 模板（实测本地解析主页面 → 0 场）。
+//   → 表里没有对阵页 ⇒ 赛程**永远不可能**从 EF 命中（无论客户端怎么调优先级）。
+//
+// 修复：并入 curation 的 `scheduledMatchesSlug` / `structureSlug` / `liquipediaSlug`。
+//   前者是对阵页（含 {{Match}}），中者是小组积分/淘汰赛结构页（{{GroupTableLeague}}/{{Bracket}}），
+//   后者补齐 slugmap 未覆盖的历史赛事主页。
+//   `utils/curation.js` 零 wx 依赖 → 可在 Node/GH Actions 直接 require。
+const curation = require('./../utils/curation.js');
+
+const baseSlugs = Object.values(slugmap.mappings || {});
+const curatedSlugs = [];
+(curation.CURATED_EVENTS || []).forEach((ev) => {
+  if (!ev) return;
+  ['scheduledMatchesSlug', 'structureSlug', 'liquipediaSlug'].forEach((f) => {
+    if (typeof ev[f] === 'string' && ev[f]) curatedSlugs.push(ev[f]);
+  });
+});
+
+// 注意：slugmap 的值与 curation 的 slug 均为 LP 页面标题形态（下划线分隔、含 `/`），
+// 与 EF 侧 `slugFor()` 的产出、以及缓存 key `lp:w:<slug>` 完全同口径 —— 不可做任何归一化改写，
+// 否则 EF 会查不到（这是 v8.21「斜杠保留」修过的同一类坑）。
+const slugs = Array.from(new Set(baseSlugs.concat(curatedSlugs)));
+
+console.log('抓取范围：slugmap 主 slug', baseSlugs.length,
+            '+ curation 子页面/补充 slug', curatedSlugs.length,
+            '→ 去重后', slugs.length, '条');
+
+// ★ 2026-09-11：`--list` 只打印抓取范围后退出（不发请求、不需要 Supabase 凭证）。
+//   用途：核对「扩展后到底会灌哪些 slug」——尤其确认对阵子页面在列，
+//   无需真的跑一遍约 8 分钟的同步。
+if (process.argv.indexOf('--list') >= 0) {
+  console.log('--- 明细 ---');
+  slugs.forEach((x, i) => console.log(String(i + 1).padStart(4) + '. ' + x));
+  process.exit(0);
+}
+
+// ※ 环境变量校验放在 --list 之后：查看抓取范围无需 Supabase 凭证
 if (!SUPABASE_URL || !SERVICE_KEY) {
   console.error('缺少 SUPABASE_URL / SUPABASE_SERVICE_KEY 环境变量');
   process.exit(1);
 }
-
-const slugmap = require('./../cloudfunctions/aggregation/liquipedia-slugmap.json');
-const slugs = Array.from(new Set(Object.values(slugmap.mappings || {})));
-console.log('待同步 slug 数:', slugs.length);
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -95,7 +138,7 @@ async function lpFetch(slug) {
 
 (async () => {
   // ★ v8.21 启动横幅：确认执行的是修复版（斜杠保留 + 退避）
-  console.log('=== sync v8.21（斜杠保留版）启动 | slugs:', slugs.length, '| UA:', LP_UA.slice(0, 40) + '... ===');
+  console.log('=== sync v8.22（含 curation 对阵子页面）启动 | slugs:', slugs.length, '| UA:', LP_UA.slice(0, 40) + '... ===');
   let ok = 0, fail = 0, empty = 0, consecFail = 0;
   const t0 = Date.now();
   for (const slug of slugs) {
