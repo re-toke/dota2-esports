@@ -136,7 +136,43 @@ async function lpFetch(slug) {
   return (p && p.revisions && p.revisions[0] && p.revisions[0]['*']) || null;
 }
 
+// ★★ 2026-09-11：**key 角色自检** —— service_role 与 anon 都是 JWT（eyJ 开头），肉眼难辨。
+//   解开 payload 看 `role` 字段：service_role 才能写（RLS 只给了 anon 只读策略）。
+function keyRole(key) {
+  try {
+    const part = String(key).split('.')[1];
+    if (!part) return '(非 JWT)';
+    const json = JSON.parse(Buffer.from(part, 'base64').toString('utf8'));
+    return json.role || '(payload 无 role)';
+  } catch (e) { return '(解码失败)'; }
+}
+
 (async () => {
+  console.log('key 角色:', keyRole(SERVICE_KEY),
+              keyRole(SERVICE_KEY) === 'service_role' ? '✅' : '⚠️（不是 service_role，写入必被 RLS 拒）');
+
+  // ★★ 金丝雀预检：先写一条测试 key，**被拒就立刻退出** ——
+  //   否则会像上次那样空耗 8 分钟、209 条全部失败。
+  //   （aggregation_cache 开了 RLS 且只给 anon 只读策略 → anon key 写入必被 403 拒）
+  console.log('金丝雀预检（lp:sync:canary，TTL 1h）...');
+  try {
+    await upsertCache('lp:sync:canary', { t: Date.now(), note: 'sync canary' });
+    console.log('✅ 写入通过，凭证有效');
+  } catch (e) {
+    console.error('');
+    console.error('❌ 写库预检失败：' + e.message);
+    console.error('');
+    console.error('诊断：');
+    console.error('  · 401/403 → **用的是 anon key**。`aggregation_cache` 开了 RLS，');
+    console.error('    只有一条「anon 只读」策略，**没有任何写入策略** —— 只有 service_role 能写。');
+    console.error('    到 Supabase Dashboard → Settings → API → 取「service_role」那一栏（不是 anon/public）。');
+    console.error('  · 400 PGRST… → 列不匹配（本脚本写 key/payload/expire_at/updated_at，与建表一致，不应发生）。');
+    console.error('');
+    console.error('可用下面命令核对你手里 key 的角色（把 <key> 换成粘贴内容，含引号不要带）：');
+    console.error("  node -e \"console.log(JSON.parse(Buffer.from(process.argv[1].split('.')[1],'base64').toString()).role)\" <key>");
+    process.exit(2);
+  }
+
   // ★ v8.21 启动横幅：确认执行的是修复版（斜杠保留 + 退避）
   console.log('=== sync v8.22（含 curation 对阵子页面）启动 | slugs:', slugs.length, '| UA:', LP_UA.slice(0, 40) + '... ===');
   let ok = 0, fail = 0, empty = 0, consecFail = 0;
