@@ -18,3 +18,8 @@ scripts/export/
 
 # 开发者工具预览二维码（临时产物，约 25 分钟过期）
 preview-*.png
+
+# ★ 本机密钥（2026-09-11 加固，推 GitHub 前必加）
+.secrets.local.json
+admin/.env
+.env

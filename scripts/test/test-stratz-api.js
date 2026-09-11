@@ -3,7 +3,13 @@
 
 const https = require('https');
 
-const API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJTdWJqZWN0IjoiZDlkZjAzNGQtMDdlYy00ZGUzLTkzYTktZGJhYmFhYTc3OWFhIiwiU3RlYW1JZCI6IjE3NzUzNzU0MCIsIkFQSVVzZXIiOiJ0cnVlIiwibmJmIjoxNzg0NjMxMDA2LCJleHAiOjE4MTYxNjcwMDYsImlhdCI6MTc4NDYzMTAwNiwiaXNzIjoiaHR0cHM6Ly9hcGkuc3RyYXR6LmNvbSJ9.ic7GBS5tAVm0VCgYP_1ZUSskpj5piSyaDwZLq2pbE3g';
+// ★ 2026-09-11（脱敏）：原硬编码 STRATZ token —— 推 GitHub 即泄露个人凭证，改为本地密钥文件/env。
+const LOCAL_SECRETS = require('./load-local-secrets.js');
+const API_KEY = process.env.STRATZ_API_KEY || LOCAL_SECRETS.STRATZ_API_KEY || '';
+if (!API_KEY) {
+  console.log('跳过：未配置 STRATZ_API_KEY（本机无 .secrets.local.json / 环境变量）');
+  process.exit(0);
+}
 const BASE = 'https://api.stratz.com/graphql';
 
 function gql(query, variables) {

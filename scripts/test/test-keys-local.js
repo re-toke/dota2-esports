@@ -1,7 +1,7 @@
 // scripts/test-keys-local.js
 // 本地直连 STRATZ + Steam API 测试 key 有效性
 // 使用方法：
-//   1. 把下方 STRATZ_KEY 和 STEAM_KEY 替换为你申请的 key
+//   1. 把下方 API_KEY 和 STEAM_KEY 替换为你申请的 key
 //   2. 在终端运行：node scripts/test-keys-local.js
 //
 // 作用：区分「key 本身无效」还是「云函数 IP 被屏蔽」
@@ -12,7 +12,13 @@ const https = require('https');
 const http = require('http');
 
 // ★★★ 把下面两个 key 替换为你申请的 key ★★★
-const STRATZ_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJTdWJqZWN0IjoiZDlkZjAzNGQtMDdlYy00ZGUzLTkzYTktZGJhYmFhYTc3OWFhIiwiU3RlYW1JZCI6IjE3NzUzNzU0MCIsIkFQSVVzZXIiOiJ0cnVlIiwibmJmIjoxNzg1Mzg1OTkzLCJleHAiOjE4MTY5MjE5OTMsImlhdCI6MTc4NTM4NTk5MywiaXNzIjoiaHR0cHM6Ly9hcGkuc3RyYXR6LmNvbSJ9.ceNiC7jiZlwU1oGmf9_GfQEaLD41sOVpx9-IhiJvosw';
+// ★ 2026-09-11（脱敏）：原硬编码 STRATZ token —— 推 GitHub 即泄露个人凭证，改为本地密钥文件/env。
+const LOCAL_SECRETS = require('./load-local-secrets.js');
+const API_KEY = process.env.STRATZ_API_KEY || LOCAL_SECRETS.STRATZ_API_KEY || '';
+if (!API_KEY) {
+  console.log('跳过：未配置 STRATZ_API_KEY（本机无 .secrets.local.json / 环境变量）');
+  process.exit(0);
+}
 const STEAM_KEY = 'E1D15F00CCE474FC2539B47E44A322E1';
 // ★★★★★★★★★★★★★★★★★★★★★★★★★★★
 
@@ -54,17 +60,17 @@ function httpsPost(url, headers, body) {
 
 async function testStratz() {
   console.log('====== 测试 1: STRATZ_API_KEY 本地直连 ======');
-  console.log('Key 前 30 字符:', STRATZ_KEY.slice(0, 30) + '...');
-  console.log('Key 总长度:', STRATZ_KEY.length, '字符');
+  console.log('Key 前 30 字符:', API_KEY.slice(0, 30) + '...');
+  console.log('Key 总长度:', API_KEY.length, '字符');
   console.log('');
 
-  if (STRATZ_KEY === '在此粘贴你的 STRATZ key' || !STRATZ_KEY) {
+  if (API_KEY === '在此粘贴你的 STRATZ key' || !API_KEY) {
     console.log('⚠️ 请先在脚本顶部填入 STRATZ key');
     return;
   }
 
   // 检查 JWT 格式
-  const parts = STRATZ_KEY.split('.');
+  const parts = API_KEY.split('.');
   if (parts.length !== 3) {
     console.log('❌ Key 格式错误：STRATZ key 应为 JWT 格式（三段以 . 分隔）');
     console.log('   当前分段数:', parts.length);
@@ -97,7 +103,7 @@ async function testStratz() {
     const res = await httpsPost(STRATZ_BASE, {
       'content-type': 'application/json',
       'Accept': 'application/json',
-      'Authorization': 'Bearer ' + STRATZ_KEY
+      'Authorization': 'Bearer ' + API_KEY
     }, body);
     console.log('HTTP 状态码:', res.statusCode);
     if (res.statusCode === 200) {
