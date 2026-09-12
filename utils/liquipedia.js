@@ -818,6 +818,22 @@ function getLeagueStructure(name, opts) {
 //
 // 返回 { logo: url, source: 'liquipedia' } 或 null。
 // 任何失败（云函数不可用 / 页面不存在 / 无 image 字段 / imageinfo 失败）均 resolve null，不影响其它源。
+/** PostgREST 直读 aggregation_cache（队标专用；读不到/过期返回 null） */
+function _sbLogoGet(key) {
+  try {
+    var sb = require('./supabaseClient.js');
+    if (!sb || !sb.enabled()) return Promise.resolve(null);
+    return sb.rest('aggregation_cache', { select: 'payload,expire_at', eq: { key: key }, limit: 1 })
+      .then(function (rows) {
+        var row = rows && rows[0];
+        if (!row || !row.payload) return null;
+        if (row.expire_at && new Date(row.expire_at).getTime() < Date.now()) return null;
+        return row.payload;
+      })
+      .catch(function () { return null; });
+  } catch (e) { return Promise.resolve(null); }
+}
+
 function getTeamLogo(name) {
   if (!ENABLED || !name) return Promise.resolve(null);
 
@@ -826,18 +842,26 @@ function getTeamLogo(name) {
   var cached = cache.get(cacheKey, CACHE_TTL);
   if (cached) return Promise.resolve(cached);
 
-  // 云代理优先（Node.js 可设 UA + gzip）
-  if (typeof wx !== 'undefined' && wx.cloud && (cloudProxy.isAvailable() || cloudProxy.efAvailable())) {
+  // ★★ 2026-09-12（方案 B）：**Supabase 直读优先** —— 队标由 GH Actions 预抓写表（lp:logo:<slug>），
+  //   命中即不依赖云开发；未命中再回落云函数（云开发关停后该回落自动失效，返回 null → UI 默认图标）。
+  //   动机：保住 LP 队标这一跳，避免少数老/冷门队失去头像。
+  var _sbLogoKey = 'lp:logo:' + liquipediaSlugFor(name);
+  return _sbLogoGet(_sbLogoKey).then(function (row) {
+    if (row && row.logo) {
+      console.log('[liquipedia] 队标走 Supabase 直读（零云开发）');
+      try { cache.set(cacheKey, row, CACHE_TTL); } catch (e) {}
+      return row;
+    }
+    // 回落云函数（仅云开发仍可用时）
+    if (typeof wx === "undefined" || !wx.cloud || !cloudProxy.isAvailable()) return null;
     return cloudProxy.liquipediaTeamLogoProxy(name).then(function (remote) {
-      if (remote && remote.logo) {
-        cache.set(cacheKey, remote, CACHE_TTL);
-        return remote;
-      }
+      if (remote && remote.logo) { cache.set(cacheKey, remote, CACHE_TTL); return remote; }
       return null;
     }).catch(function () { return null; });
-  }
-  // 无云代理可用 → 无法获取（wx.request 禁设 UA，直连必被拦）
-  return Promise.resolve(null);
+  }).catch(function () { return null; });
+
+  // ★ 2026-09-12：原「云代理优先」分支已移除 —— 它在 SB 直读块之后，属不可达代码
+  //   （云函数回落逻辑已在 SB 直读块内部处理，见上方 _sbLogoGet 调用处）
 }
 
 // ===== §9 Liquipedia 赛事主动枚举（2026-07-30）=====

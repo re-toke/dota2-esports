@@ -47,6 +47,8 @@ const curation = require('./../utils/curation.js');
 //   该模块必须放在云函数目录内（微信云函数只能 require 自己目录下的文件），
 //   同步脚本反向 require 进去 —— 与 liquipedia-slugmap.json 同一套路。
 const BUILDERS = require('./../cloudfunctions/aggregation/index-builders.js');
+// ★ 2026-09-12：队标解析器（与云函数共用同一份 liquipedia-parse，避免双源漂移）
+const LIQUI_PARSE = require('./../cloudfunctions/aggregation/liquipedia-parse.js');
 
 const baseSlugs = Object.values(slugmap.mappings || {});
 const curatedSlugs = [];
@@ -212,6 +214,71 @@ function fetchOpenDota(url) {
   });
 }
 
+// ★★ 2026-09-12：LP 队标预抓 → 写表（为「关停云开发」铺路）
+//
+// 背景：队标链路是 本地缓存 → OpenDota → STRATZ → **Liquipedia 兜底**。
+//   最后一跳原先只在微信云函数里能做（云端两步：抓 wikitext → parseTeamLogo →
+//   imageinfo API 取缩略图 URL）。云开发一旦关停，这一跳就没了 → 少数战队显示默认图标。
+//   本函数把这一跳搬到 GH Actions（出口不受 LP 拦截）预抓后写入 Supabase，
+//   客户端改从表里直读，即可脱离云开发。
+//
+// 覆盖范围：curation 的 24 支精选战队 + 6 支历史 S 级战队（按名去重）。
+//   ★ 这是「已知战队」集合 —— 真正需要 LP 兜底的正是这些老/冷门队
+//   （主流队在 OpenDota/STRATZ 都有 logo，轮不到这一跳）。
+//
+// 成本：每队 2 次 LP 请求（wikitext + imageinfo），2.2s 间隔 → ~4.5s/队。
+// TTL 30 天（与云函数原 TTL.liquipediaTeamLogo 一致）。
+async function syncTeamLogos() {
+  console.log('');
+  console.log('=== LP 队标预抓（写 lp:logo:*）===');
+  const curation = require('./../utils/curation.js');
+  const LOGO_TTL = 30 * 24 * 3600;
+
+  // 目标队名清单：curation 24 支 + 历史 S 级 6 支，按名去重
+  const names = [];
+  const seen = new Set();
+  const push = (n) => { if (n && !seen.has(n)) { seen.add(n); names.push(n); } };
+  Object.values(curation.CURATED_TEAMS || {}).forEach((t) => push(t && t.name));
+  (BUILDERS.TEAMS_SEARCH_HISTORICAL || []).forEach((t) => push(t && t.name));
+  console.log('  目标战队:', names.length, '支');
+
+  let ok = 0, fail = 0;
+  for (const name of names) {
+    const slug = name.replace(/ /g, '_');
+    try {
+      // 步骤 1：抓 wikitext 解析 image 文件名
+      const url1 = LP_BASE + '?action=query&format=json&prop=revisions&rvprop=content&titles=' + encodeURIComponent(slug).replace(/%2F/g, '/');
+      const r1 = await fetchJson(url1, { 'User-Agent': LP_UA, 'Accept-Encoding': 'gzip' });
+      if (r1.status !== 200 || !r1.json) throw new Error('wikitext HTTP ' + r1.status);
+      const pages = r1.json.query && r1.json.query.pages;
+      const page = pages ? Object.values(pages)[0] : null;
+      const wikitext = page && page.revisions && page.revisions[0] && page.revisions[0]['*'];
+      if (!wikitext) throw new Error('页面无内容');
+      const parsed = LIQUI_PARSE.parseTeamLogo(wikitext);
+      if (!parsed || !parsed.image) throw new Error('未解析到 image 字段');
+
+      // 步骤 2：遵守限流后再调 imageinfo API
+      await sleep(RATE_LIMIT_MS);
+      const url2 = LP_BASE + '?action=query&format=json&prop=imageinfo&iiprop=url&iiurlwidth=120&titles=' + encodeURIComponent('File:' + parsed.image);
+      const r2 = await fetchJson(url2, { 'User-Agent': LP_UA, 'Accept-Encoding': 'gzip' });
+      if (r2.status !== 200 || !r2.json) throw new Error('imageinfo HTTP ' + r2.status);
+      const pages2 = r2.json.query && r2.json.query.pages;
+      const page2 = pages2 ? Object.values(pages2)[0] : null;
+      const info = page2 && page2.imageinfo && page2.imageinfo[0];
+      const logo = info && (info.thumburl || info.url);
+      if (!logo) throw new Error('imageinfo 无 url');
+
+      await upsertCache('lp:logo:' + slug, { logo: logo, source: 'liquipedia' }, LOGO_TTL);
+      ok++;
+    } catch (e) {
+      fail++;
+      console.warn('  ✗ ' + name + ' → ' + e.message);
+    }
+    await sleep(RATE_LIMIT_MS);
+  }
+  console.log('  队标完成:', ok, '成功 /', fail, '失败，共', names.length, '支');
+}
+
 (async () => {
   console.log('key 角色:', keyRole(SERVICE_KEY),
               keyRole(SERVICE_KEY) === 'service_role' ? '✅' : '⚠️（不是 service_role，写入必被 RLS 拒）');
@@ -267,6 +334,7 @@ function fetchOpenDota(url) {
   }
   console.log('同步完成:', ok, '成功 /', empty, '空页面 /', fail, '失败, 耗时', Math.round((Date.now() - t0) / 1000) + 's');
   await syncIndexes();
+  await syncTeamLogos();
 
   if (fail > slugs.length * 0.5) {
     console.error('失败率超 50%——查看上方 ✗ 行的具体错误（403/429=被限流，需加长退避）');
