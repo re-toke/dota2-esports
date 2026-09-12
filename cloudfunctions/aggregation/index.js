@@ -20,6 +20,9 @@
 // })
 
 const cloud = require('wx-server-sdk');
+
+// ★ 2026-09-12：索引构建器抽为共享模块（云函数 与 GH Actions 同步脚本 require 同一份，避免双源漂移）
+const SHARED_BUILDERS = require('./index-builders.js');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
 const GOT = require('got');
@@ -1244,13 +1247,8 @@ async function preheatUpcomingFromStratz() {
 async function buildSearchIndex() {
   try {
     const leagues = await fetch('/leagues');
-    const list = Array.isArray(leagues)
-      ? leagues
-          .filter((l) => l && (l.leagueid || l.id) && l.name)
-          .map((l) => ({ id: Number(l.leagueid || l.id), name: String(l.name) }))
-          .sort((a, b) => a.name.localeCompare(b.name))
-      : [];
-    const index = { leagues: list, builtAt: Date.now(), count: list.length };
+    // ★ 2026-09-12：整形逻辑移至共享模块（与 GH Actions 灌表同源，避免双源漂移）
+    const index = SHARED_BUILDERS.buildSearchIndex(leagues);
     await setCache('search_index', index, 6 * 3600 * 1000);
     return index;
   } catch (e) {
@@ -1267,7 +1265,7 @@ async function buildSearchIndex() {
 // ⚠️ 与 pages/teams/teams.js HOT_TEAMS、utils/curation.js CURATED_TEAMS 保持一致（2026-07 经 OpenDota 核验）。
 // OpenDota 会复用 team_id：原 15/1838312/2163/8336801/7090336/1369577/2506989 等已指向不同战队，
 // 此处全部校正为当前真实 id。原 1375614 误标 Fnatic（实际为 Newbee，已解散），已替换为 Team Liquid(2163)。
-const HOT_TEAM_IDS = [10150538, 7119388, 36, 2586976, 1838315, 2163, 8291895, 8599101, 8255756, 9580444];
+const HOT_TEAM_IDS = SHARED_BUILDERS.HOT_TEAM_IDS;  // ★ 2026-09-12 改由共享模块提供
 
 // ===== 战队搜索索引语料（修复 TEAM_SEARCH_BUG · 修复 A）=====
 // OpenDota /search 按「近期活跃度」建索引，历史/已解散的 S 级及以上战队常不在其结果中，
@@ -1278,22 +1276,13 @@ const HOT_TEAM_IDS = [10150538, 7119388, 36, 2586976, 1838315, 2163, 8291895, 85
 //   - navigable:false 的 2 支（CDEC/LGD.FY）当前窗口未核验到正确 id，仅搜索可见、不跳转。
 // 当前活跃 S/SSS 队由客户端 curation（utils/teamSearch.js）本地兜底覆盖，此处不重复，避免漂移。
 // 与 utils/teamSearch.js 的 HISTORICAL_S_TEAMS 保持同步。
-const TEAMS_SEARCH_HISTORICAL = [
-  { id: 1836806, name: 'Wings Gaming', tag: 'WG', aliases: ['wings', 'wingsgaming', 'the wings gaming'], tier: 'SSS', navigable: true },
-  { id: 4, name: 'EHOME', tag: 'EH', aliases: ['ehome'], tier: 'S', navigable: true },
-  { id: 5, name: 'Invictus Gaming', tag: 'iG', aliases: ['invictus gaming', 'ig', 'igaming'], tier: 'SSS', navigable: true },
-  { id: 3331948, name: 'LGD.Forever Young', tag: 'LFY', aliases: ['lgd.forever young', 'lfy'], tier: 'S', navigable: true },
-  { id: -1, name: 'CDEC', tag: 'CDEC', aliases: ['cdec'], tier: 'S', navigable: false },
-  { id: -2, name: 'LGD.FY', tag: 'LGD.FY', aliases: ['lgd.fy', 'lgdfy'], tier: 'S', navigable: false }
-];
+const TEAMS_SEARCH_HISTORICAL = SHARED_BUILDERS.TEAMS_SEARCH_HISTORICAL;  // ★ 2026-09-12 内联数组已抽到 teams-search-historical.json;
 
 // 构建战队搜索索引（历史 S 级语料），落库 teams_search（TTL 6h）。
 async function buildTeamsIndex() {
   try {
-    const teams = TEAMS_SEARCH_HISTORICAL.map((t) => ({
-      id: t.id, name: t.name, tag: t.tag, aliases: t.aliases || [], tier: t.tier || '', navigable: t.navigable !== false
-    }));
-    const index = { teams: teams, builtAt: Date.now(), count: teams.length };
+    // ★ 2026-09-12：语料 + 整形均移至共享模块（与 GH Actions 灌表同源）
+    const index = SHARED_BUILDERS.buildTeamsIndex(TEAMS_SEARCH_HISTORICAL);
     await setCache('teams_search', index, 6 * 3600 * 1000);
     return index;
   } catch (e) {
@@ -1316,22 +1305,9 @@ async function refreshTeams() {
   for (const id of HOT_TEAM_IDS) {
     try {
       const t = await fetch('/teams/' + id);
-      if (t && (t.team_id != null || t.name || t.rating != null || t.wins != null)) {
-        out[id] = {
-          team_id: t.team_id != null ? t.team_id : id,
-          name: t.name || '',
-          tag: t.tag || '',
-          logo_url: t.logo_url || '',
-          country_code: t.country_code || '',
-          rating: t.rating || 0,
-          wins: t.wins || 0,
-          losses: t.losses || 0,
-          last_match_time: t.last_match_time || 0
-        };
-        ok++;
-      } else {
-        fail++;
-      }
+      // ★ 2026-09-12：整形逻辑移至共享模块（与 GH Actions 灌表同源）
+      const shaped = SHARED_BUILDERS.shapeHotTeam(id, t);
+      if (shaped) { out[id] = shaped; ok++; } else { fail++; }
     } catch (e) {
       fail++; // 隔离单队失败，不影响其它
     }

@@ -43,6 +43,10 @@ const slugmap = require('./../cloudfunctions/aggregation/liquipedia-slugmap.json
 //   后者补齐 slugmap 未覆盖的历史赛事主页。
 //   `utils/curation.js` 零 wx 依赖 → 可在 Node/GH Actions 直接 require。
 const curation = require('./../utils/curation.js');
+// ★ 2026-09-12：索引构建器与云函数**共用同一份实现**（cloudfunctions/aggregation/index-builders.js）。
+//   该模块必须放在云函数目录内（微信云函数只能 require 自己目录下的文件），
+//   同步脚本反向 require 进去 —— 与 liquipedia-slugmap.json 同一套路。
+const BUILDERS = require('./../cloudfunctions/aggregation/index-builders.js');
 
 const baseSlugs = Object.values(slugmap.mappings || {});
 const curatedSlugs = [];
@@ -95,11 +99,11 @@ function fetchJson(url, headers) {
   });
 }
 
-function upsertCache(key, payload) {
+function upsertCache(key, payload, ttlSec) {
   return new Promise((resolve, reject) => {
     const body = JSON.stringify({
       key, payload,
-      expire_at: new Date(Date.now() + TTL_SEC * 1000).toISOString(),
+      expire_at: new Date(Date.now() + (ttlSec || TTL_SEC) * 1000).toISOString(),
       updated_at: new Date().toISOString()
     });
     const u = new URL(SUPABASE_URL + '/rest/v1/aggregation_cache');
@@ -145,6 +149,67 @@ function keyRole(key) {
     const json = JSON.parse(Buffer.from(part, 'base64').toString('utf8'));
     return json.role || '(payload 无 role)';
   } catch (e) { return '(解码失败)'; }
+}
+
+// ★★ 2026-09-12：通用 KV 灌表（search_index / teams_search / teams_hot）
+//
+// 背景：客户端已改为「Supabase 直读优先」（utils/cloudCache.js 的 _sbKvGet），
+//   但这三个 key 原先只由云函数写入**微信云开发**，Supabase 表里没有 → 直读永远 miss。
+//   本函数把它们同步写入 Supabase，直读才真正生效。
+//   ★ 整形逻辑复用共享模块（与云函数同一份实现），避免双源漂移。
+//
+// TTL 6h：与云函数原 setCache TTL 一致；每日 2 次灌表 → 始终新鲜。
+async function syncIndexes() {
+  console.log('');
+  console.log('=== 通用 KV 灌表（search_index / teams_search / teams_hot）===');
+  const OPENDOTA = 'https://api.opendota.com/api';
+  const IDX_TTL = 6 * 3600;
+
+  // ① teams_search：纯本地数据（历史 S 级战队语料），无网络依赖
+  try {
+    const ti = BUILDERS.buildTeamsIndex();
+    await upsertCache('teams_search', ti, IDX_TTL);
+    console.log('  ✅ teams_search:', ti.count, '支');
+  } catch (e) { console.warn('  ✗ teams_search:', e.message); }
+
+  // ② search_index：抓 OpenDota /leagues 后整形
+  try {
+    const leagues = await fetchOpenDota(OPENDOTA + '/leagues');
+    const si = BUILDERS.buildSearchIndex(leagues);
+    await upsertCache('search_index', si, IDX_TTL);
+    console.log('  ✅ search_index:', si.count, '个联赛');
+  } catch (e) { console.warn('  ✗ search_index:', e.message); }
+
+  // ③ teams_hot：串行拉 10 支热门战队详情（1.05s 间隔，与云函数限流口径一致）
+  try {
+    const pairs = [];
+    for (const id of BUILDERS.HOT_TEAM_IDS) {
+      let team = null;
+      try { team = await fetchOpenDota(OPENDOTA + '/teams/' + id); } catch (e) { /* 单队失败隔离 */ }
+      pairs.push({ id: id, team: team });
+      await sleep(1050);
+    }
+    const th = BUILDERS.buildTeamsHot(pairs);
+    await upsertCache('teams_hot', th.out, IDX_TTL);
+    console.log('  ✅ teams_hot:', th.ok, '成功 /', th.fail, '失败');
+  } catch (e) { console.warn('  ✗ teams_hot:', e.message); }
+}
+
+/** OpenDota GET（JSON）；非 2xx 抛错，由调用方隔离 */
+function fetchOpenDota(url) {
+  return new Promise((resolve, reject) => {
+    https.get(url, { headers: { 'User-Agent': LP_UA, 'Accept-Encoding': 'gzip' } }, (r) => {
+      const g = r.headers['content-encoding'] === 'gzip' ? zlib.createGunzip() : null;
+      const stream = g ? r.pipe(g) : r;
+      let d = '';
+      stream.on('data', (c) => d += c);
+      stream.on('end', () => {
+        if (r.statusCode < 200 || r.statusCode >= 300) { reject(new Error('OpenDota HTTP ' + r.statusCode)); return; }
+        try { resolve(JSON.parse(d)); } catch (e) { reject(new Error('JSON parse fail')); }
+      });
+      stream.on('error', reject);
+    }).on('error', reject);
+  });
 }
 
 (async () => {
@@ -201,6 +266,8 @@ function keyRole(key) {
     }
   }
   console.log('同步完成:', ok, '成功 /', empty, '空页面 /', fail, '失败, 耗时', Math.round((Date.now() - t0) / 1000) + 's');
+  await syncIndexes();
+
   if (fail > slugs.length * 0.5) {
     console.error('失败率超 50%——查看上方 ✗ 行的具体错误（403/429=被限流，需加长退避）');
     process.exit(2);

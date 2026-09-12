@@ -1,0 +1,68 @@
+[
+  {
+    "id": 1836806,
+    "name": "Wings Gaming",
+    "tag": "WG",
+    "aliases": [
+      "wings",
+      "wingsgaming",
+      "the wings gaming"
+    ],
+    "tier": "SSS",
+    "navigable": true
+  },
+  {
+    "id": 4,
+    "name": "EHOME",
+    "tag": "EH",
+    "aliases": [
+      "ehome"
+    ],
+    "tier": "S",
+    "navigable": true
+  },
+  {
+    "id": 5,
+    "name": "Invictus Gaming",
+    "tag": "iG",
+    "aliases": [
+      "invictus gaming",
+      "ig",
+      "igaming"
+    ],
+    "tier": "SSS",
+    "navigable": true
+  },
+  {
+    "id": 3331948,
+    "name": "LGD.Forever Young",
+    "tag": "LFY",
+    "aliases": [
+      "lgd.forever young",
+      "lfy"
+    ],
+    "tier": "S",
+    "navigable": true
+  },
+  {
+    "id": -1,
+    "name": "CDEC",
+    "tag": "CDEC",
+    "aliases": [
+      "cdec"
+    ],
+    "tier": "S",
+    "navigable": false
+  },
+  {
+    "id": -2,
+    "name": "LGD.FY",
+    "tag": "LGD.FY",
+    "aliases": [
+      "lgd.fy",
+      "lgdfy"
+    ],
+    "tier": "S",
+    "navigable": false
+  }
+]
