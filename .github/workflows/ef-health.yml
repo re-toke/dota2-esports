@@ -1,0 +1,47 @@
+# ============================================================
+# EF 健康探测 + 告警（2026-09-12）
+#
+# ## 为什么需要
+# 项目已决定「接受 EF 单点」（不再依赖云开发做兜底）。代价是：EF 挂了 = 小程序核心
+# 功能不可用。所以**故障必须能被及时发现**，否则是「用户先发现」。
+#
+# ## 告警通道（零成本）
+# 本 job 失败 → GitHub 自动发失败通知邮件给仓库 owner。
+# 不需要接任何第三方告警服务。
+#
+# ## 探测口径（见 scripts/ops/probe-ef.js）
+# 「EF 活着」= 有任何 HTTP 响应（含 400/401，只证明函数被调度起来）。
+# 只有 超时 / 网络错 / 5xx 才算故障 → 退出码 1 → job 失败。
+# 「慢」（超 8s）仅打 🐢 标记，**不触发告警**（避免噪音）。
+#
+# ## 频率
+# 每 2 小时一次（GitHub cron 最小粒度；实际执行可能延迟几分钟，可接受）
+# 也可在 Actions 页手动触发。
+#
+# ## 前置 Secrets
+#   SUPABASE_URL / SUPABASE_SERVICE_KEY（已配置，用于把结果写入 ops:ef_health 留历史）
+# ============================================================
+name: EF Health Check
+
+on:
+  schedule:
+    # 每 2 小时（UTC 偶数点；北京时间 +8 → 落在偶数点，避开整点拥堵）
+    - cron: '15 */2 * * *'
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Probe Edge Functions
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        # 退出码 1 = 有 EF 故障 → job 失败 → GitHub 发失败通知（这就是告警）
+        run: node scripts/ops/probe-ef.js
