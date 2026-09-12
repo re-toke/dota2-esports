@@ -65,6 +65,26 @@ function _sbFollowSet(key, value, ttlSec) {
     .then(function () { return true; });
 }
 
+// ===== ★ 2026-09-12：通用 KV 走 Supabase 直读 =====
+// 背景：通用 KV（search_index / teams_hot / teams_search）原走云函数读，是「单后端」的最后一处依赖。
+//   · 客户端对通用 KV **只读不写**（实测：setCached 仅被 follow_profile 使用）→ **不需要新建 EF**；
+//   · 表 aggregation_cache 已允许 anon 读公开缓存（前提是 RLS 已收敛 —— 见
+//     supabase/migrations/002-fix-anon-read-cache.sql，否则 anon 会连带读到 follow_profile_*）。
+//   → 直接 PostgREST 读，省掉一次云开发调用（也省掉 EF 的一跳）。
+// 未命中（数据尚未入表 / 已过期）或失败 → 返回 null，调用方回落云函数原路径，**行为不变**。
+function _sbKvGet(key) {
+  var sb = require('./supabaseClient.js');
+  if (!sb || !sb.enabled()) return Promise.resolve(null);
+  return sb.rest('aggregation_cache', { select: 'payload,expire_at', eq: { key: key }, limit: 1 })
+    .then(function (rows) {
+      var row = rows && rows[0];
+      if (!row || !row.payload) return null;
+      if (row.expire_at && new Date(row.expire_at).getTime() < Date.now()) return null;  // 过期按未命中
+      return row.payload;
+    })
+    .catch(function () { return null; });
+}
+
 // ===== 通用缓存 =====
 // 返回缓存值；云端与本地均无则返回 null。
 // 注意：key 透传云端（裸），本地兜底用 localKey(key)（带版本前缀）。
@@ -104,6 +124,18 @@ function setCached(key, value, ttlSec) {
 // 返回 { leagues:[{id,name}], builtAt, count } 或 null。
 function getSearchIndex() {
   const local = cache.get(localKey(INDEX_LOCAL_KEY), LOCAL_TTL);
+  return _sbKvGet('search_index').then((d) => {
+    if (d && d.leagues && d.leagues.length) {
+      try { cache.set(localKey(INDEX_LOCAL_KEY), d, LOCAL_TTL); } catch (e) {}
+      console.log('[cloudCache] search_index 走 Supabase 直读（零云开发）');
+      return d;
+    }
+    return _cloudSearchIndex(local);
+  }).catch(() => _cloudSearchIndex(local));
+}
+
+// 云函数原路径（数据未入表时的回落，行为与改动前一致）
+function _cloudSearchIndex(local) {
   return cloudProxy.call('getSearchIndex', {})
     .then((r) => {
       const data = r && r.data;
@@ -134,6 +166,17 @@ function buildSearchIndex() {
 
 function getTeamsHot() {
   const local = cache.get(localKey(TEAMS_HOT_LOCAL_KEY), LOCAL_TTL);
+  return _sbKvGet('teams_hot').then((d) => {
+    if (d && Object.keys(d).length) {
+      try { cache.set(localKey(TEAMS_HOT_LOCAL_KEY), d, LOCAL_TTL); } catch (e) {}
+      console.log('[cloudCache] teams_hot 走 Supabase 直读（零云开发）');
+      return d;
+    }
+    return _cloudTeamsHot(local);
+  }).catch(() => _cloudTeamsHot(local));
+}
+
+function _cloudTeamsHot(local) {
   return cloudProxy.call('getTeamsHot', {})
     .then((r) => {
       const data = r && r.data;
@@ -153,6 +196,17 @@ function getTeamsHot() {
 
 function getTeamsIndex() {
   const local = cache.get(localKey(TEAMS_INDEX_LOCAL_KEY), LOCAL_TTL);
+  return _sbKvGet('teams_search').then((d) => {
+    if (d && d.teams && d.teams.length) {
+      try { cache.set(localKey(TEAMS_INDEX_LOCAL_KEY), d, LOCAL_TTL); } catch (e) {}
+      console.log('[cloudCache] teams_search 走 Supabase 直读（零云开发）');
+      return d;
+    }
+    return _cloudTeamsIndex(local);
+  }).catch(() => _cloudTeamsIndex(local));
+}
+
+function _cloudTeamsIndex(local) {
   return cloudProxy.call('getTeamsIndex', {})
     .then((r) => {
       const data = r && r.data;
