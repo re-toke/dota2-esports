@@ -201,6 +201,7 @@ function load(force) {
   // ★ 阶段2-③A：SB 可用时也允许进入（不再依赖云开发可用性）
   var _sbOn = false;
   try { _sbOn = require('./supabaseClient.js').enabled(); } catch (e) {}
+  console.log('[remoteCuration] 诊断 v8.69: _sbOn=' + _sbOn);   // 临时：确认后可删
   if (!_sbOn && !(cloudProxy.isAvailable() || cloudProxy.efAvailable())) { ensure(); return Promise.resolve(false); }
   const meta = cache.getStale(CACHE_KEY, config.remoteCuration.ttlSec, config.remoteCuration.ttlSec);
   if (!force && meta.value) { ensure(); return Promise.resolve(false); }
@@ -274,7 +275,6 @@ function _cloudLoad(force, clientVersion, meta) {
       ensure(); resolve(false);
     });
   }).then(function (r) { loadingPromise = null; return r; });
-  return loadingPromise;
 }
 
 module.exports = {
