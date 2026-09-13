@@ -21,6 +21,7 @@
 //
 // ## 前置
 //   先执行 supabase/migrations/003-curation-schema-fix.sql（加 canonical_key 唯一索引）
+//   注：curation_meta 的 jsonb 列名是 value（不是 data）—— 001-init 的定义如此，实测踩过
 // ============================================================
 'use strict';
 
@@ -152,7 +153,7 @@ function upsert(table, rows, conflictCol) {
     const k = o._id != null ? String(o._id) : null;
     if (!k) return;
     delete o._id;
-    meRows.push({ key: k, data: o });
+    meRows.push({ key: k, value: o });   // ★ 列名是 value 不是 data（001-init 定义如此）
   });
 
   console.log('');
@@ -214,7 +215,7 @@ function upsert(table, rows, conflictCol) {
   console.log('写入中...');
   const a = await run('curation_events', evRows, 'canonical_key');
   const b = await run('curation_teams', tmRows, 'team_id');
-  const c = await run('curation_meta', meRows, 'key');
+  const c = await run('curation_meta', meRows, 'key');   // 列: key / value
   console.log('');
   console.log(a && b && c ? '✅ 全部写入完成' : '⚠️ 有批次失败，见上方日志');
 })();
