@@ -173,8 +173,25 @@ function upsert(table, rows, conflictCol) {
     console.log('（预览模式结束。确认无误后加 --apply 并设置 SUPABASE_SERVICE_KEY 实际写入）');
     return;
   }
-  if (!URL_SB || !KEY) {
-    console.error('❌ --apply 需要 SUPABASE_URL 与 SUPABASE_SERVICE_KEY');
+  // ---- 预检：把底层报错换成人话（实测踩过：把占位文本当 key → ERR_INVALID_CHAR）----
+  const errs = [];
+  if (!URL_SB) errs.push('缺少 SUPABASE_URL');
+  if (!KEY) errs.push('缺少 SUPABASE_SERVICE_KEY');
+  if (KEY) {
+    if (/[^\x20-\x7E]/.test(KEY)) errs.push('SUPABASE_SERVICE_KEY 含非 ASCII 字符（很可能是把说明里的占位文本当成了 key）');
+    if (/\s/.test(KEY)) errs.push('SUPABASE_SERVICE_KEY 含空格或换行');
+    if (KEY.length < 100) errs.push('SUPABASE_SERVICE_KEY 长度异常（' + KEY.length + '）—— service_role key 通常是 200+ 字符的长 JWT');
+    if (KEY.slice(0, 3) !== 'eyJ') errs.push('SUPABASE_SERVICE_KEY 不是 JWT 形态（应以 eyJ 开头）');
+  }
+  if (URL_SB && URL_SB.indexOf('http') !== 0) errs.push('SUPABASE_URL 应以 http(s):// 开头');
+  if (errs.length) {
+    console.error('');
+    console.error('❌ 参数预检未通过：');
+    errs.forEach((e) => console.error('   · ' + e));
+    console.error('');
+    console.error('service_role key 在哪拿：Supabase Dashboard → Project Settings → API');
+    console.error('  → Project API keys → service_role（secret）→ Reveal → 复制整串（很长，200+ 字符）');
+    console.error('PowerShell 设置环境变量时，用真实的 key 替换占位内容，注意保留双引号。');
     process.exit(1);
   }
 
