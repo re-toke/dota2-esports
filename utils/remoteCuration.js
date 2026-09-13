@@ -130,8 +130,78 @@ function getEffectiveEvents() {
 //
 // 增量更新：客户端传 clientVersion，若与云端一致 → 云函数返回 { unchanged: true }，
 //   零数据传输，仅刷新缓存时间戳。
+/**
+ * ★ 阶段2-③A（2026-09-13）：Supabase 直读 curation（等价替换云函数 getCuration）
+ *
+ * 数据源三表（由 scripts/ops/backfill-curation.js 灌入）：
+ *   curation_events( canonical_key, league_id, data ) → events = rows.map(r => r.data)
+ *   curation_teams ( team_id, data )                  → teams = { [team_id]: data }
+ *   curation_meta  ( key, value )                     → tiContestantIds = value.ids
+ *
+ * ⚠️ 必须分页：PostgREST 单次有 max-rows 上限（默认 1000），超限静默截断 ——
+ *    与云开发 .limit(500) 是同一类坑。此处每页 1000，用 Range 头翻页。
+ *
+ * 返回 { events, teams, tiContestantIds, version }；任何失败返回 null（调用方回落云函数）。
+ */
+function _sbLoadCuration() {
+  var sb = require('./supabaseClient.js');
+  if (!sb || !sb.enabled()) return Promise.resolve(null);
+
+  var PAGE = 1000;
+  function fetchPage(offset, acc) {
+    return sb.rest('curation_events', { select: 'canonical_key,league_id,data', range: offset + '-' + (offset + PAGE - 1) })
+      .then(function (rows) {
+        var list = rows || [];
+        list.forEach(function (r) { if (r && r.data) acc.push(r.data); });
+        if (list.length < PAGE) return acc;
+        if (offset > 20000) return acc;
+        return fetchPage(offset + PAGE, acc);
+      });
+  }
+
+  return fetchPage(0, [])
+    .then(function (events) {
+      if (!events.length) return null;
+      return sb.rest('curation_teams', { select: 'team_id,data', limit: 1000 }).then(function (teamRows) {
+        var teams = {};
+        (teamRows || []).forEach(function (r) { if (r && r.team_id != null && r.data) teams[Number(r.team_id)] = r.data; });
+        return sb.rest('curation_meta', { select: 'key,value', eq: { key: 'ti_contestant_ids' }, limit: 1 }).then(function (metaRows) {
+          var row = metaRows && metaRows[0];
+          var tiIds = (row && row.value && row.value.ids) || [];
+          return { events: events, teams: teams, tiContestantIds: tiIds, version: 'sb:' + events.length };
+        });
+      });
+    })
+    .catch(function (e) {
+      console.warn('[remoteCuration] Supabase 直读失败，将回落云函数:', e && e.message);
+      return null;
+    });
+}
+
+/** 应用远端 curation（SB 与云函数两条路共用） */
+function _applyRemote(data) {
+  try {
+    var eff = buildEffective(data);
+    effectiveEvents = eff.events;
+    effectiveTeams = eff.teams;
+    effectiveTiIds = eff.tiContestantIds;
+    lookups = curation.buildLookups(eff.events, eff.teams);
+    cache.set(CACHE_KEY, { events: eff.events, teams: eff.teams, tiContestantIds: eff.tiContestantIds }, config.remoteCuration.ttlSec);
+    cache.set(VERSION_KEY, data.version, 365 * 24 * 3600);
+    console.log('[remoteCuration] curation 加载成功, version:', data.version,
+      'events:', eff.events.length, 'teams:', Object.keys(eff.teams).length);
+    return true;
+  } catch (e) {
+    console.error('[remoteCuration] buildEffective 或缓存写入抛错:', e && e.message);
+    return false;
+  }
+}
+
 function load(force) {
-  if (!(cloudProxy.isAvailable() || cloudProxy.efAvailable())) { ensure(); return Promise.resolve(false); }
+  // ★ 阶段2-③A：SB 可用时也允许进入（不再依赖云开发可用性）
+  var _sbOn = false;
+  try { _sbOn = require('./supabaseClient.js').enabled(); } catch (e) {}
+  if (!_sbOn && !(cloudProxy.isAvailable() || cloudProxy.efAvailable())) { ensure(); return Promise.resolve(false); }
   const meta = cache.getStale(CACHE_KEY, config.remoteCuration.ttlSec, config.remoteCuration.ttlSec);
   if (!force && meta.value) { ensure(); return Promise.resolve(false); }
   if (loadingPromise) return loadingPromise;
@@ -139,7 +209,25 @@ function load(force) {
   // 读取本地存储的 version（用于增量更新）
   const clientVersion = cache.getStale(VERSION_KEY, 365 * 24 * 3600, 365 * 24 * 3600).value || '';
 
-  loadingPromise = new Promise((resolve) => {
+  // ★ 阶段2-③A：**Supabase 直读优先**；未命中/失败 → 回落云函数（行为不变）
+  if (_sbOn) {
+    loadingPromise = _sbLoadCuration().then(function (sbData) {
+      if (sbData && sbData.events && sbData.events.length) {
+        console.log('[remoteCuration] 走 Supabase 直读（零云开发）, events:', sbData.events.length);
+        if (_applyRemote(sbData)) return true;
+      }
+      return _cloudLoad(force, clientVersion, meta);
+    }).then(function (r) { loadingPromise = null; return r; });
+    return loadingPromise;
+  }
+
+  // 云函数路径（SB 不可用时）
+  return _cloudLoad(force, clientVersion, meta);
+}
+
+/** 云函数路径（原实现，拆分出来供回落/无 SB 时调用） */
+function _cloudLoad(force, clientVersion, meta) {
+  return new Promise((resolve) => {
     wx.cloud.callFunction({
       name: 'aggregation',
       data: { action: 'getCuration', params: { clientVersion: clientVersion }, force: !!force }

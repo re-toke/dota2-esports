@@ -86,6 +86,10 @@ function rest(table, query) {
   return new Promise(function (resolve, reject) {
     if (!enabled()) { reject(new Error('supabase disabled')); return; }
     var q = query || {};
+    var hdr = {
+      'apikey': sb().anonKey,
+      'Authorization': 'Bearer ' + sb().anonKey
+    };
     var url = sb().url + '/rest/v1/' + table + '?select=' + encodeURIComponent(q.select || '*');
     if (q.eq) {
       Object.keys(q.eq).forEach(function (k) {
@@ -93,16 +97,16 @@ function rest(table, query) {
       });
     }
     if (q.limit) url += '&limit=' + q.limit;
+    // ★ 2026-09-13：支持 Range 分页（PostgREST 单次有 max-rows 上限，默认 1000，
+    //   超过会静默截断 —— 与云开发 .limit(500) 是同一类坑，必须显式分页）
+    if (q.range) hdr.Range = q.range;
     if (q.order) url += '&order=' + q.order;
 
     wx.request({
       url: url,
       method: 'GET',
       timeout: 12000,
-      header: {
-        'apikey': sb().anonKey,
-        'Authorization': 'Bearer ' + sb().anonKey
-      },
+      header: hdr,
       success: function (res) {
         if (res.statusCode >= 200 && res.statusCode < 300) resolve(res.data || []);
         else reject(new Error('REST ' + table + ' HTTP ' + res.statusCode));
