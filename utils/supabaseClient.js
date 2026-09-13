@@ -93,7 +93,10 @@ function rest(table, query) {
     var url = sb().url + '/rest/v1/' + table + '?select=' + encodeURIComponent(q.select || '*');
     if (q.eq) {
       Object.keys(q.eq).forEach(function (k) {
-        url += '&' + k + '=eq.' + encodeURIComponent(q.eq[k]);
+        // ★ 2026-09-13：值可带操作符前缀（gte./lte./gt./lt./not.）——若带则原样使用
+        var v = String(q.eq[k]);
+        var isOp = /^(eq|gte|lte|gt|lt|not|like|in)\./.test(v);
+        url += '&' + k + '=' + (isOp ? v : 'eq.' + encodeURIComponent(v));
       });
     }
     if (q.limit) url += '&limit=' + q.limit;

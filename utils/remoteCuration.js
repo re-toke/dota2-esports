@@ -197,11 +197,61 @@ function _applyRemote(data) {
   }
 }
 
+/**
+ * ★ 阶段2-③B（2026-09-13）：**首屏只拉近期子集**（year >= 2025）。
+ *
+ * 动机：全量 2414 条约 690KB，是「每日首开慢」的主因。
+ * 做法：先用单条件过滤（PostgREST 的 gte 操作符，避免 or= 与 json 箭头的兼容风险）
+ *   取近期赛事 → 首页秒开；全量由 _scheduleFullLoad 在后台补。
+ * 数据依据：实测 year>=2025 共 83 条（2026:27 + 2025:56），约全量的 3%。
+ *
+ * 任何失败返回 null（调用方回落全量 / 云函数）。
+ */
+function _sbLoadCurationRecent() {
+  var sb = require('./supabaseClient.js');
+  if (!sb || !sb.enabled()) return Promise.resolve(null);
+  return sb.rest('curation_events', {
+    select: 'canonical_key,league_id,data',
+    eq: { 'data->>year': 'gte.2025' },
+    limit: 1000
+  }).then(function (rows) {
+    var events = [];
+    (rows || []).forEach(function (r) { if (r && r.data) events.push(r.data); });
+    if (!events.length) return null;
+    return sb.rest('curation_teams', { select: 'team_id,data', limit: 1000 }).then(function (teamRows) {
+      var teams = {};
+      (teamRows || []).forEach(function (r) { if (r && r.team_id != null && r.data) teams[Number(r.team_id)] = r.data; });
+      return sb.rest('curation_meta', { select: 'key,value', eq: { key: 'ti_contestant_ids' }, limit: 1 }).then(function (metaRows) {
+        var row = metaRows && metaRows[0];
+        var tiIds = (row && row.value && row.value.ids) || [];
+        return { events: events, teams: teams, tiContestantIds: tiIds, version: 'sb-recent:' + events.length };
+      });
+    });
+  }).catch(function (e) {
+    console.warn('[remoteCuration] SB 近期子集读取失败:', e && e.message);
+    return null;
+  });
+}
+
+/** 后台补拉全量（不阻塞首屏；每会话仅一次） */
+var _bgFullDone = false;
+function _scheduleFullLoad() {
+  if (_bgFullDone) return;
+  _bgFullDone = true;
+  setTimeout(function () {
+    _sbLoadCuration().then(function (full) {
+      if (!full || !full.events || !full.events.length) return;
+      if (_applyRemote(full)) {
+        console.log('[remoteCuration] 后台已补全量, events:', full.events.length);
+      }
+    }).catch(function () { /* 静默：首屏已有数据 */ });
+  }, 3000);
+}
+
 function load(force) {
   // ★ 阶段2-③A：SB 可用时也允许进入（不再依赖云开发可用性）
   var _sbOn = false;
   try { _sbOn = require('./supabaseClient.js').enabled(); } catch (e) {}
-  console.log('[remoteCuration] 诊断 v8.69: _sbOn=' + _sbOn);   // 临时：确认后可删
   if (!_sbOn && !(cloudProxy.isAvailable() || cloudProxy.efAvailable())) { ensure(); return Promise.resolve(false); }
   const meta = cache.getStale(CACHE_KEY, config.remoteCuration.ttlSec, config.remoteCuration.ttlSec);
   if (!force && meta.value) { ensure(); return Promise.resolve(false); }
@@ -212,12 +262,21 @@ function load(force) {
 
   // ★ 阶段2-③A：**Supabase 直读优先**；未命中/失败 → 回落云函数（行为不变）
   if (_sbOn) {
-    loadingPromise = _sbLoadCuration().then(function (sbData) {
-      if (sbData && sbData.events && sbData.events.length) {
-        console.log('[remoteCuration] 走 Supabase 直读（零云开发）, events:', sbData.events.length);
-        if (_applyRemote(sbData)) return true;
+    loadingPromise = _sbLoadCurationRecent().then(function (recent) {
+      // ① 首屏：近期子集（快）
+      if (recent && recent.events && recent.events.length) {
+        console.log('[remoteCuration] 首屏走 Supabase 直读·近期子集, events:', recent.events.length);
+        if (_applyRemote(recent)) { _scheduleFullLoad(); return true; }
       }
-      return _cloudLoad(force, clientVersion, meta);
+      // ② 近期失败 → 全量直读
+      return _sbLoadCuration().then(function (sbData) {
+        if (sbData && sbData.events && sbData.events.length) {
+          console.log('[remoteCuration] 走 Supabase 直读·全量, events:', sbData.events.length);
+          if (_applyRemote(sbData)) return true;
+        }
+        // ③ 都失败 → 云函数兜底
+        return _cloudLoad(force, clientVersion, meta);
+      });
     }).then(function (r) { loadingPromise = null; return r; });
     return loadingPromise;
   }
