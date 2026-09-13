@@ -239,12 +239,13 @@ function _scheduleFullLoad() {
   if (_bgFullDone) return;
   _bgFullDone = true;
   setTimeout(function () {
+    console.log('[remoteCuration] 后台补全量开始（分页拉全量）...');
     _sbLoadCuration().then(function (full) {
       if (!full || !full.events || !full.events.length) return;
       if (_applyRemote(full)) {
         console.log('[remoteCuration] 后台已补全量, events:', full.events.length);
       }
-    }).catch(function () { /* 静默：首屏已有数据 */ });
+    }).catch(function (e) { console.warn('[remoteCuration] 后台补全量失败:', e && e.message); });
   }, 3000);
 }
 
