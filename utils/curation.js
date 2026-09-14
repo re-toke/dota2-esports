@@ -624,7 +624,53 @@ const CURATED_EVENTS = [
     year: 2026,
     start: Math.floor(Date.UTC(2026, 10, 17) / 1000),
     end: Math.floor(Date.UTC(2026, 10, 29, 23, 59, 59) / 1000),
-    liquipediaSlug: 'BLAST/SLAM/9' }
+    liquipediaSlug: 'BLAST/SLAM/9' },
+  // ★ 2026-09-14 补收录（原缺失 → 首页/「即将」看不到对局）
+  { canonical: 'EPL World Series: Southeast Asia Season 17', tier: { grade: 'B', rank: 1, label: 'B级' },
+    aliases: ['eplworldseriessoutheastasiaseason17'], year: 2026,
+    start: Math.floor(Date.UTC(2026, 8, 1) / 1000), end: Math.floor(Date.UTC(2026, 8, 16) / 1000),
+    liquipediaSlug: 'EPL_World_Series:_Southeast_Asia_Season_17' },
+  // ★ 2026-09-14 补收录（原缺失 → 首页/「即将」看不到对局）
+  { canonical: 'WINLINE Star Series Season 4', tier: { grade: 'B', rank: 1, label: 'B级' },
+    aliases: ['winlinestarseriesseason4'], year: 2026,
+    leagueId: 20159,   // 实测 OpenDota leagueId（补收录时正在进行的联赛）
+    start: Math.floor(Date.UTC(2026, 8, 10) / 1000), end: Math.floor(Date.UTC(2026, 8, 19) / 1000),
+    liquipediaSlug: 'WINLINE_Star_Series_Season_4' },
+  // ★ 2026-09-14 补收录（原缺失 → 首页/「即将」看不到对局）
+  { canonical: 'European Pro League Season 40', tier: { grade: 'B', rank: 1, label: 'B级' },
+    aliases: ['europeanproleagueseason40'], year: 2026,
+    start: Math.floor(Date.UTC(2026, 8, 12) / 1000), end: Math.floor(Date.UTC(2026, 8, 25) / 1000),
+    liquipediaSlug: 'European_Pro_League_Season_40' },
+  // ★ 2026-09-14 补收录（原缺失 → 首页/「即将」看不到对局）
+  { canonical: 'Sber Tournament 2026', tier: { grade: 'B', rank: 1, label: 'B级' },
+    aliases: ['sbertournament2026'], year: 2026,
+    start: Math.floor(Date.UTC(2026, 9, 10) / 1000), end: Math.floor(Date.UTC(2026, 10, 1) / 1000),
+    liquipediaSlug: 'Sber_Tournament_2026' },
+  // ★ 2026-09-14 补收录（原缺失 → 首页/「即将」看不到对局）
+  { canonical: 'DreamLeague Division 2 Series 5', tier: { grade: 'B', rank: 1, label: 'B级' },
+    aliases: ['dreamleaguedivision2series5'], year: 2026,
+    start: Math.floor(Date.UTC(2026, 10, 6) / 1000), end: Math.floor(Date.UTC(2026, 10, 19) / 1000),
+    liquipediaSlug: 'DreamLeague_Division_2_Series_5' },
+  // ★ 2026-09-14 补收录（原缺失 → 首页/「即将」看不到对局）
+  { canonical: 'DreamLeague Season 30', tier: { grade: 'S', rank: 3, label: 'S级' },
+    aliases: ['dreamleagueseason30'], year: 2026,
+    start: Math.floor(Date.UTC(2026, 11, 2) / 1000), end: Math.floor(Date.UTC(2026, 11, 13) / 1000),
+    liquipediaSlug: 'DreamLeague_Season_30' },
+  // ★ 2026-09-14 补收录（原缺失 → 首页/「即将」看不到对局）
+  { canonical: 'DreamLeague Division 2 Series 6', tier: { grade: 'B', rank: 1, label: 'B级' },
+    aliases: ['dreamleaguedivision2series6'], year: 2027,
+    start: Math.floor(Date.UTC(2027, 0, 9) / 1000), end: Math.floor(Date.UTC(2027, 0, 18) / 1000),
+    liquipediaSlug: 'DreamLeague_Division_2_Series_6' },
+  // ★ 2026-09-14 补收录（原缺失 → 首页/「即将」看不到对局）
+  { canonical: 'DreamLeague Season 31', tier: { grade: 'S', rank: 3, label: 'S级' },
+    aliases: ['dreamleagueseason31'], year: 2027,
+    start: Math.floor(Date.UTC(2027, 0, 20) / 1000), end: Math.floor(Date.UTC(2027, 0, 31) / 1000),
+    liquipediaSlug: 'DreamLeague_Season_31' },
+  // ★ 2026-09-14 补收录（原缺失 → 首页/「即将」看不到对局）
+  { canonical: 'PGL Wallachia Season 10', tier: { grade: 'S', rank: 3, label: 'S级' },
+    aliases: ['pglwallachiaseason10'], year: 2027,
+    start: Math.floor(Date.UTC(2027, 2, 2) / 1000), end: Math.floor(Date.UTC(2027, 2, 14) / 1000),
+    liquipediaSlug: 'PGL_Wallachia_Season_10' }
 ];
 
 // ===== 知名战队（team_id -> 规范信息）=====

@@ -1,13 +1,18 @@
 {
-  "generatedAt": 1789383452,
+  "generatedAt": 1789394694,
   "source": "opendota",
   "note": "build-time leagues snapshot (active 90d + curated 60d), refresh via scripts/sync/fetch-leagues-snapshot.js",
   "stats": {
     "total": 10205,
-    "kept": 16,
-    "windows": 16
+    "kept": 17,
+    "windows": 17
   },
   "leagues": [
+    {
+      "leagueid": 20159,
+      "tier": "excluded",
+      "name": "WINLINE Star Series Season 4"
+    },
     {
       "leagueid": 19885,
       "tier": "professional",
@@ -179,6 +184,12 @@
       "latest": 1789301470,
       "lastEnd": 1789304992,
       "count": 12
+    },
+    "20159": {
+      "earliest": 1789043258,
+      "latest": 1789324066,
+      "lastEnd": 1789326041,
+      "count": 27
     },
     "20169": {
       "earliest": 1787969202,

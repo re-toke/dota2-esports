@@ -6,7 +6,7 @@
 // 数据来源：utils/upcoming-local.json（由本脚本生成）
 
 module.exports = {
-  "generatedAt": 1789383477,
+  "generatedAt": 1789394710,
   "source": "liquipedia",
   "note": "build-time snapshot (Upcoming+Ongoing, Tier1-3), refresh via scripts/sync/fetch-liquipedia-upcoming.js",
   "events": [
@@ -59,18 +59,6 @@ module.exports = {
       "source": "liquipedia"
     },
     {
-      "id": -1973943,
-      "name": "PGL Wallachia Season 9",
-      "grade": "S",
-      "rank": 3,
-      "label": "S级",
-      "tier": 1,
-      "start": 1789603200,
-      "end": 1790553599,
-      "date": "Sep 17–27, 2026",
-      "source": "liquipedia"
-    },
-    {
       "id": -1404221,
       "name": "BLAST SLAM IX China Open Qualifier 2",
       "grade": "S",
@@ -92,6 +80,18 @@ module.exports = {
       "start": 1789689600,
       "end": 1789862399,
       "date": "Sep 18–19, 2026",
+      "source": "liquipedia"
+    },
+    {
+      "id": -1973943,
+      "name": "PGL Wallachia Season 9",
+      "grade": "S",
+      "rank": 3,
+      "label": "S级",
+      "tier": 1,
+      "start": 1789776000,
+      "end": 1790553599,
+      "date": "Sep 19–27, 2026",
       "source": "liquipedia"
     },
     {
