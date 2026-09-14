@@ -157,6 +157,87 @@ async function upsert(rows) {
   return fail === 0;
 }
 
+/* ---------- ④b：分级同步（迁自云函数 syncTiers）---------- */
+
+/**
+ * 抓 LP 页面 wikitext（用于解析 liquipediatier）
+ * ⚠️ 必须带 redirects=1 —— 否则 #REDIRECT 页面会污染缓存且不自愈（项目踩过的坑）
+ * ⚠️ 必须带 UA + gzip —— LP 官方软限流要求（客户端 wx.request 禁设 UA 才需云函数中转）
+ */
+async function fetchWikitext(slug) {
+  const url = LP_BASE + '?action=query&format=json&prop=revisions&rvprop=content&redirects=1&titles=' + encodeURIComponent(slug);
+  const r = await fetchJson(url);
+  if (r.status !== 200 || !r.json) return null;
+  const pages = r.json.query && r.json.query.pages;
+  if (!pages) return null;
+  const page = Object.keys(pages).map(function (k) { return pages[k]; })[0];
+  return (page && page.revisions && page.revisions[0] && page.revisions[0]['*']) || null;
+}
+
+/**
+ * 分级同步：pending_review 的赛事 → 抓 LP 分级 → 双源决策 → 写回
+ *
+ * 迁自云函数同名函数。差异：
+ *   · MAX_SYNC 15 → 100（云函数受 60s 超时约束；GH Actions 可跑数分钟）
+ *   · 数据源从云开发 DB 改为 Supabase（读 pending + PATCH 写回）
+ *   · ★ PostgREST 的 PATCH 对 jsonb 列是**整体替换** → 必须发送合并后的完整 data
+ */
+async function syncTiers() {
+  const MAX_SYNC = Number(process.env.DISCOVER_MAX_SYNC || 100);
+  console.log('');
+  console.log('④ 分级同步（pending_review → 抓 LP 分级 → 写回）...');
+
+  // 读待同步：status=pending_review 且 tierSource != community
+  const r = await sbReq('GET', '/rest/v1/curation_events?select=canonical_key,data' +
+    '&data->>status=eq.pending_review&limit=' + MAX_SYNC,
+    null, { Range: '0-' + (MAX_SYNC - 1) });
+  if (r.status >= 300) { console.warn('  ⚠️ 读取待同步失败 HTTP ' + r.status + ' ' + r.body.slice(0, 160)); return null; }
+  let pending = [];
+  try { pending = JSON.parse(r.body); } catch (e) {}
+  // community 已命中的无需再抓 LP（省请求）
+  pending = pending.filter(function (x) { return x && x.data && x.data.tierSource !== 'community'; });
+  console.log('  待同步: ' + pending.length + ' 条（单次上限 ' + MAX_SYNC + '）');
+  if (!pending.length) return { synced: 0, upgraded: 0, failed: 0 };
+
+  let synced = 0, upgraded = 0, failed = 0;
+  for (let i = 0; i < pending.length; i++) {
+    const row = pending[i];
+    const key = row.canonical_key;
+    const doc = row.data || {};
+    const canonical = doc.canonical || '';
+    const slug = doc.liquipediaSlug || canonical;
+    if (!key || !canonical) continue;
+    if (i > 0) await sleep(RATE_MS);          // LP ≥2s 软限流
+
+    const wt = await fetchWikitext(slug);
+    if (!wt) { failed++; console.warn('  ✗ ' + canonical + ' wikitext 抓取失败'); continue; }
+    const parsed = CORE.parseLeagueTierFromWikitext(wt);
+    const lpTier = parsed ? parsed.tier : null;
+    const decision = CORE.decideTier(canonical, lpTier);
+
+    const currentGrade = (doc.tier && doc.tier.grade) || 'C';
+    const needs = decision.grade !== currentGrade || doc.tierSource !== decision.source || doc.status !== 'auto_tiered';
+    if (!needs) continue;
+
+    // ★ jsonb 整体替换 → 发送合并后的完整 data
+    const merged = Object.assign({}, doc, {
+      tier: { grade: decision.grade, rank: decision.rank, label: decision.label },
+      tierSource: decision.source,
+      liquipediaTier: lpTier,
+      status: 'auto_tiered',
+      updatedAt: Date.now()
+    });
+    const up = await sbReq('PATCH', '/rest/v1/curation_events?canonical_key=eq.' + encodeURIComponent(key),
+      { data: merged }, { Prefer: 'return=minimal' });
+    if (up.status >= 200 && up.status < 300) {
+      synced++;
+      if (decision.grade !== 'C' && currentGrade === 'C') { upgraded++; console.log('  ↑ ' + canonical + ': C → ' + decision.grade + '（' + decision.source + '）'); }
+    } else { failed++; console.warn('  ✗ ' + canonical + ' 写回失败 HTTP ' + up.status + ' ' + up.body.slice(0, 120)); }
+  }
+  console.log('  分级同步完成: ' + synced + ' 更新（其中升级 ' + upgraded + '）｜失败 ' + failed);
+  return { synced: synced, upgraded: upgraded, failed: failed };
+}
+
 (async () => {
   console.log('=== 每日赛事发现（阶段2-④）' + (APPLY ? ' ★ 实际写入' : ' 预览') + ' ===');
   console.log('  ' + new Date().toISOString());
@@ -224,11 +305,17 @@ async function upsert(rows) {
   const rows = toInsert.map((x) => ({ canonical_key: x.key, league_id: null, data: x.doc }));
   const ok = await upsert(rows);
 
+  // ④b：发现完成后，对 pending_review 的赛事做分级同步
+  let tierResult = null;
+  try { tierResult = await syncTiers(); }
+  catch (e) { console.warn('分级同步异常（不影响发现结果）:', e && e.message); }
+
   console.log('');
   console.log('=== 结果 ===');
   console.log('  现有基线: ' + existing.size + ' 条');
   console.log('  LP 候选 : ' + candidates.length + ' 条');
   console.log('  新发现  : ' + newOnes.length + ' 条 ｜ 本次写入 ' + rows.length + ' 条');
+  if (tierResult) console.log('  分级同步: ' + tierResult.synced + ' 更新 / ' + tierResult.upgraded + ' 升级 / ' + tierResult.failed + ' 失败');
   console.log('  ' + (ok ? '✅ 完成' : '⚠️ 有批次失败，见上'));
   process.exit(ok ? 0 : 1);
 })();
