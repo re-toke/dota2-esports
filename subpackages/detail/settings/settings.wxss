@@ -1,0 +1,184 @@
+/* 设置（二级页）2026-09-14
+   极简风：平铺留白、无阴影无描边装饰、无左侧图标；
+   全部色值/间距/圆角/字号引用 app.wxss token，零新增硬编码色。 */
+
+/* ===== 分组标题 ===== */
+.group-label {
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+  letter-spacing: 1rpx;
+  margin: var(--space-3) var(--space-0-5) var(--space-1-5);
+}
+
+/* ===== 卡片（极简：纯平铺，去阴影/去描边） ===== */
+.card {
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+.card--list {
+  padding: 0;
+  overflow: hidden;
+}
+
+/* ===== 通用行 ===== */
+.row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+.row-title {
+  font-size: var(--fs-subhead);
+  font-weight: 600;
+  color: var(--text-1);
+}
+.row-sub {
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+}
+.row-status {
+  flex-shrink: 0;
+  margin-left: var(--space-2);
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+}
+
+/* ===== 开关（纯 CSS，无第三方依赖） ===== */
+.switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 76rpx;
+  height: 44rpx;
+  border-radius: var(--radius-pill);
+  background: var(--td-bg-color-component-active);
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.switch.on { background: var(--dota-gold); }
+.switch.busy { opacity: 0.5; }
+.switch-knob {
+  position: absolute;
+  top: 4rpx;
+  left: 4rpx;
+  width: 36rpx;
+  height: 36rpx;
+  border-radius: 50%;
+  background: var(--td-bg-color-container);
+  box-shadow: 0 1rpx 4rpx var(--overlay-12);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.switch.on .switch-knob { transform: translateX(32rpx); }
+
+/* ===== 云同步说明 ===== */
+.scope {
+  margin-top: var(--space-2-5);
+  padding-top: var(--space-2-5);
+  border-top: 1rpx solid var(--td-border-level-1-color);
+  display: flex;
+  flex-direction: column;
+}
+.scope-lead {
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+  margin-bottom: var(--space-1);
+}
+.scope-item {
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+  line-height: var(--lh-loose);
+}
+.scope-note {
+  margin-top: var(--space-1);
+  font-size: var(--fs-caption);
+  color: var(--text-4);
+}
+
+/* ===== 提醒策略 ===== */
+.rem-block { margin-bottom: var(--space-2-5); }
+.rem-label {
+  display: block;
+  font-size: var(--fs-body);
+  color: var(--text-2);
+  margin-bottom: var(--space-1-5);
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1-5);
+}
+.chip {
+  font-size: var(--fs-body);
+  padding: 10rpx 22rpx;
+  border-radius: var(--radius-pill);
+  background: var(--td-bg-color-component);
+  color: var(--text-2);
+}
+.chip--on {
+  background: var(--dota-gold-soft);
+  color: var(--tier-s-text);
+  font-weight: 600;
+}
+.rem-hint {
+  display: block;
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+}
+
+/* ===== 设置项（列表内单元格） ===== */
+.cell {
+  display: flex;
+  align-items: center;
+  min-height: 96rpx;
+  padding: var(--space-2-5) var(--space-3);
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.cell + .cell { border-top: 1rpx solid var(--td-border-level-1-color); }
+.cell-hover { background: var(--td-bg-color-component); }
+.cell-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+.cell-title {
+  font-size: var(--fs-subhead);
+  color: var(--text-1);
+}
+.cell-desc {
+  font-size: var(--fs-caption);
+  color: var(--text-4);
+  line-height: var(--lh-normal);
+}
+.cell-value {
+  flex-shrink: 0;
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+}
+
+/* ===== CSS 箭头（避免引入图标组件 / 硬编码色） ===== */
+.chev {
+  flex-shrink: 0;
+  width: 14rpx;
+  height: 14rpx;
+  margin-left: var(--space-2);
+  border-right: 2rpx solid var(--text-4);
+  border-bottom: 2rpx solid var(--text-4);
+  transform: rotate(-45deg);
+}
+
+/* ===== 页脚 ===== */
+.foot-note {
+  margin: var(--space-4) var(--space-2) var(--space-2);
+  text-align: center;
+  font-size: var(--fs-micro);
+  color: var(--text-4);
+  line-height: var(--lh-relaxed);
+}

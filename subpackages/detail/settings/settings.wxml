@@ -1,0 +1,109 @@
+<!-- 设置（二级页）2026-09-14：从「我的」页下沉 —— 云同步说明 / 提醒策略 / 数据管理 / 关于。
+     设计：极简 —— 无卡片装饰色、无左侧图标，仅标题 + 说明 + CSS 绘制箭头，全部色值走 token。
+     注意：云同步**开关**仍在「我的」页（避免两处重复实现 enable/disable），此处只说明范围。 -->
+<view class="container with-safe-bottom">
+
+  <!-- ===== 云同步 ===== -->
+  <view class="group-label">云同步</view>
+  <view class="card">
+    <view class="row-between">
+      <text class="row-title">同步内容</text>
+      <text class="row-status">{{sync.enabled ? (sync.status === 'syncing' ? '正在同步…' : (sync.status === 'failed' ? '同步失败' : '已同步 · ' + sync.lastSyncText)) : '未开启'}}</text>
+    </view>
+    <view class="scope">
+      <text class="scope-lead">开启后换设备也能恢复你的关注与提醒（开关在「我的」页）。</text>
+      <text class="scope-item">· 关注的战队</text>
+      <text class="scope-item">· 提醒策略（提前量 / 级别）</text>
+      <text class="scope-item">· 订阅授权状态</text>
+      <text class="scope-note">不含头像与昵称（仅保存在本机）</text>
+    </view>
+  </view>
+
+  <!-- ===== 赛前提醒策略 ===== -->
+  <view class="group-label">赛前提醒</view>
+  <view class="card">
+    <view class="rem-block">
+      <text class="rem-label">提前量</text>
+      <view class="chips">
+        <view
+          wx:for="{{leadOptions}}"
+          wx:key="sec"
+          class="chip {{reminder.leadSec === item.sec ? 'chip--on' : ''}}"
+          data-sec="{{item.sec}}"
+          bindtap="onLeadChange"
+        >{{item.label}}</view>
+      </view>
+    </view>
+    <view class="rem-block">
+      <text class="rem-label">提醒级别</text>
+      <view class="chips">
+        <view
+          wx:for="{{tierOptions}}"
+          wx:key="grade"
+          class="chip {{item.selected ? 'chip--on' : ''}}"
+          data-grade="{{item.grade}}"
+          bindtap="onTierToggle"
+        >{{item.label}}</view>
+      </view>
+    </view>
+    <text class="rem-hint">仅对选中级别、赛前 {{reminder.leadSec / 60}} 分钟推送，降低打扰</text>
+  </view>
+
+  <!-- ===== 数据管理 ===== -->
+  <view class="group-label">数据管理</view>
+  <view class="card card--list">
+    <view class="cell" bindtap="onClearCache" hover-class="cell-hover">
+      <view class="cell-main">
+        <text class="cell-title">清除本机缓存</text>
+        <text class="cell-desc">仅赛事数据缓存与搜索历史，不影响关注与登录状态</text>
+      </view>
+      <view class="chev"></view>
+    </view>
+    <view class="cell" bindtap="onDeleteCloud" hover-class="cell-hover">
+      <view class="cell-main">
+        <text class="cell-title">删除云端数据</text>
+        <text class="cell-desc">删除云端保存的关注与提醒，本机数据保留</text>
+      </view>
+      <view class="chev"></view>
+    </view>
+    <view class="cell" bindtap="onResetAll" hover-class="cell-hover">
+      <view class="cell-main">
+        <text class="cell-title">重置全部数据</text>
+        <text class="cell-desc">删除云端数据并清空本机关注、资料与登录状态</text>
+      </view>
+      <view class="chev"></view>
+    </view>
+    <view class="cell" bindtap="onProfileReset" hover-class="cell-hover">
+      <view class="cell-main">
+        <text class="cell-title">重设头像与昵称</text>
+        <text class="cell-desc">清除本机保存的头像与昵称</text>
+      </view>
+      <view class="chev"></view>
+    </view>
+  </view>
+
+  <!-- ===== 关于 ===== -->
+  <view class="group-label">关于</view>
+  <view class="card card--list">
+    <view class="cell" bindtap="openPrivacy" hover-class="cell-hover">
+      <view class="cell-main">
+        <text class="cell-title">隐私与协议</text>
+      </view>
+      <view class="chev"></view>
+    </view>
+    <view class="cell">
+      <view class="cell-main">
+        <text class="cell-title">关于我们</text>
+      </view>
+      <text class="cell-value">v{{appVersion}}</text>
+    </view>
+    <view class="cell">
+      <view class="cell-main">
+        <text class="cell-title">图标素材</text>
+      </view>
+      <text class="cell-value">game-icons.net · CC BY 3.0</text>
+    </view>
+  </view>
+
+  <view class="foot-note">DOTA2 赛事通 · 数据来自 OpenDota / STRATZ / Liquipedia 等公开来源</view>
+</view>

@@ -16,7 +16,8 @@
         "match-detail/match-detail",
         "team-detail/team-detail",
         "h2h/h2h",
-        "privacy/privacy"
+        "privacy/privacy",
+        "settings/settings"
       ]
     },
     {

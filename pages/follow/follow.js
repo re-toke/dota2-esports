@@ -8,8 +8,8 @@ const sources = require('../../utils/sources.js');
 const auth = require('../../utils/auth.js');
 // ★ 2026-09-10（账号体系重构）：云同步开关状态（替代原「隐式自动上云」）
 const cloudSync = require('../../utils/cloudSync.js');
-// ★ 2026-09-10（复核 A2）：本机存储分类清理（替代原 wx.clearStorageSync 一刀切）
-const storageReset = require('../../utils/storageReset.js');
+// ★ 2026-09-14（极简改造）：数据管理 3 项 + 资料重置已下沉到 /subpackages/detail/settings
+//   → 本页不再 require storageReset。
 
 const TABS = [
   { key: 'teams', label: '战队' },
@@ -32,7 +32,8 @@ function formatLastSync(ts) {
 
 Page({
   data: {
-    tabs: TABS,
+    // 分段标签带关注计数（原独立统计行已移除 —— 计数并入此处）
+    tabs: TABS.map((t) => ({ key: t.key, label: t.label, count: 0 })),
     activeTab: 'teams',
     activeLabel: '战队',
     items: [],
@@ -45,17 +46,8 @@ Page({
     // 2.2 订阅状态
     subStatus: null,   // { subscribed, time } | null
     subReady: false,   // 是否已配置模板
-    tmplTitle: subscribe.TEMPLATE_TITLE || '',
-    sendHistory: [],   // 最近发送记录
-    todayCount: 0,      // 今日发送次数
-    // #20 智能提醒策略
+    // #20 智能提醒策略（提前量/级别的编辑入口已下沉到「设置」页；本页只读展示提前量）
     reminder: { leadSec: 1800, tiers: ['S', 'A'] },
-    leadOptions: reminderStrategy.LEAD_OPTIONS,
-    // tierOptions 在 applyReminder 中按 reminder.tiers 预计算 selected 标记（避免 WXML 内调用
-    // Array.indexOf 在 setData 新 reminder 对象后不重算的坑，导致「提醒级别」无法选中）
-    tierOptions: reminderStrategy.TIER_OPTIONS.map((t) => ({
-      grade: t.grade, label: t.label, selected: ['S', 'A'].indexOf(t.grade) >= 0
-    })),
     // ★ 批次4（2026-08-30）· PRD §11.2：用户卡身份升级为 chooseAvatar + 昵称 input，
     //   仅存本地 storage（无服务端账号体系）。openid 登录保留（订阅前置），不再驱动用户卡 UI。
     profile: { avatarUrl: '', nickname: '' },
@@ -66,14 +58,10 @@ Page({
     // ★ 2026-09-10（复核 A4）：隐私授权状态——未授权时 <input type="nickname"> 会
     //   降级为普通文本框（官方行为），用户会误以为「填不出微信昵称 = 坏了」
     privacyNeedAuth: false,
-    // ★ 批次4 §11.1：推送记录默认折叠（sendLogExpanded）
-    sendLogExpanded: false,
-    // 每日推送上限（O2/V1：subscribe.js DAILY_LIMIT 未导出，WXML 无法访问模块对象，故硬编码）
-    dailyLimit: 5,
+    // ★ 2026-09-14（极简改造）：sendLogExpanded / dailyLimit 随「推送记录」与「每日上限」文案一并移除。
     // 空态「发现」按钮文案（按当前 Tab + A/B 实验动态生成）
-    exploreText: '去发现战队',
-    // v11 系统配置：关于我们版本号
-    appVersion: '1.1.0'
+    exploreText: '去发现战队'
+    // ★ 2026-09-14（极简改造）：appVersion 随「关于」区块下沉到设置页，本页不再需要。
   },
 
   onShow() {
@@ -94,8 +82,6 @@ Page({
     this._enrichFollowLogos(all);
 
     const st = subscribe.getSubStatus();
-    const history = (subscribe.getSendHistory(10) || []).slice(0, 5);   // P3-3：JS 侧限 5 条，wxml 不再 wx:if
-    const today = subscribe.getTodayCount();
     const reminder = reminderStrategy.getStrategy();
     const ctaVariant = experiment.getVariant('follow_cta_variant', 'A');
     // ★ 2026-08-07（R2）：预登录预热 + 云端订阅态恢复（fire-and-forget，缓存命中零请求）
@@ -113,10 +99,16 @@ Page({
       }).catch(() => {});
     }
 
+    const counts = follow.counts();
     const patch = {
       ctaVariant: ctaVariant,
       items: slice,
-      counts: follow.counts(),
+      counts: counts,
+      // 分段标签带计数（原独立统计行已移除）
+      tabs: [
+        { key: 'teams', label: '战队', count: counts.teams || 0 },
+        { key: 'leagues', label: '赛事', count: counts.leagues || 0 }
+      ],
       activeLabel: LABELS[active],
       exploreText: active === 'leagues'
         ? (ctaVariant === 'B' ? '浏览热门赛事' : '去发现赛事')
@@ -125,14 +117,7 @@ Page({
       hasMore: all.length > slice.length,
       subStatus: st,
       subReady: !!subscribe.TMPL_ID,
-      sendHistory: (history || []).map((h) => Object.assign({}, h, { leagueName: sources.leagueDisplayName(h.leagueName || ''), displayName: sources.leagueDisplayName(h.leagueName || '') })),
-      todayCount: today,
-      reminder: reminder,
-      tierOptions: reminderStrategy.TIER_OPTIONS.map((t) => ({
-        grade: t.grade,
-        label: t.label,
-        selected: (reminder.tiers || []).indexOf(t.grade) >= 0
-      }))
+      reminder: reminder
     };
     this.setData(patch);
     this.syncProfile();
@@ -183,17 +168,9 @@ Page({
     this.setData({ profile: p });
   },
 
-  // ★ 批次4 §11.1：推送记录折叠/展开
-  toggleSendLog() {
-    this.setData({ sendLogExpanded: !this.data.sendLogExpanded });
-  },
+  // ★ 2026-09-14（极简改造）：推送记录与统计行已移除 → toggleSendLog / scrollToReminder 删除。
 
-  // ★ 批次4 §11.3：统计行第三格点击 → 滚动至段三「赛前提醒」卡
-  scrollToReminder() {
-    wx.pageScrollTo({ selector: '#sec-reminder', duration: 300 });
-  },
-
-  // ★ 批次4 §11.1：合并卡开关（卡头 pill）——已开启走取消（含确认弹窗），未开启走订阅
+  // ★ 批次4 §11.1：提醒开关（已开启走取消，未开启走订阅）
   onToggleReminder() {
     if (this.data.subStatus && this.data.subStatus.subscribed) {
       this.onUnsubscribe();
@@ -207,89 +184,11 @@ Page({
     wx.navigateTo({ url: '/subpackages/detail/privacy/privacy' });
   },
 
-  // ===== ★ 2026-09-10（复核 A2）：数据管理拆三项 =====
-  //   原实现用 wx.clearStorageSync() 一刀切：**连同步开关状态一起清掉却不动云端**
-  //   → 造出「云端孤儿」（本地显示未开启、云端仍在，且删除入口点不动）。
-  //   现改为三类独立操作，且「删除云端数据」恒定可用（与开关状态无关）。
-
-  /** ① 只清缓存（保留关注/资料/凭证/同步开关） */
-  onClearCache() {
-    wx.showModal({
-      title: '清除本机缓存',
-      content: '仅清除赛事数据缓存与搜索历史，不影响你的关注、资料与登录状态。',
-      confirmText: '清除',
-      success: (res) => {
-        if (!res.confirm) return;
-        const r = storageReset.clearCacheOnly();
-        this.onShow();
-        wx.showToast({ title: '已清除 ' + r.removed + ' 项缓存', icon: 'none' });
-      }
-    });
-  },
-
-  /** ② 删除云端数据（★ 恒定可用 —— 专治「同步已关但云端仍有数据」的孤儿） */
-  onDeleteCloud() {
-    wx.showModal({
-      title: '删除云端数据',
-      content: '将删除云端保存的关注与提醒数据。本机数据不受影响。删除后换设备将无法恢复。',
-      confirmText: '删除',
-      confirmColor: '#E8443B',
-      success: (res) => {
-        if (!res.confirm) return;
-        wx.showLoading({ title: '删除中…', mask: true });
-        cloudSync.deleteCloudData().then((r) => {
-          wx.hideLoading();
-          this._refreshSyncState();
-          wx.showToast({ title: r.ok ? '云端数据已删除' : '删除失败，请检查网络后重试', icon: 'none' });
-        });
-      }
-    });
-  },
-
-  /** ③ 重置全部：先删云端 → 成功才清本机（顺序不可颠倒） */
-  onResetAll() {
-    const hasCloud = cloudSync.getState().enabled;
-    wx.showModal({
-      title: '重置全部数据',
-      content: hasCloud
-        ? '将删除云端数据，并清空本机的关注、资料与登录状态。此操作不可撤销。'
-        : '将清空本机的关注、资料与登录状态。此操作不可撤销。',
-      confirmText: '重置全部',
-      confirmColor: '#E8443B',
-      success: (res) => {
-        if (!res.confirm) return;
-        wx.showLoading({ title: '处理中…', mask: true });
-        storageReset.resetAll().then((r) => {
-          wx.hideLoading();
-          if (!r.ok) {
-            // ★ 云端删除失败 → 中止，不清本机（避免制造新的不一致）
-            wx.showModal({
-              title: '未能完成',
-              content: '云端数据删除失败（可能是网络问题），为避免数据状态不一致，本机数据**未**清除。请稍后重试。',
-              showCancel: false,
-              confirmText: '知道了'
-            });
-            return;
-          }
-          this.onShow();
-          wx.showToast({ title: '已重置', icon: 'success' });
-        });
-      }
-    });
-  },
-
-  /** ★ A3：重置本机资料（头像/昵称）—— 此前无入口，选错了只能再选一次 */
-  onProfileReset() {
-    wx.showModal({
-      title: '重置头像与昵称',
-      content: '将清除本机保存的头像与昵称（不影响关注与提醒）。',
-      confirmText: '重置',
-      success: (res) => {
-        if (!res.confirm) return;
-        this._saveProfile({ avatarUrl: '', nickname: '' });
-        wx.showToast({ title: '已重置', icon: 'success' });
-      }
-    });
+  // ===== 设置入口（2026-09-14 极简改造） =====
+  //   原「云同步内容明细 + 提醒策略 chips + 数据管理 3 项 + 关于 3 项」已全部下沉到设置二级页，
+  //   本页只保留一个入口。合规上「删除云端数据」路径 = 我的 → 设置 → 数据管理（入口仍可达）。
+  goSettings() {
+    wx.navigateTo({ url: '/subpackages/detail/settings/settings' });
   },
 
   // ===== ★ A4：隐私授权状态 =====
@@ -323,9 +222,15 @@ Page({
     this.allItems = all;
     const pageSize = this.data.pageSize;
     const slice = all.slice(0, pageSize);
+    const counts = follow.counts();
     this.setData({
       items: slice,
-      counts: follow.counts(),
+      counts: counts,
+      // 分段计数同步（取消关注后需立即反映）
+      tabs: [
+        { key: 'teams', label: '战队', count: counts.teams || 0 },
+        { key: 'leagues', label: '赛事', count: counts.leagues || 0 }
+      ],
       activeLabel: LABELS[active],
       exploreText: this.buildExploreText(active),
       page: 0,
@@ -362,8 +267,8 @@ Page({
     });
   },
 
-  // loadSubStatus / loadReminder 保留给显式调用（订阅状态变更后）
-  // onShow 已合并其逻辑，不再单独调用
+  // loadSubStatus 保留给显式调用（订阅状态变更后）；onShow 已合并其逻辑。
+  // ★ 2026-09-14：loadReminder 已删除（策略编辑下沉到「设置」页）。
 
   onReachBottom() {
     if (this.data.hasMore && !this.data.loadingMore) this.appendPage();
@@ -525,57 +430,16 @@ Page({
 
   // ===== 2.2 订阅状态展示 =====
   loadSubStatus() {
-    var st = subscribe.getSubStatus();
-    var history = (subscribe.getSendHistory(10) || []).slice(0, 5);   // P3-3：JS 侧限 5 条，wxml 不再 wx:if
-    var today = subscribe.getTodayCount();
     this.setData({
-      subStatus: st,
-      subReady: !!subscribe.TMPL_ID,
-      sendHistory: (history || []).map((h) => Object.assign({}, h, { leagueName: sources.leagueDisplayName(h.leagueName || ''), displayName: sources.leagueDisplayName(h.leagueName || '') })),
-      todayCount: today
+      subStatus: subscribe.getSubStatus(),
+      subReady: !!subscribe.TMPL_ID
     });
   },
 
   // ===== #20 智能提醒策略 =====
-  // 应用策略并同步「提醒级别」选项选中态：在 JS 侧预计算 selected（item.selected），
-  // 避免 WXML 内 reminder.tiers.indexOf(item.grade) 在 setData 新 reminder 对象后不重算，
-  // 表现为「提醒级别」选项点不动。tierOptions 引用变更也会强制 wx:for 重渲染。
-  applyReminder(reminder) {
-    this.setData({
-      reminder,
-      tierOptions: reminderStrategy.TIER_OPTIONS.map((t) => ({
-        grade: t.grade,
-        label: t.label,
-        selected: (reminder.tiers || []).indexOf(t.grade) >= 0
-      }))
-    });
-  },
-
-  loadReminder() {
-    this.applyReminder(reminderStrategy.getStrategy());
-    this.syncProfile();
-  },
-
-  // 切换提前量
-  onLeadChange(e) {
-    const sec = Number(e.currentTarget.dataset.sec);
-    const s = reminderStrategy.setStrategy(Object.assign({}, this.data.reminder, { leadSec: sec }));
-    this.setData({ reminder: s });
-    this.syncProfile();
-  },
-
-  // 切换分级开关（多选）
-  onTierToggle(e) {
-    const grade = e.currentTarget.dataset.grade;
-    if (!grade) return;
-    const cur = this.data.reminder.tiers.slice();
-    const idx = cur.indexOf(grade);
-    if (idx >= 0) cur.splice(idx, 1); else cur.push(grade);
-    if (!cur.length) cur.push(grade); // 至少保留一个
-    const s = reminderStrategy.setStrategy(Object.assign({}, this.data.reminder, { tiers: cur }));
-    this.applyReminder(s);
-    this.syncProfile();
-  },
+  // ★ 2026-09-14（极简改造）：提前量/级别的编辑入口（chips）已下沉到「设置」页
+  //   （/subpackages/detail/settings）。本页只读展示 leadSec；策略变更由设置页负责
+  //   即时上传，本页 onShow 的 syncProfile 作为兜底再次对齐。
 
   // 把关注战队 + 策略上传云端（#20 服务端策略引擎数据层）
   syncProfile() {

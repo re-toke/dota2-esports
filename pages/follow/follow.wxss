@@ -1,43 +1,18 @@
+/* 「我的」页 · 极简版（2026-09-14）
+   极简原则：平铺留白、单层卡片、无装饰渐变/彩条/图标环、弱化色彩噪音。
+   全部色值/间距/圆角/字号引用 app.wxss token，零新增硬编码色。 */
+
 .container { padding: var(--space-3); }
 
-/* ===== 段一 · 身份区（批次4 · PRD §11.1/11.2 紧凑头部卡） =====
-   用户卡 + 统计行合并为单卡：上=chooseAvatar 头像 + 昵称 input；下=内嵌统计行。 */
-.user-card {
-  position: relative;
-  background: var(--card-bg, #FFFFFF);
-  border: 1rpx solid var(--td-border-level-1-color);
-  border-radius: var(--radius-lg, 16rpx);
-  padding: var(--space-3) var(--space-2-5);
-  margin-bottom: var(--space-2);
-  overflow: hidden;
-  box-shadow: var(--card-inner-shadow, 0 1rpx 4rpx rgba(0,0,0,0.04));
-}
-/* 顶部金线：暗示"传说级"身份 */
-.user-card::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 16rpx; right: 16rpx;
-  height: 2rpx;
-  background: linear-gradient(90deg, transparent, var(--dota-gold, #C8A951), transparent);
-  z-index: 1;
-}
-/* 底部三色阵营签名条：天辉绿→金→夜魇红 */
-.user-card::after {
-  content: '';
-  position: absolute;
-  bottom: 0; left: 0; right: 0;
-  height: 2rpx;
-  background: linear-gradient(90deg, var(--radiant, #5fd35f) 0%, var(--dota-gold, #C8A951) 50%, var(--dire, #e8443b) 100%);
-  opacity: 0.6;
-  z-index: 1;
-}
-.uc-top {
+/* ===== ① 身份条（直接坐在页面底色上，不用卡片 —— 极简签名） ===== */
+.hero {
   display: flex;
   align-items: center;
   gap: var(--space-2-5);
+  padding: var(--space-2) var(--space-1) var(--space-3);
 }
-/* chooseAvatar 承载按钮：去原生样式（透明底/无边框/无 ::after） */
-.uc-avatar-btn {
+/* chooseAvatar 承载按钮：去原生样式 */
+.hero-avatar-btn {
   position: relative;
   padding: 0;
   margin: 0;
@@ -49,554 +24,104 @@
   line-height: 1;
   flex-shrink: 0;
 }
-.uc-avatar-btn::after { border: none; }
-/* 头像 96rpx 圆形 + 2rpx 暗金描边环（§11.2）——环用 box-shadow 外扩避免挤压 image */
-.uc-avatar-img {
+.hero-avatar-btn::after { border: none; }
+.hero-avatar {
   width: 96rpx;
   height: 96rpx;
   border-radius: 50%;
   display: block;
-  box-shadow: 0 0 0 2rpx var(--dota-gold, #C8A951);
+  background: var(--card-bg-inset);
 }
-.uc-avatar-default {
-  background: rgba(200, 169, 81, 0.12);
-  padding: 16rpx;
-  box-sizing: border-box;
-}
-.user-info {
+.hero-avatar--default { padding: 20rpx; box-sizing: border-box; }
+.hero-info {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 6rpx;
 }
-/* 昵称 input（type=nickname）：外观对齐原 user-name */
-.uc-name-input {
-  font-size: var(--fs-heading);
-  font-weight: 600;
-  color: var(--text-1);
-  font-family: var(--font-display, -apple-system, sans-serif);
+.hero-name {
   height: 48rpx;
   line-height: 48rpx;
+  font-size: var(--fs-heading);
+  font-weight: 600;
+  color: var(--text-1);
 }
-.uc-name-ph {
-  color: var(--text-3);
+.hero-name-ph {
+  color: var(--text-4);
   font-weight: 400;
 }
-.user-status {
-  font-size: var(--fs-body);
-  color: var(--text-3);
-}
-/* ===== 统计行（内嵌于头部卡，无独立分隔线卡） ===== */
-.uc-stats {
-  display: flex;
-  align-items: center;
-  margin-top: var(--space-3);
-  padding-top: var(--space-3);
-  border-top: 1rpx solid var(--td-border-level-1-color);
-}
-.stat-cell {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-0-5);
-  transition: background 120ms ease;
-}
-.stat-cell:active {
-  background: var(--td-bg-color-component-active, #E5E7EB);
-  border-radius: var(--radius-sm);
-}
-/* 数字格：tnum 数字字体（§11.3 第一/二格保持数字） */
-.stat-value {
-  font-size: var(--fs-display);
-  font-weight: 700;
-  color: var(--text-1);
-  font-family: var(--font-numeric, var(--font-display, -apple-system, sans-serif));
-  font-feature-settings: 'tnum';
-  line-height: 1.1;
-}
-.stat-cell:nth-child(1) .stat-value { color: var(--radiant, #5fd35f); }
-.stat-cell:nth-child(3) .stat-value { color: var(--dota-gold, #C8A951); }
-.stat-label {
+.hero-sub {
   font-size: var(--fs-caption);
   color: var(--text-3);
 }
-.stat-divider {
-  width: 1rpx;
-  height: 48rpx;
-  background: var(--overlay-04);
-  flex-shrink: 0;
-}
-/* ===== 第三格提醒徽章（§11.3：已开启红脉冲 / 未开启灰静态） ===== */
-.rem-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 8rpx;
-  height: 48rpx;
-  padding: 0 18rpx;
-  border-radius: var(--radius-pill, 999rpx);
-  background: rgba(107, 114, 128, 0.14);
-}
-.rem-dot {
-  width: 10rpx;
-  height: 10rpx;
-  border-radius: 50%;
-  background: var(--text-3);
-}
-.rem-text {
-  font-size: var(--fs-caption);
-  font-weight: 600;
-  color: var(--text-2);
-}
-.rem-badge--on {
-  background: rgba(239, 68, 68, 0.14);
-}
-.rem-badge--on .rem-dot {
-  background: var(--status-live, #EF4444);
-  animation: signal-dot var(--dur-breath) var(--ease-in-out) infinite;
-}
-.rem-badge--on .rem-text {
-  color: var(--status-live, #EF4444);
-}
-@media (prefers-reduced-motion: reduce) {
-  .rem-badge--on .rem-dot { animation: none; }
-}
 
-/* ===== 分区标签 ===== */
-.section-label {
-  font-size: var(--fs-label);
-  font-weight: 600;
-  color: var(--text-2);
-  letter-spacing: 1rpx;
-  margin: var(--space-3) 0 var(--space-1);
-  padding-left: var(--space-0-5);
-}
-
-/* ===== 分段控件 ===== */
-.seg {
-  display: flex;
-  background: var(--card-bg-inset, #F1F3F5);
-  border-radius: var(--radius-md, 12rpx);
-  padding: var(--space-0-5);
-  margin: var(--space-2) 0;
-}
-.seg-item {
-  flex: 1;
-  text-align: center;
-  padding: 14rpx 0;
-  font-size: var(--fs-label);
-  color: var(--text-2);
-  border-radius: var(--radius-sm);
-  transition: background 120ms ease, color 120ms ease;
-}
-.seg-item.active {
-  background: var(--card-bg-elevated, #F1F3F5);
-  color: var(--text-1);
-  font-weight: 600;
-}
-
-/* ===== 关注卡片（v11 聚光灯：Tier 浸染 + 冷炭灰底） ===== */
-.list { margin-bottom: var(--space-3); }
-.follow-card {
-  position: relative;
-  display: flex;
-  align-items: center;
-  background: var(--card-bg, #FFFFFF);
-  border-radius: var(--radius-lg, 16rpx);
-  padding: 18rpx var(--space-2-5);
-  margin-bottom: var(--space-1-5);
-  overflow: hidden;
-  transition: background 120ms ease;
-}
-.follow-card-hover {
-  background: var(--card-bg-elevated, #F1F3F5);
-}
-.follow-card-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-/* 头像/Logo 占位符：圆角方块，按类型染色 */
-.follow-avatar {
-  width: 72rpx;
-  height: 72rpx;
-  border-radius: var(--radius-md, 12rpx);
-  background: var(--card-bg-inset, #F1F3F5);
-  border: 1rpx solid var(--td-border-level-1-color);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--fs-subhead);
-  font-weight: 700;
-  color: var(--text-2);
-  font-family: var(--font-mono, monospace);
-  flex-shrink: 0;
-}
-.follow-avatar-teams {
-  background: var(--radiant-soft);
-  color: var(--radiant);
-  border-color: rgba(95, 211, 95, 0.3);
-}
-.follow-avatar-leagues {
-  background: rgba(255, 207, 92, 0.12);
-  color: var(--dota-gold-strong);
-  border-color: rgba(255, 207, 92, 0.3);
-}
-.follow-avatar-icon {
-  font-size: var(--fs-heading);
-}
-/* ★ 2026-08-13（关注页头像区优化 · 3）：战队队标图片——铺满头像区，圆角继承父级 */
-.follow-avatar-img {
-  width: 100%;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--card-bg-inset, #F1F3F5);
-}
-
-.follow-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-0-5);
-}
-.follow-name-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-.follow-name {
-  font-size: var(--fs-emphasis);
-  font-weight: 600;
-  color: var(--text-1);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--font-display, -apple-system, sans-serif);
-}
-.type-badge {
-  font-size: var(--fs-badge);
-  padding: 2rpx var(--space-1);
-  border-radius: var(--radius-pill, 999rpx);
-  font-weight: 600;
-  flex-shrink: 0;
-  font-family: var(--font-mono, monospace);
-  letter-spacing: 0.5rpx;
-}
-.type-teams {
-  background: rgba(95, 211, 95, 0.14);
-  color: var(--radiant);
-}
-.type-leagues {
-  background: rgba(255, 207, 92, 0.14);
-  color: var(--dota-gold-strong);
-}
-.follow-sub {
-  font-size: var(--fs-caption);
-  color: var(--text-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* 取消关注按钮 */
-.follow-action {
-  padding: var(--space-2) var(--space-1) var(--space-2) var(--space-2);
-  flex-shrink: 0;
-}
-
-/* ===== 底部 ===== */
-.footer { margin-top: var(--space-2); }
-.tip {
-  font-size: var(--fs-body);
-  line-height: var(--lh-relaxed);
-  margin-bottom: var(--space-2-5);
-  color: var(--text-3);
-}
-.muted { color: var(--text-3); }
-.loadmore { display: flex; justify-content: center; margin: var(--space-3) 0 var(--space-1); }
-.center.muted {
-  text-align: center;
-  color: var(--text-3);
-  font-size: var(--fs-body);
-  padding: var(--space-3) 0;
-}
-
-/* ===== 段三 · 合并卡（批次4 · PRD §11.1：sub-card + reminder-card 合并） ===== */
-/* 原 .sub-card 样式已删（功能并入 .reminder-card 合并卡）。 */
-.sub-card-head {
+/* ===== 隐私未授权提示（可点击去同意） ===== */
+.privacy-tip {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: var(--space-1-5);
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2-5);
+  margin-bottom: var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--dota-gold-soft);
 }
-/* 卡头左组：标题 + 订阅状态徽章 */
-.rc-head-left {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1-5);
-  min-width: 0;
+.privacy-tip-text {
+  font-size: var(--fs-caption);
+  color: var(--tier-s-text);
 }
-.sub-card-title {
-  font-size: var(--fs-emphasis);
-  font-weight: 600;
-  color: var(--text-1);
-}
-.sub-badge {
-  font-size: var(--fs-micro);
-  padding: var(--space-0-5) 14rpx;
-  border-radius: var(--radius-pill, 999rpx);
-  font-weight: 600;
-}
-.sub-badge--on {
-  background: rgba(95, 211, 95, 0.14);
-  color: var(--radiant);
-  /* v11 聚光灯：信号激活脉冲（signal-dot 定义在 app.wxss；v18 统一呼吸节奏 --dur-breath） */
-  animation: signal-dot var(--dur-breath) var(--ease-in-out) infinite;
-}
-.sub-badge--off {
-  background: rgba(107, 114, 128, 0.14);
-  color: var(--text-2);
-}
-/* 卡头开关 pill（§11.1）：未开启=暗金描边、已开启=夜魇红实底 */
-.rc-toggle {
+.privacy-tip-link {
   flex-shrink: 0;
   font-size: var(--fs-caption);
   font-weight: 600;
-  padding: 8rpx 26rpx;
-  border-radius: var(--radius-pill, 999rpx);
-  background: rgba(200, 169, 81, 0.16);
-  border: 1rpx solid rgba(200, 169, 81, 0.5);
-  color: var(--text-1);
+  color: var(--tier-s-text);
 }
-.rc-toggle--on {
-  background: rgba(232, 68, 59, 0.16);
-  border-color: rgba(232, 68, 59, 0.55);
-  color: var(--dire);
+
+/* ===== 通用单行卡（提醒 / 设置入口） ===== */
+.row-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: 112rpx;
+  padding: var(--space-2-5) var(--space-3);
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-2);
+  transition: background var(--dur-fast) var(--ease-out);
 }
-/* 已开启卡身内「重新授权」链接（替代原双按钮区） */
-.rc-reauth {
-  display: block;
-  margin-top: var(--space-1-5);
-  font-size: var(--fs-caption);
-  color: var(--text-3);
-  text-decoration: underline;
-  text-decoration-color: rgba(154, 164, 178, 0.4);
-}
-.sub-card-body {
+.row-card-hover { background: var(--td-bg-color-component); }
+.row-card--nav { min-height: 96rpx; }
+.row-main {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 6rpx;
-  margin-bottom: var(--space-2);
 }
-.sub-info {
-  font-size: var(--fs-body);
-  color: var(--text-2);
-}
-.sub-muted {
-  color: var(--text-3);
-  font-size: var(--fs-body);
-}
-/* 降级态（subReady=false）：单行引导卡（§11.1 复核新增） */
-.rc-degraded {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-2-5) 0;
-}
-.rc-degraded-text {
-  font-size: var(--fs-body);
-  color: var(--text-3);
-}
-/* 推送记录折叠行（§11.1：默认收起「推送记录 N 条 ›」） */
-.sl-fold {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-1-5) 0;
-}
-.sl-fold .send-log-title {
-  margin-bottom: 0;
-}
-
-/* 批次4 §11.1：.sub-actions 双按钮布局已移除（改卡头开关 pill + 卡身「重新授权」链接） */
-
-/* ===== 发送记录 ===== */
-.send-log { margin-top: var(--space-2); }
-.send-log-title {
-  font-size: var(--fs-label);
-  font-weight: 600;
-  color: var(--text-1);
-  margin-bottom: var(--space-1-5);
-}
-.send-log-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1-5);
-  padding: 10rpx 0;
-  border-bottom: 1rpx solid var(--td-border-level-1-color);
-}
-.sl-status {
-  font-size: var(--fs-micro);
-  padding: 2rpx 10rpx;
-  border-radius: var(--radius-pill, 999rpx);
-  font-weight: 600;
-  flex-shrink: 0;
-}
-.sl-ok {
-  background: rgba(95, 211, 95, 0.14);
-  color: var(--radiant);
-}
-.sl-fail {
-  background: rgba(248, 113, 113, 0.14);
-  color: var(--dire);
-}
-.sl-detail {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  justify-content: space-between;
-}
-.sl-league {
-  font-size: var(--fs-body);
-  color: var(--text-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 320rpx;
-}
-.sl-time {
-  font-size: var(--fs-caption);
-  color: var(--text-3);
-  flex-shrink: 0;
-}
-
-/* 底部 spacer：配合 with-tab-bar 留出自定义 tabBar 区域 */
-.bottom-spacer { height: 24rpx; }
-
-/* ===== #20 智能提醒设置 ===== */
-.reminder-card {
-  background: var(--card-bg, #FFFFFF);
-  border-radius: var(--radius-lg, 16rpx);
-  padding: var(--space-3);
-  margin-bottom: var(--space-3);
-  border: 1rpx solid var(--td-border-level-1-color);
-}
-.reminder-block { margin: var(--space-2) 0; }
-.reminder-label {
-  font-size: var(--fs-body);
-  color: var(--text-2);
-  margin-bottom: var(--space-1-5);
-  display: block;
-}
-.reminder-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 14rpx;
-}
-.rc-chip {
-  font-size: var(--fs-body);
-  padding: 10rpx 22rpx;
-  border-radius: var(--radius-pill, 999rpx);
-  background: var(--overlay-02);
-  color: var(--text-2);
-  border: 1rpx solid transparent;
-}
-.rc-chip--on {
-  background: rgba(200,169,81,0.16);
-  border-color: rgba(200,169,81,0.5);
-  color: var(--text-1);
-  font-weight: 600;
-}
-.reminder-hint {
-  font-size: var(--fs-caption);
-  color: var(--text-3);
-  margin-top: var(--space-1);
-  display: block;
-}
-
-/* ===== v11 新增：系统配置区（个人英雄面板底部） ===== */
-.settings-card {
-  background: var(--card-bg, #FFFFFF);
-  border-radius: var(--radius-lg, 14rpx);
-  overflow: hidden;
-  margin-bottom: var(--space-2);
-}
-.settings-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: 88rpx;
-  padding: 0 var(--space-3);
-  background: var(--card-bg, #FFFFFF);
-}
-.settings-item + .settings-item {
-  border-top: 1rpx solid var(--td-border-level-1-color);
-}
-.settings-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40rpx;
-  flex-shrink: 0;
-}
-.settings-title {
-  flex: 1;
+.row-title {
   font-size: var(--fs-subhead);
   color: var(--text-1);
 }
-.settings-value {
+.row-sub {
   font-size: var(--fs-caption);
   color: var(--text-3);
 }
 
-/* ===== ★ 2026-09-10（账号体系重构）：云同步开关 =====
-   设计要点：与用户卡同一容器内的次级行；开关用纯 CSS 实现（无第三方组件依赖）；
-   状态差异靠 --dota-gold（已同步=品牌金实心）/ 灰（未开启）区分，避免引入新色。 */
-/* ★ 2026-09-10：拆为独立卡后，不再需要卡内的上分隔线 */
-.uc-sync {
-  display: block;
-}
-.uc-sync-main {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.uc-sync-hover { opacity: 0.7; }
-.uc-sync-text {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-width: 0;
-}
-.uc-sync-title {
-  font-size: var(--fs-label);
-  color: var(--text-1);
-  font-weight: 600;
-}
-.uc-sync-sub {
-  margin-top: 6rpx;
-  font-size: var(--fs-caption);
-  color: var(--text-3);
-}
-/* 开关本体 */
-.uc-sync-switch {
+/* ===== 开关（纯 CSS，无第三方依赖） ===== */
+.switch {
   position: relative;
   flex-shrink: 0;
-  margin-left: 20rpx;
   width: 76rpx;
   height: 44rpx;
-  border-radius: 22rpx;
+  border-radius: var(--radius-pill);
   background: var(--td-bg-color-component-active);
-  transition: background 0.2s ease;
+  transition: background var(--dur-fast) var(--ease-out);
 }
-.uc-sync-switch.on { background: var(--dota-gold); }
-.uc-sync-switch.busy { opacity: 0.5; }
-.uc-sync-knob {
+.switch.on { background: var(--dota-gold); }
+.switch.busy { opacity: 0.5; }
+.switch-knob {
   position: absolute;
   top: 4rpx;
   left: 4rpx;
@@ -605,76 +130,142 @@
   border-radius: 50%;
   background: var(--td-bg-color-container);
   box-shadow: 0 1rpx 4rpx var(--overlay-12);
-  transition: transform 0.2s ease;
+  transition: transform var(--dur-fast) var(--ease-out);
 }
-.uc-sync-switch.on .uc-sync-knob { transform: translateX(32rpx); }
+.switch.on .switch-knob { transform: translateX(32rpx); }
 
-/* ===== ★ 2026-09-10（复核整改）新增样式 ===== */
-
-/* A3：资料重置入口（右上角小字） */
-.uc-reset {
-  flex-shrink: 0;
-  margin-left: 16rpx;
-  padding: 8rpx 16rpx;
-  font-size: var(--fs-caption);
+/* ===== ③ 分段（极简下划线 tab，计数并入标签） ===== */
+.seg {
+  display: flex;
+  gap: var(--space-5);
+  margin: var(--space-1) var(--space-1) 0;
+  border-bottom: 1rpx solid var(--td-border-level-1-color);
+}
+.seg-item {
+  position: relative;
+  padding: 0 0 var(--space-1-5);
+  font-size: var(--fs-label);
   color: var(--text-3);
-  border: 1rpx solid var(--td-border-level-1-color);
-  border-radius: 24rpx;
+}
+.seg-item.active {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.seg-item.active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1rpx;
+  height: 3rpx;
+  border-radius: 3rpx;
+  background: var(--dota-gold);
 }
 
-/* A4：隐私未授权提示（可点击去同意） */
-.uc-privacy-tip {
+/* ===== 关注列表（单卡 + 行分隔，替代逐项卡片） ===== */
+.list {
+  margin: var(--space-2-5) 0 var(--space-2);
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.follow-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-top: 16rpx;
-  padding: 16rpx 20rpx;
-  border-radius: 12rpx;
-  background: var(--dota-gold-soft);
-  font-size: var(--fs-caption);
-  color: var(--tier-s-text);
+  min-height: 108rpx;
+  padding: var(--space-2) var(--space-3);
+  transition: background var(--dur-fast) var(--ease-out);
 }
-.uc-privacy-link {
-  flex-shrink: 0;
-  margin-left: 16rpx;
-  font-weight: 600;
-}
-
-/* A6：同步内容明细（明列同步什么 / 不含什么） */
-.uc-scope {
-  margin-top: 20rpx;
-  padding-top: 20rpx;
-  border-top: 1rpx solid var(--td-border-level-1-color);
-  display: flex;
-  flex-direction: column;
-}
-.uc-scope-title {
-  font-size: var(--fs-caption);
-  color: var(--text-2);
-  font-weight: 600;
-  margin-bottom: 8rpx;
-}
-.uc-scope-item {
-  font-size: var(--fs-caption);
-  color: var(--text-3);
-  line-height: 1.7;
-}
-.uc-scope-note {
-  margin-top: 8rpx;
-  font-size: var(--fs-caption);
-  color: var(--text-4);
-}
-
-/* 数据管理：带说明副文案的 settings 项 */
-.settings-main {
+.follow-row + .follow-row { border-top: 1rpx solid var(--td-border-level-1-color); }
+.follow-row-hover { background: var(--td-bg-color-component); }
+.follow-main {
   flex: 1;
   min-width: 0;
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
 }
-.settings-desc {
-  margin-top: 4rpx;
-  font-size: var(--fs-caption);
+.follow-avatar {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: var(--radius-md);
+  background: var(--card-bg-inset);
+  color: var(--text-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--fs-subhead);
+  font-weight: 600;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.follow-avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--card-bg-inset);
+}
+.follow-name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-subhead);
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.follow-remove {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64rpx;
+  height: 64rpx;
+  margin-left: var(--space-1);
+}
+/* CSS 绘制 ×（避免引入图标组件 / 硬编码色） */
+.remove-x {
+  position: relative;
+  width: 26rpx;
+  height: 26rpx;
+}
+.remove-x::before,
+.remove-x::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 26rpx;
+  height: 2rpx;
+  border-radius: 2rpx;
+  background: var(--text-4);
+}
+.remove-x::before { transform: translateY(-50%) rotate(45deg); }
+.remove-x::after { transform: translateY(-50%) rotate(-45deg); }
+
+/* ===== 加载更多 / 已显示全部 ===== */
+.loadmore {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-2-5) 0;
+}
+.center.muted {
+  text-align: center;
   color: var(--text-4);
-  line-height: 1.5;
+  font-size: var(--fs-caption);
+  padding: var(--space-3) 0;
 }
+
+/* ===== CSS 箭头（设置入口） ===== */
+.chev {
+  flex-shrink: 0;
+  width: 14rpx;
+  height: 14rpx;
+  margin-left: var(--space-2);
+  border-right: 2rpx solid var(--text-4);
+  border-bottom: 2rpx solid var(--text-4);
+  transform: rotate(-45deg);
+}
+
+/* 底部 spacer：配合 with-tab-bar 留出自定义 tabBar 区域 */
+.bottom-spacer { height: 24rpx; }
