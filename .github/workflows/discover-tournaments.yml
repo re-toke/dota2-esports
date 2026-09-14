@@ -1,0 +1,47 @@
+# ============================================================
+# 每日赛事发现（2026-09-14 · 阶段2-④）
+#
+# ## 作用
+# 替代微信云开发的 cron-discover-tournaments（每日 03:00）：
+#   拉 Liquipedia Category:Tournaments → 过滤 DOTA2 + 有年份 + 未命中排除规则
+#   → 与 Supabase 现有全量对比 → 新赛事 upsert 入库
+#
+# ## 为什么必须迁移（不只是「退场」）
+#   云函数侧 `.limit(500)` 导致对比基数被卡死：库里 2414 条只读前 500 →
+#   1914 条被误判「未收录」→ 每天插 100 条**已存在的老赛事**，真新赛事永远排不上号。
+#   实测证据：admin-logs 的 summary.existing=500、details[0]._id 是 2021 年老赛事。
+#   迁到 Supabase 后无 500 上限 → 该缺陷自然消失。
+#   迁移后实测：现有 2414 条 → 未收录 **0 条**（云函数同条件为 248 条「假新」）。
+#
+# ## 时间
+#   每日 03:20 UTC（= 北京时间 11:20，避开主流服务整点拥堵）
+#   云函数原来跑在 03:00；此处错开 20 分钟，避免与其它 job 抢 runner
+#
+# ## 前置 Secrets
+#   SUPABASE_URL / SUPABASE_SERVICE_KEY
+# ============================================================
+name: Discover Tournaments
+
+on:
+  schedule:
+    - cron: '20 19 * * *'   # UTC 19:20 = 北京 03:20（与云函数原 03:00 北京时间对齐）
+  workflow_dispatch:
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Discover new tournaments (LP → Supabase)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          # GH Actions 无云函数的 60s 超时约束 → 放宽页数，覆盖更全
+          # （云函数为超时妥协只能用 3 页 = 1500 条；实测 1500 页里 899 条因顺序靠后无年份被剔除）
+          DISCOVER_MAX_PAGES: '10'
+        run: node scripts/sync/discover-tournaments.js --apply

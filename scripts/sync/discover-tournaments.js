@@ -38,7 +38,9 @@ const KEY = process.env.SUPABASE_SERVICE_KEY || '';
 
 const LP_BASE = 'https://liquipedia.net/dota2/api.php';
 const LP_UA = 'DOTA2-Esports-Hub/1.0 (cron; contact: dev@local)';
-const MAX_PAGES = 3;            // 与云函数一致：3 页 × 500 = 1500 条
+// ★ GH Actions 无云函数的 60s 超时约束 → 默认放宽到 10 页（5000 条），
+//   云函数为超时只能 3 页；实测 1500 页里 899 条因字母序靠后而无年份被剔除。
+const MAX_PAGES = Number(process.env.DISCOVER_MAX_PAGES || 10);
 const RATE_MS = 2200;           // LP ≥2s 软限流
 const MAX_INSERT = 500;         // 云函数曾限 100（因 60s 超时）；GH Actions 无此约束，放宽
 const BATCH = 200;              // Supabase 批量写入
