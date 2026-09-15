@@ -264,7 +264,12 @@ function load(force) {
   try { _sbOn = require('./supabaseClient.js').enabled(); } catch (e) {}
   if (!_sbOn && !(cloudProxy.isAvailable() || cloudProxy.efAvailable())) { ensure(); return Promise.resolve(false); }
   const meta = cache.getStale(CACHE_KEY, config.remoteCuration.ttlSec, config.remoteCuration.ttlSec);
-  if (!force && meta.value) { ensure(); return Promise.resolve(false); }
+  // ★ 2026-09-15：此前此处静默早退，用户两次把「没有日志」误读为「代码没跑」→ 补日志
+  //   （清缓存可强制重新拉取；partial 缓存 30min 后也会自动重试）
+  if (!force && meta.value) {
+    console.log('[remoteCuration] 缓存命中（未过期），跳过拉取。如需强制刷新请清缓存');
+    ensure(); return Promise.resolve(false);
+  }
   if (loadingPromise) return loadingPromise;
 
   // 读取本地存储的 version（用于增量更新）
