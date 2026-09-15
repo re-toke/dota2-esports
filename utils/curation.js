@@ -41,6 +41,7 @@ const CURATED_EVENTS = [
   // ── TI 系列（S 级，对齐 Liquipedia Tier 1） ──
   { canonical: 'The International 2025', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['theinternational2025', 'ti2025', 'international2025'], year: 2025,
+    leagueId: 18324,
     liquipediaSlug: 'The_International/2025' },
   { canonical: 'The International 2024', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['theinternational2024', 'ti2024', 'international2024'], year: 2024,
@@ -61,7 +62,6 @@ const CURATED_EVENTS = [
   //   参赛队伍已通过 GosuGamers/fragster/17173/百度百科/16score 五源交叉验证，2026-06-29 全部锁定）
   { canonical: 'The International 2026', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['theinternational2026', 'ti2026', 'international2026', 'ti15'], year: 2026,
-    leagueId: 19719, legacyFakeId: -1653808,
     start: Math.floor(Date.UTC(2026, 7, 13) / 1000), end: Math.floor(Date.UTC(2026, 7, 23) / 1000),
     prizePool: '$1,600,000', organizer: 'Valve', region: '中国上海', format: '小组赛+双败淘汰',
     participants: [
@@ -129,6 +129,7 @@ const CURATED_EVENTS = [
   // BetBoom Dacha：高额新秀系列
   { canonical: 'BetBoom Dacha', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['betboomdacha', 'betboomdacha2024', 'bbdacha'], year: 2024,
+    leagueId: 15638,
     liquipediaSlug: 'BetBoom_Dacha' },
   // PGL Wallachia：PGL 三年马拉松系列
   { canonical: 'PGL Wallachia', tier: { grade: 'S', rank: 3, label: 'S级' },
@@ -155,6 +156,7 @@ const CURATED_EVENTS = [
   // ── S 级（ESL One 统一为 S-Tier，与 tiers.js 的 esl\s+one 规则对齐）2025 ──
   { canonical: 'ESL One Raleigh 2025', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['esloneraleigh2025', 'raleigh2025', 'eslraleigh2025'], year: 2025,
+    leagueId: 17795,
     prizePool: '$1,000,000', organizer: 'ESL', region: '北美', format: '双败淘汰', participants: 16,
     status: '已结束', liquipediaSlug: 'ESL_One/2025/Raleigh', valve: false, topThirdParty: false },
   { canonical: 'Riyadh Masters 2025', tier: { grade: 'S', rank: 3, label: 'S级' },
@@ -175,6 +177,7 @@ const CURATED_EVENTS = [
   // DreamLeague Season 26：2026 上半年 ESL Pro Tour 赛事（已举办）
   { canonical: 'DreamLeague Season 26', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['dreamleagueseason26', 'dreamleague26', 'dl2026s26'], year: 2026,
+    leagueId: 18111,
     prizePool: '$1,000,000', organizer: 'ESL', region: '欧洲', format: '双败淘汰',
     participants: 16, status: '已结束', liquipediaSlug: 'DreamLeague/Season_26',
     valve: false, topThirdParty: false },
@@ -192,6 +195,7 @@ const CURATED_EVENTS = [
   //   今后：curation 的赛期必须存「该游戏项目的实际赛期」，不能存整个嘉年华宽窗口。
   { canonical: 'Esports World Cup 2026', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['esportsworldcup2026', 'ewc2026', 'ewcdota2026'], year: 2026,
+    leagueId: 19785,
     start: Math.floor(Date.UTC(2026, 6, 7) / 1000), end: Math.floor(Date.UTC(2026, 6, 19) / 1000),
     prizePool: '$2,000,000', organizer: 'Esports Foundation / ESL FACEIT Group', region: '法国·巴黎',
     format: '循环小组赛(Bo2) + 突围赛(Bo3) + 单败淘汰(Bo3/Bo5决赛)',
@@ -325,7 +329,6 @@ const CURATED_EVENTS = [
     valve: false, topThirdParty: false },
   { canonical: 'RES Unchained 5: BLAST SLAM VIII SEA Qualifier',
     tier: { grade: 'B', rank: 1, label: 'B-Tier' },
-    leagueId: 20143,
     game: 'dota2',
     aliases: ['resunchained5sea', 'resunchained5southeastasia', 'res unchained 5sea'], year: 2026,
     start: Math.floor(Date.UTC(2026, 7, 26) / 1000), end: Math.floor(Date.UTC(2026, 7, 30) / 1000),
@@ -348,6 +351,7 @@ const CURATED_EVENTS = [
   // BLAST SLAM VIII：9月29日-10月11日，欧洲/马耳他，$750,000
   { canonical: 'BLAST SLAM VIII', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['blastslamviii', 'blastslam8', 'blastslam2026viii', 'blast2026s8'], year: 2026,
+    leagueId: 19102,
     start: 1790640000, end: 1791676800,
     prizePool: '$750,000', organizer: 'BLAST', region: '马耳他', format: '双败淘汰',
     participants: 12, status: '即将到来', liquipediaSlug: 'BLAST/Slam/8',
@@ -362,6 +366,7 @@ const CURATED_EVENTS = [
   // BLAST SLAM IX：11月17-29日，欧洲，$750,000
   { canonical: 'BLAST SLAM IX', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['blastslamix', 'blastslam9', 'blastslam2026ix', 'blast2026s9'], year: 2026,
+    leagueId: 20208,
     start: 1794873600, end: 1795910400,
     prizePool: '$750,000', organizer: 'BLAST', region: '欧洲', format: '双败淘汰',
     participants: 12, status: '即将到来', liquipediaSlug: 'BLAST/Slam/9',
@@ -438,6 +443,7 @@ const CURATED_EVENTS = [
     liquipediaSlug: 'Esports_World_Cup/2024/Dota_2', valve: false, topThirdParty: true },
   { canonical: 'Esports World Cup 2025', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['esportsworldcup2025', 'ewc2025', 'ewcdota2025'], year: 2025,
+    leagueId: 18375,
     prizePool: '$1,000,000', organizer: 'Savvy Games', region: '沙特阿拉伯',
     format: '双败淘汰', participants: 16, status: '已结束',
     liquipediaSlug: 'Esports_World_Cup/2025/Dota_2', valve: false, topThirdParty: true },
@@ -474,6 +480,7 @@ const CURATED_EVENTS = [
     valve: false, topThirdParty: false },
   { canonical: 'BLAST Slam VI', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['blastslamvi', 'blastslam6', 'blastslam2026vi'], year: 2026,
+    leagueId: 19099,
     prizePool: '$750,000', organizer: 'BLAST', region: '欧洲', format: '双败淘汰',
     participants: 12, status: '已结束', liquipediaSlug: 'BLAST/Slam/6',
     valve: false, topThirdParty: false },
@@ -549,6 +556,7 @@ const CURATED_EVENTS = [
   // DPC Major 代表（2017-2020，Valve 官方顶级积分赛，已停办）
   { canonical: 'The Kuala Lumpur Major', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['kualalumpurmajor', 'klmajor2018', 'thekualalumpurmajor'], year: 2018,
+    leagueId: 10296,
     prizePool: '$1,000,000', organizer: 'Valve / PGL', region: '东南亚', format: '双败淘汰',
     participants: 16, status: '已结束', liquipediaSlug: 'The_Kuala_Lumpur_Major',
     valve: true, topThirdParty: false, defunct: true },
@@ -609,6 +617,7 @@ const CURATED_EVENTS = [
     liquipediaSlug: 'BLAST/SLAM/9/China' },
   { canonical: 'BLAST SLAM VIII', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['blast slam 8'],
+    leagueId: 19102,
     year: 2026,
     start: Math.floor(Date.UTC(2026, 8, 29) / 1000),
     end: Math.floor(Date.UTC(2026, 9, 11, 23, 59, 59) / 1000),
@@ -633,7 +642,6 @@ const CURATED_EVENTS = [
   // ★ 2026-09-14 补收录（原缺失 → 首页/「即将」看不到对局）
   { canonical: 'WINLINE Star Series Season 4', tier: { grade: 'B', rank: 1, label: 'B级' },
     aliases: ['winlinestarseriesseason4'], year: 2026,
-    leagueId: 20159,   // 实测 OpenDota leagueId（补收录时正在进行的联赛）
     start: Math.floor(Date.UTC(2026, 8, 10) / 1000), end: Math.floor(Date.UTC(2026, 8, 19) / 1000),
     liquipediaSlug: 'WINLINE_Star_Series_Season_4' },
   // ★ 2026-09-14 补收录（原缺失 → 首页/「即将」看不到对局）
