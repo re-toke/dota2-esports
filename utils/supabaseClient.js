@@ -41,7 +41,7 @@ function edge(name, data, opts) {
       url: sb().url + '/functions/v1/' + name,
       method: 'POST',
       data: data || {},
-      timeout: 12000,
+      timeout: 25000,
       header: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ' + authKey
@@ -108,7 +108,7 @@ function rest(table, query) {
     wx.request({
       url: url,
       method: 'GET',
-      timeout: 12000,
+      timeout: 25000,
       header: hdr,
       success: function (res) {
         if (res.statusCode >= 200 && res.statusCode < 300) resolve(res.data || []);

@@ -147,7 +147,7 @@ function _sbLoadCuration() {
   var sb = require('./supabaseClient.js');
   if (!sb || !sb.enabled()) return Promise.resolve(null);
 
-  var PAGE = 1000;
+  var PAGE = 400;
   function fetchPage(offset, acc) {
     return sb.rest('curation_events', { select: 'canonical_key,league_id,data', range: offset + '-' + (offset + PAGE - 1) })
       .then(function (rows) {
@@ -179,14 +179,23 @@ function _sbLoadCuration() {
 }
 
 /** 应用远端 curation（SB 与云函数两条路共用） */
-function _applyRemote(data) {
+/**
+ * 应用远端 curation（SB 与云函数两条路共用）
+ * @param {object} data  {events, teams, tiContestantIds, version}
+ * @param {boolean} [partial] 仅近期子集时为 true → 用短 TTL 缓存
+ *   ★ 2026-09-15：实测踩过 —— 首屏只拉到近期子集、后台补全量又 timeout 时，
+ *   6h 长 TTL 会把客户端卡在「只有 179 条」的状态；短 TTL 让下次启动重新尝试全量。
+ */
+function _applyRemote(data, partial) {
   try {
     var eff = buildEffective(data);
     effectiveEvents = eff.events;
     effectiveTeams = eff.teams;
     effectiveTiIds = eff.tiContestantIds;
     lookups = curation.buildLookups(eff.events, eff.teams);
-    cache.set(CACHE_KEY, { events: eff.events, teams: eff.teams, tiContestantIds: eff.tiContestantIds }, config.remoteCuration.ttlSec);
+    var _ttl = partial ? 1800 : config.remoteCuration.ttlSec;   // partial: 30min；完整: 6h
+    if (partial) console.log('[remoteCuration] 仅近期子集 → 缓存 30min（下次启动重试全量）');
+    cache.set(CACHE_KEY, { events: eff.events, teams: eff.teams, tiContestantIds: eff.tiContestantIds }, _ttl);
     cache.set(VERSION_KEY, data.version, 365 * 24 * 3600);
     console.log('[remoteCuration] curation 加载成功, version:', data.version,
       'events:', eff.events.length, 'teams:', Object.keys(eff.teams).length);
@@ -267,7 +276,7 @@ function load(force) {
       // ① 首屏：近期子集（快）
       if (recent && recent.events && recent.events.length) {
         console.log('[remoteCuration] 首屏走 Supabase 直读·近期子集, events:', recent.events.length);
-        if (_applyRemote(recent)) { _scheduleFullLoad(); return true; }
+        if (_applyRemote(recent, true)) { _scheduleFullLoad(); return true; }   // true = partial（短 TTL，下次启动重试全量）
       }
       // ② 近期失败 → 全量直读
       return _sbLoadCuration().then(function (sbData) {
