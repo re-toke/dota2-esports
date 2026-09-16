@@ -530,6 +530,9 @@ Page({
         .filter((function () { const seen = new Set(); return function (ev) {
           if (seen.has(ev.name)) return false; seen.add(ev.name); return true;
         }; })())
+        // ★ 2026-09-16（产品决策）：⑥ 段候选**只取 S/A 级** ——
+        //   ① 与首页三段「只保留 S/A」口径一致；② 顺带减少 LP/Steam 赛程查询次数（性能正收益）。
+        .filter((e) => { const t = e.tier; return !!(t && (t.grade === 'S' || t.grade === 'A')); })
         .slice(0, 5);                                     // 请求量上限（3→5，A2）
     } catch (e) { return Promise.resolve([]); }
     if (!events.length) { console.log('[index][⑥段] 候选为空（curation 无窗口内赛事）'); return Promise.resolve([]); }
@@ -1068,7 +1071,17 @@ Page({
     const selected = this.data.selectedDateKey;
     const filter = this.data.matchFilter;
     const all = this._allMatches || [];
-    const dayMatches = all.filter((c) => c.dateKey === selected);
+    // ★ 2026-09-16（产品决策）：首页「即将到来 / 进行中 / 已结束」三段**只保留 S/A 级**。
+    //   背景：此前无级别过滤，窗口内在赛的都是 S/A 时「看起来」是 S/A；
+    //   补收录 B 级赛事（WINLINE S4 / EPL SEA S17 等）后它们正在进行 → 冒进首页。
+    //   注意：只影响首页；赛事列表页（leagues）仍展示全部级别。
+    const HOME_GRADES = { S: 1, A: 1 };
+    const passGrade = (c) => !!(c.tier && HOME_GRADES[c.tier.grade]);
+    const beforeGrade = all.filter((c) => c.dateKey === selected);
+    const dayMatches = beforeGrade.filter(passGrade);
+    if (beforeGrade.length !== dayMatches.length) {
+      console.log('[index] S/A 级别过滤：' + beforeGrade.length + ' → ' + dayMatches.length + ' 张（剔除 ' + (beforeGrade.length - dayMatches.length) + ' 张非 S/A）');
+    }
     const counts = { live: 0, upcoming: 0, ended: 0 };
     dayMatches.forEach((c) => { counts[c.status] = (counts[c.status] || 0) + 1; });
 

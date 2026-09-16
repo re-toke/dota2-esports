@@ -470,7 +470,12 @@ Page({
           this.setData({
             loading: false,
             error: '',
-            leaguesAsOfText: '本地数据 ' + this._formatSnapshotDate(snap.generatedAt) + ' · 正在同步实时赛程'
+            // ★ 2026-09-16（问题3 修复）：快照未见旧时**不显示日期**。
+            //   原实现无条件带日期 → 用户看到「本地数据 9月14日」以为数据陈旧（其实才 2 天）。
+            //   与 v8.1 设计意图对齐（L1028：新快照不显示、过期(>7天)才提示日期）。
+            leaguesAsOfText: this._snapshotIsStale(snap.generatedAt)
+              ? '本地数据 ' + this._formatSnapshotDate(snap.generatedAt) + ' · 正在同步实时赛程'
+              : '正在同步实时赛程'
           });
           console.info('[leagues][perf] P2-2 快照秒开：' + this.allLeagues.length + ' 个联赛先上');
         }
@@ -1042,6 +1047,13 @@ Page({
   },
 
   // P1-4：快照 generatedAt（unix 秒）→「MM-DD」显示用日期（本地时区）
+
+  // ★ 2026-09-16：快照是否已过期（与 tryLocalUpcoming 的判定同口径，单一来源）
+  _snapshotIsStale(genAt) {
+    const t = Number(genAt) || 0;
+    if (!t) return true;                       // 无时间戳按过期处理
+    return (util.nowSec() - t) > SNAPSHOT_MAX_AGE_SEC;
+  },
   _formatSnapshotDate(genAt) {
     if (!genAt) return '';
     const d = new Date(genAt * 1000);
