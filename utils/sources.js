@@ -1738,8 +1738,12 @@ function absorbSettledGames(openSeriesList, liqSeries, teamIdNameResolver) {
       // 检查 matchIds 是否含 OpenDota 同源格式（纯数字字符串）。
       //   含 → 上游明确知道这些 match_id（即使本次不命中，可能是数据延迟）→ 保留 R3 return 保护；
       //   全无 → matchIds 是 LPDB v3 的 'lp_match_...' 格式（不同源）→ 安全降级 S1。
+      // ★ 2026-09-17（P1-8 修复）：原为 /^\\d+$/（正则字面量里 \\ 表示**字面反斜杠**），
+      //   实际匹配的是「\ + d」而非数字串 → 字符串形态的数字 matchId 恒不命中
+      //   → hasOdMatchId 恒 false → R3 保护失效 → 本应保留的同源卡被错误降级到 S1
+      //   队名+时间窗吸收（潜在误吸收/双卡）。
       var hasOdMatchId = card.matchIds.some(function (id) {
-        return typeof id === 'number' || /^\\d+$/.test(String(id));
+        return typeof id === 'number' || /^\d+$/.test(String(id));
       });
       if (hasOdMatchId) return;
     }
@@ -2549,7 +2553,22 @@ function buildLpLiveSeries(lpMatches, now) {
   var dedupOrder = [];
   live.forEach(function (m) {
     var pk = _pairKeyX(m);
-    if (!pk) { dedupMap['__standalone_' + dedupOrder.length] = m; dedupOrder.push('__standalone_' + (dedupOrder.length - 1)); return; }
+    // ★ 2026-09-17（P1-9 修复）：原写法键错位 ——
+    //   赋值用 `dedupOrder.length`（设为 N），而 push 用 `(dedupOrder.length - 1)`
+    //   （push 尚未执行，length 仍为 N，故算出 N-1）→
+    //     dedupMap 实际写的是 __standalone_N
+    //     dedupOrder 记录的却是 __standalone_(N-1)
+    //   → ① 该条匹配对象写入无人引用的键（数据丢失）；
+    //     ② dedupOrder.map 取到 undefined → 下游 groupLiquipediaMatches 访问
+    //        m.team1Name 抛 TypeError → buildLpLiveSeries 中断
+    //        （被 _fetchLpUpcoming 的 .catch 吞没 → 首页 ⑥ 段对局卡静默消失）。
+    //   触发条件：某场 live 的队名归一化后为空（_pairKeyX 返回 null），属数据异常场景。
+    if (!pk) {
+      var sk = '__standalone_' + dedupOrder.length;
+      dedupMap[sk] = m;
+      dedupOrder.push(sk);
+      return;
+    }
     var prev = dedupMap[pk];
     if (!prev) { dedupMap[pk] = m; dedupOrder.push(pk); return; }
     if (_infoScoreX(m) > _infoScoreX(prev)) dedupMap[pk] = m;

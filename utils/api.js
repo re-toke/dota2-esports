@@ -248,7 +248,12 @@ function fetchedAtOf(name, arg) {
     path = '/explorer?sql=' + encodeURIComponent(sqlFragments.LEAGUE_WINDOWS_SQL());
   }
   if (!path) return 0;
-  const meta = cache.peek(path + '|{}');
+  // ★ 2026-09-17（P1-7 修复）：补 _v() 前缀。
+  //   写入侧统一为 `_v() + path + '|' + JSON.stringify(data || {})`（见 L169 / L209 / L410），
+  //   而此处读侧漏了前缀 → peek 恒 miss → fetchedAt 恒 0，
+  //   影响 5 处「更新于 X 前」文案（leagues / team-detail ×2 / match-detail / league-detail）。
+  //   （L481 注释曾记录过同类前缀坑，但漏修了本处。）
+  const meta = cache.peek(_v() + path + '|{}');
   return (meta && meta.fetchedAt) || 0;
 }
 
