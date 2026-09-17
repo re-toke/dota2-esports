@@ -325,11 +325,16 @@ Page({
       });
     }
     // 默认选中今天（仅当今天在本周窗口内；翻周后保持选中周一）
+    // ★ 2026-09-17（P1-3 修复）：原实现只判 `!selected` —— 翻周后 selected 仍是
+    //   上一周的日期（非空）→ 不修正 → 该 key 不在新周 days 内 →
+    //   日历无高亮、比赛流仍用旧 dateKey 过滤（显示旧日数据）。
+    //   现补「selected 不在本周窗口内」兜底：优先今天，否则本周首日。
     let selected = this.data.selectedDateKey;
-    if (!selected) {
-      selected = todayKey;
-      this._selectedIsToday = true;
+    const inWindow = !!(selected && days.some((d) => d.key === selected));
+    if (!inWindow) {
+      selected = days.some((d) => d.key === todayKey) ? todayKey : ((days[0] && days[0].key) || '');
     }
+    this._selectedIsToday = (selected === todayKey);   // 统一维护，避免翻周后残留旧值
     this.setData({ weekDays: days, selectedDateKey: selected });
     this._renderMatchFlow();
   },
@@ -352,12 +357,10 @@ Page({
     //   向后保持 -2（proMatches 只覆盖近 2 天，再向后是空周——复核 H4 决定不扩展向后）。
     if (next < -2 || next > 12) return;
     this._weekOffset = next;
-    // 翻周后：若原选中天不在新周窗口，回到该周周一
-    const days = this.data.weekDays;
-    if (days.length) {
-      const inWindow = days.some((d) => d.key === this.data.selectedDateKey);
-      if (!inWindow) this.setData({ selectedDateKey: '' });
-    }
+    // ★ 2026-09-17（P1-3 修复）：此处原先用**旧周**的 this.data.weekDays 判断
+    //   「选中日是否在新周窗口内」—— 而选中日本来就取自旧周 → inWindow 恒 true
+    //   → 清空分支永不执行（无效代码）。
+    //   窗口校验已下沉到 _buildWeekDays（只有那里持有新周的 days）。
     this._buildWeekDays();
   },
 
@@ -1407,10 +1410,20 @@ Page({
 
   // ===== LIVE 轮询（F3a：120s 基线，失败退避 180s→300s，成功回归 120s，静默） =====
   _startMatchPolling() {
-    if (this._pollTimer) return;
+    // ★ 2026-09-17（P1-4 修复）：改用**代际计数** _pollEpoch 判活，不再用 _pollTimer 句柄。
+    //   原实现的缺陷：tick 开头就 `this._pollTimer = null`（进入异步窗口），于是
+    //     ① _stopMatchPolling 的 `if (this._pollTimer)` 在窗口内不成立 → 停止失效
+    //        → 在途请求回调仍会 setTimeout 重新武装 → 页面隐藏/销毁后继续轮询并 setData
+    //     ② 同一窗口内 onShow 再调 _startMatchPolling 时 _pollTimer===null → 不 return
+    //        → 起第二条链 → 双倍请求（切 tab 与在途 /live 重叠时极易发生）
+    //   epoch 方案：start 捕获当前代际；每个异步回调返回点校验代际；
+    //   stop 时置 0 使所有在途回调失效（不再武装、不再写数据）。
+    if (this._pollEpoch) return;               // 已有链在跑（0 / undefined = 已停止）
+    this._pollEpoch = 1;
+    const _epoch = this._pollEpoch;
     this._pollFails = this._pollFails || 0;
     const tick = () => {
-      this._pollTimer = null;
+      if (_epoch !== this._pollEpoch) return;  // 已停止 → 直接退出
       // F1（2026-08-31）：轮询通过 _kickMatchFlow 统一入口，复用 epoch 代际守卫与缓存逻辑。
       //   _kickMatchFlow 内部会判断 pro/live 缓存新鲜度，仅在必要时发起请求。
       //   失败计数由 _pollFails 在外层维护，控制退避间隔。
@@ -1443,6 +1456,7 @@ Page({
         api.getLiveMatches().catch(() => null),
         proTask
       ]).then(([live, pro]) => {
+        if (_epoch !== this._pollEpoch) return;   // ★ P1-4：停止后不再写数据 / 不再武装
         if (live == null && pro == null) {
           this._pollFails++;
         } else {
@@ -1456,6 +1470,7 @@ Page({
           : (this._pollFails === 1 ? POLL_BACKOFF_1_MS : POLL_BASE_MS);
         this._pollTimer = setTimeout(tick, delay);
       }).catch(() => {
+        if (_epoch !== this._pollEpoch) return;   // ★ P1-4：停止后不再武装
         this._pollFails++;
         const delay = this._pollFails >= 2 ? POLL_BACKOFF_MAX_MS : POLL_BACKOFF_1_MS;
         this._pollTimer = setTimeout(tick, delay);
@@ -1465,6 +1480,10 @@ Page({
   },
 
   _stopMatchPolling() {
+    // ★ 2026-09-17（P1-4 修复）：先置代际为 0 使**所有在途回调失效**
+    //   （它们会在各自返回点校验 _epoch 后直接退出，不再重新武装定时器），
+    //   再清理当前句柄。仅清句柄无法阻止异步窗口内的回调把定时器"复活"。
+    this._pollEpoch = 0;
     if (this._pollTimer) {
       clearTimeout(this._pollTimer);
       this._pollTimer = null;

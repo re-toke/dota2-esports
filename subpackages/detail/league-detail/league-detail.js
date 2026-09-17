@@ -1157,7 +1157,15 @@ Page({
               // 无任何实际开赛证据 → 降级回 UPCOMING（顺延等待中）
               if (!_hasKickoffProof) return false;
               // ★ 比分结束判定：若系列比分已达到 BO 上限则归为已结束，不进 LIVE 段
-              if (_s1 + _s2 > 0) {
+              //   ★ 2026-09-17（P1-5 修复）—— 原实现有两个缺陷：
+              //     ① 字段名错：原读 s.score1 / s.score2，但本 filter 作用于 liqSeries
+              //        （上方 .map() 的产物，见 L1028）——该对象只有 scoreA / scoreB，
+              //        从未产出 score1 / score2 → _s1/_s2 恒 0 → 整段是**死代码**，
+              //        注释宣称的「防 Steam LIVE 残留」从未生效（僵尸卡可长期挂 LIVE 段）。
+              //     ② BO2 口径不一致：原 Math.ceil(2/2)=1 会把 1:0 进行中的 BO2 判为已结束。
+              //        本处以 utils/sources.js（BO 引擎权威实现）为准：
+              //        「BO2 双局积分制必须打满 2 局才算结束」。
+              if (_scoreA + _scoreB > 0) {
                 var _boNum = 0;
                 if (s.boType && /^BO\s*([1-9])$/i.test(s.boType)) {
                   _boNum = parseInt(RegExp.$1, 10);
@@ -1165,8 +1173,10 @@ Page({
                   _boNum = [1, 3, 5, 2, 7][s.seriesType] || 0;
                 }
                 if (_boNum > 0) {
-                  var _winsToClinch = Math.ceil(_boNum / 2);
-                  if (Math.max(_s1, _s2) >= _winsToClinch) return false;  // 系列已结束
+                  var _seriesEnded = (_boNum === 2)
+                    ? ((_scoreA + _scoreB) >= 2)                        // BO2：打满 2 局
+                    : (Math.max(_scoreA, _scoreB) >= Math.ceil(_boNum / 2));
+                  if (_seriesEnded) return false;                       // 系列已结束
                 }
               }
               return true;
@@ -1523,8 +1533,13 @@ Page({
           if ((!s.direName || s.direName === '夜魇') && old.direName && old.direName !== '夜魇') s.direName = old.direName;
         });
         var pageSize = self.data.pageSize;
-        var slice = all.slice(0, pageSize);
+        // ★ 2026-09-17（P1-6 修复）：保留用户已翻页的渲染量。
+        //   原实现固定 slice(0, pageSize) —— 用户 appendPage 后 oldSeries.length 已增长到
+        //   (page+1)*pageSize，两者恒不等 → structureChanged 恒 true → 每次轮询把列表
+        //   打回第一页（与下方「保留用户翻页态」的设计目标相悖）。
         var oldSeries = self.data.series || [];
+        var renderedLen = Math.max(pageSize, oldSeries.length);
+        var slice = all.slice(0, Math.min(renderedLen, all.length));
         var patch = {};
         // 结构变化（段计数/长度变化）→ 全量替换 series（低频：段间移动/新增/删除）
         var structureChanged =
@@ -1545,6 +1560,11 @@ Page({
         }
         // 标量更新（计数/分页/时间戳）
         patch.totalSeries = all.length;
+        // ★ 2026-09-17（P1-6 修复）：回写 page 使其与本次渲染长度保持一致。
+        //   原 patch 不含 page → data.page 停留在翻页后的旧值，而 series 可能已被替换/截短，
+        //   后续 onReachBottom → appendPage 以 `data.page * pageSize` 作起点写入
+        //   会落到越界下标（稀疏空洞）。此处按渲染长度反推页索引。
+        patch.page = Math.max(0, Math.ceil(slice.length / pageSize) - 1);
         patch.liveCount = built.liveList.length;
         patch.upcomingCount = built.upcomingList.length;
         patch.recentCount = built.recentList.length;
