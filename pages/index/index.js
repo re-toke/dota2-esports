@@ -969,6 +969,12 @@ Page({
       leagueName: leagueName,
       tierLabel: tier ? tier.label : '',
       tierClass: tier ? 'tier-' + tier.grade.toLowerCase() : '',
+      // ★ 2026-09-17（P0-1 修复）：**补 tier 对象本身**。
+      //   根因：_renderMatchFlow 的 passGrade 读 c.tier.grade 做 S/A 过滤，
+      //   而三个卡片工厂此前只输出 tierLabel/tierClass → c.tier 恒 undefined
+      //   → 过滤恒空 → 首页三段全部为空（必现）。
+      //   守卫：scripts/ops/check-card-contract.js（已接入 test:all）
+      tier: tier || null,
       bo: bo,                          // 权威 BO 类型（dots 渲染依据）
       boText: boMeta.label,            // 中文赛制说明（单局制 / 三局两胜 …）
       boGames: boMeta.games,           // 局间色点渲染
@@ -1044,6 +1050,7 @@ Page({
       leagueName: ev.name || '',
       tierLabel: tier ? tier.label : '',
       tierClass: tier ? 'tier-' + tier.grade.toLowerCase() : '',
+      tier: tier || null,                     // ★ 2026-09-17（P0-1）：同上，契约要求
       bo: 'BO1',
       boText: '',                             // 赛事级不展示赛制
       boGames: 0,                             // 0 → 局间色点渲染跳过
@@ -1489,6 +1496,7 @@ Page({
       displayName: sources.leagueDisplayName(pick),
       tierClass: tier ? 'tier-' + tier.grade.toLowerCase() : '',
       tierLabel: tier ? tier.label : '',
+      tier: tier || null,                     // ★ 2026-09-17（P0-1）：同上，契约要求
       start: pick.start_time,
       status: isUpcoming ? 'upcoming' : 'ended',
       dateText: util.formatTime(pick.start_time),
