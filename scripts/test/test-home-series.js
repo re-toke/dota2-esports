@@ -9,7 +9,12 @@
  *   ② /live 职业场 normalize 后形状（radiant_win=null、无 series_id、start=now-duration）
  *   ③ ctx=null（首页无 Liquipedia 数据 → buildBoContext(series, null)）
  *
- * 运行：node scripts/test/test-home-series.js（已接入 test:all / precommit）
+ * 运行：node scripts/test/test-home-series.js
+ *       ★ 2026-09-17 起已接入 test:all（此前注释声称"已接入"，但实际未接线、
+ *         从未被执行 —— 详见 deliverables/代码审计报告-三维复核-2026-09-17.md §五）
+ *       ⚠️ 本文件只 require utils/sources.js，**不加载 pages/**，因此无法覆盖
+ *         页面层缺陷（如 _renderMatchFlow 的字段契约问题）—— 那由
+ *         scripts/ops/check-card-contract.js 负责。
  */
 const sources = require('../../utils/sources.js');
 

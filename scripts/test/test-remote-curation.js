@@ -152,10 +152,17 @@ function main() {
   // ===== 3. 模拟远程拉取（异步，云函数模式）=====
   console.log('\n--- async ---');
   return runAsync(function () {
+    // ★ 2026-09-17 修复陈旧断言（原「应触发 wx.cloud.callFunction」自 2026-09-14
+    //   Supabase 迁移后一直失败）：迁移后 remoteCuration.load() 默认走 PostgREST 直读，
+    //   云函数已退化为「回落路径」。本用例专门验证**云函数链路**（= 当前的回滚路径，
+    //   云开发下线前必须可用），故显式关闭 Supabase 以强制走云函数分支。
+    //   ⚠️ 该断言失败会让 test:all 的 && 链在此中断 —— 其后的 check-token-overreach /
+    //      check-card-contract 等门禁全部不会执行，是"接线了却跑不到"的典型。
+    if (config.supabase) config.supabase.enabled = false;
     // 3a. 成功拉取（云函数 getCuration）
     Object.keys(storage).forEach(function (k) { delete storage[k]; });
     var p = remoteCuration.load(true);
-    assert(cloudCallHandler, '应触发 wx.cloud.callFunction');
+    assert(cloudCallHandler, '应触发 wx.cloud.callFunction（已强制关闭 Supabase 直读）');
     fireCloud({
       data: {
         events: [{ canonical: 'Remote Event', tier: { grade: 'A', rank: 2, label: '远程' }, aliases: ['remote'] }],
@@ -188,6 +195,7 @@ function main() {
       }).catch(function (e) { throw e; });
     });
   }).then(function () {
+    if (config.supabase) config.supabase.enabled = true;   // 恢复默认（config.js 默认启用）
     config.remoteCuration.url = '';
     console.log('\n' + passed + ' passed, ' + failed + ' failed');
     process.exit(failed ? 1 : 0);

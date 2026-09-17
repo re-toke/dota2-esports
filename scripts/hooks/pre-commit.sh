@@ -52,13 +52,16 @@ npm test || {
 }
 
 # §7.1 增强（2026-07-29）：当修改涉及 data layer（utils/sources|consensus|curation|api.js）
-# 时，运行完整 test:all（含 sources + consensus）作为更强门禁。
-# 判断方式：检查暂存文件是否触及 data layer 关键模块
-DATA_LAYER_TOUCHED=$(echo "$STAGED_JS" | grep -E 'utils/(sources|consensus|curation|api)\.js$' || true)
+# 时，运行完整 test:all 作为更强门禁。
+# ★ 2026-09-17 扩展：`pages/` 下的 .js 一并纳入触发范围。
+#   原因（审计 P0-1）：页面层改动此前不触发 test:all，而 test:all 又是唯一会跑
+#   页面契约守卫（check-card-contract）的入口 → 首页字段契约错误（c.tier 读不到）
+#   一路无阻进入生产。页面层与数据层同样需要强门禁。
+DATA_LAYER_TOUCHED=$(echo "$STAGED_JS" | grep -E '(utils/(sources|consensus|curation|api)\.js|^pages/.*\.js|/pages/.*\.js)$' || true)
 if [ -n "$DATA_LAYER_TOUCHED" ]; then
-  echo "[pre-commit] 检测到 data layer 变更，运行完整测试套件（test:all）..."
+  echo "[pre-commit] 检测到 data layer / 页面层变更，运行完整测试套件（test:all）..."
   npm run test:all || {
-    echo "❌ test:all 未通过，提交被阻断。data layer 变更需通过 sources + consensus + canonical 全部测试。"
+    echo "❌ test:all 未通过，提交被阻断。data layer / 页面层变更需通过全部门禁（含 check-card-contract）。"
     exit 1
   }
 fi

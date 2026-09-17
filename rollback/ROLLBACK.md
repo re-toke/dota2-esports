@@ -1,9 +1,10 @@
-# 回滚说明 — rollback-v8.1-stratz-haglund-2026-08-31
+# 回滚说明 — rollback-pre-audit-fix-2026-09-17
 
-> **回滚点名称**：`rollback-v8.1-stratz-haglund-2026-08-31`
-> **创建时间**：2026-08-31 11:29
-> **基线提交**：`52b65ed`（master，v8.0 UI 全面改版 + v8.1 STRATZ 启用 + haglund 容灾强化）
-> **测试基线**：全套 329/0 全绿（8 件套 313 + haglund 熔断器 16）
+> **回滚点名称**：`rollback-pre-audit-fix-2026-09-17`
+> **创建时间**：2026-09-17 11:59
+> **基线提交**：`800f7a6`（master，v8.87 修上线后 2 个问题 —— 首页只留 S/A + 快照提示语）
+> **回滚点用途**：代码审计问题修复（P0-1 首页三段全空 + 9 项 P1）开工前的干净基线
+> **测试基线**：以开工前实测为准（见下方备注）
 
 ---
 
@@ -11,11 +12,15 @@
 
 | 项目 | 说明 |
 |------|------|
-| Git tag | `rollback-v8.1-stratz-haglund-2026-08-31`（annotated，连字符防斜杠失效） |
-| Zip 备份 | `rollback/rollback-v8.1-stratz-haglund-2026-08-31.zip`（8.5MB，git archive 不含 node_modules / miniprogram_npm） |
-| 基线 commit | `52b65ed` — v8.0 UI 全面改版（HEAD） |
-| Tag object | `54bd089`（tag → commit `52b65ed`） |
-| 分支 | `master`（纯本地，无 remote） |
+| Git tag | `rollback-pre-audit-fix-2026-09-17`（annotated，连字符防斜杠失效） |
+| Zip 备份 | `rollback/rollback-pre-audit-fix-2026-09-17.zip`（16MB / 538 文件，git archive 不含 node_modules / miniprogram_npm） |
+| 基线 commit | `800f7a6` — v8.87（HEAD） |
+| Tag object | `400dfe6`（tag → commit `800f7a6`） |
+| 分支 | `master` |
+
+> **备注**：本回滚点建立时，工作树仅含 3 个未跟踪的审计文档（deliverables/*.md）与 1 个已删除的临时脚本 `.tmp-fix-launch.js`，**代码目录干净**。
+
+---
 
 ## 回滚方式
 
@@ -24,16 +29,16 @@
 ```bash
 # 1. 确保工作区干净或已 stash
 # 2. 回到基线提交（保留后续提交为可恢复状态）
-git checkout 52b65ed
+git checkout 800f7a6
 
 # 3. 如要彻底放弃后续提交，可硬重置分支（慎用，会丢未推送提交）
-git reset --hard 52b65ed
+git reset --hard 800f7a6
 ```
 
 ### 方式 B：git tag 恢复
 
 ```bash
-git checkout rollback-v8.1-stratz-haglund-2026-08-31
+git checkout rollback-pre-audit-fix-2026-09-17
 ```
 
 ### 方式 C：zip 解包恢复（node_modules 需重新构建）
@@ -41,7 +46,7 @@ git checkout rollback-v8.1-stratz-haglund-2026-08-31
 ```bash
 # 1. 备份当前损坏/不满意的目录
 # 2. 解包 zip（不含 node_modules / miniprogram_npm）
-unzip rollback/rollback-v8.1-stratz-haglund-2026-08-31.zip -d <项目目录>
+unzip rollback/rollback-pre-audit-fix-2026-09-17.zip -d <项目目录>
 
 # 3. 重建 npm 依赖（如缺失）
 #    - npm install（若报"up to date"用 npm ci 严格重建）
@@ -53,7 +58,7 @@ unzip rollback/rollback-v8.1-stratz-haglund-2026-08-31.zip -d <项目目录>
 
 只想回滚某个文件的修改时：
 ```bash
-git checkout 52b65ed -- <文件路径>
+git checkout 800f7a6 -- <文件路径>
 ```
 
 ---
@@ -64,6 +69,8 @@ git checkout 52b65ed -- <文件路径>
 2. **CRLF/LF**：若 husky 拦提交，检查是否因换行符不一致导致；sync 产物须 `cp` 字节拷贝
 3. **中文长路径**：git 操作一律 `git -C "<绝对路径>"`，禁用 `git rm`/`npm run`
 4. **紧急绕行**：husky pre-commit 失败可 `--no-verify`（不推荐）
+5. **环境提示（2026-09-17）**：本机 Bash 的 PATH 在会话起始时未初始化，执行外部命令前需先
+   `export PATH="/usr/bin:/bin:/c/Windows/System32:$PATH"`，否则报 `ls: command not found`
 
 ---
 
@@ -71,7 +78,8 @@ git checkout 52b65ed -- <文件路径>
 
 | 日期 | 回滚点 | 说明 |
 |------|--------|------|
-| 2026-08-31 | `rollback-v8.1-stratz-haglund-2026-08-31` | **当前**：v8.1 STRATZ 启用 + haglund 容灾 + v8.0 UI 改版（52b65ed） |
+| 2026-09-17 | `rollback-pre-audit-fix-2026-09-17` | **当前**：审计问题修复开工前（800f7a6，含 P0-1 未修状态） |
+| 2026-08-31 | `rollback-v8.1-stratz-haglund-2026-08-31` | v8.1 STRATZ 启用 + haglund 容灾 + v8.0 UI 改版（52b65ed） |
 | 2026-08-15 | `rollback/pre-p3-2026-08-15.zip`（zip 保留，tag 已删） | P3 架构专项实施前（c5fbc00） |
 | 2026-08-09 | `rollback/pre-spotlight-ui-2026-08-09.zip`（zip 保留） | 聚光灯 UI 实施前 |
 
