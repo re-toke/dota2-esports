@@ -5,15 +5,33 @@
 // - edge(name, data, opts)：调 Edge Function；opts.jwt 有值时 Authorization 带业务 JWT
 //   （follow-profile / smart-reminders 必须带），否则用 anon key（公开数据）
 // - rest(table, query)：PostgREST 直查公开表（anon 只读，不消耗 EF 调用配额）
-// - EF 独立熔断：连续 EF_SB_BREAKER_THRESHOLD 次 edge 失败 → 本会话直走云开发
-//   （复用 cloudProxy circuitBreakerThreshold 同款模式，独立计数不影响云开发熔断）
+// - EF 熔断（2026-09-17 重构）：**按 EF 名分桶**独立熔断 —— 连续 3 次 edge 失败 →
+//   该 EF 进入 10min OPEN（冷却到期后放行一次 HALF_OPEN 探测）；不同 EF 互不影响
+//   （旧实现为单一全局开关，任一 EF 失败会连带禁用全部 EF；见下方 efAvailable 注释）
+//   ⚠️ 语义变化：efAvailable(name) 不传 name 时返回「EF 通道整体是否启用」而不再反映
+//      熔断状态（熔断已按名隔离，无法用单一布尔表达）。现有 10 处调用点均不传 name →
+//      仍会尝试 EF，失败后由 edge() 按 name 判定并回落云开发，功能等价、仅多一次往返。
 // - 安全：anon key 是公开密钥（RLS 保护），JWT 来自 wechat-auth 签发（WX_APPSECRET 在 EF Secrets）
 
 var config = require('./config');
 
-var EF_SB_BREAKER_THRESHOLD = 3;   // 连续失败阈值
-var _efFailCount = 0;              // EF 连续失败计数（会话级）
-var _efBreakerOpen = false;        // 熔断开关（本会话内不再试 EF）
+var EF_BREAKER_THRESHOLD = 3;              // 连续失败阈值
+var EF_BREAKER_TTL_MS = 10 * 60 * 1000;    // OPEN 冷却时长（对齐 cloudBreaker.js 的 10min）
+// ★ 2026-09-17（P1-10 修复）：熔断状态改为「按 EF 名分桶 + TTL 冷却 + 半开探测」。
+//   原实现是单一全局布尔（_efBreakerOpen），三个缺陷：
+//     ① 不分桶：最不稳定的 haglund-proxy 连续 3 次 502，会把 opendota-proxy /
+//        liquipedia-proxy / steam-proxy / bundle-aggregator 一起拖下水；
+//     ② 无 TTL：置 true 后**整个会话**不再尝试任何 EF，无冷却窗口；
+//     ③ 无半开：没有恢复探测，源恢复后客户端也无从得知。
+//   项目内另两套熔断器（cloudBreaker.js 有 10min TTL、haglund.js 有 HALF_OPEN）
+//   均已具备这些能力，本处属实现不一致。
+//   ⚠️ 云函数下线后 EF 是这些 action 的唯一后端 —— 该缺陷届时会由 P1 升为 P0。
+var _efBreakers = {};                      // { [efName]: { fails, openUntil, halfOpen } }
+
+function _breakerOf(name) {
+  if (!_efBreakers[name]) _efBreakers[name] = { fails: 0, openUntil: 0, halfOpen: false };
+  return _efBreakers[name];
+}
 
 function sb() { return config.supabase || {}; }
 
@@ -21,8 +39,20 @@ function enabled() {
   return !!(sb().enabled && sb().url && sb().anonKey);
 }
 
-function efAvailable() {
-  return enabled() && !_efBreakerOpen;
+/**
+ * 该 EF 当前是否可用（按 name 分桶；OPEN 冷却到期后放行一次探测 = HALF_OPEN）。
+ * @param {string} [name] 不传时不做熔断限制（兼容不含 name 的旧调用）
+ */
+function efAvailable(name) {
+  if (!enabled()) return false;
+  if (!name) return true;
+  var b = _breakerOf(name);
+  if (!b.openUntil) return true;
+  if (Date.now() >= b.openUntil) {
+    b.halfOpen = true;    // 冷却到期 → 放行一次探测（HALF_OPEN）
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -34,7 +64,7 @@ function efAvailable() {
  */
 function edge(name, data, opts) {
   return new Promise(function (resolve, reject) {
-    if (!efAvailable()) { reject(new Error('supabase ef unavailable')); return; }
+    if (!efAvailable(name)) { reject(new Error('supabase ef unavailable: ' + name)); return; }
 
     var authKey = (opts && opts.jwt) ? opts.jwt : sb().anonKey;
     wx.request({
@@ -48,32 +78,42 @@ function edge(name, data, opts) {
       },
       success: function (res) {
         if (res.statusCode >= 200 && res.statusCode < 300) {
-          _efFailCount = 0;   // 成功复位熔断计数
+          _countSuccess(name);   // 成功复位该 EF 的熔断计数
           resolve(res.data);
         } else if (res.statusCode === 401 && opts && opts.jwt) {
-          // JWT 过期/无效：重置熔断计数但不熔断（下次登录换新 JWT 可恢复）
-          _efFailCount = 0;
+          // JWT 过期/无效：属鉴权问题而非 EF 服务故障 —— 不计失败、也不复位累计
+          // （下次登录换新 JWT 自然恢复；旧实现此处复位会掩盖真实的服务端连续失败）
           reject(new Error('EF ' + name + ' auth failed (401)'));
         } else {
-          _countFail();
+          _countFail(name);
           reject(new Error('EF ' + name + ' HTTP ' + res.statusCode));
         }
       },
       fail: function (err) {
-        _countFail();
+        _countFail(name);
         reject(new Error(err.errMsg || 'network fail'));
       }
     });
   });
 }
 
-/** EF 连续失败计数 + 熔断（3 次后本会话直走云开发，云开发调用零额外延迟） */
-function _countFail() {
-  _efFailCount++;
-  if (_efFailCount >= EF_SB_BREAKER_THRESHOLD) {
-    _efBreakerOpen = true;
-    console.warn('[supabaseClient] EF breaker OPEN after ' + _efFailCount + ' fails (session)');
+/** 该 EF 连续失败计数 + 熔断（按 name 分桶；3 次后该 EF 进入 10min OPEN） */
+function _countFail(name) {
+  if (!name) return;
+  var b = _breakerOf(name);
+  b.fails++;
+  if (b.fails >= EF_BREAKER_THRESHOLD) {
+    b.openUntil = Date.now() + EF_BREAKER_TTL_MS;
+    b.halfOpen = false;
+    console.info('[supabaseClient] EF breaker OPEN: ' + name + ' after ' + b.fails +
+      ' fails, cooldown ' + (EF_BREAKER_TTL_MS / 60000) + 'min（该 EF 独立熔断，不影响其它 EF）');
   }
+}
+
+/** 成功 → 复位该 EF 的熔断状态 */
+function _countSuccess(name) {
+  if (!name) return;
+  _efBreakers[name] = { fails: 0, openUntil: 0, halfOpen: false };
 }
 
 /**
