@@ -14,8 +14,10 @@
   <view class="section">
     <view class="section-title">二、数据收集说明</view>
     <view class="section-body">
-      <view class="para">本小程序 <text class="em">不收集</text> 用户的个人敏感信息，包括但不限于：</view>
-      <view class="list-item">· 不调用 wx.getUserInfo / wx.getUserProfile（不获取微信昵称/头像）</view>
+      <view class="para">本小程序仅在您<text class="em">主动操作</text>时获取必要信息，不主动采集个人敏感信息：</view>
+      <view class="list-item">· 头像与昵称（仅在您点击头像 / 输入昵称设置个人资料时获取，<text class="em">仅保存在本机</text>用于个人资料卡展示，不上传服务器；您可随时在「我的」页重设）</view>
+      <view class="list-item">· 剪切板（仅在您点击「复制链接」时<text class="em">写入</text>，不读取您的剪切板内容）</view>
+      <view class="list-item">· 不调用 wx.getUserInfo / wx.getUserProfile（不经该接口获取微信资料）</view>
       <view class="list-item">· 不调用 wx.getLocation（不获取地理位置）</view>
       <view class="list-item">· 不调用 wx.chooseAddress / wx.getWeRunData 等敏感接口</view>
       <view class="list-item">· 不上传通讯录、相册、麦克风录音</view>
@@ -25,6 +27,7 @@
       <view class="list-item">· 搜索历史关键词（最多 10 条，可手动清除）</view>
       <view class="list-item">· 赛事数据的本地缓存（用于离线浏览与降低请求量，含 TTL 自动过期）</view>
       <view class="list-item">· 您的关注列表（赛事/战队/选手）与提醒设置</view>
+      <view class="list-item">· 您的头像与昵称（用于「我的」页个人资料卡展示，可在设置中重设或清除）</view>
     </view>
     <view class="section-body">
       <view class="para">为识别您的账号并实现跨设备同步，以下数据将<span class="em">上传至云端</span>（详见第六、七条）：</view>
