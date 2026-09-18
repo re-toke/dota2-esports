@@ -40,10 +40,14 @@ function normName(s) {
   // §8.3 多语言支持（2026-07-29）：保留拉丁字母、数字、中日韩汉字、西里尔字母（俄语赛事名）
   // 原 [^a-z0-9一-鿿] 会把西里尔字母过滤掉，导致俄语赛事名（如 "Чемпионат" → ""）匹配失败
   // 西里尔范围 а-яё (U+0430-U+0451) + А-Я (大写，toLowerCase 后统一为小写)
-  var s = String(s).toLowerCase().replace(/[^a-z0-9一-鿿а-яё]/g, '');
+  // ★ 2026-09-18：内部结果改用 n —— 原先写 `var s = ...` 与形参同名，触发
+  //   ESLint no-redeclare（**error 级**）→ GitHub CI 的 Lint 步骤失败 →
+  //   其后的 Test / curation-map 校验步骤从未执行（CI 长期未真正生效的根因）。
+  //   运行时无影响（var 重复声明会被忽略），但门禁因此形同虚设。
+  let n = String(s).toLowerCase().replace(/[^a-z0-9一-鿿а-яё]/g, '');
   // 剥离开头的 "the" 前缀（如 "The International" → "theinternational" → "international"）
-  if (s.slice(0, 3) === 'the') s = s.slice(3);
-  return s;
+  if (n.slice(0, 3) === 'the') n = n.slice(3);
+  return n;
 }
 
 // 数字归一：非法/非有限/负数返回 null

@@ -5,9 +5,9 @@
 // cannot load .json directly).
 module.exports = {
   "version": 3,
-  "generatedAt": "2026-09-11T07:24:21.964Z",
+  "generatedAt": "2026-09-18T04:38:00.429Z",
   "source": "utils/curation.js#CURATED_EVENTS",
-  "eventCount": 271,
+  "eventCount": 289,
   "map": {
     "theinternational2025": "The International 2025",
     "ti2025": "The International 2025",
@@ -211,13 +211,41 @@ module.exports = {
     "resunchainedblastslamixsea": "RES Unchained 6: BLAST SLAM IX Southeast Asia Closed Qualifier",
     "blastslamixchinaqualifier": "BLAST SLAM IX China Closed Qualifier",
     "blastslam9china": "BLAST SLAM IX China Closed Qualifier",
-    "esportsnationscup": "Esports Nations Cup 2026"
+    "esportsnationscup": "Esports Nations Cup 2026",
+    "eplworldseriessoutheastasiaseason17": "EPL World Series: Southeast Asia Season 17",
+    "winlinestarseriesseason4": "WINLINE Star Series Season 4",
+    "europeanproleagueseason40": "European Pro League Season 40",
+    "sbertournament2026": "Sber Tournament 2026",
+    "dreamleaguedivision2series5": "DreamLeague Division 2 Series 5",
+    "dreamleagueseason30": "DreamLeague Season 30",
+    "dreamleaguedivision2series6": "DreamLeague Division 2 Series 6",
+    "dreamleagueseason31": "DreamLeague Season 31",
+    "pglwallachiaseason10": "PGL Wallachia Season 10"
   },
   "leagueIdMap": {
+    "10296": "The Kuala Lumpur Major",
+    "10482": "The Chongqing Major",
+    "10810": "MDL Disneyland Paris Major",
+    "14268": "The International 2022",
+    "15638": "BetBoom Dacha",
+    "15728": "The International 2023",
+    "16935": "The International 2024",
+    "17795": "ESL One Raleigh 2025",
+    "18111": "DreamLeague Season 26",
+    "18324": "The International 2025",
+    "18375": "Esports World Cup 2025",
+    "19099": "BLAST Slam VI",
+    "19101": "BLAST Slam VII",
+    "19102": "BLAST SLAM VIII",
     "19719": "The International 2026",
+    "19785": "Esports World Cup 2026",
+    "19917": "Games of the Future 2026",
     "19944": "EPL Masters II",
+    "20009": "1win Essence II",
     "20142": "RES Unchained 5: BLAST SLAM VIII Europe Qualifier",
-    "20143": "RES Unchained 5: BLAST SLAM VIII SEA Qualifier"
+    "20143": "RES Unchained 5: BLAST SLAM VIII SEA Qualifier",
+    "20159": "WINLINE Star Series Season 4",
+    "20208": "BLAST SLAM IX"
   },
-  "dataVersion": "1789111461956"
+  "dataVersion": "1789706280420"
 };
