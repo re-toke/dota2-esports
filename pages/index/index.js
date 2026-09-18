@@ -877,7 +877,12 @@ Page({
     // v5.1：LP upcoming 系列（games=[]）带 leagueName/leagueId 字段，优先读取；
     //   OpenDota 系列回退 g0.league_name。
     const leagueName = s.leagueName || sources.leagueDisplayName(g0) || g0.league_name || '职业赛事';
-    const tier = sources.getMatchTier(s.leagueName || g0.league_name || '');
+    // ★ 2026-09-18：改用 getMatchTierForHome（curation 优先 + 正则兜底）。
+    //   原 getMatchTier 是单源（仅 community 正则），而 community 在命中
+    //   EXCLUSION_RULES 时会主动返回 null（本意是「交给其他源决定」），
+    //   被 passGrade 当成「无级别」过滤掉 → curation 已判 S/A 的赛事故意漏显示。
+    //   传 leagueId 以支持「一 ID 多届」的精确 pin。
+    const tier = sources.getMatchTierForHome(s.leagueName || g0.league_name || '', s.leagueId || g0.leagueid);
     const bo = s.boType || 'BO1';
     const boMeta = BO_META[bo] || BO_META.BO1;
     // 队名兜底：groupSeries 对 null 队名回退 '天辉'/'夜魇'，组内找首个真实名替换
@@ -1499,7 +1504,8 @@ Page({
     const pick = upcoming[0] || past[0];
     if (!pick) return null;
     const isUpcoming = pick.start_time > now;
-    const tier = sources.getMatchTier(pick.league_name || '');
+    // ★ 2026-09-18：同 _cardFromSeries，改用 curation 优先的首页专用分级
+    const tier = sources.getMatchTierForHome(pick.league_name || '', pick.leagueid);
     const won = (pick.radiant === pick.radiant_win);
     const ownScore = pick.radiant ? pick.radiant_score : pick.dire_score;
     const oppScore = pick.radiant ? pick.dire_score : pick.radiant_score;

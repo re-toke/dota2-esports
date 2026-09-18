@@ -684,6 +684,40 @@ function getMatchTier(leagueName) {
   return t || null;
 }
 
+// ★ 2026-09-18（首页分级口径修正）：**curation 优先，正则兜底**。
+//
+// 背景（为什么不能直接用 getMatchTier）：
+//   ① tiers.communityTierFromName 在命中 EXCLUSION_RULES（预选/业余/慈善等）时会
+//      **主动返回 null**，其注释明确写着「让其他源（curation/opendota/stratz/liquipedia）
+//      决定分级」（utils/tiers.js:148-151）。而 getMatchTier 只调 community 一家 ——
+//      拿到 null 就当「无级别」，首页 passGrade 再把它变成「过滤掉」
+//      → curation 已明确判为 S/A 的赛事被误滤（实测 15 条未命中里 12 条 curation 判 S/A，
+//        含 Esports Nations Cup 2026 这类明确 S 级正赛）。
+//   ② 反向也存在误判：正则把 B 级赛事判成 A/S，使它们冒进首页
+//      （EPL World Series: SEA S17 / European Pro League S40 / DreamLeague Div2 S5-S6
+//       正则判 A/S，curation 判 B）—— 这正是 2026-09-16 用户点名的现象。
+//   故首页口径改为「curation（人工策展权威源）优先，未收录时回退 community 正则」。
+//
+// ⚠️ 仅用于首页卡片工厂。**不改 getMatchTier 本体** —— 它另有 6 个调用点
+//    （h2h ×2 / match-detail / team-detail / reminderStrategy 推送策略），
+//    改本体会影响推送行为，留待云开发下线观察期结束后统一评估。
+//
+// @param {string} leagueName 赛事名（OpenDota / LP 原始名，curation 内部会做归一名匹配）
+// @param {number} [leagueId]  可选，用于「一 ID 多届」的精确 pin（如 EPL Masters I/II）
+function getMatchTierForHome(leagueName, leagueId) {
+  const name = leagueName || '';
+  const lid = (typeof leagueId === 'number' && leagueId > 0) ? leagueId : undefined;
+  if (!name && !lid) return null;
+  // ① curation 优先（人工策展，权威源；leagueId 启用精确 pin + 跨游戏隔离）
+  const cu = curation.curatedEventFor(name, { leagueId: lid, game: 'dota2' });
+  if (cu && cu.tier && cu.tier.grade) {
+    return { grade: cu.tier.grade, rank: cu.tier.rank, label: cu.tier.label, source: 'curation' };
+  }
+  // ② curation 未收录 → 回退 community 正则（保持对未策展赛事的分级能力）
+  const t = tiers.communityTierFromName(name);
+  return t ? { grade: t.grade, rank: t.rank, label: t.label, source: 'community' } : null;
+}
+
 // ===== 赛事展示名：curation 规范名覆盖（同步式，零网络）=====
 // 集中式覆盖入口：所有 UI 展示赛事名时统一调用本函数。命中 curation 且规范名
 // 与原始名不同则返回规范名（如 OpenDota 的 "EPL Masters 2026" → 权威库 "EPL Masters I"），
@@ -2657,6 +2691,7 @@ module.exports = {
   validatePlayerId: validatePlayerId,
   getTeamPriority: getTeamPriority,
   getMatchTier: getMatchTier,
+  getMatchTierForHome: getMatchTierForHome,
   canonicalLeagueName: canonicalLeagueName,
   leagueDisplayName: leagueDisplayName,
   getUpcomingLocalSnapshot: getUpcomingLocalSnapshot
