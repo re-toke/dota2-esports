@@ -107,7 +107,7 @@ function main() {
       changed.slice(0, 10).forEach((s) => console.log('    ~ ' + s));
       if (changed.length > 10) console.log('    ... 等共 ' + changed.length + ' 条');
     } else {
-      diffSummary = '\n  映射无变化（仅 dataVersion 更新）';
+      diffSummary = '\n  映射无变化（产物保持不变，时间戳不更新）';
     }
   } catch (e) {
     // 首次生成无旧文件，跳过 diff
@@ -116,13 +116,42 @@ function main() {
 
   const text = serialize(map, leagueIdMap, count, dataVersion);
 
+  // ★ 2026-09-18 幂等化（修复 CI 第 4 步"永久失败"）：
+  //   generatedAt / dataVersion 每次 sync 都取当前时间戳 → 产物必然与上次不同 →
+  //   CI 里「跑 sync:canon 后 git diff --quiet」的检查**必然失败**，
+  //   **与产物是否最新无关**（这是 CI 从未变绿的第三个阻塞点，属设计缺陷）。
+  //   现改为：若除这两个时间戳外的内容与现有产物完全一致，则复用现有文本
+  //   （即保留旧时间戳），使产物逐字节稳定 —— 真正做到"内容变了才产生 diff"。
+  // 比对采用「解析后的内容指纹」而非字符串替换 —— 后者易受格式/空白/行尾符差异干扰。
+  const _sig = function (p) {
+    return JSON.stringify([p.version, p.source, p.eventCount, p.map, p.leagueIdMap]);
+  };
+  let outText = text;
+  try {
+    if (fs.existsSync(MINI_JS)) {
+      delete require.cache[require.resolve(MINI_JS)];
+      const oldPayload = require(MINI_JS);
+      const newPayload = {
+        version: 3,
+        source: 'utils/curation.js#CURATED_EVENTS',
+        eventCount: count,
+        map: map,
+        leagueIdMap: leagueIdMap
+      };
+      if (_sig(oldPayload) === _sig(newPayload)) {
+        outText = fs.readFileSync(MINI_JS, 'utf8');   // 复用原文件原文（含旧时间戳）
+        console.log('[sync-canon-map] 映射内容无变化 → 复用现有产物（时间戳不变，不产生 diff）');
+      }
+    }
+  } catch (e) { /* 读取/解析失败则按新文本写入 */ }
+
   // 写入小程序侧
   fs.mkdirSync(path.dirname(MINI_JS), { recursive: true });
-  fs.writeFileSync(MINI_JS, text, 'utf8');
+  fs.writeFileSync(MINI_JS, outText, 'utf8');
 
   // 镜像到云函数侧（独立部署，无法共享小程序 utils）
   fs.mkdirSync(path.dirname(CLOUD_JS), { recursive: true });
-  fs.writeFileSync(CLOUD_JS, text, 'utf8');
+  fs.writeFileSync(CLOUD_JS, outText, 'utf8');
 
   // 断言两侧内容一致（这是 G4 的核心不变量）
   const a = fs.readFileSync(MINI_JS, 'utf8');
