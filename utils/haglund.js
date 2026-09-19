@@ -241,6 +241,16 @@ function extractYear(s) {
   var m = String(s).match(/(20\d{2})/);
   return m ? m[1] : '';
 }
+// ★ 2026-09-19 新增：赛季号归一化 —— 把 "season 9" / "season9" / "s 9" 统一为 "s9"，
+//   再去掉所有分隔符（空格/横线/点），使「规范名 ↔ 缩写名」可子串比对。
+//   背景：haglund 侧赛事名多用缩写（"PGL Wallachia S9 - Round 1"），
+//   而调用方（liquipedia.getScheduledMatches）传的是 curation 规范名
+//   （"PGL Wallachia Season 9"）→ 原有子串比对必然失败（见 filterByLeague 内注释）。
+function _normSeasonName(x) {
+  return String(x).toLowerCase()
+    .replace(/\bseason\s*(\d+)\b/g, 's$1')
+    .replace(/[^a-z0-9]+/g, '');
+}
 function filterByLeague(matches, leagueName) {
   if (!leagueName || !matches || !matches.length) return matches || [];
   var target = String(leagueName).toLowerCase();
@@ -249,11 +259,22 @@ function filterByLeague(matches, leagueName) {
   LEAGUE_ALIASES.forEach(function (a) {
     if (a.re.test(String(leagueName))) targetShort = a.short;
   });
+  var targetNorm = _normSeasonName(target);
   return matches.filter(function (m) {
     var ln = (m._leagueName || m.leagueName || '');
     if (!ln) return false;
     var low = String(ln).toLowerCase();
     if (low.indexOf(target) !== -1 || target.indexOf(low) !== -1) return true;
+    // ★ 2026-09-19 修复：赛事名缩写差异导致漏匹配（真机诊断 · 详情页赛程为空）。
+    //   现象：同一份 haglund 数据，列表页有 47 场、详情页 0 场。
+    //   根因：详情页传 curation 规范名「PGL Wallachia Season 9」，haglund 数据是
+    //     「PGL Wallachia S9 - Round 1」→ 上面那次子串比对必然失败；
+    //     而 extractYear 只认 4 位年份（"season 9" 取不到年份）→ 年份分支也进不去。
+    //     （列表页不传 leagueName，走函数首行 `return matches` 全量，故不受影响。）
+    //   修复：追加一次「赛季号归一化」比对（"season 9" → "s9" 再去分隔符）。
+    var lowNorm = _normSeasonName(low);
+    if (lowNorm && targetNorm &&
+        (lowNorm.indexOf(targetNorm) !== -1 || targetNorm.indexOf(lowNorm) !== -1)) return true;
     if (targetYear && targetShort) {
       var lowYear = extractYear(low);
       var lnShort = '';
