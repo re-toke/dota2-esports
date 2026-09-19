@@ -276,6 +276,48 @@ check('The International China 匹配 ti china 而非 ti', function () {
   assert(filtered.length === 1, '应命中 TI China');
 });
 
+section('\n--- 14. 赛程名匹配：赛季号缩写（"Season 9" ↔ "S9"）---');
+// ★ 2026-09-19 新增（真机诊断 · 详情页赛程为空）：
+//   详情页经 liquipedia.getScheduledMatches → tryHaglundFallback(name) 传的是
+//   **curation 规范名**「PGL Wallachia Season 9」，而 haglund 侧数据用**缩写**
+//   「PGL Wallachia S9 - Round 1」→ 修复前子串比对必然失败（且 extractYear 只认
+//   4 位年份，年份分支也进不去）→ 返回 0 场。
+//   而列表页 mergeHaglundUpcoming **不传 leagueName**（走全量）→ 故「同一份数据，
+//   列表页 47 场正常、详情页 0 场」。修复方式：追加赛季号归一化比对。
+check('规范名 Season 9 应命中缩写名 S9（Round / Playoffs）', function () {
+  resetEnv();
+  var matches = [
+    { _leagueName: 'PGL Wallachia S9 - Round 1' },
+    { _leagueName: 'PGL Wallachia S9 - Round 5' },
+    { _leagueName: 'PGL Wallachia S9 - Playoffs' }
+  ];
+  var filtered = haglund._filterByLeague(matches, 'PGL Wallachia Season 9');
+  assert(filtered.length === 3, '应命中全部 3 场，实际 ' + filtered.length);
+});
+check('精度守卫：不误匹配相邻届（S8 / Season 10）', function () {
+  resetEnv();
+  var matches = [
+    { _leagueName: 'PGL Wallachia S8 - Round 1' },
+    { _leagueName: 'PGL Wallachia Season 10 - Round 1' }
+  ];
+  var filtered = haglund._filterByLeague(matches, 'PGL Wallachia Season 9');
+  assert(filtered.length === 0, '不应命中任何一场，实际 ' + filtered.length);
+});
+check('回归守卫：既有精确名匹配未被破坏（TI 2026）', function () {
+  resetEnv();
+  var matches = [
+    { _leagueName: 'TI 2026 - Main Event' },
+    { _leagueName: 'ESL One Birmingham 2026' }
+  ];
+  var filtered = haglund._filterByLeague(matches, 'TI 2026');
+  assert(filtered.length === 1, '应只命中 TI 2026，实际 ' + filtered.length);
+});
+check('不传 leagueName 时返回全量（列表页语义）', function () {
+  resetEnv();
+  var matches = [{ _leagueName: 'A' }, { _leagueName: 'B' }];
+  assert(haglund._filterByLeague(matches, null).length === 2, '不传名应返回全量');
+});
+
 // ===== 运行 =====
 async function runAll() {
   for (const t of tests) {
