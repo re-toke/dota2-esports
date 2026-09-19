@@ -1380,9 +1380,24 @@ Page({
       // 1) 按 _leagueName 聚合成赛事级（同一 leagueName 下所有场取最早/最晚 startTime）
       //    ★ TBD/TBA 占位场也参与时间范围计算（它们占据了真实时间槽位，扩展赛事的 end），
       //      仅 matchCount 不计入（避免虚高场次计数）
+      //
+      // ★★ 2026-09-19 修复「同一赛事按阶段拆成多个条目」（真机反馈）：
+      //   haglund 的 `_leagueName` 形如「赛事名 - 阶段名」（如 "PGL Wallachia S9 - Round 1"），
+      //   而此处原按**全名**聚合 → 同一赛事的 Round 1~5 / Playoffs 被当成 6 个**独立赛事**
+      //   出现在「即将开始」列表里（用户看到 "PGL Wallachia S9 - Round 1" … "- Round 5" 多条）。
+      //   修复：聚合前把**已知阶段后缀**剥掉，还原「基准赛事名」再分组。
+      //   ⚠️ 只剥离**已知阶段关键词**，**不按 " - " 粗暴切分** —— 避免误伤本身含短横线的
+      //      赛事名（如 "RES Unchained - A Blast Dota Slam VIII Qualifier" 必须原样保留）。
+      const _baseLeagueName = function (name) {
+        const stripped = String(name || '').replace(
+          /\s*[-–—]\s*(round\s*\d+|group\s*[a-z0-9]+|group\s*stage|playoffs?|play-?in|main\s*event|swiss|upper\s*bracket|lower\s*bracket|grand\s*final|semi-?finals?|finals?|open\s*qualifiers?|closed\s*qualifiers?|qualifiers?)\b[\s\S]*$/i,
+          ''
+        ).trim();
+        return stripped || String(name || '');
+      };
       const evMap = {};
       matches.forEach(function (m) {
-        const ln = m._leagueName || m.leagueName;
+        const ln = _baseLeagueName(m._leagueName || m.leagueName);
         if (!ln || !m.startTime) return;
         const hasTeams = !!(m.team1Name || m.team2Name);
         if (!evMap[ln]) {
