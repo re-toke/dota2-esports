@@ -737,7 +737,13 @@ function getMatchTierForHome(leagueName, leagueId) {
 function leagueBaseName(rawName) {
   const name = String(rawName || '');
   if (!name) return name;
-  const PHASE_SUFFIX_RE = /\s*[-–—]\s*(round\s*\d+|group\s*[a-z0-9]+|group\s*stage|playoffs?|play-?in|main\s*event|swiss|upper\s*bracket|lower\s*bracket|grand\s*final|semi-?finals?|finals?|open\s*qualifiers?|closed\s*qualifiers?|qualifiers?)\b[\s\S]*$/i;
+  // ⚠️ **刻意不含 Qualifier 类词**（Open / Closed / 裸 Qualifier）——
+  //    实测教训：预选赛在赛程数据里**常作为独立赛事**出现（不同赛区 / 不同轮次各有 leagueid），
+  //    例如 "Elite League - Closed Qualifier SEA / MENA / Eastern Europe …" 是 8 个不同赛事，
+  //    若把 " - Closed Qualifier XXX" 当阶段后缀剥掉 → 全部塌缩成 "Elite League" → **误合并**
+  //    （真机数据实测：8 个赛区被并为同一个键）。
+  //    只剥离**明确属于「同一赛事内部阶段」**的词（Round N / Playoffs / Group Stage / Main Event …）。
+  const PHASE_SUFFIX_RE = /\s*[-–—]\s*(round\s*\d+|group\s*[a-z0-9]+|group\s*stage|playoffs?|play-?in|main\s*event|swiss|upper\s*bracket|lower\s*bracket|grand\s*final|semi-?finals?|finals?)\b[\s\S]*$/i;
   const stripped = name.replace(PHASE_SUFFIX_RE, '').trim() || name;
   try {
     const c = canonicalLeagueName(stripped);
@@ -745,6 +751,20 @@ function leagueBaseName(rawName) {
   } catch (e) {
     return stripped;   // curation 异常时降级为「仅剥阶段」，不阻断调用方
   }
+}
+
+// 跨源赛事名**去重键**（在 leagueBaseName 基础上再去符号）——
+// 供任何「判断两个来自不同源的赛事名是否同一赛事」的场景统一调用（列表去重 / 快照匹配 /
+// 焦点卡 fakeId 哈希 …）。凡新增按名比对的逻辑都应复用它，不要再内联一套。
+//
+// ★ 关键：**必须保留 CJK / 西里尔字母**。原实现只留 [a-z0-9]，实测会把
+//   「Чемпионат Москвы 2024」抹成 "2024"、把「刀塔校运会」抹成 **空串** ——
+//   在 allLeagues(2977 条) 上实测出 **156 组「不同赛事算出同键」**，
+//   而空键更危险：`nameSeen[''] = true` 之后**所有**中文赛事都会被误判为「已存在」。
+//   字符集对齐 utils/consensus.js 的 normName，避免再出现第三套归一化口径。
+function leagueKey(rawName) {
+  const b = leagueBaseName(rawName);
+  return String(b || '').toLowerCase().replace(/[^a-z0-9一-鿿а-яё]/g, '').replace(/^the/, '');
 }
 
 // ===== 赛事展示名：curation 规范名覆盖（同步式，零网络）=====
@@ -2722,6 +2742,7 @@ module.exports = {
   getMatchTier: getMatchTier,
   getMatchTierForHome: getMatchTierForHome,
   leagueBaseName: leagueBaseName,
+  leagueKey: leagueKey,
   canonicalLeagueName: canonicalLeagueName,
   leagueDisplayName: leagueDisplayName,
   getUpcomingLocalSnapshot: getUpcomingLocalSnapshot

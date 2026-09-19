@@ -19,10 +19,23 @@ const sources = require('../../utils/sources.js');
 //   统一后：任何"按赛事名比对/去重"处都用同一个键 —— 先 `leagueBaseName` 归一
 //   （剥阶段后缀 + 对齐 curation 权威名），再去符号。
 //   ⚠️ 新增按名比对的逻辑时**必须复用本函数**，不要再内联一套 —— 本项目已因此复发多次。
-const leagueKey = (s) => {
-  const b = sources.leagueBaseName(s);
-  return (b || '').toLowerCase().replace(/[^a-z0-9]/g, '').replace(/^the/, '');
-};
+// ★★★ 2026-09-19：跨源赛事名**去重键统一** —— 一律复用 `sources.leagueKey`。
+//   （单点定义在 utils/sources.js：剥阶段后缀 + 对齐 curation 权威名 + 保留 CJK/西里尔）
+//
+//   背景（真机复现 + 用户指出「只修了一处，没有做全局修复」）：
+//     本文件原有 **6 处各自内联**的去重键 `norm`（仅去符号，**不归一赛季号/阶段后缀**）：
+//       · `mergeAllWithUpcoming`  —— 跨「进行中 / 即将开始」Tab 合并去重
+//       · `mergeLocalSnapshot`    —— 本地快照合并
+//       · `mergeCurationUpcoming` —— curation 合并
+//       · `mergeHaglundUpcoming`  —— haglund 合并
+//       · `dedupeByDisplayName`   —— 进行中 / 已结束 Tab
+//       · 焦点卡哈希 fakeId        —— 关注态 / 跳转
+//     同一赛事在不同数据源里写法不同（curation 用 "PGL Wallachia Season 9"、
+//     haglund 用 "PGL Wallachia S9 - Round 1"）→ 各自算出的键不同 → 去重失效 → 重复卡片。
+//
+//   ⚠️ 新增任何「按赛事名比对」的逻辑都必须复用本函数，不要再内联一套 ——
+//      本项目已因各自内联而**复发三次**（haglund 匹配 → 列表去重 → 全局键）。
+const leagueKey = sources.leagueKey;
 const stratz = require('../../utils/stratz.js');
 const cloudProxy = require('../../utils/cloudProxy.js');
 const tiers = require('../../utils/tiers.js');

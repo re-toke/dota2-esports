@@ -533,6 +533,38 @@ check('TI 别名归一（TI 2026 ↔ The International 2026）', function () {
          _srcTest.leagueBaseName('The International 2026'),
     'TI 2026 与 The International 2026 应同键');
 });
+// ★ 2026-09-19 新增负例（真机数据实测教训）：
+//   预选赛在赛程数据里**常作为独立赛事**出现（不同赛区各有 leagueid）→
+//   绝不能当"阶段后缀"剥掉，否则 Elite League 的 8 个赛区会被并成同一个键。
+check('预选赛各赛区不应被当作阶段剥离（Elite League）', function () {
+  const a = _srcTest.leagueBaseName('Elite League - Closed Qualifier SEA');
+  const b = _srcTest.leagueBaseName('Elite League - Closed Qualifier MENA');
+  assert(a !== b, '不同赛区预选是不同赛事，不应同键，实际都为: ' + a);
+  assert(a === 'Elite League - Closed Qualifier SEA', '应原样保留，实际: ' + a);
+});
+check('BLAST 系列预选亦不合并', function () {
+  const n1 = 'BLAST SLAM IX China Open Qualifier 1';
+  const n2 = 'BLAST SLAM IX China Open Qualifier 2';
+  assert(_srcTest.leagueBaseName(n1) === n1 && _srcTest.leagueBaseName(n2) === n2,
+    '不同预选轮次应原样保留');
+});
+check('CJK / 西里尔赛事名不被抹成空键或退化键', function () {
+  const a = _srcTest.leagueKey('Чемпионат Москвы 2024');
+  const b = _srcTest.leagueKey('Открытые Киберспортивные Игры 2024');
+  assert(a !== b, '两个俄语赛事不应同键，实际都为: ' + a);
+  assert(a.length > 4, '俄语名不应退化成纯年份，实际: ' + a);
+  assert(_srcTest.leagueKey('刀塔校运会').length > 0, '中文名不应被抹成空串');
+});
+check('leagueKey：去重实际用的键，S9 与 Season 9 必须同键', function () {
+  assert(_srcTest.leagueKey('PGL Wallachia S9 - Round 1') ===
+         _srcTest.leagueKey('PGL Wallachia Season 9'),
+    '去重键应相同（这是 mergeAllWithUpcoming / dedupeByDisplayName 实际使用的键）');
+});
+check('leagueKey：不同赛区预选必须不同键', function () {
+  assert(_srcTest.leagueKey('Elite League - Closed Qualifier SEA') !==
+         _srcTest.leagueKey('Elite League - Closed Qualifier MENA'),
+    '不同赛区预选不应同键');
+});
 
 async function runAll() {
   for (const t of tests) {
