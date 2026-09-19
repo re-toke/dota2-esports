@@ -58,13 +58,44 @@ var _slugMissedNames = {};
 var SLUG_MISS_LIMIT = 50;
 function liquipediaSlugFor(name) {
   var m = getSlugMap();
-  if (m && m.mappings && m.mappings[name]) {
+  var mm = (m && m.mappings) || null;
+  // ① 精确命中（原逻辑，命中路径零额外成本、零回归）
+  if (mm && mm[name]) {
     _slugHitCount++;
-    return m.mappings[name];
+    return mm[name];
+  }
+  // ★★ 2026-09-19 新增：**归一化后再查**（修复「展示名被当成内部键」导致的 EF 全 miss）
+  //
+  //   真机根因：详情页收到的是列表卡片的**展示名**（haglund 命名）
+  //     `PGL Wallachia S9 - Round 1`
+  //   而 slugmap / curation 里只有**规范名** `PGL Wallachia Season 9`
+  //   → 精确匹配失败 → 下方「原样返回」→ EF 查 `lp:w:PGL Wallachia S9 - Round 1` → **必然 miss**。
+  //   实测佐证：`PGL/Wallachia/9` 在 EF 里 200 / 26592B / `{{Match}} ×14`（缓存其实全都有）。
+  //
+  //   归一化复用 `sources.leagueBaseName`（剥阶段后缀 + 对齐 curation 权威名），
+  //   于是 `PGL Wallachia S9 - Round 1` → `PGL Wallachia Season 9` → **命中 slugmap**。
+  //
+  //   ⚠️ 用**函数内延迟 require**：`sources.js` 顶部 require 了本模块（L37），
+  //      顶部互相 require 会成环 → 运行时加载时两模块均已就绪，安全。
+  //   ⚠️ 放在精确匹配**之后**：原本能命中的输入一律走原路径，**行为不变**。
+  var norm = null;
+  try { norm = require('./sources.js').leagueBaseName(name); } catch (e) { norm = null; }
+  if (norm && norm !== name && mm && mm[norm]) {
+    _slugHitCount++;
+    console.log('[liquipedia] slug 归一化命中：' + name + ' → ' + norm);
+    return mm[norm];
   }
   _slugMissCount++;
+  var _isNewMiss = !_slugMissedNames[name];
   if (Object.keys(_slugMissedNames).length < SLUG_MISS_LIMIT) {
     _slugMissedNames[name] = 1;
+  }
+  // ★ 未命中告警（原实现**静默**原样返回 —— 危险默认值：把「查不到 slug」
+  //   变成「拿中文/带阶段的名字当 LP 页面路径」，必然 miss 却无任何痕迹）。
+  //   仅每个未命中名**首次**告警，避免刷屏（`_slugMissedNames` 本身有 LIMIT 去重）。
+  if (_isNewMiss) {
+    console.warn('[liquipedia] slug 未命中（将原样用作 LP 页面路径）：' + name +
+      (norm && norm !== name ? '（归一化后 "' + norm + '" 仍未命中）' : ''));
   }
   return name;
 }
