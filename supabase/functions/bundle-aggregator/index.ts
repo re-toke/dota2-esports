@@ -144,9 +144,19 @@ Deno.serve(async (req) => {
       " teamNames=" + Object.keys(names).length +
       (odOk ? "" : " (od empty→client fallback)"));
 
-    // 两者皆空视为整体失败（客户端回退旧链）；任一成功即部分成功
+    // 两者皆空 → **返回 200 + data:null**（语义：本条赛事确实没有 bundle 数据）
+    //
+    // ★ 2026-09-19 修正（原为 `502 {error:"league detail bundle empty"}`）：
+    //   原设计意图是用 502 通知客户端"回退旧链"，但**副作用严重** ——
+    //   客户端熔断器（utils/supabaseClient.js `_countFail`）把 502 计入**服务故障**，
+    //   连续 3 次即**熔断该 EF**；此后所有请求都直接 `supabase ef unavailable: bundle-aggregator`
+    //   回落云开发，**连"本来可能成功"的也不试**（真机日志已复现）。
+    //   「**空结果**」≠「**服务故障**」—— 前者是正常业务态，不应影响熔断状态。
+    //   现改为语义正确的 200；客户端据 `data === null` 判断是否需要回退
+    //   （客户端侧同时做了兼容：旧 502 的 `error` 含 "empty" 也**不计熔断**）。
     if (!odOk && !namesOk) {
-      return Response.json({ error: "league detail bundle empty" }, { status: 502 });
+      console.log("[bundle] league=" + leagueId + " 两者皆空 → 200 + data:null（非故障，不计熔断）");
+      return Response.json({ data: null, source: "empty" }, { status: 200 });
     }
     return Response.json({ data: { matches: od, teamNames: names }, source: "bundle" });
   } catch (e) {

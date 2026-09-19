@@ -84,6 +84,20 @@ function edge(name, data, opts) {
           // JWT 过期/无效：属鉴权问题而非 EF 服务故障 —— 不计失败、也不复位累计
           // （下次登录换新 JWT 自然恢复；旧实现此处复位会掩盖真实的服务端连续失败）
           reject(new Error('EF ' + name + ' auth failed (401)'));
+        } else if (name === 'bundle-aggregator' && res.statusCode === 502 &&
+                   res.data && typeof res.data.error === 'string' &&
+                   res.data.error.indexOf('bundle empty') >= 0) {
+          // ★ 2026-09-19 新增：**「空结果」不计熔断**（与上方 401 的处理同思路）。
+          //   背景：`bundle-aggregator` 在「两者皆空」时超返 502
+          //   `{error:"league detail bundle empty"}`（设计意图=通知客户端回退旧链），
+          //   但熔断器把它当成**服务故障** → 连续 3 次即熔断该 EF →
+          //   此后所有请求都直接 `supabase ef unavailable: bundle-aggregator` 回落云开发，
+          //   **连"本来可能成功"的也不试**（真机日志已复现该状态）。
+          //   「空结果」是正常业务态、不是故障 —— 故**不计失败**；
+          //   也**不复位**已有累计（避免掩盖真实故障，与 401 同策略）。
+          //   注：EF 侧已改为返 200 + data:null（走上方成功分支，加 `_countSuccess`）；
+          //   此分支用于**兼容尚未部署新 EF 的环境**。
+          reject(new Error('EF ' + name + ' empty result (not counted)'));
         } else {
           _countFail(name);
           reject(new Error('EF ' + name + ' HTTP ' + res.statusCode));
