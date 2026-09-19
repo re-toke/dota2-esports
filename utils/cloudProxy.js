@@ -117,11 +117,20 @@ function _hotGet(action) {
   return h;
 }
 
+// ★ 2026-09-19：部分 EF 期望「裸参数」而非 {action, params} 包裹。
+//   如 stratz-proxy 直接读 body.query（见 supabase/functions/stratz-proxy/index.ts:26）。
+//   这正是 STRATZ 长期未接入 EF 的真实卡点：EF 早已部署、EDGE_ACTIONS 也已注册
+//   stratzGql 映射，但 payload 格式不兼容 → 调用只会得到 400 "query required"。
+//   白名单内的 action 直接把 params 展开为顶层 payload（其余 action 行为不变）。
+var RAW_PAYLOAD_ACTIONS = { stratzGql: 1 };
+
 function call(action, params, extra) {
   // ★ M2.4：Supabase 数据代理优先；EF 熔断打开或失败 → 回落云开发
   var efName = EDGE_ACTIONS[action];
   if (efName && _sbEfAvailable()) {
-    var sbPayload = { action: action, params: params || {} };
+    var sbPayload = RAW_PAYLOAD_ACTIONS[action]
+      ? (params || {})
+      : { action: action, params: params || {} };
     if (extra && typeof extra === 'object' && extra.force != null) sbPayload.force = !!extra.force;
     // ★ 2026-09-11（LP 服务迁 EF）：cacheOnly 透传 —— 让 EF「未命中立即返回」，
     //   客户端据此实现「EF 缓存优先 → 未命中回落云函数」而不用付 7s 的 429 超时。

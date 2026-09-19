@@ -173,18 +173,43 @@ function gql(query, variables) {
   if (!ENABLED && !(config.stratz && config.stratz.enabled && config.stratz.apiKey)) {
     return Promise.resolve(null);
   }
-  // 纯云代理模式：无本地 key，完全依赖云函数
-  if (cloudEnabled && !config.stratz.apiKey) {
-    return gqlCloud(query, variables);
-  }
-  // 混合模式：有本地 key + 云代理，优先云函数加速，失败回退直连
-  if (cloudEnabled) {
-    return gqlCloud(query, variables)
-      .then((d) => d || gqlDirect(query, variables))
-      .catch(() => gqlDirect(query, variables));
-  }
-  // 纯直连模式
-  return gqlDirect(query, variables);
+  // ★ 2026-09-19：**优先走 EF（stratz-proxy）** —— 补上缺失的接线。
+  //   背景（真机诊断）：stratz-proxy EF **早已部署**且其 STRATZ key 有效
+  //   （实测 `{query}` 直调返回 200），EDGE_ACTIONS 也已注册 `stratzGql → stratz-proxy`，
+  //   但本函数**从未调用它** → STRATZ 一直依赖云函数，而云函数侧 key 已失效（403）。
+  //   后果：① 功能退化（分级/展示名取不到）② **成为「下线云开发」的阻塞项**。
+  //   另有契约卡点：stratz-proxy 期望裸 `{query, variables}` 而非 `{action, params}`，
+  //   已在 cloudProxy 的 RAW_PAYLOAD_ACTIONS 白名单中处理。
+  //   云函数 / 直连降为兜底，原有降级链保持不变。
+  var efTry = (cloudProxy && typeof cloudProxy.call === 'function' && cloudProxy.efAvailable())
+    ? cloudProxy.call('stratzGql', { query: query, variables: variables || {} })
+        .then(function (res) {
+          // ⚠️ 不要再取一层 .data：cloudProxy._efCall 已解包过
+          //   （cloudProxy.js:162-164 取 EF 响应的 r.data）→
+          //   实测 cp.call('stratzGql') 直接返回 STRATZ 的 data 内容（{constants:{...}}），
+          //   与下方 gqlCloud 的 result.data **形状本就一致**，无需转换。
+          //   （首版误加了一层 .data 导致恒为 null，已修正。）
+          return res || null;
+        })
+        .catch(function () { return null; })
+    : Promise.resolve(null);
+
+  return efTry.then(function (d) {
+    if (d) return d;
+    // ---- 以下为原有降级链（EF 不可用 / 失败时），逻辑未改动 ----
+    // 纯云代理模式：无本地 key，完全依赖云函数
+    if (cloudEnabled && !config.stratz.apiKey) {
+      return gqlCloud(query, variables);
+    }
+    // 混合模式：有本地 key + 云代理，优先云函数加速，失败回退直连
+    if (cloudEnabled) {
+      return gqlCloud(query, variables)
+        .then((x) => x || gqlDirect(query, variables))
+        .catch(() => gqlDirect(query, variables));
+    }
+    // 纯直连模式
+    return gqlDirect(query, variables);
+  });
 }
 
 // 全部联赛（轻量字段），用于分级匹配
