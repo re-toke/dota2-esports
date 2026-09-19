@@ -3,6 +3,26 @@ const util = require('../../utils/util.js');
 const follow = require('../../utils/follow.js');
 const config = require('../../utils/config.js');
 const sources = require('../../utils/sources.js');
+
+// ★★★ 2026-09-19：跨源赛事名**去重键统一** —— 一律走单点函数 `sources.leagueBaseName`。
+//
+//   背景（真机复现 + 用户指出「只修了一处，没有做全局修复」）：
+//     本文件原有 **4 处各自内联**的去重键 `norm`（仅去符号，**不归一赛季号/阶段后缀**）：
+//       · `mergeAllWithUpcoming`  —— 跨「进行中 / 即将开始」Tab 合并去重
+//       · `mergeLocalSnapshot`    —— 本地快照合并
+//       · `mergeCurationUpcoming` —— curation 合并
+//       · `mergeHaglundUpcoming`  —— haglund 合并
+//     同一赛事在不同数据源里写法不同（curation 用 "PGL Wallachia Season 9"、
+//     haglund 用 "PGL Wallachia S9 - Round 1"）→ 各自算出的键不同 → 去重失效 → **重复卡片**。
+//     上轮只让 haglund 那处的 `ev.name` 过了归一，**键函数本身没统一** → 其它源仍重复。
+//
+//   统一后：任何"按赛事名比对/去重"处都用同一个键 —— 先 `leagueBaseName` 归一
+//   （剥阶段后缀 + 对齐 curation 权威名），再去符号。
+//   ⚠️ 新增按名比对的逻辑时**必须复用本函数**，不要再内联一套 —— 本项目已因此复发多次。
+const leagueKey = (s) => {
+  const b = sources.leagueBaseName(s);
+  return (b || '').toLowerCase().replace(/[^a-z0-9]/g, '').replace(/^the/, '');
+};
 const stratz = require('../../utils/stratz.js');
 const cloudProxy = require('../../utils/cloudProxy.js');
 const tiers = require('../../utils/tiers.js');
@@ -68,7 +88,7 @@ function sortSmart(arr) {
 function mergeAllWithUpcoming(allLeagues, upcomingList) {
   const seen = Object.create(null);
   const nameSeen = Object.create(null);
-  const normName = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '').replace(/^the/, '');
+  const normName = leagueKey;   // ★ 2026-09-19 统一去重键（见文件顶部说明）
   const out = [];
   (allLeagues || []).forEach((x) => {
     const k = String(x.leagueid);
@@ -100,7 +120,7 @@ function dedupeByDisplayName(arr) {
     return 0;
   };
   (arr || []).forEach((x) => {
-    const base = x.displayName || x.name || ('' + x.leagueid);
+    const base = leagueKey(x.displayName || x.name || ('' + x.leagueid));   // ★ 2026-09-19 统一去重键
     const y = yearOf(x);
     const key = y ? (base + '_' + y) : base;
     const prev = groups[key];
@@ -674,9 +694,13 @@ Page({
         try { _snap = require('../../utils/upcoming-local-data.js'); }
         catch (_e) { _snap = require('../../utils/upcoming-local.json'); }
         if (_snap && _snap.events) {
-          const _dn = (displayName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          // ★ 2026-09-19：统一走 `leagueKey`（跨源赛事名归一）。
+          //   原内联"小写 + 去符号"与列表去重键各自演化 —— 当 displayName 与快照名写法
+          //   不一致时（如 "PGL Wallachia S9" vs 快照的 "PGL Wallachia Season 9"），
+          //   双向 indexOf 都会落空 → 该赛事**取不到快照赛期**（信息不全的表现之一）。
+          const _dn = leagueKey(displayName || '');
           const _hit = _snap.events.find((e) => {
-            const _en = (e.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const _en = leagueKey(e.name || '');
             return _en && (_en === _dn || _dn.indexOf(_en) >= 0 || _en.indexOf(_dn) >= 0);
           });
           if (_hit && _hit.start && _hit.end) _fromSnap = { start: _hit.start, end: _hit.end };
@@ -1243,7 +1267,7 @@ Page({
     if (!events.length) return;
     const horizon = now + config.leagueWindow.upcomingRangeSec;
     const seen = {};
-    const norm = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '').replace(/^the/, '');
+    const norm = leagueKey;   // ★ 2026-09-19 统一去重键（见文件顶部说明）
     results.forEach((r) => { const k = norm(r.name); if (k) seen[k] = true; });
     events
       .filter((e) => e.start && e.start <= horizon && (!e.end || e.end >= now))
@@ -1284,7 +1308,7 @@ Page({
     const nowSec = Math.floor(Date.now() / 1000);
     // 只收集 results 中已添加的归一名（allLeagues 中同名但非 upcoming 的不应阻止补充）
     const seen = {};
-    const norm = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '').replace(/^the/, '');
+    const norm = leagueKey;   // ★ 2026-09-19 统一去重键（见文件顶部说明）
     results.forEach((r) => {
       const k = norm(r.name);
       if (k) seen[k] = true;
@@ -1413,7 +1437,7 @@ Page({
 
       // 2) 时间窗过滤（与 tryCloudUpcoming / mergeLocalSnapshot 同口径）
       const horizon = now + config.leagueWindow.upcomingRangeSec;
-      const norm = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '').replace(/^the/, '');
+      const norm = leagueKey;   // ★ 2026-09-19 统一去重键（见文件顶部说明）
       const seen = {};
       results.forEach((r) => { const k = norm(r.name); if (k) seen[k] = true; });
 
@@ -1748,10 +1772,15 @@ Page({
       return;
     }
     const { ev, start, end, isLive, daysToStart } = best;
-    // 稳定的 id：优先 curation 真实 leagueId（方案 E），无则回退哈希 fakeId（与 mergeCurationUpcoming 一致）
-    // ⚠️ 哈希须剥离 'the' 前缀，与 mergeCurationUpcoming 的 norm() 对齐，否则焦点卡与列表 tab 关注态割裂
+    // 稳定的 id：优先 curation 真实 leagueId（方案 E），无则回退哈希 fakeId
+    // ★ 2026-09-19：哈希键改为复用 `leagueKey`（单点归一）——
+    //   原实现内联"小写+去符号+剥 the"，与列表侧的去重键**各自演化**，
+    //   一旦任一侧调整（如本次统一归一化）就会**割裂**：焦点卡的 fakeId 与
+    //   列表 tab 里同赛事的 fakeId 不再相等 → 关注态/跳转错位。
+    //   （原注释已提示过该风险：「哈希须剥离 the 前缀，与 mergeCurationUpcoming 的
+    //   norm() 对齐，否则焦点卡与列表 tab 关注态割裂」—— 本次即把它真正统一。）
     let hash = 0;
-    const k = (ev.canonical || '').toLowerCase().replace(/[^a-z0-9]/g, '').replace(/^the/, '');
+    const k = leagueKey(ev.canonical || '');
     for (let j = 0; j < k.length; j++) { hash = ((hash << 5) - hash + k.charCodeAt(j)) | 0; }
     const fallbackFakeId = -(Math.abs(hash) % 1000000 + 1000000);
     const focusId = (ev.leagueId != null) ? ev.leagueId : fallbackFakeId;
