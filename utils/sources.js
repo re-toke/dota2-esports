@@ -747,7 +747,34 @@ function leagueBaseName(rawName) {
   const stripped = name.replace(PHASE_SUFFIX_RE, '').trim() || name;
   try {
     const c = canonicalLeagueName(stripped);
-    return c || stripped;
+    if (c && c !== stripped) return c;
+    // ★★ 2026-09-19 新增：**年份位置变体的二次尝试**（真机复现）
+    //
+    //   现象：`PGL Wallachia 2026 Season 9`（年份插在中间）与规范名
+    //        `PGL Wallachia Season 9` 无法互认 → **同一赛事被显示成两个**。
+    //   原因：curation 的 aliases 里同时有 `wallachia2026` 与 `pglwallachiaseason9`，
+    //        却**没有二者的组合**（`pglwallachia2026season9`）→ 精确匹配失败。
+    //
+    //   修复：首次查表未命中时，**剥离 4 位年份**后再查一次。
+    //   ⚠️ 保守设计：
+    //     · 仅在「剥离后**确实命中** curation（即返回了不同于入参的规范名）」时才采用；
+    //     · 剥离年份**不会**混淆 `DreamLeague Season 30 / 31` 这类"届次数字"
+    //       —— 它们本来就不含 4 位年份，`noYear === stripped`，直接跳过本分支；
+    //     · 命中时会打日志，便于观察是否出现误判（若发现再收窄条件）。
+    const noYear = stripped.replace(/\b(19|20)\d{2}\b/g, ' ').replace(/\s+/g, ' ').trim();
+    if (noYear && noYear !== stripped) {
+      // ⚠️ 必须用 `curatedEventFor` 判断「**是否命中 curation**」，
+      //   而**不能**用 `canonicalLeagueName(noYear) !== noYear`
+      //   —— 因为当 `noYear` 本身就是规范名时，它返回的是它自己（`c2 === noYear`），
+      //      那个条件会把**正确命中**误判为"未命中"（本修复首版即栽在这里，实测未生效）。
+      let cu2 = null;
+      try { cu2 = curation.curatedEventFor(noYear, { game: 'dota2' }); } catch (e) { cu2 = null; }
+      if (cu2 && cu2.canonical) {
+        console.log('[sources] leagueBaseName 年份变体命中：' + stripped + ' → ' + cu2.canonical);
+        return cu2.canonical;
+      }
+    }
+    return stripped;
   } catch (e) {
     return stripped;   // curation 异常时降级为「仅剥阶段」，不阻断调用方
   }
