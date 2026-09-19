@@ -100,21 +100,51 @@ function sortSmart(arr) {
 // 确保「全部」能完整展示即将到来的赛事，而不只是「已结束+正在进行」。
 function mergeAllWithUpcoming(allLeagues, upcomingList) {
   const seen = Object.create(null);
-  const nameSeen = Object.create(null);
-  const normName = leagueKey;   // ★ 2026-09-19 统一去重键（见文件顶部说明）
+  const nameIdx = Object.create(null);   // ★ 2026-09-19：key → out 中的下标（用于**择优替换**）
+  const normName = leagueKey;
   const out = [];
-  (allLeagues || []).forEach((x) => {
+
+  // ★★ 2026-09-19「同名择优」（真机问题：留下来的恰是信息不全的那条）
+  //   现象：`PGL Wallachia 2026 Season 9`（来自 allLeagues/OpenDota，**只有 name/tier/id**）
+  //        与 `PGL Wallachia Season 9`（来自 upcomingList/快照，**有赛期**）归一后同键；
+  //        原实现「allLeagues 先入 → upcomingList 被 nameSeen 挡掉」→ **留下的信息不全** ✗
+  //   修复：同 key 冲突时**按「数据完整度」择优替换**，而不是先入为主。
+  //   评分维度（有赛期最关键 —— allLeagues 只有 name/tier/id，无赛期）：
+  const _scoreOf = (x) => {
+    if (!x) return -1;
+    let s = 0;
+    if (x.startDate || x.earliest) s += 2;
+    if (x.endDate || x.latest) s += 2;
+    if (x.dateRange) s += 1;              // curation 已解析赛期
+    if (x.matchCount) s += 1;             // 有对局数
+    return s;
+  };
+  const _put = (x) => {
     const k = String(x.leagueid);
-    if (!seen[k]) { seen[k] = true; out.push(x); nameSeen[normName(x.displayName || x.name)] = true; }
-  });
-  (upcomingList || []).forEach((u) => {
-    const k = String(u.leagueid);
-    if (seen[k]) return;            // 同 leagueid 已收录
-    // 防重复卡：curation 未来赛事用负数 fakeId，若其规范名已存在于 allLeagues（真实已开赛赛事），
-    // 说明是同一赛事的两条记录，优先保留真实数据那条，跳过 curation 占位（收录错误：重复卡片）。
-    if (nameSeen[normName(u.displayName || u.name)]) return;
-    seen[k] = true; out.push(u);
-  });
+    if (seen[k]) return;
+    const nk = normName(x.displayName || x.name);
+    if (nk) {
+      const at = nameIdx[nk];
+      if (at != null) {
+        // 同 key 已存在 → 择优：新条目更全则替换，否则丢弃
+        const prev = out[at];
+        if (_scoreOf(x) > _scoreOf(prev)) {
+          console.log('[leagues] mergeAllWithUpcoming 择优替换：' +
+            (prev.displayName || prev.name) + '(完整度 ' + _scoreOf(prev) + ') → ' +
+            (x.displayName || x.name) + '(完整度 ' + _scoreOf(x) + ')');
+          out[at] = x;
+        }
+        seen[k] = true;
+        return;
+      }
+      nameIdx[nk] = out.length;
+    }
+    seen[k] = true;
+    out.push(x);
+  };
+
+  (allLeagues || []).forEach(_put);
+  (upcomingList || []).forEach(_put);
   return out;
 }
 
