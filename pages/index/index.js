@@ -433,12 +433,19 @@ Page({
     lpP.then((lpUp) => {
       if (myEpoch !== this._epoch) return;
       this._lastLpUp = lpUp; this._lastLpUpTs = Date.now();
+      // ★ 2026-09-19 修复（**同一 bug 的第二段**）：stale 刷新触发必须放在
+      //   「空数组提前 return」**之前**。
+      //   原实现先 `if (!(lpUp && lpUp.length)) return;` → 当 lpUp 是空数组
+      //   （但已带 _stale 标记，见 _fetchLpUpcoming 的修复）时直接返回
+      //   → 下方 `if (lpUp._stale) this._refreshStaleLp()` 永不执行
+      //   → **首页三段持续空白**（真机复现：日志已打出「已带 _stale 标记」却无后续拉新）。
+      //   教训：修「提前 return 吞掉后续语句」类 bug 时，要**沿调用链逐层检查**——
+      //   上一次只修了「产生标记」那一层，这一层「消费标记」同样有相同的坑。
+      if (lpUp && lpUp._stale) this._refreshStaleLp(myEpoch);
       if (!(lpUp && lpUp.length)) return;
       lpReady = lpUp;
       // LP 就绪即渲染（pro/live 未到时二者为 null，_applyMatchSources 兼容）
       this._applyMatchSources(this._lastPro, this._lastLive, this._followRows || [], lpUp);
-      // stale 后台刷新（S3）：_stale 由 _fetchLpUpcoming 胶合传递（任一赛事 stale 即整体 stale）
-      if (lpUp._stale) this._refreshStaleLp(myEpoch);
     }).catch(() => {});
     Promise.race([
       Promise.all([proP, liveP]),
