@@ -82,9 +82,29 @@ function getTeamInfo(teamId) {
   }).catch(() => null);
 }
 
-// 赛事奖金池（TI 奖金池，Steam 独有，OpenDota/STRATZ 无此数据）
-// 返回 prize_pool（美元浮点）与币种，未启用或失败时返回 null。
+// 赛事奖金池（原设计：Steam 独有，OpenDota/STRATZ 无此数据）
+//
+// ★ 2026-09-19（观察期真机诊断）**该调用已停用**，原因是它成了「EF 熔断污染源」：
+//   ① **interface 错配**：Valve 的 GetTournamentPrizePool 属 `IEconDOTA2_570`，
+//      而 steam-proxy EF 把所有请求硬编码在 `IDOTA2Match_570` 下
+//      （supabase/functions/steam-proxy/index.ts:20 `STEAM_BASE`）→ 必然 404
+//      → EF 包装为 **HTTP 502**；
+//   ② **接口本身已废弃**：用路径逃逸指到正确 interface 后（实测 200），
+//      **所有** leagueid（含 TI 2022/2023/2024）仍恒返回 `prize_pool:0, league_id:0`
+//      —— 连入参都不回显 → Valve 已停止提供该数据（端点尚存但已失效）；
+//   ③ **污染面**：本函数被 sources.js `getLeagueMetadata` 调用，
+//      **每次赛事详情/联赛列表加载都会触发** → 累计 3 次即熔断 `steam-proxy`
+//      → 连带拖垮同一 EF 下**正常**的 `steamLeagueScheduled`（LIVE 对局抓取）。
+//      真机 Console 已完整呈现该链条（502 → breaker OPEN → 后续 action 全被拒）。
+//
+//   而奖池以 **Liquipedia 为主源**（sources.js 注释：「Liquipedia 优先，Steam 兜底」），
+//   Steam 仅为兜底且兜底已失效 → **停用无任何功能损失，反而消除熔断污染**。
+//
+//   恢复条件：若 Valve 未来恢复该接口，需①改回下方实现 ②同步修 EF 的 interface 路由
+//   （让 steamProxy 支持指定 interface，而非硬编码 IDOTA2Match_570）。
 function getTournamentPrizePool(leagueId) {
+  return Promise.resolve(null);   // 已停用，原因见上方注释块
+  /* 原实现（保留以便恢复）：
   if (!ENABLED) return Promise.resolve(null);
   return get('/GetTournamentPrizePool', { league_id: leagueId }).then((d) => {
     const r = (d && d.result) || null;
@@ -96,6 +116,7 @@ function getTournamentPrizePool(leagueId) {
       source: 'steam'
     };
   }).catch(() => null);
+  */
 }
 
 module.exports = {
