@@ -655,6 +655,9 @@ Page({
     grade = (grade || ut.grade).toUpperCase();
     const rank = curTier ? curTier.rank : ut.rank;
     const label = curTier ? curTier.label : ut.label;
+    // ★ 2026-09-19（收录严谨化 · 用户决策 3）：预选赛「保留但降级标注」——
+    //   级别已由 tiers.applyQualifierCap 扣到最高 B 级，此处只补展示标记。
+    const isQualifier = !!(curTier ? curTier.qualifier : ut.qualifier) || tiers.isQualifier(l.name || '');
     const t = tagThemeOf(grade);
     const valve = (cur && cur.valve != null) ? cur.valve : tiers.flagValve(l.name);
     const topThirdParty = (cur && cur.topThirdParty != null) ? cur.topThirdParty : tiers.flagTopThirdParty(l.name);
@@ -736,6 +739,7 @@ Page({
       rank: rank,
       tierClass: 'tier-' + grade.toLowerCase(),
       label: label,
+      qualifier: isQualifier,                 // ★ 2026-09-19：预选赛标注（降级为 B 级展示）
       displayLabel: tiers.displayOf(grade),   // 文档五档名：官方TI/S-Tier/A-Tier/区域赛/社区赛
       source: ut.source,
       tagTheme: t.theme,
@@ -1559,16 +1563,17 @@ Page({
       //   （status='upcoming'，真实排期数据）此前只出现在「全部」tab——「全部」能看到、
       //   「即将到来」却为空。修复：将 allLeagues 的 upcoming 赛事并入本 tab（按 leagueid 去重，
       //   与「进行中」分支合并模式一致）。
-      // ★★ 2026-09-19 修复「即将开始 Tab 重复卡片」（真机截图定位）：
+      // ★★ 2026-09-19 修复「即将开始 Tab 重复卡片」（真机截图复现）：
       //   原实现**只用 leagueid 判重**，但两个来源的 id **体系完全不同**：
       //     · fromList（upcomingList：快照 / 云函数 / curation）→ **负数 fakeId**（如 -1632240）
       //     · fromAll（allLeagues：OpenDota）→ **真实 leagueid**（如 19102）
       //   同一赛事在两边 id 必然不同 → 判重**彻底失效** → 两张同名卡同时展示。
       //   实测复现（用户截图）：BLAST SLAM VIII / BLAST SLAM IX /
-      //     DreamLeague Division 2 Series 5 / 6 —— 均双份，
-      //     一份标 Liquipedia（LP 赛期），一份标社区分级（带 $750,000 奖池）。
-      //   ⚠️ 教训：**跨源判重不能用 id**（不同源 id 体系可能完全不同），
-      //     必须用「归一化后的业务键」—— 与「全部」「进行中」Tab 口径统一。
+      //     DreamLeague Division 2 Series 5 / 6 —— 均出现双份，
+      //     一份标 Liquipedia（赛期来自 LP），一份标社区分级（带 $750,000 奖池）。
+      //   ⚠️ 这正是「同名不同 id 体系」类问题的又一例（与 stratz 未接 EF、CI 卡 Lint 同源：
+      //     判重依据与实际数据形态不匹配）。
+      //   修复：改按 `leagueKey`（归一化赛事名）判重 —— 与「全部」「进行中」Tab 口径统一。
       const _seenUp = {};
       fromList.forEach((x) => { const k = leagueKey(x.displayName || x.name); if (k) _seenUp[k] = true; });
       const fromAll = (this.allLeagues || []).filter((x) =>
@@ -1600,6 +1605,16 @@ Page({
       // 未来赛事（OpenDota 暂无比赛记录）一并展示（RC1 / P0-1）。
       arr = mergeAllWithUpcoming(this.allLeagues, this.upcomingList).filter(gradeMatch).slice();
     }
+    // ★ 2026-09-19（收录严谨化 · 用户决策 5）：C 级（社区赛）**从赛事列表彻底移除**。
+    //   双保险：① 服务端 trimLeagues 已按「白名单准入」丢弃未命中的 professional；
+    //   ② 此处兜住仍漏进来的（OpenDota 标 professional 但实为社区/娱乐赛者，
+    //      util.unifiedTier 会判为 C 级），与首页「只保留 S/A」的口径保持一致。
+    arr = arr.filter((x) => {
+      const g = (x.grade || '').toUpperCase();
+      if (g === 'C') return false;
+      if (x.rank != null && x.rank <= 0) return false;
+      return !!g;
+    });
     // 排序：默认按时间倒序；智能排序（关注置顶 + S级优先 + 时间）为高级模式
     if (this.data.sortMode === 'smart') {
       arr = sortSmart(arr);

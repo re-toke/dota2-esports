@@ -635,28 +635,56 @@ function getScheduledMatches(name, opts) {
         console.log('[liquipedia] 赛程走 EF 缓存 + 本地解析（' + local.matches.length + ' 场，零云开发）');
         return local;
       }
-      // 本地无对阵（页面无 {{Match}} 或全是空占位）→ 云函数兜底
-      console.log('[liquipedia] EF 缓存未命中或无对阵 → 云函数兜底：' + name);
-      return cloudProxy.liquipediaScheduledProxy(name, force).then(function (res) {
-        var norm = normalizeScheduled(res);
-        if (norm.matches.length) {
-          console.log('[liquipedia] 赛程取到（云函数）：' + norm.matches.length + ' 场');
-          return norm;
-        }
-        // 云函数返回空 → haglund 第三方源
-        return tryHaglundFallback(name, force, cacheKey).then(function (hf) {
+      // ★★ 2026-09-19 性能优化（详情页 12.6s → 目标 2~3s）：**云函数与 haglund 并行兜底**。
+      //
+      //   原实现是**串行链**：`EF(from fetchScheduledLocal)` → `liquipediaScheduledProxy`(云函数)
+      //   → `tryHaglundFallback`。其中云函数这步**几乎必然失败却要等满超时**：
+      //     · 上方注释与 cloudProxy 均载明「CloudBase 出口 IP 被 Liquipedia Cloudflare 429 拦」；
+      //     · `ACTION_TIMEOUT_MS._default = 8000`。
+      //   真机实测：`[detail][perf] od+lp 并行段 12648ms（od 0 场 / lp 8 场）`
+      //   —— 而 `getLeagueMatches` 实测仅 ~1s，**12.6s 几乎全耗在等这个云函数**。
+      //
+      //   改为并行后：haglund 通常 1~2s 返回，**不再被云函数阻塞**。
+      //   语义保持与原实现一致：
+      //     · 谁先拿到**有效数据**就用谁（任一先到即 resolve，不空等）；
+      //     · 某路返回空/失败 → 等另一路；
+      //     · 两路都空 → 仍返回 `{ matches: [], boFormat: null }`（保持原返回契约）。
+      console.log('[liquipedia] EF 缓存未命中或无对阵 → 云函数 / haglund 并行兜底：' + name);
+
+      var _cloudP = cloudProxy.liquipediaScheduledProxy(name, force)
+        .then(function (res) {
+          var norm = normalizeScheduled(res);
+          if (norm.matches.length) {
+            console.log('[liquipedia] 赛程取到（云函数）：' + norm.matches.length + ' 场');
+            return norm;
+          }
+          return null;   // 云函数返回空 → 让位给 haglund
+        })
+        .catch(function () { return null; });
+
+      var _hagP = tryHaglundFallback(name, force, cacheKey)
+        .then(function (hf) {
           if (hf && hf.matches.length) {
             console.log('[liquipedia] 赛程取到（haglund 兜底）：' + hf.matches.length + ' 场');
             return hf;
           }
-          console.warn('[liquipedia] 赛程三条路径均为空：' + name);
-          return { matches: [], boFormat: null };
-        });
-      }).catch(function () {
-        // 云函数失败 → haglund 第三方源
-        return tryHaglundFallback(name, force, cacheKey).then(function (hf) {
-          return (hf && hf.matches.length) ? hf : { matches: [], boFormat: null };
-        });
+          return null;
+        })
+        .catch(function () { return null; });
+
+      return new Promise(function (resolve) {
+        var settled = 0, best = null;
+        function onOne(r) {
+          if (best) return;                    // 已采用某路结果，忽略后到者
+          if (r) { best = r; resolve(best); return; }   // ★ 先拿到有效数据 → 立即采用
+          settled++;
+          if (settled === 2) {                 // 两路都空 → 维持原「三条路径均为空」契约
+            console.warn('[liquipedia] 赛程三条路径均为空：' + name);
+            resolve({ matches: [], boFormat: null });
+          }
+        }
+        _cloudP.then(onOne);
+        _hagP.then(onOne);
       });
     });
   }
