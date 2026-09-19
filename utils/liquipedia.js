@@ -353,13 +353,16 @@ function getLeagueMetadata(name) {
         console.log('[liquipedia] 元数据走 EF 缓存 + 本地解析（' + (local.canonical || name) + '）');
         return local;
       }
-      return cloudProxy.liquipediaProxy(name).then(function (remote) {
-        if (remote) {
-          cache.set(cacheKey, remote, CACHE_TTL);
-          return remote;
-        }
-        return null;
-      }).catch(function () { return null; });
+      // ★ 2026-09-19：**移除云函数兜底**（同 fetchLiquipediaChain 的处理）。
+      //   原实现：本地解析失败 → `cloudProxy.liquipediaProxy(name)` → `call('liquipediaLeagueMeta')`
+      //   → 该 action **不在 EDGE_ACTIONS** → 走 `callCloud()` = 微信云开发云函数。
+      //   移除依据与「赛程」完全同构：
+      //     · 本地解析已是主力（`fetchPageWikitext` 三级链路，EF 缓存命中即零云开发；
+      //       且 `fetchAndParseLeague` 已补齐 `liquipediaTier`，与云函数产出字段对齐）；
+      //     · 云函数抓 LP 必然 429（CloudBase 出口被 Cloudflare 拦）；
+      //     · 真机日志中从未出现该云函数命中。
+      //   移除后：本地失败则返回 null，由上层按「无元数据」处理（与云函数失败时行为一致）。
+      return null;
     });
   }
   return fetchAndParseLeague(name, cacheKey);
@@ -857,12 +860,13 @@ function getTeamLogo(name) {
       try { cache.set(cacheKey, row, CACHE_TTL); } catch (e) {}
       return row;
     }
-    // 回落云函数（仅云开发仍可用时）
-    if (typeof wx === "undefined" || !wx.cloud || !cloudProxy.isAvailable()) return null;
-    return cloudProxy.liquipediaTeamLogoProxy(name).then(function (remote) {
-      if (remote && remote.logo) { cache.set(cacheKey, remote, CACHE_TTL); return remote; }
-      return null;
-    }).catch(function () { return null; });
+    // ★ 2026-09-19：**移除云函数回落**（`liquipediaTeamLogoProxy` → `liquipediaTeamLogo`）。
+    //   上方 2026-09-12 的注释本就说「未命中再回落云函数（**云开发关停后该回落自动失效，
+    //   返回 null → UI 默认图标**）」——现在主动去掉，避免每次未命中都白跑一次
+    //   必然失败的云调用（该 action 同样不在 EDGE_ACTIONS，走 callCloud = 云开发）。
+    //   Supabase 直读（GH Actions 预抓写 `lp:logo:<slug>`）已是主力路径；
+    //   未命中即返回 null → UI 默认图标，**行为与云函数失效后完全一致**。
+    return null;
   }).catch(function () { return null; });
 
   // ★ 2026-09-12：原「云代理优先」分支已移除 —— 它在 SB 直读块之后，属不可达代码
