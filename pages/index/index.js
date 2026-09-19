@@ -561,7 +561,21 @@ Page({
     )).then((lists) => {
       const all = [];
       lists.forEach((ms) => { if (ms && ms.length) all.push.apply(all, ms); });
-      if (!all.length) return [];
+      // ★ 2026-09-19 修复「首页永久空白」：**空结果也必须带 _stale 标记**。
+      //   原实现 `if (!all.length) return []` 提前返回 → 下方 L580 的 out._stale 永远
+      //   执行不到 → 调用方（见上方 440-441 行）拿到的空数组无 _stale →
+      //   `_refreshStaleLp()` 不被触发 → 后台永不拉新
+      //   → 「SWR 缓存恰好是 0 场」时首页三段持续空白（真机复现：PGL S9 详情页有 8 场
+      //     赛程、首页却一张卡都没有）。
+      //   注意：这与 P0-1（passGrade 读不存在的 c.tier）同属「标记/字段在传递链上断裂」，
+      //   都会表现为「界面静默空白」而不报错。
+      if (!all.length) {
+        const emptyOut = [];
+        if (anyStale && !force) emptyOut._stale = true;
+        console.log('[index][⑥段] 本轮 0 场 → ' +
+          (anyStale ? '命中 stale 空缓存，已带 _stale 标记（触发后台刷新）' : '数据源确无赛程'));
+        return emptyOut;
+      }
       // ★ 分流：LIVE 场（已开赛未结束）走 buildLpLiveSeries，upcoming 场走原函数。
       //   Steam LIVE 场 startTime 为「当前时间」占位 → 以 phase==='live' 为主判据；
       //   haglund/LPDB 场有真实开赛时间，phase 可能缺失 → 用 start<=now 兜底分流。
