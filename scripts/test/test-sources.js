@@ -502,6 +502,38 @@ check('curation 名称救援兼容 "Dota 2" 后缀（未收录回归：esportswo
 });
 
 // ===== 运行全部测试（顺序执行，支持 async）=====
+// ===== 跨源赛事名归一 sources.leagueBaseName（2026-09-19）=====
+section('\n--- 跨源赛事名归一 leagueBaseName（2026-09-19）---');
+const _srcTest = require('../../utils/sources.js');
+// ★ 回归守卫：同一赛事在不同源里写法不同 → 曾被当成**两个赛事**
+//   真机现象：列表页「进行中」显示全称 "PGL Wallachia Season 9"，
+//   而「即将开始」显示缩写 "PGL Wallachia S9"（信息还不全）。
+//   根因：haglund 用缩写、curation/快照用全称，跨源比对未归一 → 去重挡不住。
+check('S9 缩写应归一为 Season 9 全称（跨源同键）', function () {
+  assert(_srcTest.leagueBaseName('PGL Wallachia S9') ===
+         _srcTest.leagueBaseName('PGL Wallachia Season 9'),
+    'S9 与 Season 9 应归一为同一名');
+});
+check('带阶段后缀也应归一到同一赛事', function () {
+  const a = _srcTest.leagueBaseName('PGL Wallachia S9 - Round 1');
+  const b = _srcTest.leagueBaseName('PGL Wallachia S9 - Playoffs');
+  const c = _srcTest.leagueBaseName('PGL Wallachia Season 9');
+  assert(a === b && b === c, 'Round 1 / Playoffs / 全称 应同键，实际: ' + [a, b, c].join(' | '));
+});
+check('关键负例：含短横线的赛事名不被误剥离', function () {
+  const n = 'RES Unchained - A Blast Dota Slam VIII Qualifier';
+  assert(_srcTest.leagueBaseName(n) === n, '不应被剥离，实际: ' + _srcTest.leagueBaseName(n));
+});
+check('Division 1/2 不被当作阶段剥离', function () {
+  const n = 'DreamLeague Season 30 - Division 1';
+  assert(_srcTest.leagueBaseName(n) === n, '不应被剥离，实际: ' + _srcTest.leagueBaseName(n));
+});
+check('TI 别名归一（TI 2026 ↔ The International 2026）', function () {
+  assert(_srcTest.leagueBaseName('TI 2026 - Main Event') ===
+         _srcTest.leagueBaseName('The International 2026'),
+    'TI 2026 与 The International 2026 应同键');
+});
+
 async function runAll() {
   for (const t of tests) {
     if (t.kind === 'section') { console.log(t.title); continue; }

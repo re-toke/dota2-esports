@@ -718,6 +718,35 @@ function getMatchTierForHome(leagueName, leagueId) {
   return t ? { grade: t.grade, rank: t.rank, label: t.label, source: 'community' } : null;
 }
 
+// ★ 2026-09-19 新增：**跨源赛事名归一（去重 / 比对用）** —— 两步归一：
+//   ① 剥离「已知阶段后缀」（"… - Round 1" / "… - Playoffs" / "… - Main Event" …）
+//      ⚠️ 只剥已知阶段关键词，**不按 " - " 粗暴切分** —— 否则会切坏本身含短横线的
+//         赛事名（如 "RES Unchained - A Blast Dota Slam VIII Qualifier"）。
+//   ② 归一为 curation 权威名（canonicalLeagueName）—— 统一「Season 9 ↔ S9」等异写法。
+//
+//   为什么必须是**单点函数**（真机教训 2026-09-19）：
+//     同一赛事在不同数据源里写法不同 —— haglund 用缩写 "PGL Wallachia S9 - Round 1"，
+//     而 curation / 快照用全称 "PGL Wallachia Season 9" → 列表页「进行中」与
+//     「即将开始」各显示一条，被当成**两个赛事**（且缩写那条信息不全）。
+//     项目里「跨源按名比对」的地方不止一处（haglund 赛程匹配 / 列表去重 / 分级判定 …），
+//     若每处各自内联一套归一化逻辑，必然反复出现同类不一致（本次即二次复发）。
+//     → 统一走本函数：凡是「判断两个来自不同源的赛事名是否同一赛事」的场景都应用它。
+//
+//   @param {string} rawName 原始赛事名（任意源）
+//   @returns {string} 归一后的基准赛事名（已剥离阶段 + 已对齐 curation 权威名）
+function leagueBaseName(rawName) {
+  const name = String(rawName || '');
+  if (!name) return name;
+  const PHASE_SUFFIX_RE = /\s*[-–—]\s*(round\s*\d+|group\s*[a-z0-9]+|group\s*stage|playoffs?|play-?in|main\s*event|swiss|upper\s*bracket|lower\s*bracket|grand\s*final|semi-?finals?|finals?|open\s*qualifiers?|closed\s*qualifiers?|qualifiers?)\b[\s\S]*$/i;
+  const stripped = name.replace(PHASE_SUFFIX_RE, '').trim() || name;
+  try {
+    const c = canonicalLeagueName(stripped);
+    return c || stripped;
+  } catch (e) {
+    return stripped;   // curation 异常时降级为「仅剥阶段」，不阻断调用方
+  }
+}
+
 // ===== 赛事展示名：curation 规范名覆盖（同步式，零网络）=====
 // 集中式覆盖入口：所有 UI 展示赛事名时统一调用本函数。命中 curation 且规范名
 // 与原始名不同则返回规范名（如 OpenDota 的 "EPL Masters 2026" → 权威库 "EPL Masters I"），
@@ -2692,6 +2721,7 @@ module.exports = {
   getTeamPriority: getTeamPriority,
   getMatchTier: getMatchTier,
   getMatchTierForHome: getMatchTierForHome,
+  leagueBaseName: leagueBaseName,
   canonicalLeagueName: canonicalLeagueName,
   leagueDisplayName: leagueDisplayName,
   getUpcomingLocalSnapshot: getUpcomingLocalSnapshot

@@ -1388,16 +1388,18 @@ Page({
       //   修复：聚合前把**已知阶段后缀**剥掉，还原「基准赛事名」再分组。
       //   ⚠️ 只剥离**已知阶段关键词**，**不按 " - " 粗暴切分** —— 避免误伤本身含短横线的
       //      赛事名（如 "RES Unchained - A Blast Dota Slam VIII Qualifier" 必须原样保留）。
-      const _baseLeagueName = function (name) {
-        const stripped = String(name || '').replace(
-          /\s*[-–—]\s*(round\s*\d+|group\s*[a-z0-9]+|group\s*stage|playoffs?|play-?in|main\s*event|swiss|upper\s*bracket|lower\s*bracket|grand\s*final|semi-?finals?|finals?|open\s*qualifiers?|closed\s*qualifiers?|qualifiers?)\b[\s\S]*$/i,
-          ''
-        ).trim();
-        return stripped || String(name || '');
-      };
+      // ★★★ 2026-09-19：跨源赛事名归一**统一走 `sources.leagueBaseName()`**（单点函数）。
+      //   它做两步归一：① 剥离已知阶段后缀（"… - Round 1" / "… - Playoffs" …）；
+      //                ② 对齐 curation 权威名（统一「Season 9 ↔ S9」等异写法）。
+      //   真机问题（本次）：haglund 侧用缩写 "PGL Wallachia S9 - Round 1"，而 curation /
+      //   快照侧用全称 "PGL Wallachia Season 9" → 列表页「进行中」与「即将开始」各显示一条，
+      //   被当成**两个赛事**（且缩写那条信息不全）。归一后两者**同键** →
+      //   下方 `seen` 去重即可挡住，留下信息齐全的权威名。
+      //   ⚠️ 铁律：凡「跨源按赛事名比对」的场景都要调用它，不要再各自内联 ——
+      //      本项目已因重复实现而**复发两次**（先 haglund 匹配、后列表去重）。
       const evMap = {};
       matches.forEach(function (m) {
-        const ln = _baseLeagueName(m._leagueName || m.leagueName);
+        const ln = sources.leagueBaseName(m._leagueName || m.leagueName);
         if (!ln || !m.startTime) return;
         const hasTeams = !!(m.team1Name || m.team2Name);
         if (!evMap[ln]) {
