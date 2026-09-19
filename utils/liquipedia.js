@@ -635,56 +635,33 @@ function getScheduledMatches(name, opts) {
         console.log('[liquipedia] 赛程走 EF 缓存 + 本地解析（' + local.matches.length + ' 场，零云开发）');
         return local;
       }
-      // ★★ 2026-09-19 性能优化（详情页 12.6s → 目标 2~3s）：**云函数与 haglund 并行兜底**。
+      // ★★ 2026-09-19：**移除云函数兜底**（由用户质疑推动 —— 方向比我上一版的"并行化"更根本）。
       //
-      //   原实现是**串行链**：`EF(from fetchScheduledLocal)` → `liquipediaScheduledProxy`(云函数)
-      //   → `tryHaglundFallback`。其中云函数这步**几乎必然失败却要等满超时**：
-      //     · 上方注释与 cloudProxy 均载明「CloudBase 出口 IP 被 Liquipedia Cloudflare 429 拦」；
-      //     · `ACTION_TIMEOUT_MS._default = 8000`。
-      //   真机实测：`[detail][perf] od+lp 并行段 12648ms（od 0 场 / lp 8 场）`
-      //   —— 而 `getLeagueMatches` 实测仅 ~1s，**12.6s 几乎全耗在等这个云函数**。
+      //   原实现走 `cloudProxy.liquipediaScheduledProxy` → `call('liquipediaScheduledMatches')`
+      //   → 该 action **不在 EDGE_ACTIONS** → 落到 `callCloud()` = **微信云开发云函数**。
+      //   而项目正处于「脱离云开发」阶段，这属于未迁移的遗留依赖。
       //
-      //   改为并行后：haglund 通常 1~2s 返回，**不再被云函数阻塞**。
-      //   语义保持与原实现一致：
-      //     · 谁先拿到**有效数据**就用谁（任一先到即 resolve，不空等）；
-      //     · 某路返回空/失败 → 等另一路；
-      //     · 两路都空 → 仍返回 `{ matches: [], boFormat: null }`（保持原返回契约）。
-      console.log('[liquipedia] EF 缓存未命中或无对阵 → 云函数 / haglund 并行兜底：' + name);
-
-      var _cloudP = cloudProxy.liquipediaScheduledProxy(name, force)
-        .then(function (res) {
-          var norm = normalizeScheduled(res);
-          if (norm.matches.length) {
-            console.log('[liquipedia] 赛程取到（云函数）：' + norm.matches.length + ' 场');
-            return norm;
-          }
-          return null;   // 云函数返回空 → 让位给 haglund
-        })
-        .catch(function () { return null; });
-
-      var _hagP = tryHaglundFallback(name, force, cacheKey)
-        .then(function (hf) {
-          if (hf && hf.matches.length) {
-            console.log('[liquipedia] 赛程取到（haglund 兜底）：' + hf.matches.length + ' 场');
-            return hf;
-          }
-          return null;
-        })
-        .catch(function () { return null; });
-
-      return new Promise(function (resolve) {
-        var settled = 0, best = null;
-        function onOne(r) {
-          if (best) return;                    // 已采用某路结果，忽略后到者
-          if (r) { best = r; resolve(best); return; }   // ★ 先拿到有效数据 → 立即采用
-          settled++;
-          if (settled === 2) {                 // 两路都空 → 维持原「三条路径均为空」契约
-            console.warn('[liquipedia] 赛程三条路径均为空：' + name);
-            resolve({ matches: [], boFormat: null });
-          }
+      //   移除依据（三条叠加，确认它是**纯冗余**）：
+      //     ① **功能已被覆盖**：上面的 `fetchScheduledLocal` 就是
+      //        「EF 取 raw wikitext（`liquipediaFetchRawWikitext` **早已迁到 EF**）
+      //         + 客户端 `LiquiParse` 本地解析」——对应日志
+      //        「赛程走 EF 缓存 + 本地解析（N 场，**零云开发**）」。云函数做的是同一件事。
+      //     ② **必然失败**：CloudBase 出口 IP 被 Liquipedia Cloudflare **429** 拦（注释已载明）。
+      //     ③ **从未成功过**：真机日志中从未出现 `赛程取到（云函数）`，每次都直接跳到 haglund。
+      //
+      //   附带收益：`liquipediaScheduledMatches` 属 `cloudProxy.js` 列出的
+      //   「契约不兼容、待迁移」项 —— 移除后**该项无需再迁**，等于消掉一个脱云阻塞点。
+      //
+      //   ⚠️ 回退方式：若将来确认云函数有独家数据，可用 git 历史恢复上一版
+      //      「云函数 ∥ haglund 并行」的写法（commit 9aff195）。
+      console.log('[liquipedia] EF 缓存未命中或无对阵 → haglund 兜底：' + name);
+      return tryHaglundFallback(name, force, cacheKey).then(function (hf) {
+        if (hf && hf.matches.length) {
+          console.log('[liquipedia] 赛程取到（haglund 兜底）：' + hf.matches.length + ' 场');
+          return hf;
         }
-        _cloudP.then(onOne);
-        _hagP.then(onOne);
+        console.warn('[liquipedia] 赛程两条路径均为空（EF 本地解析 / haglund）：' + name);
+        return { matches: [], boFormat: null };
       });
     });
   }
