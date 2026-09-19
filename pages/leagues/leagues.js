@@ -1559,10 +1559,20 @@ Page({
       //   （status='upcoming'，真实排期数据）此前只出现在「全部」tab——「全部」能看到、
       //   「即将到来」却为空。修复：将 allLeagues 的 upcoming 赛事并入本 tab（按 leagueid 去重，
       //   与「进行中」分支合并模式一致）。
+      // ★★ 2026-09-19 修复「即将开始 Tab 重复卡片」（真机截图定位）：
+      //   原实现**只用 leagueid 判重**，但两个来源的 id **体系完全不同**：
+      //     · fromList（upcomingList：快照 / 云函数 / curation）→ **负数 fakeId**（如 -1632240）
+      //     · fromAll（allLeagues：OpenDota）→ **真实 leagueid**（如 19102）
+      //   同一赛事在两边 id 必然不同 → 判重**彻底失效** → 两张同名卡同时展示。
+      //   实测复现（用户截图）：BLAST SLAM VIII / BLAST SLAM IX /
+      //     DreamLeague Division 2 Series 5 / 6 —— 均双份，
+      //     一份标 Liquipedia（LP 赛期），一份标社区分级（带 $750,000 奖池）。
+      //   ⚠️ 教训：**跨源判重不能用 id**（不同源 id 体系可能完全不同），
+      //     必须用「归一化后的业务键」—— 与「全部」「进行中」Tab 口径统一。
       const _seenUp = {};
-      fromList.forEach((x) => { _seenUp[String(x.leagueid)] = true; });
+      fromList.forEach((x) => { const k = leagueKey(x.displayName || x.name); if (k) _seenUp[k] = true; });
       const fromAll = (this.allLeagues || []).filter((x) =>
-        x.status === 'upcoming' && gradeMatch(x) && !_seenUp[String(x.leagueid)]);
+        x.status === 'upcoming' && gradeMatch(x) && !_seenUp[leagueKey(x.displayName || x.name)]);
       // ★ v8.13 诊断：upcoming tab 数据流透出（确认战队筛选豁免已生效）
       console.log('[leagues] upcoming tab: 快照/实时卡', fromList.length,
         '+ allLeagues 兜底', fromAll.length, '| 战队筛选已豁免 ★v8.13');
