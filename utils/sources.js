@@ -761,7 +761,7 @@ function leagueBaseName(rawName) {
     //     · 剥离年份**不会**混淆 `DreamLeague Season 30 / 31` 这类"届次数字"
     //       —— 它们本来就不含 4 位年份，`noYear === stripped`，直接跳过本分支；
     //     · 命中时会打日志，便于观察是否出现误判（若发现再收窄条件）。
-    const noYear = stripped.replace(/\b(19|20)\d{2}\b/g, ' ').replace(/\s+/g, ' ').trim();
+    const noYear = stripYearTokens(stripped);   // ★ 与 canonicalLeagueName 共用同一口径
     if (noYear && noYear !== stripped) {
       // ⚠️ 必须用 `curatedEventFor` 判断「**是否命中 curation**」，
       //   而**不能**用 `canonicalLeagueName(noYear) !== noYear`
@@ -799,23 +799,68 @@ function leagueKey(rawName) {
 // 与原始名不同则返回规范名（如 OpenDota 的 "EPL Masters 2026" → 权威库 "EPL Masters I"），
 // 否则原样返回原始名。避免各页面重复内联 curation 查找、降低回归风险，
 // 也保证「列表/详情/搜索/关注/对局/推送」所有展示位口径一致。
-function canonicalLeagueName(rawName, ctx) {
-  const name = (rawName || '').trim();
-  if (!name) return name;
+// 剥离 4 位年份 token（如「PGL Wallachia **2026** Season 9」→「PGL Wallachia Season 9」）。
+// 单一出口：展示名（canonicalLeagueName）与去重键（leagueBaseName）共用同一口径，
+// **勿各自内联一份正则**（本项目「同一件事两套归一化」已反复成为 bug 温床）。
+function stripYearTokens(rawName) {
+  return String(rawName || '').replace(/\b(19|20)\d{2}\b/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+// 单次 curation 查表，返回 { hit, name }。
+// ★ 必须区分「**命中但规范名与入参相同**」与「**完全未命中**」两种情形：
+//   · 前者说明该名**已是权威名** → 不可再剥年份（否则 `The International 2026`
+//     会退化成 `The International` 去做模糊匹配，有误映射到其它届次的风险，实测 2026 本身命中）；
+//   · 后者才允许走「年份位置变体」二次尝试。
+function _canonLookupOnce(name, ctx) {
   // 2026-07-27：当 ctx 提供 game（跨游戏隔离意图），仅信任动态 curation 引擎
   // （含 leagueId pin + game 校验）；静态映射不带 game 信息，保守跳过，避免
   // 把 CS2 联赛误用 DOTA2 canonical 覆盖。leagueDisplayName 默认传 game='dota2'，
   // 走这条路径。
   if (ctx && ctx.game) {
-    const cu = curation.curatedEventFor(name, ctx);
-    if (cu && cu.canonical && cu.canonical !== name) return cu.canonical;
-    return name;
+    let cu = null;
+    try { cu = curation.curatedEventFor(name, ctx); } catch (e) { cu = null; }
+    if (cu && cu.canonical) return { hit: true, name: cu.canonical };
+    return { hit: false, name: name };
   }
   // 兼容旧调用（无 ctx 或无 game）：优先静态精确映射（G4），再动态模糊匹配
-  const exact = leagueCanon.resolveCanonical(name);
-  if (exact && exact !== name) return exact;
-  const cu = curation.curatedEventFor(name, ctx);
-  if (cu && cu.canonical && cu.canonical !== name) return cu.canonical;
+  let exact = null;
+  try { exact = leagueCanon.resolveCanonical(name); } catch (e) { exact = null; }
+  if (exact && exact !== name) return { hit: true, name: exact };
+  let cu = null;
+  try { cu = curation.curatedEventFor(name, ctx); } catch (e) { cu = null; }
+  if (cu && cu.canonical && cu.canonical !== name) return { hit: true, name: cu.canonical };
+  if (exact === name) return { hit: true, name: name };   // 静态映射命中原名 → 视为权威名
+  return { hit: false, name: name };
+}
+
+function canonicalLeagueName(rawName, ctx) {
+  const name = (rawName || '').trim();
+  if (!name) return name;
+  const r1 = _canonLookupOnce(name, ctx);
+  if (r1.hit) return r1.name;
+  // ★★ 2026-09-19 新增：**年份位置变体**二次尝试（真机复现，与 leagueBaseName 同源问题）
+  //
+  //   现象：卡片标题显示 `PGL Wallachia 2026 Season 9`（OpenDota 原名），
+  //        而权威库里该赛事的规范名是 `PGL Wallachia Season 9`。
+  //   原因：curation 收录了 `pglwallachiaseason9` 与 `wallachia2026` 两个别名，
+  //        却**没有二者的组合**（年份插在中间）→ 精确查表 MISS → 原名原样返回。
+  //
+  //   ⚠️ 与 `leagueBaseName` 的区别（这正是本 bug 拖到第二轮的根因）：
+  //     项目里存在**两条独立的归一化路径** —— 去重键走 leagueBaseName、
+  //     **展示名走本函数**。当时只修了前者 → 卡片不再重复，但**留下的那张标题仍是原名**。
+  //     → 凡修归一化，必须**同时检查这两条路径**。
+  //
+  //   保守设计：仅在「原名的查表**完全未命中**」时才剥年份重试；
+  //   且以「**是否命中**」而非「是否改名」为判据（`noYear` 本身即规范名时，
+  //   查表会返回它自己，用「改名」判断会把正确命中误判为未命中 —— leagueBaseName 首版即栽在此）。
+  const alt = stripYearTokens(name);
+  if (alt && alt !== name) {
+    const r2 = _canonLookupOnce(alt, ctx);
+    if (r2.hit) {
+      console.log('[sources] canonicalLeagueName 年份变体命中：' + name + ' → ' + r2.name);
+      return r2.name;
+    }
+  }
   return name;
 }
 

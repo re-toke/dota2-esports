@@ -101,10 +101,16 @@ check('未知赛事降级到 OpenDota', async () => {
   assert(r.grade === 'S', 'professional 应返回 S');
 });
 
-check('amateur 赛事降级到 OpenDota', async () => {
-  const r = await sources.getLeagueTier({ name: 'Weekly Cup', tier: 'amateur' });
+// ★ 2026-09-19（收录严谨化 · 白名单准入）：amateur 不再映射为 B —— 新口径下 amateur 不收录
+//   （服务端 trimLeagues 已丢弃 amateur；客户端 unifiedTier 判 C，列表页再过滤 C 级）。
+check('amateur 赛事不再映射为 B（白名单准入）', async () => {
+  const r = await sources.getLeagueTier({ name: 'Random Cup', tier: 'amateur' });
   assert(r.sources.indexOf('opendota') >= 0, '应为 opendota');
-  assert(r.grade === 'B', 'amateur 应返回 B');
+  assert(r.grade === 'C', 'amateur 应返回 C（不收录），实际: ' + r.grade);
+});
+check('硬排除：周赛/月赛（Liquipedia 收录门槛外）', async () => {
+  const r = await sources.getLeagueTier({ name: 'Weekly Cup', tier: 'amateur' });
+  assert(r.grade === 'C', 'Weekly Cup 应判 C，实际: ' + r.grade);
 });
 
 check('空名称兜底', async () => {
@@ -405,16 +411,31 @@ section('\n--- §9 通用排除规则（community 正则误升防护）---');
 check('shouldExclude 导出可用', () => {
   assert(typeof tiers.shouldExclude === 'function', 'shouldExclude 应为函数');
   assert(Array.isArray(tiers.EXCLUSION_RULES), 'EXCLUSION_RULES 应为数组');
-  assert(tiers.EXCLUSION_RULES.length === 4, '应含 4 条规则，实际: ' + tiers.EXCLUSION_RULES.length);
+  // ★ 2026-09-19：规则拆为「硬排除」(HARD_EXCLUDE_RULES，EXCLUSION_RULES 为向后兼容别名)
+  //   + 「预选赛降级」(QUALIFIER_RULES)。不再断言固定条数，改为自洽 + 下限断言。
+  assert(Array.isArray(tiers.HARD_EXCLUDE_RULES), 'HARD_EXCLUDE_RULES 应为数组');
+  assert(Array.isArray(tiers.QUALIFIER_RULES), 'QUALIFIER_RULES 应为数组');
+  assert(tiers.EXCLUSION_RULES.length === tiers.HARD_EXCLUDE_RULES.length, 'EXCLUSION_RULES 别名应指向硬排除集合');
+  assert(tiers.HARD_EXCLUDE_RULES.length >= 4, '硬排除应含 >=4 条规则，实际: ' + tiers.HARD_EXCLUDE_RULES.length);
 });
 
-check('排除①预选赛/资格赛关键词', () => {
-  assert(tiers.shouldExclude('Open Qualifier'), 'Open Qualifier 应排除');
-  assert(tiers.shouldExclude('Closed Qualifier'), 'Closed Qualifier 应排除');
-  assert(tiers.shouldExclude('Regional Qualifier'), 'Regional Qualifier 应排除');
-  assert(tiers.shouldExclude('ESL One Birmingham Qualifiers'), 'Qualifiers 应排除');
-  assert(tiers.shouldExclude('Play-In Tournament'), 'Play-In 应排除');
-  assert(tiers.shouldExclude('PlayIn Cup'), 'PlayIn 应排除');
+// ★ 2026-09-19（用户决策3）：预选赛由「排除」改为「保留但降级为 B 级 + qualifier 标注」
+check('预选赛保留但降级为 B 级 + 标注（2026-09-19 口径变更）', () => {
+  assert(!tiers.shouldExclude('Open Qualifier'), 'Open Qualifier 不再硬排除（保留）');
+  assert(!tiers.shouldExclude('Closed Qualifier'), 'Closed Qualifier 不再硬排除（保留）');
+  assert(tiers.isQualifier('Open Qualifier'), 'Open Qualifier 应识别为预选赛');
+  assert(tiers.isQualifier('Closed Qualifier'), 'Closed Qualifier 应识别为预选赛');
+  assert(tiers.isQualifier('Regional Qualifier'), 'Regional Qualifier 应识别为预选赛');
+  assert(tiers.isQualifier('Play-In Tournament'), 'Play-In 应识别为预选赛');
+  assert(tiers.isQualifier('PlayIn Cup'), 'PlayIn 应识别为预选赛');
+  // 降级验证：命中 ESL One（原本 S 级）的预选赛必须被扣到 B 级并打标注
+  const q = tiers.communityTierFromName('ESL One Birmingham Qualifiers');
+  assert(!!q && q.grade === 'B' && q.rank === 1 && q.qualifier === true,
+    'ESL One 预选赛应降级为 B 级+标注，实际: ' + JSON.stringify(q));
+  // 未命中任何系列的预选赛同样保留为 B
+  const q2 = tiers.communityTierFromName('Knight Cup Qualifier');
+  assert(!!q2 && q2.grade === 'B' && q2.qualifier === true,
+    '无名预选赛应保留为 B 级+标注，实际: ' + JSON.stringify(q2));
 });
 
 check('排除②业余/社区/青训关键词', () => {
@@ -564,6 +585,53 @@ check('leagueKey：不同赛区预选必须不同键', function () {
   assert(_srcTest.leagueKey('Elite League - Closed Qualifier SEA') !==
          _srcTest.leagueKey('Elite League - Closed Qualifier MENA'),
     '不同赛区预选不应同键');
+});
+
+// ===== 展示名路径（canonicalLeagueName / leagueDisplayName）—— 2026-09-19 补 =====
+// ★★ 本节存在的理由（教训）：
+//   项目里存在**两条独立的赛事名归一化路径**：
+//     ① 去重键： leagueKey → leagueBaseName              （判重/合并用）
+//     ② 展示名： leagueDisplayName → canonicalLeagueName  （**卡片标题 + 详情页入参**用）
+//   上一轮修「年份位置变体」时**只修了 ①**，结果：
+//     · 列表不再重复 ✓
+//     · 但留下的那张卡标题仍是 OpenDota 原名 `PGL Wallachia 2026 Season 9` ✗
+//     · 详情页拿这个名字查 curation **MISS** → 赛期/元数据缺失
+//     · LP/haglund 按这个名字找赛程**双双 MISS** → 对局从 36 场掉到 1 场
+//   ⇒ **凡修归一化，必须同时锁住这两条路径**（本节即为此而设，勿删）。
+section('\n--- 展示名归一 leagueDisplayName / canonicalLeagueName（2026-09-19 补）---');
+check('★ 展示名：年份插在中间也必须归一到 curation 规范名', function () {
+  const d = _srcTest.leagueDisplayName({ leagueid: 20279, name: 'PGL Wallachia 2026 Season 9' });
+  assert(d === 'PGL Wallachia Season 9',
+    '展示名应为规范名（卡片标题 + 详情页入参都用它），实际: ' + d);
+});
+check('★ 展示名：两条路径必须给出同一赛事（防「只修一条」复发）', function () {
+  const raw = 'PGL Wallachia 2026 Season 9';
+  const canon = 'PGL Wallachia Season 9';
+  assert(_srcTest.leagueDisplayName({ leagueid: 20279, name: raw }) ===
+         _srcTest.leagueDisplayName({ leagueid: -1973943, name: canon }),
+    '两种写法的展示名必须一致');
+  assert(_srcTest.leagueKey(raw) === _srcTest.leagueKey(canon),
+    '两种写法的去重键必须一致');
+});
+check('展示名：已命中 curation 的权威名不得被再剥年份（防误映射）', function () {
+  // `The International 2026` 本身命中 curation → 不应退化成 `The International` 去模糊匹配，
+  // 否则有映射到其它届次的风险。
+  const d = _srcTest.leagueDisplayName({ leagueid: 19719, name: 'The International 2026' });
+  assert(d === 'The International 2026', '应保持不变，实际: ' + d);
+});
+check('展示名：届次数字（非 4 位年份）不受影响', function () {
+  const a = _srcTest.leagueDisplayName({ name: 'DreamLeague Season 30' });
+  const b = _srcTest.leagueDisplayName({ name: 'DreamLeague Season 31' });
+  assert(a !== b, 'Season 30 / 31 是两个赛事，不应被合并，实际: ' + a + ' | ' + b);
+});
+check('展示名：未收录的普通赛事名不应被改写', function () {
+  const n = 'Some Uncovered Amateur Cup 2026';
+  assert(_srcTest.leagueDisplayName({ name: n }) === n, '未命中的名字应原样返回，实际: ' + _srcTest.leagueDisplayName({ name: n }));
+});
+check('展示名：中文 / 空值边界', function () {
+  assert(_srcTest.leagueDisplayName({ name: '刀塔校运会' }) === '刀塔校运会', '中文名不应被改写');
+  assert(_srcTest.leagueDisplayName('') === '', '空串应原样返回');
+  assert(_srcTest.leagueDisplayName(null) === '', 'null 应安全返回空串');
 });
 
 async function runAll() {
