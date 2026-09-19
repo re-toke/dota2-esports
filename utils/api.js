@@ -328,7 +328,28 @@ const CLOUD_ACTION_TIMEOUT = {
   getLiveMatches: 12000
 };
 
+// ★ 2026-09-19 新增：OpenDota 主数据源**优先走 EF**（补上缺失的接线）。
+//   背景：api.js 的 cloudFetch 原先**只调云函数**；而 opendota-proxy EF 与 EDGE_ACTIONS
+//   映射（getLeagues / getLeagueWindows / getLeagueMatches / searchTeams / getTeam /
+//   getTeamPlayers / getTeamMatches / getHeroes / getProMatches / getLiveMatches …）
+//   **早已就绪** → 缺的只是接线。若不接，「删除云函数」后此处只能退化直连，
+//   失去 EF 的国内加速与云端共享缓存（见阶段6手册 §六 待确认项 ④）。
+//   cloudProxy.call 内部即为「EF 优先 → 云函数降级」，且自带超时守卫与熔断，
+//   返回形状与原 cloudFetch 一致（均为 result.data / EF 的 r.data）。
+//   ⚠️ 必须用**函数内延迟 require**：cloudProxy 顶部 require 本模块（用于回退），
+//      若顶部互相 require 会成循环依赖 → 运行时加载时两模块均已就绪，安全。
 function cloudFetch(action, params, force) {
+  let cp = null;
+  try { cp = require('./cloudProxy.js'); } catch (e) { cp = null; }
+  if (cp && typeof cp.call === 'function') {
+    return cp.call(action, params, force ? { force: true } : null);
+  }
+  // 极端情况（cloudProxy 加载失败）→ 退回云函数直调，行为与修复前完全一致
+  return _cloudFetchViaCloud(action, params, force);
+}
+
+// 云函数直调（原 cloudFetch 实现原样保留，作为 EF 不可用 / cloudProxy 加载失败时的兜底）
+function _cloudFetchViaCloud(action, params, force) {
   const threshold = (config.cloudProxy && config.cloudProxy.circuitBreakerThreshold) || 0;
   // 防御：wx.cloud 未初始化（测试环境 / 未开通云开发 / 用户拒绝授权）时直接 reject，
   // 交由 tryCloudOrDirect 回退到直连，避免 `wx.cloud.callFunction` 同步抛 TypeError 击穿调用链。

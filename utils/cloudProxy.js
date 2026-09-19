@@ -58,9 +58,14 @@ function timeoutFor(action) {
 // ===== M2.4（2026-09-09）：Supabase 数据代理路由 =====
 // supabase.enabled=true 时，下列 action 走 Supabase Edge Function（香港，带 Postgres 缓存），
 // 失败自动回落云开发链路（callCloud）。EF 返回形状 {data, source} 与云函数一致。
-// ⚠️ 未列入的 action（liquipediaLeagueMeta/ScheduledMatches/TeamLogo/ListTournaments、
-//    haglundUpcoming、getUpcomingSchedule、getLeagueDetailBundle、health 等）契约不兼容
-//    （云函数端含解析/聚合逻辑，EF 薄代理只回 raw wikitext）——继续走云开发，分阶段迁移。
+// ⚠️ **未列入的 action**（仍走云开发，属「分阶段迁移」的剩余项）：
+//    liquipediaLeagueMeta / liquipediaScheduledMatches / liquipediaTeamLogo /
+//    liquipediaListTournaments（LP 解析链 —— 云函数端含解析/聚合逻辑，
+//    EF 薄代理只回 raw wikitext，契约不兼容）、getUpcomingSchedule（云端含聚合逻辑）、health。
+//    ★ 2026-09-19 更正：本条注释原先还把 **haglundUpcoming / getLeagueDetailBundle**
+//      列为「未列入」，但二者**实际已在下方 EDGE_ACTIONS 中映射**（v8.25「M2.4 收尾」时迁入）
+//      —— 注释未同步会误导排查（本轮即差点据此误判 stratz/proxy 状态）。
+//      **核对该清单时请以 EDGE_ACTIONS 实体为准，不要采信本注释的历史描述。**
 var EDGE_ACTIONS = {
   // OpenDota 11+ action → opendota-proxy
   getLeagues: 'opendota-proxy',
