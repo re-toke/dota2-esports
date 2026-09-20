@@ -5,9 +5,9 @@
 // cannot load .json directly).
 module.exports = {
   "version": 3,
-  "generatedAt": "2026-09-18T04:38:00.429Z",
+  "generatedAt": "2026-09-20T05:14:37.008Z",
   "source": "utils/curation.js#CURATED_EVENTS",
-  "eventCount": 289,
+  "eventCount": 279,
   "map": {
     "theinternational2025": "The International 2025",
     "ti2025": "The International 2025",
@@ -100,6 +100,7 @@ module.exports = {
     "esportsnationscup2026": "Esports Nations Cup 2026",
     "enc2026": "Esports Nations Cup 2026",
     "nationscup2026": "Esports Nations Cup 2026",
+    "esportsnationscup": "Esports Nations Cup 2026",
     "blastslamix": "BLAST SLAM IX",
     "blastslam9": "BLAST SLAM IX",
     "blastslam2026ix": "BLAST SLAM IX",
@@ -108,14 +109,21 @@ module.exports = {
     "resunchained6blastslamixeurope": "RES Unchained 6: BLAST SLAM IX Europe Closed Qualifier",
     "resunchained6eu": "RES Unchained 6: BLAST SLAM IX Europe Closed Qualifier",
     "resblastslamixeuq": "RES Unchained 6: BLAST SLAM IX Europe Closed Qualifier",
+    "resunchained6europe": "RES Unchained 6: BLAST SLAM IX Europe Closed Qualifier",
+    "blastslamixeuropequalifier": "RES Unchained 6: BLAST SLAM IX Europe Closed Qualifier",
+    "resunchainedblastslamixeurope": "RES Unchained 6: BLAST SLAM IX Europe Closed Qualifier",
     "resunchained6blastslamixsoutheastasiaclosedqualifier": "RES Unchained 6: BLAST SLAM IX Southeast Asia Closed Qualifier",
     "resunchained6blastslamixsea": "RES Unchained 6: BLAST SLAM IX Southeast Asia Closed Qualifier",
     "resunchained6sea": "RES Unchained 6: BLAST SLAM IX Southeast Asia Closed Qualifier",
     "resblastslamixseq": "RES Unchained 6: BLAST SLAM IX Southeast Asia Closed Qualifier",
+    "blastslamixsoutheastasiaqualifier": "RES Unchained 6: BLAST SLAM IX Southeast Asia Closed Qualifier",
+    "resunchainedblastslamixsea": "RES Unchained 6: BLAST SLAM IX Southeast Asia Closed Qualifier",
     "blastslamixchinaclosedqualifier": "BLAST SLAM IX China Closed Qualifier",
     "blastslamixchina": "BLAST SLAM IX China Closed Qualifier",
     "blastslamixcn": "BLAST SLAM IX China Closed Qualifier",
     "blastslamixchinaq": "BLAST SLAM IX China Closed Qualifier",
+    "blastslamixchinaqualifier": "BLAST SLAM IX China Closed Qualifier",
+    "blastslam9china": "BLAST SLAM IX China Closed Qualifier",
     "gamesofthefuture2024": "Games of the Future 2024",
     "gof2024": "Games of the Future 2024",
     "eslonekualalumpur2024": "ESL One Kuala Lumpur 2024",
@@ -204,14 +212,6 @@ module.exports = {
     "gamesofthefuture": "Games of the Future 2026",
     "future2026": "Games of the Future 2026",
     "gotf2026": "Games of the Future 2026",
-    "resunchained6europe": "RES Unchained 6: BLAST SLAM IX Europe Closed Qualifier",
-    "blastslamixeuropequalifier": "RES Unchained 6: BLAST SLAM IX Europe Closed Qualifier",
-    "resunchainedblastslamixeurope": "RES Unchained 6: BLAST SLAM IX Europe Closed Qualifier",
-    "blastslamixsoutheastasiaqualifier": "RES Unchained 6: BLAST SLAM IX Southeast Asia Closed Qualifier",
-    "resunchainedblastslamixsea": "RES Unchained 6: BLAST SLAM IX Southeast Asia Closed Qualifier",
-    "blastslamixchinaqualifier": "BLAST SLAM IX China Closed Qualifier",
-    "blastslam9china": "BLAST SLAM IX China Closed Qualifier",
-    "esportsnationscup": "Esports Nations Cup 2026",
     "eplworldseriessoutheastasiaseason17": "EPL World Series: Southeast Asia Season 17",
     "winlinestarseriesseason4": "WINLINE Star Series Season 4",
     "europeanproleagueseason40": "European Pro League Season 40",
@@ -247,5 +247,5 @@ module.exports = {
     "20159": "WINLINE Star Series Season 4",
     "20208": "BLAST SLAM IX"
   },
-  "dataVersion": "1789706280420"
+  "dataVersion": "1789881277006"
 };

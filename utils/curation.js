@@ -367,16 +367,18 @@ const CURATED_EVENTS = [
     valve: false, topThirdParty: false },
   // Esports Nations Cup 2026：11月2-8日，利雅得，$1,500,000（国家级 Tier 1）
   { canonical: 'Esports Nations Cup 2026', tier: { grade: 'S', rank: 3, label: 'S级' },
-    aliases: ['esportsnationscup2026', 'enc2026', 'nationscup2026'], year: 2026,
+    aliases: ['esportsnationscup2026', 'enc2026', 'nationscup2026', 'esportsnationscup'], year: 2026,
     start: 1793577600, end: 1794096000,
     prizePool: '$1,500,000', organizer: 'ESL / Savvy Games', region: '沙特阿拉伯·利雅得', format: '双败淘汰',
     participants: 8, status: '即将到来', liquipediaSlug: 'Esports_Nations_Cup/2026',
     valve: false, topThirdParty: true },
-  // BLAST SLAM IX：11月17-29日，欧洲，$750,000
+  // BLAST SLAM IX：11月20-29日，欧洲，$750,000
+  // ★ 2026-09-20 按 LP 订正起始日：原写 11/17（1794873600）—— LP `BLAST/SLAM/9` 的
+  //   `|sdate=2026-11-20`，起始日早 3 天（会误判「即将到来」并让倒计时偏差）。
   { canonical: 'BLAST SLAM IX', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['blastslamix', 'blastslam9', 'blastslam2026ix', 'blast2026s9'], year: 2026,
     leagueId: 20208,
-    start: 1794873600, end: 1795910400,
+    start: 1795132800, end: 1795910400,
     prizePool: '$750,000', organizer: 'BLAST', region: '欧洲', format: '双败淘汰',
     participants: 12, status: '即将到来', liquipediaSlug: 'BLAST/Slam/9',
     valve: false, topThirdParty: false },
@@ -386,7 +388,8 @@ const CURATED_EVENTS = [
   // RES Unchained 6: BLAST SLAM IX 欧洲封闭预选：9月12-13日
   { canonical: 'RES Unchained 6: BLAST SLAM IX Europe Closed Qualifier',
     tier: { grade: 'S', rank: 3, label: 'S级' },
-    aliases: ['resunchained6blastslamixeurope', 'resunchained6eu', 'resblastslamixeuq'], year: 2026,
+    aliases: ['resunchained6blastslamixeurope', 'resunchained6eu', 'resblastslamixeuq',
+              'resunchained6europe', 'blastslamixeuropequalifier', 'resunchainedblastslamixeurope'], year: 2026,
     start: 1789171200, end: 1789257599,
     prizePool: '$25,000', organizer: 'RES Esports', region: '欧洲', format: '封闭预选',
     participants: 8, status: '即将到来', liquipediaSlug: 'RES_Unchained/6/BLAST_SLAM_IX/Europe',
@@ -394,16 +397,21 @@ const CURATED_EVENTS = [
   // RES Unchained 6: BLAST SLAM IX 东南亚封闭预选：9月12-13日
   { canonical: 'RES Unchained 6: BLAST SLAM IX Southeast Asia Closed Qualifier',
     tier: { grade: 'S', rank: 3, label: 'S级' },
-    aliases: ['resunchained6blastslamixsea', 'resunchained6sea', 'resblastslamixseq'], year: 2026,
+    aliases: ['resunchained6blastslamixsea', 'resunchained6sea', 'resblastslamixseq',
+              'blastslamixsoutheastasiaqualifier', 'resunchainedblastslamixsea'], year: 2026,
     start: 1789171200, end: 1789257599,
     prizePool: '$25,000', organizer: 'RES Esports', region: '东南亚', format: '封闭预选',
     participants: 8, status: '即将到来', liquipediaSlug: 'RES_Unchained/6/BLAST_SLAM_IX/Southeast_Asia',
     valve: false, topThirdParty: false },
-  // BLAST SLAM IX 中国封闭预选：9月19-20日
+  // BLAST SLAM IX 中国封闭预选：10月15-16日
+  // ★ 2026-09-20 按 LP 订正（原写 9月19-20日，与 LP 差近一个月）：
+  //   LP 页 `BLAST/SLAM/9/China` 的 `|sdate=2026-10-15` / `|edate=2026-10-16`
+  //   （正赛 11/20 前一个月开预选，逻辑自洽；原 9/19 疑为复制粘贴 PGL Wallachia 赛期所致）。
   { canonical: 'BLAST SLAM IX China Closed Qualifier',
     tier: { grade: 'S', rank: 3, label: 'S级' },
-    aliases: ['blastslamixchina', 'blastslamixcn', 'blastslamixchinaq'], year: 2026,
-    start: 1789776000, end: 1789862399,
+    aliases: ['blastslamixchina', 'blastslamixcn', 'blastslamixchinaq',
+              'blastslamixchinaqualifier', 'blastslam9china'], year: 2026,
+    start: 1792022400, end: 1792108800,
     prizePool: '$25,000', organizer: 'BLAST', region: '中国', format: '封闭预选',
     participants: 8, status: '即将到来', liquipediaSlug: 'BLAST/Slam/9/China',
     valve: false, topThirdParty: false },
@@ -607,48 +615,19 @@ const CURATED_EVENTS = [
   //   背景：curation 停在 8/31 导致首页 ⑥ 段（getUpcomingFromCuration 候选）查不到
   //   RES/PGL/BLAST 的排期 → 首页「即将开始」卡片全缺；leagues 页 curation 补充源同缺。
   //   预选赛未开赛无 OpenDota leagueId → 不带 leagueId（⑥ 段 Steam 自动跳过，走 LP/haglund）。
-  { canonical: 'RES Unchained 6: BLAST SLAM IX Europe Closed Qualifier', tier: { grade: 'S', rank: 3, label: 'S级' },
-    aliases: ['res unchained 6 europe', 'blast slam ix europe qualifier', 'res unchained blast slam ix europe'],
-    year: 2026,
-    start: Math.floor(Date.UTC(2026, 8, 12) / 1000),
-    end: Math.floor(Date.UTC(2026, 8, 13, 23, 59, 59) / 1000),
-    liquipediaSlug: 'BLAST/SLAM/9/Europe' },
-  { canonical: 'RES Unchained 6: BLAST SLAM IX Southeast Asia Closed Qualifier', tier: { grade: 'S', rank: 3, label: 'S级' },
-    aliases: ['res unchained 6 sea', 'blast slam ix southeast asia qualifier', 'res unchained blast slam ix sea'],
-    year: 2026,
-    start: Math.floor(Date.UTC(2026, 8, 12) / 1000),
-    end: Math.floor(Date.UTC(2026, 8, 13, 23, 59, 59) / 1000),
-    liquipediaSlug: 'BLAST/SLAM/9/Southeast Asia' },
+  // ★ 2026-09-20（重复条目清理 · 用户决策「按 LP 订正」）：
+  //   本区块原有 6 条**与上方已核实条目重复**的补录条目（RES EU/SEA、BLAST SLAM IX 中国预选、
+  //   BLAST SLAM VIII、Esports Nations Cup 2026、BLAST SLAM IX），其 end 一律写成
+  //   `Date.UTC(y, m, d, 23, 59, 59)`（**该日 UTC 日末**）→ 在 UTC+8 设备上显示为**次日**，
+  //   **每条都 +1 天**；且因**数组靠后 → curatedEventFor 命中后者**，
+  //   导致界面实际采用的是**这批错误的日期**（实测：BLAST SLAM VIII 显示到 10/12、SLAM IX 显示到 11/30）。
+  //   处理：**删除这 6 条**，其独有别名并入上方对应条目（与 L622 处置 PGL 重复条目同一手法）。
+  //   ⚠️ 勿再补录同 canonical 的条目 —— 重复注册 lookup 会让后者覆盖前者的正确值。
   // ★ 2026-09-11：此处原有一条重复的「PGL Wallachia Season 9」条目
   //   （liquipediaSlug 误写为 'PGL/Wallachia/Season_9'，LP 上不存在该页 → 实测 MISS）。
   //   与上方 L341 正确条目（'PGL/Wallachia/9'）冲突，且重复注册 lookup 会让错误 slug 覆盖正确值
   //   → 已删除，独有别名并入上方条目。这就是 PGL Wallachia 赛程走 EF 失败、只能云函数兜底的根因。
-  { canonical: 'BLAST SLAM IX China Closed Qualifier', tier: { grade: 'S', rank: 3, label: 'S级' },
-    aliases: ['blast slam ix china qualifier', 'blast slam 9 china'],
-    year: 2026,
-    start: Math.floor(Date.UTC(2026, 8, 19) / 1000),
-    end: Math.floor(Date.UTC(2026, 8, 20, 23, 59, 59) / 1000),
-    liquipediaSlug: 'BLAST/SLAM/9/China' },
-  { canonical: 'BLAST SLAM VIII', tier: { grade: 'S', rank: 3, label: 'S级' },
-    aliases: ['blast slam 8'],
-    leagueId: 19102,
-    year: 2026,
-    start: Math.floor(Date.UTC(2026, 8, 29) / 1000),
-    end: Math.floor(Date.UTC(2026, 9, 11, 23, 59, 59) / 1000),
-    liquipediaSlug: 'BLAST/SLAM/8' },
-  { canonical: 'Esports Nations Cup 2026', tier: { grade: 'S', rank: 3, label: 'S级' },
-    aliases: ['esports nations cup', 'enc 2026'],
-    year: 2026,
-    start: Math.floor(Date.UTC(2026, 10, 2) / 1000),
-    end: Math.floor(Date.UTC(2026, 10, 8, 23, 59, 59) / 1000),
-    liquipediaSlug: 'Esports_Nations_Cup/2026' },
-  { canonical: 'BLAST SLAM IX', tier: { grade: 'S', rank: 3, label: 'S级' },
-    aliases: ['blast slam 9'],
-    leagueId: 20208,
-    year: 2026,
-    start: Math.floor(Date.UTC(2026, 10, 17) / 1000),
-    end: Math.floor(Date.UTC(2026, 10, 29, 23, 59, 59) / 1000),
-    liquipediaSlug: 'BLAST/SLAM/9' },
+  // ── 2026-09-14 补收录（原缺失 → 首页/「即将」看不到对局）仍在下方继续 ──
   // ★ 2026-09-14 补收录（原缺失 → 首页/「即将」看不到对局）
   { canonical: 'EPL World Series: Southeast Asia Season 17', tier: { grade: 'B', rank: 1, label: 'B级' },
     aliases: ['eplworldseriessoutheastasiaseason17'], year: 2026,
