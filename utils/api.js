@@ -12,8 +12,13 @@ const config = require('./config.js');
 const inc = require('./incremental.js');
 const sqlFragments = require('./sqlFragments.js');
 const breaker = require('./cloudBreaker.js');
+// ★ 2026-09-19（收录严谨化 · 白名单准入）：赛事列表入口闸门依赖分级规则。
+//   tiers.js 无任何依赖（纯规则表），require 无循环风险。
+const tiers = require('./tiers.js');
 // G7.4：API 失败监控（按 path 去重，避免刷屏）。monitor.js 无其他依赖，无循环风险。
 const monitor = require('./monitor.js');
+// ★ 2026-09-20：队名「形状归一」单一实现（原为内联，与快照键 / 详情页 / 首页四处各写一份）
+const names = require('./names.js');
 // 2026-07-27：curation 数据版本戳。缓存 key 前缀，确保代码/curation 变更后旧缓存自动失效。
 // 由 scripts/sync-canon-map.js 生成 curation-shared.js 时填入（同云函数侧），仅作 fallback。
 let _dataVersion = '0';
@@ -455,6 +460,28 @@ function tryCloudOrDirect(methodName, args, directFn, transform, force) {
 
 // ===== 对外方法 =====
 
+// ★ 2026-09-19（收录严谨化 · 白名单准入）：**赛事列表的客户端入口闸门**。
+//
+// 为什么必须在客户端也判一次：
+//   服务端 trimLeagues（EF 与云函数）已按同口径裁剪，但本函数的回退链是
+//   `EF → 云函数 → **直连 OpenDota**`（见 tryCloudOrDirect 的 .catch），
+//   而直连拿到的是 **未裁剪的全量**（10176 条，含 OpenDota 误标为 professional 的
+//   社区/娱乐赛，如「肛宝联赛-老婆杯」）。若不在此再判一次，任何一次回退都会让 junk 复活。
+//   → 本闸门让「收录口径」**与数据来源无关**：只有 utils/tiers.js 是唯一权威点，
+//     服务端的裁剪退化为纯带宽优化。
+//
+// 口径（与 trimLeagues 对齐，且覆盖其 OR 语义）：
+//   premium → 放行；其余 tier（含 OpenDota 的 excluded）→ **需名字命中白名单**。
+//   ⚠️ 必须保留「OR 白名单」：The International 自身 tier=excluded，靠名字命中才得以保留。
+function filterCollectableLeagues(list) {
+  if (!Array.isArray(list)) return list;
+  return list.filter(function (l) {
+    if (!l || !l.name) return false;
+    if (l.tier === 'premium') return true;
+    return tiers.communityTierFromName(l.name) !== null;
+  });
+}
+
 function getLeagues() {
   return tryCloudOrDirect('getLeagues', [],
     // ★ 2026-09-01（loadLeagues 12s 性能修复）：direct 兜底改用 cachedFresh（stale-while-revalidate）。
@@ -462,7 +489,9 @@ function getLeagues() {
     //   cachedFresh：1h 新鲜直接返回；1h~6h 返回旧值 + 后台刷新（秒开，stale 语义）；
     //   超 6h 硬 TTL 才拉网络。云端 TTL 6h 不变（writeThrough 仍写本地）。
     //   赛事列表变化慢（S 级赛事排期以周计），1h 新鲜窗口足够，6h 硬 TTL 兜底。
-    function () { return cachedFresh('/leagues', null, 60 * 60, config.cacheTTL.leagues); });
+    function () { return cachedFresh('/leagues', null, 60 * 60, config.cacheTTL.leagues); })
+    // ★ 2026-09-19：入口闸门 —— 与数据来源无关（EF / 云函数 / 直连 / 本地缓存都过这一道）
+    .then(filterCollectableLeagues);
 }
 
 // ===== 批次2（2026-08-30）：首页全量比赛流数据源 =====
@@ -570,10 +599,10 @@ function findTeamByName(name) {
     //   同时剥离常见后缀（esports/gaming/team/club）提升简称命中率：
     //   "Level UP esports" 剥离后 = "levelup"，可直接精确命中 LP 简称 "Level UP"。
     function _norm(s) {
-      return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      return names.normTeamName(s);   // ★ 2026-09-20：统一走单一实现
     }
     function _stripSuffix(s) {
-      return _norm(s).replace(/(esports|esport|gaming|team|club|dota)$/g, '');
+      return names.normTeamNameLoose(s);   // ★ 2026-09-20：后缀剥离亦收口到 names.js
     }
     var q = _norm(name);
     var qs = _stripSuffix(name);

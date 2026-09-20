@@ -19,7 +19,7 @@ const get=(url)=>new Promise((res,rej)=>{
   console.log('未来 upcoming 场:', upcoming.length);
   // 取前 10 场验证 findTeamByName 是否能找到这些队
   const api=require(path.join(ROOT,'utils/api.js'));
-  const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const norm=s=>require(path.join(ROOT,'utils/names.js')).normTeamName(s);   // ★ 2026-09-20：统一走单一实现
   const uniqueTeams=new Set();
   upcoming.slice(0,15).forEach(m=>{uniqueTeams.add(m.team1Name);uniqueTeams.add(m.team2Name);});
   const teams=[...uniqueTeams].slice(0,12);

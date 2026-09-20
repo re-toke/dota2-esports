@@ -10,6 +10,8 @@ const sources = require('../../utils/sources.js');
 const subscribe = require('../../utils/subscribe.js');
 const reminderStrategy = require('../../utils/reminderStrategy.js');
 const logoCache = require('../../utils/logoCache.js');
+// ★ 2026-09-20：队名「形状归一」单一实现（原先内联，须与快照 byName 键逐字一致）
+const names = require('../../utils/names.js');
 // v5.1（2026-09-01）：首页「对局级 upcoming」源 —— Liquipedia/Steam/haglund 排期（云代理，30min 缓存）
 const liquipedia = require('../../utils/liquipedia.js');
 // ★ 2026-09-01：构建时队徽快照（byName 键 = consensus.normName 规范化队名 → Steam CDN 可靠域）。
@@ -1262,7 +1264,7 @@ Page({
     // ★ v2：norm 统一为「去非字母数字」——与快照 byName 键 / findTeamByName / 详情页
     //   nameTeams 的归一化完全一致。原实现 trim().toLowerCase() 保留空格/加号，
     //   与快照键（klimsani4）永不匹配，首页快照命中全 miss。
-    const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const norm = names.normTeamName;   // ★ 2026-09-20：统一走单一实现（原内联）
     // 收集待查：无 id、有真实队名、尚无 logo、未负缓存
     const jobs = [];
     const seen = {};

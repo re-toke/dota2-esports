@@ -31,6 +31,8 @@ let PATCH_NULL_SERIES_ENABLED = true;
 const config = require('./config.js');
 const tiers = require('./tiers.js');
 const util = require('./util.js');
+// ★ 2026-09-20：队名「形状归一」的单一实现（原为本文件内联复制 4 处 + 其它文件共 19 处，迁移中）
+const names = require('./names.js');
 const api = require('./api.js');
 const stratz = require('./stratz.js');
 const steam = require('./steam.js');
@@ -1801,7 +1803,7 @@ function absorbSettledGames(openSeriesList, liqSeries, teamIdNameResolver) {
     });
   });
   const absorbedKeys = [];
-  const norm = function (x) { return String(x || '').toLowerCase().replace(/[^a-z0-9]/g, ''); };
+  const norm = names.normTeamName;   // ★ 2026-09-20：统一走单一实现（原内联）
   // ★ 2026-08-05（审核 R2）：去通用队伍后缀后完整匹配 —— 解决短名被长度下限 3 拦截（1w vs 1w Team）。
   //   方向解析是「任一侧命中即定方向」（补集原理）：dire=1w 本可命中 team1='1wteam'（indexOf），
   //   但 dn.length=2 < 3 被拦 → 唯一命中点丢失。去后缀后 '1wteam'→'1w' === '1w'（完整匹配，非子串）。
@@ -2125,8 +2127,7 @@ function mergeSplittedBo3Series(allSeries) {
   var MIN_GAP = 10 * 60;
   var TBD_RE = /^(tbd|tba|待定|待公布|unknown)$/i;
   function _normName(s) {
-    var n = String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-    return n || '';
+    return names.normTeamName(s);   // ★ 2026-09-20：统一走单一实现
   }
   function _isRealTeamName(nm) {
     if (!nm) return false;
@@ -2228,7 +2229,7 @@ function filterMisattributedRecentSeries(allSeries, leagueId) {
   if (!Array.isArray(allSeries) || !allSeries.length) return allSeries;
   var lid = Number(leagueId);
   if (!lid || lid <= 0) return allSeries;
-  var _norm = function (s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); };
+  var _norm = names.normTeamName;   // ★ 2026-09-20：统一走单一实现
   var TBD_RE = /^(tbd|tba|待定|待公布|unknown)$/i;
   function _real(nm) {
     if (!nm || nm === '天辉' || nm === '夜魇' || TBD_RE.test(nm)) return '';
@@ -2266,7 +2267,7 @@ function filterMisattributedRecentSeries(allSeries, leagueId) {
 function dropDuplicateNameIds(teamMap, teamCount) {
   if (!teamMap) return null;
   function _norm(s) {
-    return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    return names.normTeamName(s);   // ★ 2026-09-20：统一走单一实现
   }
   var best = {};
   Object.keys(teamMap).forEach(function (id) {

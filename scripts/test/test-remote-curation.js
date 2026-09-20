@@ -149,6 +149,45 @@ function main() {
     assert(eff.teams[99999] && eff.teams[99999].name === 'New Team', '应追加新战队');
   });
 
+  // ===== 2.5 版本号（内容指纹）—— 2026-09-20 =====
+  // ★ 背景：原实现 version = 'sb:' + events.length（**只取条数**）→「只改字段值」（订正赛期/状态/分级）
+  //   不改变条数 → 版本号不变 → 客户端判定「版本一致，跳过数据传输」→ 陈旧缓存要等 6h TTL 才刷新。
+  //   实测事故：本地/远端均已订正 PGL Wallachia Season 9 起始日为 9/19，真机仍显示 9/17。
+  //   本组断言锁住契约：**改了任何参与渲染的字段，版本号必须变**。
+  const F = remoteCuration._contentFingerprint;
+  const _FX_A = [
+    { canonical: 'X', start: 100, end: 200, status: '进行中', tier: { grade: 'S' } },
+    { canonical: 'Y', start: 300, end: 400, status: '即将到来', tier: { grade: 'A' } }
+  ];
+
+  check('版本指纹: ★ 只改 end（订正赛期）也必须导致版本变化', function () {
+    const B = [{ canonical: 'X', start: 100, end: 999, status: '进行中', tier: { grade: 'S' } }, _FX_A[1]];
+    assert(F(_FX_A) !== F(B), '仅改 end 版本却未变（这正是真机不刷新的根因）');
+  });
+
+  check('版本指纹: 只改 status / 只改 grade 也必须变化', function () {
+    const S = [{ canonical: 'X', start: 100, end: 200, status: '已结束', tier: { grade: 'S' } }, _FX_A[1]];
+    const G = [{ canonical: 'X', start: 100, end: 200, status: '进行中', tier: { grade: 'A' } }, _FX_A[1]];
+    assert(F(_FX_A) !== F(S), '只改 status 版本未变');
+    assert(F(_FX_A) !== F(G), '只改 grade 版本未变');
+  });
+
+  check('版本指纹: 与返回顺序无关（防 REST 顺序抖动造成无谓刷新）', function () {
+    assert(F(_FX_A) === F([_FX_A[1], _FX_A[0]]), '顺序颠倒不应改变版本');
+  });
+
+  check('版本指纹: 条数变化 / 前缀语义 / 空数组边界', function () {
+    assert(F(_FX_A) !== F([_FX_A[0]]), '条数变化应改变版本');
+    assert(F(_FX_A, 'sb-recent:').indexOf('sb-recent:') === 0, '近期子集前缀必须保留');
+    assert(F(_FX_A) !== F(_FX_A, 'sb-recent:'), '前缀不同应视为不同版本串');
+    assert(F([]).indexOf('sb:0') === 0, '空数组应安全返回（不抛错）');
+  });
+
+  check('版本指纹: 内容相同 → 版本稳定（防无内容变化却反复全量传输）', function () {
+    const clone = JSON.parse(JSON.stringify(_FX_A));
+    assert(F(clone) === F(_FX_A), '相同内容必须得到相同版本');
+  });
+
   // ===== 3. 模拟远程拉取（异步，云函数模式）=====
   console.log('\n--- async ---');
   return runAsync(function () {

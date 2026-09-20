@@ -130,6 +130,39 @@ function getEffectiveEvents() {
 //
 // 增量更新：客户端传 clientVersion，若与云端一致 → 云函数返回 { unchanged: true }，
 //   零数据传输，仅刷新缓存时间戳。
+// ★★ 2026-09-20（版本号改「内容指纹」）：原实现 `version: 'sb:' + events.length` **只取条数** ——
+//   「只改字段值」（如后台订正某赛事赛期 start/end、改状态/分级）**不改变条数** → 版本号不变 →
+//   客户端判定「版本一致，跳过数据传输」→ 陈旧缓存要等 6h TTL 才刷新。
+//   实测教训：本地与远端均已订正 PGL Wallachia Season 9 起始日为 9/19，真机仍显示 9/17。
+//   现改为：`条数 + 最大 updatedAt + 关键字段滚动哈希`。
+//   · 哈希覆盖 canonical/start/end/status/grade —— 捕捉最常见的后台订正，且**不依赖 updatedAt**
+//     （直改数据库、或未走 admin-write 的存量行没有 updatedAt 也能被发现）；
+//   · 逐条哈希后 **XOR 累积**（而非拼接排序）→ 与返回顺序无关，且 O(n) 无排序开销。
+function _hash32(str) {
+  var h = 2166136261;                       // FNV-1a 32-bit
+  for (var i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;       // 必须用 Math.imul：直接相乘会超 2^53 丢精度
+  }
+  return h >>> 0;
+}
+// @param {Array} events 远端事件数组
+// @param {string} prefix 版本号前缀 —— 全量用 'sb:'、近期子集用 'sb-recent:'（保持原有前缀语义，
+//        避免与云函数返回的 version 串前缀混淆导致误判「版本一致」）
+function _contentFingerprint(events, prefix) {
+  var maxUpd = 0;
+  var acc = 0;
+  for (var i = 0; i < events.length; i++) {
+    var e = events[i] || {};
+    var t = Number(e.updatedAt) || 0;
+    if (t > maxUpd) maxUpd = t;
+    var g = (e.tier && e.tier.grade) || e.grade || '';
+    acc = (acc ^ _hash32(String(e.canonical || '') + '|' + (e.start || 0) + '|' +
+      (e.end || 0) + '|' + (e.status || '') + '|' + g)) >>> 0;
+  }
+  return (prefix || 'sb:') + events.length + ':' + maxUpd + ':' + acc.toString(36);
+}
+
 /**
  * ★ 阶段2-③A（2026-09-13）：Supabase 直读 curation（等价替换云函数 getCuration）
  *
@@ -168,7 +201,7 @@ function _sbLoadCuration() {
         return sb.rest('curation_meta', { select: 'key,value', eq: { key: 'ti_contestant_ids' }, limit: 1 }).then(function (metaRows) {
           var row = metaRows && metaRows[0];
           var tiIds = (row && row.value && row.value.ids) || [];
-          return { events: events, teams: teams, tiContestantIds: tiIds, version: 'sb:' + events.length };
+          return { events: events, teams: teams, tiContestantIds: tiIds, version: _contentFingerprint(events) };
         });
       });
     })
@@ -233,7 +266,7 @@ function _sbLoadCurationRecent() {
       return sb.rest('curation_meta', { select: 'key,value', eq: { key: 'ti_contestant_ids' }, limit: 1 }).then(function (metaRows) {
         var row = metaRows && metaRows[0];
         var tiIds = (row && row.value && row.value.ids) || [];
-        return { events: events, teams: teams, tiContestantIds: tiIds, version: 'sb-recent:' + events.length };
+        return { events: events, teams: teams, tiContestantIds: tiIds, version: _contentFingerprint(events, 'sb-recent:') };
       });
     });
   }).catch(function (e) {
@@ -358,5 +391,8 @@ module.exports = {
   isHighPriorityTeam: isHighPriorityTeam,
   getEffectiveEvents: getEffectiveEvents,
   buildEffective: buildEffective,
-  load: load
+  load: load,
+  // ★ 2026-09-20：内容指纹（版本号）—— 导出供单测锁住「改字段值也必须变版本」这一契约。
+  //   下划线前缀表示内部实现细节，业务代码勿直接调用。
+  _contentFingerprint: _contentFingerprint
 };

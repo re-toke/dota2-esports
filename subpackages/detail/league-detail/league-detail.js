@@ -1,6 +1,8 @@
 const api = require('../../../utils/api.js');
 const util = require('../../../utils/util.js');
 const sources = require('../../../utils/sources.js');
+// ★ 2026-09-20：队名「形状归一」单一实现（原先内联，须与快照 byName 键逐字一致）
+const names = require('../../../utils/names.js');
 const follow = require('../../../utils/follow.js');
 const subscribe = require('../../../utils/subscribe.js');
 // ★ 2026-08-07（审核 R2）：账号登录态（订阅授权手势红线——缓存命中才同步弹授权）
@@ -1762,7 +1764,7 @@ Page({
     //   replace(/[^a-z0-9]/g,'')）完全一致，消除「两边规则不同 → 精确键永远 miss」。
     //   原实现 replace(/\s+/g,'') 保留 + 号（"Pipsqueak+4"→pipsqueak+4），
     //   快照键是 pipsqueak4 → 永远不匹配（P0，实测 Level UP/Pipsqueak+4 等全 miss）。
-    function normName(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
+    function normName(s) { return names.normTeamName(s); }   // ★ 2026-09-20：统一走单一实现
 
     // ★ §8.3 名称兜底（2026-07-29）：Liquipedia 赛程补充的 upcoming/live 对阵
     //   team_id=0（{{Match}} 模板不提供 OpenDota team_id），按队名走 name 三级链路

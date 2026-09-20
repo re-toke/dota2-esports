@@ -58,7 +58,10 @@ function getJson(url) {
 }
 
 function normName(s) {
-  return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  // ★ 2026-09-20：改为引用单一实现 —— 本函数是**快照键的生成源头**，
+  //   此前与消费侧（首页 / 详情页 / api.findTeamByName）各写一份内联规则，仅靠注释约定同步。
+  //   规则逐字未变（小写 + 去非字母数字），因此**既有快照键不变，无需重新生成**。
+  return require('../../utils/names.js').normTeamName(s);
 }
 
 (async function main() {

@@ -740,6 +740,89 @@ check('★ 快照：数字 start/end 在 UTC+8 设备上必须等于 LP 原文�
   assert(bad.length === 0, '以下赛事数字边界与 LP 原文不一致：\n    ' + bad.join('\n    '));
 });
 
+// ===== 名称归一化单一实现（utils/names.js）—— 2026-09-20 =====
+// ★ 背景：`小写 + 去非字母数字` 这条规则曾被**内联复制 19 处**，横跨 队名 / 赛事名叶子键 两个语义，
+//   仅靠注释约定「要与 XX 保持一致」。实测事故：一处用 `replace(/\s+/g,'')`（保留 + 号）
+//   与快照键的 `replace(/[^a-z0-9]/g,'')` 不一致 → "Pipsqueak + 4" 归一成 `pipsqueak+4`
+//   而快照键是 `pipsqueak4` → **整队 logo 永远 miss**。
+//   现已抽取 utils/names.js 作为唯一实现；本节锁住「① 行为契约 ② 不再新增内联副本」。
+section('\n--- 名称归一化单一实现 names.js（2026-09-20）---');
+const _names = require('../../utils/names.js');
+const _fs = require('fs');
+const _path = require('path');
+
+check('names：★ 与队标快照键三重对齐（真实数据契约）', function () {
+  const snap = require('../../utils/team-logo-local-data.js');
+  const byName = snap.byName || {};
+  const keys = Object.keys(byName);
+  assert(keys.length > 100, '快照 byName 应有足量键，实际: ' + keys.length);
+  // ① 文档化用例（事故现场）
+  assert(_names.normTeamName('Pipsqueak + 4') === 'pipsqueak4',
+    'Pipsqueak + 4 应归一为 pipsqueak4，实际: ' + _names.normTeamName('Pipsqueak + 4'));
+  // ② 该键必须在快照里真实存在（否则「规则对了但键名不匹配」仍会 miss）
+  assert(byName['pipsqueak4'], '快照应存在键 pipsqueak4');
+  // ③ 幂等：快照键本身已是归一形态 → 再归一必须不变
+  //    （规则一旦被改成剥 'the' / 保留 CJK，既有键就会失配 → 此处立即 FAIL）
+  const bad = keys.filter((k) => _names.normTeamName(k) !== k);
+  assert(bad.length === 0, '以下快照键经 normTeamName 后发生变化（规则与键生成源已漂移）：' + bad.slice(0, 5).join(', '));
+});
+
+check('names：边界与语义（非 ASCII 抹空 / 大小写 / null）', function () {
+  assert(_names.normTeamName(null) === '' && _names.normTeamName(undefined) === '', 'null/undefined 应安全返回空串');
+  assert(_names.normTeamName('TOPSON') === 'topson', '应转小写');
+  assert(_names.normTeamName('Чемпионат Москвы') === '', '非 ASCII 应被去除（与 consensus.normName 不同，勿混用）');
+  assert(_names.normTeamName('天辉') === '', '中文占位名归一为空串（调用方需特判）');
+  assert(_names.normTeamNameLoose('Level UP esports') === 'levelup', '应剥离结尾的 esports 后缀');
+  assert(_names.normTeamNameLoose('Vici Gaming') === 'vici', '应剥离结尾的 gaming 后缀');
+  // ⚠️ 后缀是**结尾锚定**（原 api.js 实现如此）：开头的 "Team" 不会被剥
+  assert(_names.normTeamNameLoose('Team Spirit') === 'teamspirit',
+    '后缀仅结尾锚定，开头的 Team 不应被剥离，实际: ' + _names.normTeamNameLoose('Team Spirit'));
+  assert(_names.normTeamName('Level UP esports') === 'levelupesports', '精确匹配不应剥后缀');
+});
+
+check('names：★ 全库禁止再内联该规则（白名单外一律 FAIL）', function () {
+  // ⚠️ 本守卫必须**先剥注释再判定** —— 否则「在注释里提到该正则」的文件会永久误报
+  //    （本项目为 CRLF：行内 `//` 替换剥不掉整行注释，须显式判 `^\s*//`；且不能误伤 `https://`）
+  function stripComments(src) {
+    return src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .split(/\r?\n/)
+      .filter((l) => !/^\s*\/\//.test(l))
+      .map((l) => l.replace(/(^|[^:])\/\/.*$/, '$1'))
+      .join('\n');
+  }
+  const ROOT = _path.resolve(__dirname, '../..');
+  // 白名单：给出文件的**存在理由**，新增前请先确认无法 require utils/names.js
+  const ALLOW = {
+    'utils/names.js': '单一实现本体',
+    'utils/league-canon-map.js': '与 cloudfunctions 副本是**镜像对**（云端 bundle 无法 require 主包）',
+    'cloudfunctions/aggregation/league-canon-map.js': '同上（镜像对另一半）',
+    'cloudfunctions/aggregation/index.js': '云端独立 bundle，无法 require 主包 utils/names.js',
+    'scripts/ops/discover-tournaments.js': 'consensus.js 加载失败时的**刻意内联回退**实现'
+  };
+  const SKIP_DIR = /(^|[\\/])(node_modules|miniprogram_npm|dist|rollback|tmp)([\\/]|$)/;
+  const PATTERN = /toLowerCase\(\)\.replace\(\/\[\^a-z0-9\]\/g/;
+  const offenders = [];
+  function walk(dir) {
+    let entries = [];
+    try { entries = _fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return; }
+    entries.forEach((d) => {
+      const full = _path.join(dir, d.name);
+      const rel = _path.relative(ROOT, full).replace(/\\/g, '/');
+      if (SKIP_DIR.test(rel)) return;
+      if (d.isDirectory()) return walk(full);
+      if (!/\.js$/.test(d.name)) return;
+      if (rel.indexOf('scripts/test/') === 0) return;   // 本守卫自身含该正则字面量，必须排除（自指陷阱）
+      let src = '';
+      try { src = _fs.readFileSync(full, 'utf8'); } catch (e) { return; }
+      if (PATTERN.test(stripComments(src)) && !ALLOW[rel]) offenders.push(rel);
+    });
+  }
+  ['utils', 'pages', 'subpackages', 'scripts', 'cloudfunctions'].forEach((sub) => walk(_path.join(ROOT, sub)));
+  assert(offenders.length === 0,
+    '以下文件又内联了「小写+去非字母数字」规则，请改用 utils/names.js：\n    ' + offenders.join('\n    '));
+});
+
 async function runAll() {
   for (const t of tests) {
     if (t.kind === 'section') { console.log(t.title); continue; }

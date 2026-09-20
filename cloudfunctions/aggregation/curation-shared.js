@@ -5,25 +5,20 @@
 // cannot load .json directly).
 module.exports = {
   "version": 3,
-  "generatedAt": "2026-09-20T05:14:37.008Z",
+  "generatedAt": "2026-09-20T05:47:49.986Z",
   "source": "utils/curation.js#CURATED_EVENTS",
-  "eventCount": 279,
+  "eventCount": 271,
   "map": {
     "theinternational2025": "The International 2025",
     "ti2025": "The International 2025",
-    "international2025": "The International 2025",
     "theinternational2024": "The International 2024",
     "ti2024": "The International 2024",
-    "international2024": "The International 2024",
     "theinternational2023": "The International 2023",
     "ti2023": "The International 2023",
-    "international2023": "The International 2023",
     "theinternational2022": "The International 2022",
     "ti2022": "The International 2022",
-    "international2022": "The International 2022",
     "theinternational2026": "The International 2026",
     "ti2026": "The International 2026",
-    "international2026": "The International 2026",
     "ti15": "The International 2026",
     "riyadhmasters2024": "Riyadh Masters 2024",
     "rm2024": "Riyadh Masters 2024",
@@ -247,5 +242,5 @@ module.exports = {
     "20159": "WINLINE Star Series Season 4",
     "20208": "BLAST SLAM IX"
   },
-  "dataVersion": "1789881277006"
+  "dataVersion": "1789883269979"
 };

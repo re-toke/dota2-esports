@@ -19,6 +19,8 @@ const https = require('https');
 const zlib = require('zlib');
 const fs = require('fs');
 const path = require('path');
+// ★ 2026-09-20：赛事名「形状归一」单一实现（原为内联；全仓库 19 处收敛中）
+const names = require('../../utils/names.js');
 
 // 合规 UA（Liquipedia 要求带联系方式/项目说明，否则可能被限流或封禁）
 const UA = 'DOTA2-Esports-Hub/1.0 (WeChat Mini Program build-time snapshot; contact: dev@local)';
@@ -55,7 +57,7 @@ function parseLiquipediaDate(text) {
 
 // 稳定负数 id（与 curation 占位风格一致，避免和真实 leagueid 冲突）
 function hashId(name) {
-  const k = String(name).toLowerCase().replace(/[^a-z0-9]/g, '');
+  const k = names.normAsciiKey(name);   // ★ 2026-09-20：统一走单一实现（⚠️ 改动会使既有 id 变化）
   let h = 0;
   for (let i = 0; i < k.length; i++) h = ((h << 5) - h + k.charCodeAt(i)) | 0;
   return -(Math.abs(h) % 1000000 + 1000000);
@@ -131,9 +133,9 @@ async function main() {
         // Ongoing 段日期单元格可能仅显示开始日（end==start 截断）→ 回填完整赛期
         let full = fullDateMem[id];
         if ((!full || full.end <= full.start) && prevSnap && prevSnap.events) {
-          const dn = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+          const dn = names.normAsciiKey(name);
           const hit = prevSnap.events.find((e) => {
-            const en = (e.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const en = names.normAsciiKey(e.name);
             return en && (en === dn || dn.indexOf(en) >= 0 || en.indexOf(dn) >= 0);
           });
           if (hit && hit.end > hit.start) full = { start: hit.start, end: hit.end };

@@ -57,7 +57,7 @@ function build(raw, scheduled, boFormat, teamIdNameMap) {
   });
   // 2) LP filter（R1：phase!=='recent' 早退）+ map（v1.2 透传）
   const openDotaMatchIds = new Set(raw.map((m) => String(m.match_id)));
-  const normD = (n) => String(n || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const normD = (n) => require('../../utils/names.js').normTeamName(n);   // ★ 2026-09-20：统一走单一实现
   let liqSeries = scheduled
     .filter((m) => { if (m.phase !== 'recent') return true; return !(m.matchIds && m.matchIds.length && m.matchIds.every((id) => openDotaMatchIds.has(String(id)))); })
     .map((m) => {
