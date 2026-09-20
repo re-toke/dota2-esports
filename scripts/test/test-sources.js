@@ -634,6 +634,75 @@ check('展示名：中文 / 空值边界', function () {
   assert(_srcTest.leagueDisplayName(null) === '', 'null 应安全返回空串');
 });
 
+// ===== ⑤ 跨源赛期合并 mergeEventPeriod（2026-09-19 落地）=====
+// 口径经用户确认：官方赛期（LP 系）优先、缺口**按字段**回退 OpenDota ——
+//   · 首个起止都完整的源 → 全取
+//   · LP 只有 start（endDate 不完整的常态）→ start 取 LP，end 回退 OpenDota ★核心
+//   · LP 无数据 → 整体回退 OpenDota（字段级，不整条丢弃）
+// ★ 修复的 bug 形态：详情页 eventWindow / 列表页 dateRange 原对快照回退都是 all-or-nothing
+//   （`start && end` 同时成立才用）→ LP endDate 不完整时整条官方赛期被丢弃。
+section('\n--- ⑤ 跨源赛期合并 mergeEventPeriod（2026-09-19）---');
+const _mp = _srcTest.mergeEventPeriod;
+check('merge：首个起止完整的源 → 全取（高权威不被低权威稀释）', function () {
+  const r = _mp([
+    { name: 'curation', start: 1000, end: 2000 },
+    { name: 'opendota', start: 1000, end: 3000 }]);
+  assert(r && r.start === 1000 && r.end === 2000, '应全取 curation，实际: ' + JSON.stringify(r));
+  assert(r.startFrom === 'curation' && r.endFrom === 'curation', '来源标注应均为 curation');
+});
+check('merge：★ LP 只有 start → start 取 LP，end 回退 OpenDota（用户确认口径）', function () {
+  const r = _mp([
+    { name: 'curation', start: 0, end: 0 },
+    { name: 'liquipedia', start: 9000, end: 0 },
+    { name: 'opendota', start: 9500, end: 12000 }]);
+  assert(r && r.start === 9000 && r.startFrom === 'liquipedia',
+    'start 必须取 LP 官方值（不得被 OpenDota 覆盖），实际: ' + JSON.stringify(r));
+  assert(r.end === 12000 && r.endFrom === 'opendota',
+    'end 必须回退 OpenDota，实际: ' + JSON.stringify(r));
+});
+check('merge：LP 无数据 → 整体回退 OpenDota（字段级，不整条丢弃）', function () {
+  const r = _mp([
+    { name: 'curation', start: 0, end: 0 },
+    { name: 'liquipedia', start: 0, end: 0 },
+    { name: 'opendota', start: 1000, end: 2000 }]);
+  assert(r && r.start === 1000 && r.end === 2000 && r.startFrom === 'opendota',
+    '应整体回退 OpenDota，实际: ' + JSON.stringify(r));
+});
+check('merge：end 早于 start（跨源拼出脏区间）→ 丢弃 end', function () {
+  const r = _mp([
+    { name: 'liquipedia', start: 12000, end: 0 },
+    { name: 'opendota', start: 9000, end: 9500 }]);
+  assert(r && r.start === 12000 && r.end === 0,
+    '倒挂区间应丢弃 end（宁可只显示开始日），实际: ' + JSON.stringify(r));
+});
+check('merge：非法值（负数/字符串/undefined）一律视作缺失', function () {
+  const r = _mp([{ name: 'a', start: 'abc', end: -5 }, { name: 'b', start: 100, end: 200 }]);
+  assert(r && r.start === 100 && r.end === 200, '非法值不得污染结果，实际: ' + JSON.stringify(r));
+});
+check('merge：三源全空 → null；非数组入参 → null（不抛异常）', function () {
+  assert(_mp([{ name: 'a', start: 0, end: 0 }]) === null, '全空应返回 null');
+  assert(_mp(null) === null && _mp('x') === null && _mp(undefined) === null, '非法入参应返回 null');
+});
+check('merge：只剩 start（无任何可用 end）→ end=0 交由调用方决定渲染', function () {
+  const r = _mp([{ name: 'liquipedia', start: 9000, end: 0 }]);
+  assert(r && r.start === 9000 && r.end === 0, '应保留 start、end=0，实际: ' + JSON.stringify(r));
+});
+check('merge：导出表自检（防止"定义了但没导出"复发）', function () {
+  // 2026-09-19 实测：新增函数后忘写 module.exports → 调用点 TypeError。
+  // 此断言依赖上面各 check 已实际调用 _mp；此处再显式确认类型。
+  assert(typeof _srcTest.mergeEventPeriod === 'function', 'mergeEventPeriod 必须在 module.exports 中导出');
+});
+check('merge 的数据源保障：curation 查表链支持年份变体（原名 MISS → 规范名重试命中）', function () {
+  // ⑤ 合并的最高优先级源是 curation；若 normalize 仍用 OpenDota 原名查表（MISS），
+  // 合并拿不到官方赛期 → 整条链路退化。锁住「canonicalLeagueName 回退 → 命中并带赛期」。
+  const raw = 'PGL Wallachia 2026 Season 9';
+  const canon = _srcTest.canonicalLeagueName(raw, { game: 'dota2' });
+  assert(canon === 'PGL Wallachia Season 9', '规范名回退应生效，实际: ' + canon);
+  const ev = curation.curatedEventFor(canon, { leagueId: 20279, game: 'dota2' });
+  assert(ev && ev.start && ev.end,
+    'curation 应命中并提供官方赛期，实际: ' + JSON.stringify(ev && { start: ev.start, end: ev.end }));
+});
+
 async function runAll() {
   for (const t of tests) {
     if (t.kind === 'section') { console.log(t.title); continue; }

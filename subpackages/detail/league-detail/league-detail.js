@@ -684,35 +684,33 @@ Page({
         //   但比赛集中在同一天（如 1win Essence II 3 场均在 7/30）时，winStart/winEnd 均非空，
         //   不触发 upcoming-local 回退，赛期显示 "7/30 ~ 7/30" 而非完整 "7/30 ~ 8/5"。
         //   现修正为与列表页一致：upcoming-local 优先于 OpenDota 真实窗口，保证官方赛期不被截断。
-        var winStart = mixed.startDate || 0;
-        var winEnd = mixed.endDate || 0;
-        // 无 curation 赛期时，回退到 upcoming-local.json 官方赛期
-        if (!winStart || !winEnd) {
-          var snap = getUpcomingLocalSnapshot();
-          var nameKey = this.data.name;
-          if (snap && snap.events && snap.events.length) {
-            // 名称归一化匹配（与列表页 leagues.js 第 404-407 行一致）：
-            //   小写 + 去非字母数字 + 包含关系，避免大小写/空格差异导致漏匹配
-            var nameNorm = (nameKey || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-            var snapEntry = null;
-            for (var si = 0; si < snap.events.length; si++) {
-              var ev = snap.events[si];
-              var evNorm = (ev.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-              if (evNorm && nameNorm && (evNorm === nameNorm || nameNorm.indexOf(evNorm) >= 0 || evNorm.indexOf(nameNorm) >= 0)) {
-                snapEntry = ev; break;
-              }
-            }
-            if (snapEntry && snapEntry.start && snapEntry.end) {
-              if (!winStart) winStart = snapEntry.start;
-              if (!winEnd) winEnd = snapEntry.end;
+        // ★ 2026-09-19 ⑤ 跨源赛期合并落地（口径经用户确认）：
+        //   官方赛期（curation / LP 快照）优先，缺口**按字段**回退 OpenDota 真实比赛窗口。
+        //   修复：原快照回退要求 start&&end **同时存在**（all-or-nothing）——
+        //   LP「endDate 不完整」（只给 start）时整条官方赛期被丢弃 → start 也被 OpenDota
+        //   比赛窗口覆盖（OpenDota 窗口常截断为已打场次）→ 赛期显示错误甚至为空。
+        //   现统一走 `sources.mergeEventPeriod()`（与列表页 dateRange 同一实现，防止两页口径漂移）。
+        var snapEntry = null;
+        var _snap = getUpcomingLocalSnapshot();
+        if (_snap && _snap.events && _snap.events.length) {
+          // 名称归一化匹配：★ 2026-09-19 改用 `sources.leagueKey`（跨源赛事名归一统一出口），
+          //   与列表页快照匹配同口径；原"小写+去符号"内联实现与去重键各自演化，曾发生漏匹配
+          //   （leagues.js 同位置已先改，本处对齐 —— 凡跨源按名比对都应走统一归一化）。
+          var _nameKey = sources.leagueKey(this.data.name || '');
+          for (var _si = 0; _si < _snap.events.length; _si++) {
+            var _evKey = sources.leagueKey(_snap.events[_si].name || '');
+            if (_evKey && _nameKey && (_evKey === _nameKey || _nameKey.indexOf(_evKey) >= 0 || _evKey.indexOf(_nameKey) >= 0)) {
+              snapEntry = _snap.events[_si]; break;
             }
           }
         }
-        // 仍无赛期时，回退到 OpenDota 真实比赛窗口（仅 Liquipedia 也无对应赛事时）
-        if ((!winStart || !winEnd) && hasRealWindow) {
-          if (!winStart) winStart = mStart;
-          if (!winEnd) winEnd = mEnd;
-        }
+        var _period = sources.mergeEventPeriod([
+          { name: 'curation',   start: mixed.startDate, end: mixed.endDate },
+          { name: 'liquipedia', start: (snapEntry && snapEntry.start) || 0, end: (snapEntry && snapEntry.end) || 0 },
+          { name: 'opendota',   start: hasRealWindow ? mStart : 0, end: hasRealWindow ? mEnd : 0 }
+        ]);
+        var winStart = _period ? _period.start : 0;
+        var winEnd = _period ? _period.end : 0;
         let eventWindow = null;
         if (winStart > 0 && winEnd >= winStart) {
           eventWindow = {

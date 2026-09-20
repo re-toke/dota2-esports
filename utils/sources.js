@@ -897,6 +897,41 @@ function leagueDisplayName(league, ctx) {
   return display;
 }
 
+// ===== ⑤ 跨源赛期合并（2026-09-19 落地，口径经用户确认）=====
+//
+// 口径：**官方赛期源优先（Liquipedia 系：curation / upcoming-local 快照），缺口按字段回退** ——
+//   · 首个「起止都完整」的源           → 全取
+//   · 某源只有 start（LP endDate 不完整的常态）→ start 取该源，end 依次向下回退
+//   · 某源无数据                       → 整体继续向下回退（**字段级**，绝不因不完整而整条丢弃）
+//
+// 本项目的典型顺序：curation > LP 快照 > OpenDota 真实比赛窗口。
+// （haglund 赛程推得的窗口若可用，可插在 LP 快照与 OpenDota 之间 —— 接口形态相同。）
+//
+// ★ 修复的 bug 形态：原两处调用点（详情页 eventWindow / 列表页 dateRange）对快照回退都是
+//   `if (entry.start && entry.end)` 的 **all-or-nothing** —— LP「endDate 不完整」（只给 start）时
+//   整条官方赛期被丢弃，start 也被 OpenDota 比赛窗口覆盖（而 OpenDota 窗口常截断为已打场次），
+//   表现为赛期显示错误甚至为空。
+//
+// @param {Array<{name:string, start:number, end:number}>} list 按**权威性降序**排列
+// @returns {?{start:number, end:number, startFrom:string, endFrom:string}}
+//          start/end 为秒级 unix（0 = 该端缺失，调用方决定是否渲染）；三源全空返回 null。
+function mergeEventPeriod(list) {
+  const arr = Array.isArray(list) ? list : [];
+  const num = (v) => { const n = Number(v); return (isFinite(n) && n > 0) ? n : 0; };
+  const out = { start: 0, end: 0, startFrom: '', endFrom: '' };
+  for (let i = 0; i < arr.length; i++) {
+    const s = arr[i] || {};
+    const name = s.name || ('src' + i);
+    if (!out.start && num(s.start)) { out.start = num(s.start); out.startFrom = name; }
+    if (!out.end && num(s.end)) { out.end = num(s.end); out.endFrom = name; }
+  }
+  if (!out.start && !out.end) return null;
+  // 守卫：end 早于 start = 跨源拼出的脏区间（如 LP start 在未来、OpenDota 窗口是历史数据）
+  // → 丢弃 end（宁可只显示开始日，也不显示倒挂区间）
+  if (out.end && out.start && out.end < out.start) { out.end = 0; out.endFrom = ''; }
+  return out;
+}
+
 // ===== 赛事排名聚合 =====
 // 由 api.getLeagueMatches 提供的已结束比赛聚合每支队伍的胜负，
 // 不依赖 Liquipedia（避免 IP 风险）。
@@ -2817,5 +2852,7 @@ module.exports = {
   leagueKey: leagueKey,
   canonicalLeagueName: canonicalLeagueName,
   leagueDisplayName: leagueDisplayName,
+  // ★ 2026-09-19（⑤ 落地）：跨源赛期合并 —— 详情页 eventWindow 与列表页 dateRange 共用同一实现
+  mergeEventPeriod: mergeEventPeriod,
   getUpcomingLocalSnapshot: getUpcomingLocalSnapshot
 };

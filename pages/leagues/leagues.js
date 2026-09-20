@@ -672,6 +672,18 @@ Page({
     let cur = _curatedEventCache[String(l.leagueid)];
     if (cur === undefined) {
       cur = remoteCuration.curatedEventFor(l.name, { leagueId: l.leagueid, game: 'dota2' });
+      // ★ 2026-09-19（归一化铁律：两条路径必须同步）：curation 查表也要支持「年份位置变体」——
+      //   OpenDota 原名常把年份插在中间（如 `PGL Wallachia 2026 Season 9`），直接查表 MISS
+      //   → 该赛事拿不到 curation 的分级/赛期/状态（实测 PGL Wallachia S9 因此丢失官方赛期，
+      //     OpenDota 末场结束超缓冲后被误判 `ended`，而赛事实际仍在进行）。
+      //   仅在**首查未命中**时用规范名（canonicalLeagueName 已含年份回退）重试一次；
+      //   已命中的赛事完全不受影响（零回归）。
+      if (!cur) {
+        const _canon = sources.canonicalLeagueName(l.name, { game: 'dota2' });
+        if (_canon && _canon !== l.name) {
+          cur = remoteCuration.curatedEventFor(_canon, { leagueId: l.leagueid, game: 'dota2' });
+        }
+      }
       _curatedEventCache[String(l.leagueid)] = cur;
     }
     // 分级优先取 curation.tier（与详情页 sources.getLeagueTier 的 curation 输入一致），
@@ -730,35 +742,36 @@ Page({
     //   ① curation 完整周期（人工策展，最高权威）
     //   ② 🆕 upcoming-local.json 官方赛期（Liquipedia 正确时间，主力）
     //   ③ OpenDota 比赛窗口（仅当 Liquipedia 也无对应赛事时兜底）
-    let _drStart = mixed.startDate, _drEnd = mixed.endDate;
-    if (!(_drStart || _drEnd)) {
-      // ② Liquipedia 快照（官方赛期，主力）— 以 Liquipedia 正确时间为准
-      let _fromSnap = null;
-      try {
-        // 2026-07-30 修复：优先用 JS 包装模块（稳定可靠），回退到 JSON
-        let _snap;
-        try { _snap = require('../../utils/upcoming-local-data.js'); }
-        catch (_e) { _snap = require('../../utils/upcoming-local.json'); }
-        if (_snap && _snap.events) {
-          // ★ 2026-09-19：统一走 `leagueKey`（跨源赛事名归一）。
-          //   原内联"小写 + 去符号"与列表去重键各自演化 —— 当 displayName 与快照名写法
-          //   不一致时（如 "PGL Wallachia S9" vs 快照的 "PGL Wallachia Season 9"），
-          //   双向 indexOf 都会落空 → 该赛事**取不到快照赛期**（信息不全的表现之一）。
-          const _dn = leagueKey(displayName || '');
-          const _hit = _snap.events.find((e) => {
-            const _en = leagueKey(e.name || '');
-            return _en && (_en === _dn || _dn.indexOf(_en) >= 0 || _en.indexOf(_dn) >= 0);
-          });
-          if (_hit && _hit.start && _hit.end) _fromSnap = { start: _hit.start, end: _hit.end };
-        }
-      } catch (_e) { /* local snapshot 缺失时静默跳过 */ }
-      if (_fromSnap) {
-        _drStart = _fromSnap.start; _drEnd = _fromSnap.end;
-      } else {
-        // ③ OpenDota 比赛窗口兜底（Liquipedia 无对应赛事时）
-        _drStart = mixed.earliest; _drEnd = mixed.lastEnd || mixed.latest;
+    // ★ 2026-09-19 ⑤ 跨源赛期合并落地（口径经用户确认）：官方赛期优先、缺口**按字段**回退 ——
+    //   原实现对快照回退是 all-or-nothing（`_hit.start && _hit.end` 同时成立才用）：
+    //   LP「endDate 不完整」（只给 start）时整条官方赛期被丢弃 → dateRange 落到
+    //   OpenDota 比赛窗口（常截断为已打场次）→ 显示截断。统一走 `sources.mergeEventPeriod()`
+    //   （与详情页 eventWindow 同一实现，防止两页口径漂移）。
+    let _snapHit = null;
+    try {
+      // 2026-07-30 修复：优先用 JS 包装模块（稳定可靠），回退到 JSON
+      let _snap;
+      try { _snap = require('../../utils/upcoming-local-data.js'); }
+      catch (_e) { _snap = require('../../utils/upcoming-local.json'); }
+      if (_snap && _snap.events) {
+        // ★ 2026-09-19：统一走 `leagueKey`（跨源赛事名归一）。
+        //   原内联"小写 + 去符号"与列表去重键各自演化 —— 当 displayName 与快照名写法
+        //   不一致时（如 "PGL Wallachia S9" vs 快照的 "PGL Wallachia Season 9"），
+        //   双向 indexOf 都会落空 → 该赛事**取不到快照赛期**（信息不全的表现之一）。
+        const _dn = leagueKey(displayName || '');
+        _snapHit = _snap.events.find((e) => {
+          const _en = leagueKey(e.name || '');
+          return _en && (_en === _dn || _dn.indexOf(_en) >= 0 || _en.indexOf(_dn) >= 0);
+        }) || null;
       }
-    }
+    } catch (_e) { /* local snapshot 缺失时静默跳过 */ }
+    const _period = sources.mergeEventPeriod([
+      { name: 'curation',   start: mixed.startDate, end: mixed.endDate },
+      { name: 'liquipedia', start: (_snapHit && _snapHit.start) || 0, end: (_snapHit && _snapHit.end) || 0 },
+      { name: 'opendota',   start: mixed.earliest, end: mixed.lastEnd || mixed.latest }
+    ]);
+    let _drStart = _period ? _period.start : 0;
+    let _drEnd = _period ? _period.end : 0;
     const badge = statusBadgeOf(status);
     return {
       leagueid: l.leagueid,
