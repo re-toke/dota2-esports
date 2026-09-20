@@ -23,3 +23,6 @@ preview-*.png
 .secrets.local.json
 admin/.env
 .env
+
+# verify-curation 等 ops 脚本的运行产物（报告，不入库）
+scripts/ops/output/
