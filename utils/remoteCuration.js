@@ -25,6 +25,10 @@ const CACHE_KEY = 'remote_curation_v3';   // ★ 2026-08-11 bump v2→v3：build
                                           //   旧 v2 缓存可能已含「云端整条覆盖后的坏数据」（TI 2026 无
                                           //   leagueId/participants 数组），bump key 强制全量客户端重拉。
 const VERSION_KEY = 'remote_curation_version';
+// ★★ 2026-09-20：**廉价探针**的基线键（见 _probeRemoteVersion 注释）。
+//   为什么要它：`load()` 的早退条件是「缓存未过期」而非「版本一致」→ curation 改动后热客户端最多滞后 6h，
+//   只能靠用户清缓存（实测事故：远端已订正 PGL Wallachia S9，真机仍显示 9/17）。
+const PROBE_KEY = 'remote_curation_probe_v1';
 
 let lookups = null;          // 当前生效的查找器（null = 尚未初始化）
 let effectiveEvents = null;
@@ -291,6 +295,75 @@ function _scheduleFullLoad() {
   }, 3000);
 }
 
+/**
+ * ★★ 2026-09-20：**廉价版本探针** —— 在「缓存命中」的早退分支前先问一句「远端变了吗」。
+ *
+ * ## 为什么需要
+ * `load()` 原先的早退条件是 `!force && meta.value`（**只看缓存是否过期，不看版本号**），
+ * 且 `VERSION_KEY` 只在云函数兜底路径参与比对 → curation 改动后**热客户端最多滞后 6h**，
+ * 只能让用户清缓存（实测事故：远端已订正 PGL Wallachia S9 起始日为 9/19，真机仍显示 9/17）。
+ *
+ * ## 探针设计（单行读，~200B）
+ *   ① 优先 `curation_meta.key='version'`：由 admin-write EF 每次写库 bump，
+ *      覆盖 upsertEvent / deleteEvent / upsertTeam / updateMeta **全部**变更类型。
+ *      （EF 未部署该 bump 时此行不存在 → 自动走 ②，**无需先改 EF 即可生效**。）
+ *   ② 回退 `curation_events` 的最大 `data->>updatedAt`：admin-write 每次 upsert 都会写 `data.updatedAt`，
+ *      故覆盖**所有 upsert**（curation 编辑的绝大多数）；⚠️ 覆盖不到删除/队伍/元数据（那些靠 ① 或 TTL）。
+ *   ③ 任何失败 → 返回 ''（**保守沿用缓存，绝不因探针失败而阻塞启动**）。
+ *
+ * 返回 { probe, source }；probe 为空串表示"无信号"。
+ */
+function _probeRemoteVersion() {
+  var sb = null;
+  try { sb = require('./supabaseClient.js'); } catch (e) { return Promise.resolve({ probe: '', source: 'no-sb' }); }
+  if (!sb || !sb.enabled()) return Promise.resolve({ probe: '', source: 'disabled' });
+
+  // ★ 两条探针**并行**（实测各自 ~400ms 稳态，串行会累加）：
+  //   ① meta（EF 部署后覆盖全部变更类型）  ② events-max updatedAt（覆盖所有 upsert）
+  var metaP = sb.rest('curation_meta', { select: 'key,value', eq: { key: 'version' }, limit: 1 })
+    .then(function (rows) {
+      var v = rows && rows[0] && rows[0].value && rows[0].value.v;
+      return v != null ? { probe: 'meta:' + v, source: 'meta' } : null;
+    }).catch(function () { return null; });
+
+  var evP = sb.rest('curation_events', {
+    select: 'data->>updatedAt',
+    order: 'data->>updatedAt.desc.nullslast',
+    limit: 1
+  }).then(function (rows) {
+    var u = rows && rows[0] && rows[0].updatedAt;
+    return u != null ? { probe: 'ev:' + u, source: 'events-max-updatedAt' } : null;
+  }).catch(function () { return null; });
+
+  // 整体 5s 上限：探针是"尽力而为"，绝不允许长时间挂着（sb.rest 底层超时是 25s）
+  var timer = null;
+  var timeout = new Promise(function (resolve) {
+    timer = setTimeout(function () { resolve({ probe: '', source: 'timeout' }); }, 5000);
+  });
+  return Promise.race([
+    Promise.all([metaP, evP]).then(function (r) { return r[0] || r[1] || { probe: '', source: 'none' }; }),
+    timeout
+  ]).then(function (out) { if (timer) clearTimeout(timer); return out; },
+    function () { if (timer) clearTimeout(timer); return { probe: '', source: 'fail' }; });
+}
+
+/** 纯函数：是否需要重新拉取（可单测）。★ 保守优先 —— 无信号一律不重载。 */
+function _probeNeedsReload(remoteProbe, storedProbe) {
+  if (!remoteProbe) return false;     // 探针无信号（失败/表空）→ 沿用缓存
+  if (!storedProbe) return false;     // 首次建立基线 → 不重载，仅落盘基线
+  return String(remoteProbe) !== String(storedProbe);
+}
+
+/** 纯函数：是否应跳过本次探针（节流）。★ 目的是限制成本 —— 探针约 400ms/次。 */
+function _probeThrottled(lastProbeAt, nowMs, minIntervalSec) {
+  if (!lastProbeAt) return false;     // 从未探针过 → 必须探
+  return (nowMs - lastProbeAt) < minIntervalSec * 1000;
+}
+
+// 探针节流窗口：同一设备 10min 内最多探一次（冷启动通常远低于此频率，
+// 既让 curation 改动 ≤10min 生效，又避免频繁重启反复付探针成本）。
+const PROBE_MIN_INTERVAL_SEC = 10 * 60;
+
 function load(force) {
   // ★ 阶段2-③A：SB 可用时也允许进入（不再依赖云开发可用性）
   var _sbOn = false;
@@ -298,13 +371,42 @@ function load(force) {
   if (!_sbOn && !(cloudProxy.isAvailable() || cloudProxy.efAvailable())) { ensure(); return Promise.resolve(false); }
   const meta = cache.getStale(CACHE_KEY, config.remoteCuration.ttlSec, config.remoteCuration.ttlSec);
   // ★ 2026-09-15：此前此处静默早退，用户两次把「没有日志」误读为「代码没跑」→ 补日志
-  //   （清缓存可强制重新拉取；partial 缓存 30min 后也会自动重试）
   if (!force && meta.value) {
-    console.log('[remoteCuration] 缓存命中（未过期），跳过拉取。如需强制刷新请清缓存');
-    ensure(); return Promise.resolve(false);
+    // ★★ 2026-09-20：早退前先做**廉价探针**（单行读 ~400ms）——远端变了就不再早退。
+    //   实测收益：curation 改动**一次启动内生效**（原需清缓存或等 6h TTL）。
+    //   成本控制：① 两条探针并行（不串行累加）；② 整体 5s 上限；③ 10min 节流。
+    const probeInfo = cache.peek(PROBE_KEY);
+    const lastProbeAt = probeInfo && probeInfo.fetchedAt || 0;
+    if (_probeThrottled(lastProbeAt, Date.now(), PROBE_MIN_INTERVAL_SEC)) {
+      console.log('[remoteCuration] 缓存命中且 ' + (PROBE_MIN_INTERVAL_SEC / 60) + 'min 内已探针过，跳过');
+      ensure(); return Promise.resolve(false);
+    }
+    const storedProbe = (probeInfo && probeInfo.value) || '';
+    return _probeRemoteVersion().then(function (res) {
+      const remoteProbe = res && res.probe || '';
+      // 有信号 → 刷新基线；**无信号（失败/超时）→ 保留原基线、只刷新探针时间**。
+      // ⚠️ 后者不能用 cache.touch：实测 `touch` 在键不存在时**直接早退**，无法建立节流标记，
+      //   会导致「离线设备每次冷启动都白等探针超时（最长 5s）」。
+      cache.set(PROBE_KEY, remoteProbe || storedProbe, 365 * 24 * 3600);
+      if (!_probeNeedsReload(remoteProbe, storedProbe)) {
+        console.log('[remoteCuration] 缓存命中且远端未变（探针 ' + (res && res.source) + '），跳过拉取');
+        ensure(); return false;
+      }
+      console.log('★ [remoteCuration] 探针发现远端 curation 已更新（' + storedProbe + ' → ' + remoteProbe +
+        '，来源 ' + (res && res.source) + '）→ 重新拉取，不等 6h TTL');
+      return _doLoad(_sbOn, false, meta);
+    }).catch(function () {
+      console.log('[remoteCuration] 探针异常 → 沿用缓存');
+      ensure(); return false;
+    });
   }
   if (loadingPromise) return loadingPromise;
+  return _doLoad(_sbOn, force, meta);
+}
 
+/** 实际拉取（SB 直读优先 → 云函数兜底）。从 load() 拆出，供探针判定后复用。 */
+function _doLoad(_sbOn, force, meta) {
+  if (loadingPromise) return loadingPromise;
   // 读取本地存储的 version（用于增量更新）
   const clientVersion = cache.getStale(VERSION_KEY, 365 * 24 * 3600, 365 * 24 * 3600).value || '';
 
@@ -394,5 +496,9 @@ module.exports = {
   load: load,
   // ★ 2026-09-20：内容指纹（版本号）—— 导出供单测锁住「改字段值也必须变版本」这一契约。
   //   下划线前缀表示内部实现细节，业务代码勿直接调用。
-  _contentFingerprint: _contentFingerprint
+  _contentFingerprint: _contentFingerprint,
+  // ★ 2026-09-20：廉价探针的「是否需重载」判定（纯函数，导出供单测）
+  _probeNeedsReload: _probeNeedsReload,
+  _probeThrottled: _probeThrottled,
+  _probeRemoteVersion: _probeRemoteVersion
 };

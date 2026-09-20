@@ -188,6 +188,47 @@ function main() {
     assert(F(clone) === F(_FX_A), '相同内容必须得到相同版本');
   });
 
+  // ===== 2.6 廉价探针（远端变更探测）—— 2026-09-20 =====
+  // ★ 背景：load() 的早退条件是「缓存未过期」而非「版本一致」→ curation 改动后热客户端最多滞后 6h
+  //   （实测事故：远端已订正 PGL Wallachia S9 起始日，真机仍显示 9/17，只能靠用户清缓存）。
+  //   现改为早退前先做「单行读」探针。本组锁住判定契约：**保守优先 —— 无信号一律不重载**。
+  const _needReload = remoteCuration._probeNeedsReload;
+
+  check('探针：★ 远端版本变了必须要求重载（否则改动要等 6h）', function () {
+    assert(_needReload('ev:1789886892279', 'ev:1789853661020') === true, '版本不同应重载');
+    assert(_needReload('meta:1789886892279', 'ev:1789853661020') === true, '来源前缀不同也算不同');
+  });
+
+  check('探针：版本相同 → 不重载（避免每次冷启动白拉数据）', function () {
+    assert(_needReload('ev:123', 'ev:123') === false, '版本相同不应重载');
+    assert(_needReload('meta:123', 'meta:123') === false, 'meta 前缀相同也不应重载');
+  });
+
+  check('探针：★ 无信号（请求失败/表空）必须保守沿用缓存，绝不阻塞启动', function () {
+    assert(_needReload('', 'ev:123') === false, '探针无信号 → 不重载');
+    assert(_needReload(null, 'ev:123') === false, 'null → 不重载');
+    assert(_needReload(undefined, 'ev:123') === false, 'undefined → 不重载');
+  });
+
+  check('探针：首次建立基线（本地无基线）→ 不重载，仅落盘', function () {
+    assert(_needReload('ev:123', '') === false, '无基线时不应重载（避免多拉一次）');
+    assert(_needReload('ev:123', null) === false, '基线 null 同上');
+  });
+
+  check('探针：数字/字符串混用也要稳健比较', function () {
+    assert(_needReload(123, '123') === false, '数字与字符串同值应视为相同');
+    assert(_needReload('123', 123) === false, '反序同理');
+  });
+
+  check('探针节流：10min 内不重复探（限制 ~400ms/次 的成本）', function () {
+    const thr = remoteCuration._probeThrottled;
+    const now = 1700000000000;
+    assert(thr(0, now, 600) === false, '从未探过 → 必须探');
+    assert(thr(now - 60 * 1000, now, 600) === true, '1 分钟前探过 → 节流跳过');
+    assert(thr(now - 11 * 60 * 1000, now, 600) === false, '11 分钟前探过 → 应再探');
+    assert(thr(now - 600 * 1000, now, 600) === false, '刚好到窗口边界 → 应再探');
+  });
+
   // ===== 3. 模拟远程拉取（异步，云函数模式）=====
   console.log('\n--- async ---');
   return runAsync(function () {

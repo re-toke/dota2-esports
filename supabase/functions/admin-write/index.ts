@@ -76,6 +76,32 @@ Deno.serve(async (req: Request) => {
     } catch { /* 静默：日志失败不影响主流程（与云函数行为一致） */ }
   };
 
+  // ★★ 2026-09-20：**bump 全局 curation 版本**（客户端「廉价探针」用）
+  //
+  // 背景：客户端 `remoteCuration.load()` 的早退条件是「缓存是否过期」而非「版本是否一致」，
+  //   且只有云函数兜底路径才比版本 → curation 改动后热客户端最多滞后 6h（只能靠用户清缓存）。
+  //   客户端现改为：早退前**单行读**本品版本号（~200B），变了才重新拉取。
+  //
+  // 为什么放在这里（而不是让客户端去算）：admin_logs 对 anon 不可读，无法作为探针；
+  //   而 `curation_events.data.updatedAt` 只能覆盖 upsert，**覆盖不到 deleteEvent / upsertTeam / updateMeta**。
+  //   本函数在**任何**成功写入后 bump `curation_meta.key='version'` → 探针即可覆盖全部变更类型。
+  //   ⚠️ 客户端另有回退路径（读 curation_events 的最大 updatedAt），故**本 EF 未部署时也不会失效**，
+  //      只是覆盖范围退化为「仅 upsert」。
+  const bumpCurationVersion = async () => {
+    try {
+      await db.from('curation_meta').upsert(
+        { key: 'version', value: { v: Date.now() }, updated_at: new Date().toISOString() },
+        { onConflict: 'key' }
+      );
+    } catch { /* 静默：版本 bump 失败不影响主流程（客户端会回退到 events 探针） */ }
+  };
+
+  // 每次成功写入后统一收口：落 admin_logs + bump 全局 curation 版本（探针用）。
+  const afterWrite = async (detail: Record<string, unknown>) => {
+    await logRow(detail);
+    await bumpCurationVersion();
+  };
+
   try {
     switch (operation) {
       case 'upsertEvent': {
@@ -90,7 +116,7 @@ Deno.serve(async (req: Request) => {
         };
         const { error } = await db.from('curation_events').upsert(row, { onConflict: 'canonical_key' });
         if (error) throw error;
-        await logRow({ table: 'curation_events', key, op: 'upsert' });
+        await afterWrite({ table: 'curation_events', key, op: 'upsert' });
         return json({ success: true, version: 'v' + Date.now(), source: 'supabase' });
       }
 
@@ -99,7 +125,7 @@ Deno.serve(async (req: Request) => {
         if (!key) return json({ success: false, error: { message: 'docId 必填' } }, 400);
         const { error } = await db.from('curation_events').delete().eq('canonical_key', key);
         if (error) throw error;
-        await logRow({ table: 'curation_events', key, op: 'delete' });
+        await afterWrite({ table: 'curation_events', key, op: 'delete' });
         return json({ success: true, version: 'v' + Date.now(), source: 'supabase' });
       }
 
@@ -112,7 +138,7 @@ Deno.serve(async (req: Request) => {
         const row = { team_id: tid, data: clean };
         const { error } = await db.from('curation_teams').upsert(row, { onConflict: 'team_id' });
         if (error) throw error;
-        await logRow({ table: 'curation_teams', key: String(tid), op: 'upsert' });
+        await afterWrite({ table: 'curation_teams', key: String(tid), op: 'upsert' });
         return json({ success: true, version: 'v' + Date.now(), source: 'supabase' });
       }
 
@@ -121,7 +147,7 @@ Deno.serve(async (req: Request) => {
         if (!tid || isNaN(tid)) return json({ success: false, error: { message: 'docId 必须为数字 team_id' } }, 400);
         const { error } = await db.from('curation_teams').delete().eq('team_id', tid);
         if (error) throw error;
-        await logRow({ table: 'curation_teams', key: String(tid), op: 'delete' });
+        await afterWrite({ table: 'curation_teams', key: String(tid), op: 'delete' });
         return json({ success: true, version: 'v' + Date.now(), source: 'supabase' });
       }
 
@@ -132,7 +158,7 @@ Deno.serve(async (req: Request) => {
           { onConflict: 'key' },
         );
         if (error) throw error;
-        await logRow({ table: 'curation_meta', key: 'ti_contestant_ids', op: 'upsert' });
+        await afterWrite({ table: 'curation_meta', key: 'ti_contestant_ids', op: 'upsert' });
         return json({ success: true, version: 'v' + Date.now(), source: 'supabase' });
       }
 
