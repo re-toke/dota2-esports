@@ -345,11 +345,15 @@ const CURATED_EVENTS = [
   // ── 2026 下半年即将到来（Tier 1，来源：Liquipedia Tournaments，已核实日期）──
   // 这些赛事在 OpenDota /leagues 中尚无比赛记录（未开赛），只能靠 curation 进入"即将到来" tab。
   // 日期为 UTC，与 Liquipedia 公布一致；时间以 Liquipedia 为准，此处用于"即将到来"判定。
-  // PGL Wallachia Season 9：9月17-27日，布加勒斯特，$1,000,000
+  // PGL Wallachia Season 9：9月19-27日，布加勒斯特，$1,000,000
+  // ★ 2026-09-20 修正起始日：原为 9/17（1789603200）→ LP 实为 9/19。
+  //   错因：人工录入时把起始日写早 2 天（注释同步写错）。影响面 = 合并时 curation 优先，
+  //   列表/详情的开始日会显示 9/17 且状态判定窗口前移 2 天。
+  //   ⇒ 该类错误已由 scripts/sync/fetch-liquipedia-upcoming.js 的「curation ↔ LP 日期一致性核对」自动报告。
   { canonical: 'PGL Wallachia Season 9', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['pglwallachiaseason9', 'pglwallachia9', 'wallachia2026', 'pglwallachia2026',
              'wallachia season 9', 'pgl wallachia s9'], year: 2026,
-    start: 1789603200, end: 1790467200,
+    start: 1789776000, end: 1790467200,
     prizePool: '$1,000,000', organizer: 'PGL', region: '罗马尼亚·布加勒斯特', format: '双败淘汰',
     participants: 16, status: '即将到来', liquipediaSlug: 'PGL/Wallachia/9',
     valve: false, topThirdParty: false },

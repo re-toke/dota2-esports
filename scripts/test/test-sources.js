@@ -703,6 +703,43 @@ check('merge 的数据源保障：curation 查表链支持年份变体（原名 
     'curation 应命中并提供官方赛期，实际: ' + JSON.stringify(ev && { start: ev.start, end: ev.end }));
 });
 
+// ===== 快照数据自洽守卫（2026-09-20）=====
+// ★ 为什么需要：LP 快照条目同时携带**数字边界**（start/end）与**LP 原文**（date 字符串，
+//   如 "Sep 19–27, 2026"）。两者是同一事实的两种表示 —— 必须自洽。
+//   历史上生成脚本把 end 存成「该日 **UTC** 日末」（Date.UTC(y,m,d,23,59,59)），
+//   而展示函数 fmtShort() 用 `getMonth()/getDate()`（**设备本地时区**）→ 北京时间设备上
+//   结束日被显示成 **次日**（实测 PGL Wallachia S9：LP 原文 Sep 19–27，界面显示到 9/28）。
+//   ⇒ 本守卫用 LP 原文反查数字边界，等价于「在 UTC+8 设备上应该看到的日期」。
+section('\n--- 快照数据自洽（LP 原文 ↔ 数字边界，2026-09-20）---');
+check('★ 快照：数字 start/end 在 UTC+8 设备上必须等于 LP 原文的起止日（防"结束日 +1 天"）', function () {
+  const snap = _srcTest.getUpcomingLocalSnapshot() || {};
+  const evs = snap.events || [];
+  assert(evs.length > 0, '快照应包含事件（否则本守卫失去意义）');
+  const MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+  // 与生成脚本 parseLiquipediaDate 同形的解析："Mon DD–DD, YYYY" / "Mon DD–Mon DD, YYYY" / "Mon DD, YYYY"
+  const re = /^([A-Za-z]{3})\w*\s+(\d{1,2})(?:\s*[‒–—―-]\s*(?:([A-Za-z]{3})\w*\s+)?(\d{1,2}))?,\s*(\d{4})$/;
+  const bjDay = (t) => new Date((t + 8 * 3600) * 1000);   // 模拟 UTC+8 设备的 fmtShort
+  const bad = [];
+  evs.forEach((e) => {
+    const m = String(e.date || '').match(re);
+    if (!m) { bad.push(e.name + '：date 字符串形态不可识别（' + e.date + '）'); return; }
+    const sm = MONTHS[m[1].toLowerCase()];
+    const em = MONTHS[(m[3] || m[1]).toLowerCase()];
+    const sd = parseInt(m[2], 10);
+    const ed = parseInt(m[4] || m[2], 10);
+    const yr = parseInt(m[5], 10);
+    const bs = bjDay(e.start);
+    const be = bjDay(e.end);
+    if (bs.getUTCFullYear() !== yr || bs.getUTCMonth() !== sm || bs.getUTCDate() !== sd) {
+      bad.push(e.name + ' 开始日：LP 原文 ' + e.date + ' vs 数字 ' + bs.toISOString().slice(0, 10));
+    }
+    if (be.getUTCFullYear() !== yr || be.getUTCMonth() !== em || be.getUTCDate() !== ed) {
+      bad.push(e.name + ' 结束日：LP 原文 ' + e.date + ' vs 数字 ' + be.toISOString().slice(0, 10));
+    }
+  });
+  assert(bad.length === 0, '以下赛事数字边界与 LP 原文不一致：\n    ' + bad.join('\n    '));
+});
+
 async function runAll() {
   for (const t of tests) {
     if (t.kind === 'section') { console.log(t.title); continue; }

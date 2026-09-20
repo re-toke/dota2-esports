@@ -38,9 +38,18 @@ function parseLiquipediaDate(text) {
   const ed = m[4] ? parseInt(m[4], 10) : sd;
   const year = parseInt(m[5], 10);
   if (sm == null || em == null || isNaN(sd) || isNaN(ed) || isNaN(year)) return null;
+  // ★★ 2026-09-20 修复「结束日在界面晚一天」（系统性，15 条快照赛事全部命中）：
+  //   本函数产出的是**日期边界**，而展示侧 `util.fmtShort()` 用 `getMonth()/getDate()`
+  //   —— **设备本地时区**取日期。若把 end 存成「该日 **UTC** 23:59:59」，在 UTC+8 设备上
+  //   换算为次日 07:59 → 结束日被显示成**次日**（实测 LP 原文 "Sep 19–27, 2026" 显示成 9/28）。
+  //   故 end 对齐到**北京时间当日最后一秒**（= 该日 UTC 15:59:59），使 UTC+8 设备显示回 LP 原文。
+  //   start 仍取「该日 UTC 00:00」不动 —— 换算到 UTC+8 是当天 08:00，不跨日、显示本就正确。
+  //   ⚠️ 勿改回「UTC 日末」；若将来改为 UTC 展示口径，须同时改 util.fmtShort 与
+  //      scripts/test/test-sources.js 的「快照数据自洽」守卫，三者必须同步。
+  const BJ_OFFSET_SEC = 8 * 3600;   // 与 config.time.bjOffsetSec 一致（北京时间单一来源）
   return {
     start: Math.floor(Date.UTC(year, sm, sd, 0, 0, 0) / 1000),
-    end: Math.floor(Date.UTC(year, em, ed, 23, 59, 59) / 1000),
+    end: Math.floor(Date.UTC(year, em, ed, 23, 59, 59) / 1000) - BJ_OFFSET_SEC,
   };
 }
 
@@ -183,6 +192,32 @@ async function main() {
       console.log('\n⚠️  以下 ' + uncovered.length + ' 个赛事未纳入 curation（详情页赛期可能被截断）：');
       uncovered.forEach((e) => console.log('   -', e.name, '(' + e.grade + ')'));
       console.log('   建议：将上述赛事补入 utils/curation.js 的 CURATED_EVENTS，含 start/end 字段');
+    }
+
+    // ★ 2026-09-20 新增：curation ↔ Liquipedia **日期一致性核对**
+    //   动机：curation 是**人工录入**（权威但易错），本快照是**脚本抓取**（每次自动刷新）。
+    //   实测教训：PGL Wallachia Season 9 的 curation 起始日被录成 9/17（LP 实为 9/19）→
+    //   合并时 curation 优先 → 界面显示错误的开始日（且详情页按此判 ongoing/ended）。
+    //   此处每次生成都交叉核对并提示，把「人工数据漂移」变成**可见的构建期信号**。
+    //   ⚠️ **只提示不阻断**：curation 允许刻意采用更长窗口（如嘉年华全周期 > 正赛期），
+    //      故不做断言/失败退出，由开发者判断。
+    const dateMismatch = [];
+    out.forEach((e) => {
+      let ev = null;
+      try { ev = curation.curatedEventFor(e.name, { game: 'dota2' }); } catch (_e) { ev = null; }
+      if (!ev || !ev.start || !ev.end) return;
+      const bj = (t) => new Date((t + 8 * 3600) * 1000).toISOString().slice(0, 10);
+      const lpS = bj(e.start), lpE = bj(e.end), cuS = bj(ev.start), cuE = bj(ev.end);
+      if (lpS !== cuS || lpE !== cuE) {
+        dateMismatch.push({ name: e.name, cu: cuS + ' ~ ' + cuE, lp: lpS + ' ~ ' + lpE });
+      }
+    });
+    if (dateMismatch.length) {
+      console.log('\n⚠️  以下 ' + dateMismatch.length + ' 个赛事的 curation 日期与 Liquipedia 不一致' +
+        '（合并时 curation 优先，界面会按 curation 显示）：');
+      dateMismatch.forEach((x) => console.log('   -', x.name, ' curation ' + x.cu + '  |  LP ' + x.lp));
+      console.log('   建议：核对 utils/curation.js 的 start/end（UTC 秒）。');
+      console.log('   仅当确为「刻意的更长窗口」（如嘉年华全周期）时才保留差异。');
     }
   } catch (e) { /* curation 检查失败不影响主流程 */ }
 }
