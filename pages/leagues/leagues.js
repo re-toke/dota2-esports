@@ -37,7 +37,8 @@ const sources = require('../../utils/sources.js');
 //      本项目已因各自内联而**复发三次**（haglund 匹配 → 列表去重 → 全局键）。
 const leagueKey = sources.leagueKey;
 const stratz = require('../../utils/stratz.js');
-const cloudProxy = require('../../utils/cloudProxy.js');
+// ★ 2026-09-21：cloudProxy 曾用于 trySupabaseUpcoming（原 tryCloudUpcoming）的可用性判断；
+//   该路径改为 Supabase 直读后不再需要，故移除导入（保留会变成未使用变量）。
 const tiers = require('../../utils/tiers.js');
 const remoteCuration = require('../../utils/remoteCuration.js');
 const curation = require('../../utils/curation.js');
@@ -980,7 +981,9 @@ Page({
   loadUpcoming() {
     if (this.data.upcomingLoading) return;
     // 2026-08-13（「即将」加载优化 · P0 防死锁）：代际标记 + 超时兜底。
-    //   之前：tryCloudUpcoming 的 callFunction 若挂起（云函数冷缓存现场预热 30-60s），
+    //   之前：trySupabaseUpcoming 走云函数时，冷缓存会挂起 30-60s（现场预热）；
+    //   2026-09-21 已改为 Supabase 直读（无冷启动），但**超时+gen 代际判活仍保留**
+    //   —— 网络慢/表为空时同样需要及时放行本地快照与串行查询。原：
     //   upcomingLoading 永不复位，用户切走再切回 → loadUpcoming 短路 → 永远卡 spinner。
     //   现在：8s 超时后走 finishUpcoming（本地快照兜底），gen 递增丢弃晚到云函数结果。
     this._upcomingGen = (this._upcomingGen || 0) + 1;
@@ -994,7 +997,7 @@ Page({
 
     // 赛程数据源回退链：云函数预热缓存 → 本地预构建快照 → 串行查询（OpenDota + curation）
     // 任一层命中即用其数据，无需后续层；保证「即将到来」在任意部署形态下都不为空。
-    this.tryCloudUpcoming(gen).then((hit) => {
+    this.trySupabaseUpcoming(gen).then((hit) => {
       if (gen !== this._upcomingGen) return;   // 已被超时/新链路取代，丢弃
       if (this._upcomingTimer) { clearTimeout(this._upcomingTimer); this._upcomingTimer = null; }
       if (hit) return;
@@ -1021,39 +1024,42 @@ Page({
     });
   },
 
-  // 尝试从云函数读取预热的赛程缓存。命中返回 true，未命中/失败返回 false。
-  // 2026-08-13（P0-2 判空 + P1-1 gen）：① gen 参数——超时/新链路后丢弃晚到结果；
-  //   ② 判空修正——云函数冷缓存 fire-and-forget 后返回 {data:{}, source:'cold'}，
-  //   空对象是 truthy，原 `!result.data` 判不出 → 会把空列表当命中。改为键数判空。
-  tryCloudUpcoming(gen) {
-    if (!cloudProxy.isAvailable()) return Promise.resolve(false);
-    return wx.cloud.callFunction({ name: 'aggregation', data: { action: 'getUpcomingSchedule' } })
-      .then((res) => {
+  // 读取「即将到来」赛程表。命中返回 true，未命中/失败返回 false。
+  // ★★ 2026-09-21（微信云开发脱离 · 路线 A）：来源从**云函数** `getUpcomingSchedule`
+  //   （实为「读云缓存 upcoming_schedule + 触发预热」的薄壳，接口层无聚合）改为
+  //   **Supabase 表 `upcoming_schedule` 直读**。条目形状已实测一致
+  //   （id/name/grade/rank/label/tier/start/end/source **零缺失**）⇒ 下游逻辑**逐字不动**。
+  //   保留原有两条契约：① gen 代际判活（超时/新链路后丢弃晚到结果）；② 空结果一律视为 miss
+  //   （空表是 truthy，若不显式判空会把空列表当命中 → 走本地快照兜底才正确）。
+  trySupabaseUpcoming(gen) {
+    let sb = null;
+    try { sb = require('../../utils/supabaseClient.js'); } catch (e) { sb = null; }
+    if (!sb || !sb.enabled()) return Promise.resolve(false);
+    return sb.rest('upcoming_schedule', { select: 'data', order: 'data->>start.asc' })
+      .then((rows) => {
         if (gen != null && gen !== this._upcomingGen) return false;   // 已被超时/新链路取代
-        const result = res && res.result;
-        if (!result || result.error || !result.data) return false;
-        if (Object.keys(result.data).length === 0) return false;      // 冷缓存空 data = miss
-        const schedule = result.data; // { id: { id, name, grade, rank, label, tier, start, end, source } }
+        const entries = (rows || []).map((r) => r && r.data).filter(Boolean);
+        if (!entries.length) return false;                            // 空表 = miss
         const now = util.nowSec();
         const horizon = now + config.leagueWindow.upcomingRangeSec;
         const results = [];
-        Object.keys(schedule).forEach((lid) => {
-          const s = schedule[lid];
+        entries.forEach((s) => {
           if (!s || !s.start) return;
-          // 关键修复：保留「未结束」的赛事（含已开赛的进行中赛事），不再用 start > now
+          // 关键修复（原样保留）：保留「未结束」的赛事（含已开赛的进行中赛事），不再用 start > now
           // 把已开赛的 Liquipedia 赛事（如 1win Essence II）排除掉。end 缺失时按 start 在
           // 视野内放行（无法判定是否结束），避免误杀。
           if (s.start <= horizon && (!s.end || s.end >= now)) {
-            // 复用 buildUpcomingCard 统一构造（STRATZ 真实联赛 id 经 lid 回查 allLeagues 复用分级/关注）
-            results.push(buildUpcomingCard(s, { now: now, leagueMap: this._leagueMap, lid: lid }));
+            // 复用 buildUpcomingCard 统一构造（真实联赛 id 经 lid 回查 allLeagues 复用分级/关注）
+            results.push(buildUpcomingCard(s, { now: now, leagueMap: this._leagueMap, lid: s.id }));
           }
         });
+        if (!results.length) return false;
         results.sort((a, b) => (a.startDate || 0) - (b.startDate || 0));
-        // 本地快照补充：云缓存可能未含已开赛的进行中赛事（Liquipedia 仅 Upcoming 段抓取，
+        // 本地快照补充：服务端表可能未含已开赛的进行中赛事（Liquipedia 仅 Upcoming 段抓取，
         // 赛事开赛后转到 Ongoing 段）。用 upcoming-local.json 兜底，确保进行中赛事一定能进入
-        // 赛程列表，再经 upcomingCardStatus 判定归入「进行中」tab（部署新的云函数前尤其关键）。
+        // 赛程列表，再经 upcomingCardStatus 判定归入「进行中」tab。
         this.mergeLocalSnapshot(results, now);
-        // 合并 curation 库的未来赛事（云函数缓存可能未含未举办的重大赛事）
+        // 合并 curation 库的未来赛事（服务端表可能未含未举办的重大赛事）
         this.mergeCurationUpcoming(results, null);
         // ★ 2026-08-22：异步合并 haglund 源赛事（Liquipedia 故障期间的核心补充）
         //  待 haglund 合并完成后再 setData 刷新列表
@@ -1197,7 +1203,7 @@ Page({
         //   loadLeagueEntry 的回退分支一致，避免列表赛期少算最后一场 duration。
         //   数据校验：lastEnd 为 0 时回退 latest（纯未来赛未打 duration=0，lastEnd=latest）。
         const endT = (item._win && (item._win.lastEnd || item._win.latest)) || null;
-        // ★ 2026-09-01（B4）：状态判定改用 upcomingCardStatus（与 tryCloudUpcoming /
+        // ★ 2026-09-01（B4）：状态判定改用 upcomingCardStatus（与 trySupabaseUpcoming /
         //   mergeLocalSnapshot 口径一致）——原硬编码 'upcoming'，赛事实际已开赛时
         //   （earliest 在未来窗口但比赛已开始）仍标「即将到来」，用户困惑。
         //   upcomingCardStatus：start<=now<=end+1天 → ongoing；否则 upcoming。
@@ -1438,11 +1444,11 @@ Page({
   // 聚合后用 buildUpcomingCard 转换为卡片，按归一名与已有 results 去重。
   //
   // 同步性：本方法是异步的（haglund.fetchUpcoming 返回 Promise），
-  // 调用方（tryCloudUpcoming / tryLocalUpcoming / loadUpcomingSerial）须在
+  // 调用方（trySupabaseUpcoming / tryLocalUpcoming / loadUpcomingSerial）须在
   // mergeCurationUpcoming 之后链式调用，完成后才会 setData 刷新列表。
   mergeHaglundUpcoming(results, now, gen) {
     // ★ 2026-09-01（P1-L3）：合并节流 —— haglund 数据 60min TTL 内不变（云端缓存），
-    //   但 loadUpcoming 的每条调用链（tryCloudUpcoming / tryLocalUpcoming /
+    //   但 loadUpcoming 的每条调用链（trySupabaseUpcoming / tryLocalUpcoming /
     //   loadUpcomingSerial）都会触发 mergeHaglundUpcoming → 重复跑「拉取+聚合」纯浪费。
     //   距上次成功合并 < 60s 直接跳过（数据不可能变，且上次结果已写入 results）。
     //   非会话级永久标记：超过 60s 仍会重跑（保下拉刷新拉新语义，与 haglund TTL 同量级）。
@@ -1495,7 +1501,7 @@ Page({
         }
       });
 
-      // 2) 时间窗过滤（与 tryCloudUpcoming / mergeLocalSnapshot 同口径）
+      // 2) 时间窗过滤（与 trySupabaseUpcoming / mergeLocalSnapshot 同口径）
       const horizon = now + config.leagueWindow.upcomingRangeSec;
       const norm = leagueKey;   // ★ 2026-09-19 统一去重键（见文件顶部说明）
       const seen = {};
