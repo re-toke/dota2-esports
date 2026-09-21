@@ -22,6 +22,24 @@ import { cors, db } from "../_shared/auth.ts";
 // ★ v8.16：slugmap 改为 TS 内联常量（Supabase EF 运行时对 `with { type: "json" }`
 //   import attributes 支持不稳，导致 500 启动错误）。由 scripts/gen-slugmap-ts.js 生成。
 import { SLUGMAP_MAPPINGS } from "./slugmap.ts";
+// ★ 2026-09-21（微信云开发退役 · LP 解析链迁移）：本目录 parse.ts 是 utils/liquipedia-parse.js 的
+//   **ESM 镜像**（两者与 cloudfunctions 副本逐字一致）。故下面 2 个 action 只需「读缓存表 + 本地解析」，
+//   **零 LP 现抓**（EF 出口被 LP Cloudflare 429 拦，属既定约束）。
+import { parseLeagueMetadata, parseLeagueTier, parseScheduledMatches, parseBoFormat } from "./parse.ts";
+
+// 与云函数同名表逐字一致（多页面赛事的对阵在子页面，需显式覆盖 slug）；
+// 候选赛事结束（status 改为「已结束」）后应从此表移除，以节省 LP 配额。
+const SCHEDULED_MATCHES_SLUG_OVERRIDE: Record<string, string> = {
+  "The International 2026": "The_International/2026/Group_Stage",
+  "EPL Masters II": "EPL/Masters/2",
+  "PGL Wallachia Season 9": "PGL/Wallachia/9",
+  "BLAST SLAM VIII": "BLAST/Slam/8",
+  "Esports Nations Cup 2026": "Esports_Nations_Cup/2026",
+  "BLAST SLAM IX": "BLAST/Slam/9",
+  "RES Unchained 6: BLAST SLAM IX Europe Closed Qualifier": "RES_Unchained/6/BLAST_SLAM_IX/Europe",
+  "RES Unchained 6: BLAST SLAM IX Southeast Asia Closed Qualifier": "RES_Unchained/6/BLAST_SLAM_IX/Southeast_Asia",
+  "BLAST SLAM IX China Closed Qualifier": "BLAST/Slam/9/China",
+};
 
 const LP_BASE = "https://liquipedia.net/dota2/api.php";
 // UA 改用浏览器指纹（见 lpHeaders，v8.19）
@@ -165,6 +183,41 @@ async function handle(body: any): Promise<any> {
     if (!wikitext) return { data: null, source: "liquipedia" };
     await setCache(cacheKey, wikitext, SCHEDULE_TTL_MS);
     return { data: { wikitext }, source: "liquipedia" };
+  }
+
+  // ★★ 2026-09-21（微信云开发退役 · LP 解析链迁移第一步）——
+  //   原由云函数 aggregation 提供，其实现本质是「取 wikitext → 调 liquipediaParse 解析」。
+  //   解析模块与云函数侧**逐字一致** ⇒ 此处只需「读缓存表 lp:w:<slug> → 本地解析」，
+  //   **不做 LP 现抓**（EF 出口被 LP 429 拦；wikitext 由 GH Actions 的 sync-liquipedia 灌表）。
+  //   契约与云函数严格一致：返回 { data, source }。
+  if (action === "liquipediaLeagueMeta") {
+    const pageName = params.pageName || params.name || null;
+    if (!pageName) return { error: "pageName required" };
+    const slug = slugFor(pageName);
+    const wikitext = await getAnyCache("lp:w:" + slug);
+    if (!isUsableWikitext(wikitext)) return { data: null, source: "cache-miss" };
+    const meta = parseLeagueMetadata(wikitext, pageName);
+    if (!meta) return { data: null, source: "cache" };
+    // §9：复用同一份 wikitext 解析 Tier，供客户端 sources.getLeagueTier 使用（可选字段，失败隔离）
+    try {
+      const tierParsed = parseLeagueTier(wikitext);
+      if (tierParsed) (meta as any).liquipediaTier = tierParsed.tier;
+    } catch (_e) { /* 隔离 */ }
+    return { data: meta, source: "cache" };
+  }
+
+  if (action === "liquipediaScheduledMatches") {
+    const pageName = params.pageName || params.name || null;
+    if (!pageName) return { error: "pageName required" };
+    const slug = SCHEDULED_MATCHES_SLUG_OVERRIDE[pageName] || slugFor(pageName);
+    const wikitext = await getAnyCache("lp:w:" + slug);
+    if (!isUsableWikitext(wikitext)) return { data: null, source: "cache-miss" };
+    const nowSec = Math.floor(Date.now() / 1000);
+    const matches = parseScheduledMatches(wikitext, nowSec);
+    let boFormat: any = null;
+    try { boFormat = parseBoFormat(wikitext); } catch (_e) { /* 可选信号，失败隔离 */ }
+    // ★ 与云函数契约一致：{ matches, boFormat }（BO 判定引擎 S2 信号）
+    return { data: { matches: matches || [], boFormat: boFormat || null }, source: "cache" };
   }
 
   if (action === "liquipediaPrewarm") {
