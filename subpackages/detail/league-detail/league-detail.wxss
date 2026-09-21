@@ -393,8 +393,9 @@
   animation: live-pulse var(--dur-sway) var(--ease-in-out) infinite;
 }
 @keyframes live-pulse {
-  0%, 100% { opacity: 1; text-shadow: 0 0 4rpx rgba(239, 68, 68, 0.6); }
-  50% { opacity: 0.6; text-shadow: 0 0 2rpx rgba(239, 68, 68, 0.3); }
+  0%, 100% { opacity: 1; }
+  /* ★ 2026-09-21：脉冲下限 0.6 → 0.8（0.6 会让 LIVE 文字周期性变淡发虚）；并去掉红色光晕 */
+  50% { opacity: 0.8; }
 }
 .series-time {
   font-size: var(--fs-caption);
@@ -1049,7 +1050,7 @@
   color: #ffcc00;
   font-weight: 700;
   letter-spacing: 0.5rpx;
-  text-shadow: 0 0 6rpx rgba(255, 204, 0, 0.3);
+  /* ★ 2026-09-21 去掉金色光晕（同上：亮底上致虚）。 */
 }
 
 /* ===== v3 优化项21：UPCOMING 日期子标题 ===== */

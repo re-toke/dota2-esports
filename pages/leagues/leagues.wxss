@@ -354,7 +354,7 @@
   font-weight: 700;
   letter-spacing: 2rpx;
   color: var(--text-2);
-  transition: color 0.22s ease, text-shadow 0.22s ease;
+  transition: color 0.22s ease;   /* ★ 2026-09-21：text-shadow 已移除，同步清掉其过渡（避免死声明） */
   line-height: 1;
 }
 
@@ -425,6 +425,8 @@
   flex-shrink: 0;
 }
 .hl-valve { color: var(--tier-s-text); background: var(--dota-gold-soft); border: 1rpx solid rgba(200, 169, 81, 0.4); }
+/* ★ 2026-09-19（收录严谨化 · 用户决策3）：预选赛标注 —— 中性灰，视觉强度弱于 Valve 金标 */
+.hl-qualifier { color: var(--text-3); background: var(--td-bg-color-component); border: 1rpx solid var(--td-border-level-1-color); }
 
 /* ===== 焦点卡：重点运营节点（雾峰雪 v2.0 · 白卡 + 品牌金点缀） =====
    弃用暗色渐变 / 重阴影；改用白卡 + 金色径向晕染 + 极淡外阴影。 */
@@ -499,7 +501,8 @@
   margin-top: 18rpx;
   font-size: var(--fs-display); font-weight: 800; color: var(--dota-gold-strong);
   letter-spacing: 0.5rpx;
-  text-shadow: 0 2rpx 8rpx rgba(255,207,92,.18);
+  /* ★ 2026-09-21 去掉金色 text-shadow：亮色底上 8rpx 模糊半径的光晕会让标题观感发虚
+     （与「字体模糊看不清」同源，AA 对比度修复后的收尾项）。 */
 }
 .focus-sub {
   position: relative;
