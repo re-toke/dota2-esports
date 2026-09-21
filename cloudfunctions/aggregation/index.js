@@ -106,6 +106,10 @@ function trimLeagues(payload) {
 // 由 scripts/sync-canon-map.js 从 utils/curation.js 生成并镜像到本目录。
 // ⚠️ 部署云函数前必须重新运行 npm run sync:canon，使本副本与小程序侧保持同步。
 const leagueCanon = require('./league-canon-map');
+// ★ 2026-09-21：赛事名「形状归一」走单一实现（本目录为 utils/names.js 的镜像 —— 云函数是独立
+//   bundle，无法 require 主包）。原先本文件内联了 3 处同规则实现：hashId 的键 + 快照名匹配的两端，
+//   而 hashId **必须与客户端/生成脚本产出同一个 id** → 集中化同时消除漂移风险。
+const names = require('./names');
 function canonicalLeagueName(raw) {
   const r = leagueCanon.resolveCanonical(raw);
   return r || 'DOTA2 赛事';
@@ -441,7 +445,7 @@ function parseLiquipediaDate(text) {
 
 // 基于规范名生成稳定的负数 id（与 curation 占位 id 风格一致，避免与真实 leagueid 冲突）
 function hashId(name) {
-  const k = String(name).toLowerCase().replace(/[^a-z0-9]/g, '');
+  const k = names.normAsciiKey(name);   // ★ 2026-09-21 统一走单一实现（镜像 names.js）
   let h = 0;
   for (let i = 0; i < k.length; i++) h = ((h << 5) - h + k.charCodeAt(i)) | 0;
   return -(Math.abs(h) % 1000000 + 1000000);
@@ -514,9 +518,9 @@ async function fetchLiquipediaUpcoming() {
         if (dr.end <= dr.start) {
           let full = LIQUID_DATE_MEMORY.get(id);
           if ((!full || full.end <= full.start) && _snap && _snap.events) {
-            const _dn = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const _dn = names.normAsciiKey(name);   // ★ 2026-09-21 统一走单一实现
             const _hit = _snap.events.find((e) => {
-              const _en = (e.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              const _en = names.normAsciiKey(e.name);   // ★ 2026-09-21 统一走单一实现
               return _en && (_en === _dn || _dn.indexOf(_en) >= 0 || _en.indexOf(_dn) >= 0);
             });
             if (_hit && _hit.end > _hit.start) full = { start: _hit.start, end: _hit.end };

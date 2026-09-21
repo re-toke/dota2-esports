@@ -780,24 +780,26 @@ check('names：边界与语义（非 ASCII 抹空 / 大小写 / null）', functi
   assert(_names.normTeamName('Level UP esports') === 'levelupesports', '精确匹配不应剥后缀');
 });
 
+// ⚠️ 剥注释（供「禁止内联」与「镜像一致性」两处共用）—— 必须先剥注释再判定，
+//   否则「在注释里提到该正则」的文件会永久误报（本项目 CRLF：行内 `//` 替换剥不掉整行注释，
+//   须显式判 `^\s*//`；且不能误伤 `https://`）
+function _stripComments(src) {
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split(/\r?\n/)
+    .filter((l) => !/^\s*\/\//.test(l))
+    .map((l) => l.replace(/(^|[^:])\/\/.*$/, '$1'))
+    .join('\n');
+}
+
 check('names：★ 全库禁止再内联该规则（白名单外一律 FAIL）', function () {
-  // ⚠️ 本守卫必须**先剥注释再判定** —— 否则「在注释里提到该正则」的文件会永久误报
-  //    （本项目为 CRLF：行内 `//` 替换剥不掉整行注释，须显式判 `^\s*//`；且不能误伤 `https://`）
-  function stripComments(src) {
-    return src
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .split(/\r?\n/)
-      .filter((l) => !/^\s*\/\//.test(l))
-      .map((l) => l.replace(/(^|[^:])\/\/.*$/, '$1'))
-      .join('\n');
-  }
   const ROOT = _path.resolve(__dirname, '../..');
   // 白名单：给出文件的**存在理由**，新增前请先确认无法 require utils/names.js
   const ALLOW = {
     'utils/names.js': '单一实现本体',
     'utils/league-canon-map.js': '与 cloudfunctions 副本是**镜像对**（云端 bundle 无法 require 主包）',
     'cloudfunctions/aggregation/league-canon-map.js': '同上（镜像对另一半）',
-    'cloudfunctions/aggregation/index.js': '云端独立 bundle，无法 require 主包 utils/names.js',
+    'cloudfunctions/aggregation/names.js': '**镜像**（与 utils/names.js 同实现；云端 bundle 无法 require 主包）\n      —— 已由下方「镜像一致性」断言强制同步；云函数 index.js 于 2026-09-21 迁移完成，故不再豁免',
     'scripts/ops/discover-tournaments.js': 'consensus.js 加载失败时的**刻意内联回退**实现'
   };
   const SKIP_DIR = /(^|[\\/])(node_modules|miniprogram_npm|dist|rollback|tmp)([\\/]|$)/;
@@ -815,12 +817,23 @@ check('names：★ 全库禁止再内联该规则（白名单外一律 FAIL）',
       if (rel.indexOf('scripts/test/') === 0) return;   // 本守卫自身含该正则字面量，必须排除（自指陷阱）
       let src = '';
       try { src = _fs.readFileSync(full, 'utf8'); } catch (e) { return; }
-      if (PATTERN.test(stripComments(src)) && !ALLOW[rel]) offenders.push(rel);
+      if (PATTERN.test(_stripComments(src)) && !ALLOW[rel]) offenders.push(rel);
     });
   }
   ['utils', 'pages', 'subpackages', 'scripts', 'cloudfunctions'].forEach((sub) => walk(_path.join(ROOT, sub)));
   assert(offenders.length === 0,
     '以下文件又内联了「小写+去非字母数字」规则，请改用 utils/names.js：\n    ' + offenders.join('\n    '));
+});
+
+check('names：★ 云函数镜像与主实现**剥注释后逐字一致**（防漂移）', function () {
+  const ROOT = _path.resolve(__dirname, '../..');
+  const norm = (t) => _stripComments(t).replace(/\s+/g, ' ').trim();
+  const src = _fs.readFileSync(_path.join(ROOT, 'utils/names.js'), 'utf8');
+  const mirror = _fs.readFileSync(_path.join(ROOT, 'cloudfunctions/aggregation/names.js'), 'utf8');
+  assert(norm(src) === norm(mirror),
+    '云函数镜像 cloudfunctions/aggregation/names.js 与 utils/names.js 已漂移 → 请重新镜像（注释可不同，代码必须相同）');
+  // 反向自检：故意改一个字必须被发现（防止断言恒真）
+  assert(norm(src) !== norm(src + '\nconst __x = 1;'), '自检失败：比较函数不敏感，断言形同虚设');
 });
 
 async function runAll() {
