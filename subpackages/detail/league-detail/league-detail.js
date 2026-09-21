@@ -2626,6 +2626,30 @@ Page({
     });
 
     this.setData({ metadata: meta, participantsList: participantsList });
+
+    // ★★ 2026-09-21 修复「首次进入参赛队伍队名错误 / 退出再进却正确」：
+    //
+    // 现象与机理：本函数会**重建** participantsList（队名来自 `this.allMatches` 的 raw 队名，
+    //   而 OpenDota /leagues/{id}/matches 的 `*_team_name` 经常为空 → 占位 "Team {id}"，
+    //   注释亦写明「占位名后续 enrichTeamNames 会回填」）。但本函数在**第二次**被调用时
+    //   （finalize L320，由 LP/metadata promise 或 8s 超时触发）会**整表覆盖**：
+    //     · L2284 的"用上一次真名补位"仅在 `t.id in teamMap`（即该队出现在 allMatches 里）时生效
+    //       —— 未开赛/未登场（curation/LP 列了但还没打过）的队伍会被**跳过**；
+    //     · 而本函数**自身不调用 enrichTeamNames** → 一旦这次重建发生在 enrich 之后，
+    //       enrich 回填的真名就被覆盖回占位，且**没有任何后续补偿** → 整个本次访问都是错名。
+    //   二次进入之所以正确：`api.getTeamNames` 有 6h 缓存（explorer SQL），enrich 瞬时完成，
+    //   抢在 finalize 重建之前落地 → 观感上"再进一次就对了"。
+    //
+    // 修复（幂等安全网）：重建后若列表里仍有 "Team {id}" 占位 → **立即补一次 enrichTeamNames**。
+    //   `getTeamNames` 有 6h 缓存，重复调用成本极低；`enrichTeamNames` 只覆盖 `/^Team \d+$/`
+    //   的占位名（不会误伤真名），因此可安全重复执行。
+    //   同时该日志本身就是**诊断开关**：一旦它在真机出现，即证明本条路径被触发。
+    const _phCount = participantsList.filter((t) => t && /^Team \d+$/.test(t.name || '')).length;
+    if (_phCount) {
+      console.log('[league-detail] 参赛队伍仍有 ' + _phCount + '/' + participantsList.length +
+        ' 个 "Team {id}" 占位 → 触发 enrichTeamNames 回填（修复"首次进错、再进对"）');
+      try { this.enrichTeamNames(); } catch (e) { /* 隔离：补全失败不影响主流程 */ }
+    }
   },
 
   slicePage(reset) {
