@@ -16,7 +16,7 @@
 <image
     wx:if="{{src && !failed}}"
     class="imgfb-img {{loaded ? 'imgfb-img--loaded' : ''}}"
-    src="{{src}}"
+    src="{{useSrc || src}}"
     mode="{{mode}}"
     lazy-load="{{true}}"
     bindload="onLoad"
