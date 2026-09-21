@@ -179,39 +179,67 @@ async function main() {
 
   // ★ 2026-09-21：同步写 Supabase `upcoming_schedule`（**微信云开发脱离**前置）
   //   目的：替代云函数 getUpcomingSchedule 的「读云缓存」接口 → 客户端改为 PostgREST 直读本表。
-  //   鉴权：走 EF `admin-write` 的 `upsertUpcoming` + ADMIN_TOKEN（**不引入 service key**，
-  //        与 scripts/ops/sync-curation-dates.js 同一套路）。
-  //   未设 ADMIN_TOKEN（本地手动跑）→ 跳过；三件套 JSON 仍是主产物。
-  //   ⚠️ 带令牌却写失败 → 必须 exit 1：否则云端表会**静默陈旧**（最危险的失败模式）。
+  //
+  //   ★ 凭据选择（复核后调整）：**首选 repo 已有的 `SUPABASE_SERVICE_KEY`**（GitHub Secret 已配置，
+  //     且 `backfill-curation.js` / `discover-tournaments.js` / `probe-ef.js` 与本脚本的
+  //     3 个定时 workflow 都是这套 env）—— **无需新增任何 secret**。
+  //     无 service key 时（本地手动跑）回退走 EF `admin-write` 的 `upsertUpcoming` + `ADMIN_TOKEN`。
+  //   两者都是「集合语义」：整批 upsert 后删除不在本次集合中的旧行。
+  //
+  //   ⚠️ 带凭据却写失败 → 必须 exit 1：否则云端表会**静默陈旧**（最危险的失败模式）。
+  const SB_URL = process.env.SUPABASE_URL || (require(path.join(__dirname, '..', '..', 'utils', 'config.js')).supabase.url || '');
+  const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || '';
   const adminToken = process.env.ADMIN_TOKEN || '';
-  if (!adminToken) {
-    console.log('（未设 ADMIN_TOKEN → 跳过 Supabase 同步；需要同步时带上令牌重跑）');
-  } else {
-    const cfg = require(path.join(__dirname, '..', '..', 'utils', 'config.js'));
-    const efUrl = cfg.supabase.url + '/functions/v1/admin-write';
-    let ok = false;
-    let desc = '';
-    try {
-      const r = await fetch(efUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          apikey: cfg.supabase.anonKey,
-          Authorization: 'Bearer ' + cfg.supabase.anonKey,
-          'x-admin-token': adminToken
-        },
-        body: JSON.stringify({ operation: 'upsertUpcoming', params: { entries: out } })
-      });
-      const body = await r.json().catch(() => null);
-      ok = r.status >= 200 && r.status < 300 && !!(body && body.success);
-      desc = 'HTTP ' + r.status + ' ' + JSON.stringify((body && body.error) || body).slice(0, 200);
-    } catch (e) {
-      desc = (e && e.message) || String(e);
+  const ids = out.map((e) => Number(e.id)).filter((n) => Number.isFinite(n));
+
+  async function syncByServiceKey() {
+    const hdr = { apikey: SERVICE_KEY, Authorization: 'Bearer ' + SERVICE_KEY, 'Content-Type': 'application/json' };
+    const rows = out.map((e) => ({ league_id: Number(e.id), data: e, updated_at: new Date().toISOString() }));
+    const up = await fetch(SB_URL + '/rest/v1/upcoming_schedule', {
+      method: 'POST',
+      headers: Object.assign({ Prefer: 'resolution=merge-duplicates' }, hdr),
+      body: JSON.stringify(rows)
+    });
+    if (!(up.status >= 200 && up.status < 300)) {
+      throw new Error('upsert HTTP ' + up.status + ' ' + (await up.text()).slice(0, 200));
     }
-    if (ok) {
-      console.log('Synced Supabase upcoming_schedule ->', out.length, 'rows');
-    } else {
-      console.error('✗ Supabase upcoming_schedule 写入失败：' + desc);
+    // 清理不在本次集合中的旧行（保持「集合」语义）
+    const del = await fetch(SB_URL + '/rest/v1/upcoming_schedule?league_id=not.in.(' + ids.join(',') + ')', {
+      method: 'DELETE', headers: hdr
+    });
+    if (!(del.status >= 200 && del.status < 300)) {
+      throw new Error('清理旧行 HTTP ' + del.status + ' ' + (await del.text()).slice(0, 200));
+    }
+  }
+
+  async function syncByAdminEf() {
+    const cfg = require(path.join(__dirname, '..', '..', 'utils', 'config.js'));
+    const r = await fetch(cfg.supabase.url + '/functions/v1/admin-write', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: cfg.supabase.anonKey,
+        Authorization: 'Bearer ' + cfg.supabase.anonKey,
+        'x-admin-token': adminToken
+      },
+      body: JSON.stringify({ operation: 'upsertUpcoming', params: { entries: out } })
+    });
+    const body = await r.json().catch(() => null);
+    if (!(r.status >= 200 && r.status < 300 && body && body.success)) {
+      throw new Error('EF HTTP ' + r.status + ' ' + JSON.stringify((body && body.error) || body).slice(0, 200));
+    }
+  }
+
+  if (!SERVICE_KEY && !adminToken) {
+    console.log('（未设 SUPABASE_SERVICE_KEY / ADMIN_TOKEN → 跳过 Supabase 同步；三件套 JSON 仍是主产物）');
+  } else {
+    const via = SERVICE_KEY ? 'service-key' : 'admin-write EF';
+    try {
+      if (SERVICE_KEY) await syncByServiceKey();
+      else await syncByAdminEf();
+      console.log('Synced Supabase upcoming_schedule ->', out.length, 'rows (via ' + via + ')');
+    } catch (e) {
+      console.error('✗ Supabase upcoming_schedule 写入失败（via ' + via + '）：' + ((e && e.message) || e));
       console.error('  （表结构需先执行 supabase/migrations/004-upcoming-schedule.sql）');
       process.exit(1);
     }
