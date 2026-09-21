@@ -57,7 +57,12 @@ const CACHE_COLL = 'aggregation_cache';
 //   ② 也不能自造白名单——首版自造关键词漏了 EPL，导致 2 条**活跃**赛事被误删。
 //   ③ 正解：对 excluded/none 条目跑**与 utils/tiers.js COMMUNITY_TIERS 完全同源**的正则。
 //      实测「丢失 rank>=1 条目 = 0」（零行为回归），同时压到 223KB。
-const KEEP_LEAGUE_TIERS = { professional: 1, premium: 1, amateur: 1 };
+// ★ 2026-09-19（收录严谨化 · 黑名单排除 → 白名单准入）：
+//   原 `{ professional:1, premium:1, amateur:1 }` 全量放行，导致 OpenDota 标为 professional 的
+//   社区/娱乐赛全部进入客户端 —— 实测 professional 共 2488 条，其中仅 364 条（13.5%）命中
+//   共识白名单（如「肛宝联赛-老婆杯」leagueid 19066 就被 OpenDota 标成 professional）。
+//   新口径：premium 放行；**professional 需命中白名单才放行**；amateur/excluded/null 一律丢弃。
+const KEEP_LEAGUE_TIERS = { premium: 1 };
 const COMMUNITY_TIER_RES = [
   /the\s+international/i,
   /(riyadh\s+masters|esports\s+world\s+cup|ewc)/i,
@@ -84,7 +89,13 @@ function trimLeagues(payload) {
   const out = [];
   for (const l of payload) {
     if (!l || !l.leagueid || !l.name) continue;
-    if (!KEEP_LEAGUE_TIERS[l.tier] && !communityTierHits(l.name)) continue;
+    // 白名单准入：premium 直接放行；其余 tier 一律**需命中白名单**。
+    // ⚠️ 必须保持「OR 白名单」语义，不可写成 `l.tier === 'professional' && hitWhitelist` ——
+    //   **The International 自身 tier=excluded**，正是靠 communityTierHits 才得以保留
+    //   （原注释已警告：纯 tier 裁剪会把 TI 删掉）。曾误写成 && 形式，会把 TI 一并删除。
+    const hitWhitelist = communityTierHits(l.name);
+    const keep = KEEP_LEAGUE_TIERS[l.tier] || hitWhitelist;
+    if (!keep) continue;
     out.push({ leagueid: l.leagueid, tier: l.tier, name: l.name });
   }
   return out;

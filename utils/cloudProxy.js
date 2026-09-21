@@ -129,8 +129,17 @@ function _hotGet(action) {
 //   白名单内的 action 直接把 params 展开为顶层 payload（其余 action 行为不变）。
 var RAW_PAYLOAD_ACTIONS = { stratzGql: 1 };
 
+// ★ 2026-09-19（选项 C · 收录口径单一权威点）：下列 action **不再回落云函数**。
+//   原因：getLeagues 的「白名单准入」口径由 EF 的 trimLeagues 负责；云函数侧的同名
+//   trimLeagues 已停止维护（阶段6 云开发下线中），保留回落 = 维护两处口径，
+//   一旦漏改就以旧口径服务（junk 复活）。
+//   ✅ 安全性：EF 失败后由 utils/api.js 的 filterCollectableLeagues 兜底
+//      （它按 utils/tiers.js 判一遍，与数据来源无关）→ 不会漏出未收录赛事。
+//   ⚠️ 守卫：scripts/test/test-discover-mirror.js 断言本集合仍含 getLeagues。
+var NO_CLOUD_FALLBACK_ACTIONS = { getLeagues: 1 };
+
 function call(action, params, extra) {
-  // ★ M2.4：Supabase 数据代理优先；EF 熔断打开或失败 → 回落云开发
+  // ★ M2.4：Supabase 数据代理优先；EF 熔断打开或失败 → 回落云开发（NO_CLOUD_FALLBACK_ACTIONS 除外）
   var efName = EDGE_ACTIONS[action];
   if (efName && _sbEfAvailable()) {
     var sbPayload = RAW_PAYLOAD_ACTIONS[action]
@@ -170,6 +179,12 @@ function _efCall(action, efName, sbPayload) {
     }
     throw new Error((r && r.error) || 'ef empty');
   }).catch(function (efErr) {
+    // ★ 2026-09-19（选项 C）：口径已「单一权威化」的 action 不回云函数（见 NO_CLOUD_FALLBACK_ACTIONS）
+    if (NO_CLOUD_FALLBACK_ACTIONS[action]) {
+      console.warn('[cloudProxy] EF ' + efName + ' fail(' + (efErr && efErr.message) + ') → 不回落云函数（'
+        + action + ' 口径由 EF 唯一负责；客户端 filterCollectableLeagues 兜底）');
+      throw efErr;
+    }
     console.info('[cloudProxy] EF ' + efName + ' fail(' + (efErr && efErr.message) + ') → 回落云开发');
     return callCloud(action, sbPayload.params, sbPayload.force != null ? { force: sbPayload.force } : null);
   });

@@ -69,40 +69,68 @@ const COMMUNITY_TIERS = [
     grade: 'B', rank: 1, label: 'B级' }
 ];
 
-// ===== §9 通用排除规则（2026-07-30）=====
-// 痛点：原 COMMUNITY_TIERS 的 major/premier/the international 等正则过宽，
-//   把社区赛/预选赛/慈善赛误升为 S/A/B。discover-tournaments.js 首次运行发现
-//   611 条 rank>=1 的未覆盖赛事，其中混入大量误判：
-//     - "SAGEMASK MAJOR" / "PONIME MAJOR" 被误判为 S（社区戏称）
-//     - "Premier Amateur Community League" 被误判为 S（premier 命中）
-//     - "Road To The International 2024 - Regional Qualifiers" 被误判为 SSS
-//     - "Dota 2 Amateur Series" / "Youth Cup" / "University League" 被误升
-// 方案：前置通用排除规则，命中关键词的赛事跳过所有 community 规则，返回 null。
-//   通用规则覆盖三类误判：
-//   ① 预选赛/资格赛：Open Qualifier / Closed Qualifier / Regional Qualifier / Play-In
-//   ② 业余/社区/青训：Amateur / Community / Collegiate / University / Youth / Academy
-//   ③ 慈善/娱乐/表演赛：Charity / Fun / Meme / Showmatch / All-Star
-//   ④ TI 预选路径专用：Road To The International / Path to TI
-//   ★ 所有关键词用 \b 单词边界，避免误匹配 FunPlus / Funcurve / CommunityBank 等
-//   ★ 不含单独 "open"（ESL Open 是 A-Tier 真实赛事，"open" 必须 + qualifier/cup 才排除）
-const EXCLUSION_RULES = [
-  // ① 预选赛/资格赛（TI 预选、Major 预选、Play-In 等，不应与正赛同级）
-  /\b(open\s+qualifier|closed\s+qualifier|regional\s+qualifier|qualifiers?|play-?in)\b/i,
-  // ② 业余/社区/青训/学生（Tier 3-4，不应升 S/A/B）
+// ===== §9 收录口径（2026-09-19 重构：黑名单排除 → 白名单准入）=====
+// ★ 重构背景（实测，非推测）：OpenDota 的 tier 字段**不可作为可信度信号** ——
+//   「肛宝联赛-老婆杯」(leagueid 19066) 被 OpenDota 标为 tier=professional。
+//   实测 professional 共 2488 条，其中仅 364 条（13.5%）命中白名单（正则 ∪ curation）。
+//   → 新口径：**默认不收录**，需「命中白名单」才收录。
+//     闸门落在服务端裁剪（supabase/functions/opendota-proxy + cloudfunctions/aggregation
+//     的 trimLeagues）；本文件提供**同源**判定供客户端兜底。
+//
+// 规则分三类（用户 2026-09-19 拍板）：
+//   ① 硬排除（不收录）：业余/社区/青训/慈善/表演/周赛月赛/国家队/TI 预选路径
+//   ② 预选赛（Qualifier）：**保留但降级**为 B 级 + qualifier 标注（用户决策）
+//   ③ 未命中任何规则：返回 null（交 curation / Liquipedia tier 决定，不再默认收录）
+//
+// 标杆：Liquipedia Notability Guidelines
+//   · 收录门槛：奖金池 ≥ $500 USD
+//   · 明确排除：Qualifiers / Monthly-Weekly / Showmatches / 国籍类赛事
+//     （本项目按用户决策把 Qualifiers 由「排除」改为「降级保留」）
+//   ★ 关键词用 \b 单词边界，避免误匹配 FunPlus / Funcurve / CommunityBank 等
+//   ★ 不含单独 "open"（ESL Open 是真实赛事，"open" 必须 + qualifier/cup 才排除）
+const HARD_EXCLUDE_RULES = [
+  // 业余/社区/青训/学生（Liquipedia Tier 4，不收录）
   /\b(amateur|community|collegiate|university|school|student|youth|academy|junior|rookie|newbie)\b/i,
-  // ③ 慈善/娱乐/非正式表演赛（非竞技性，不收录）
-  /\b(charity|fun(ny)?|meme|joke|show\s*match|all[\s-]?star)\b/i,
-  // ④ TI 预选路径专用排除：Road To The International / Path to TI
-  /road\s+to\s+the\s+international|path\s+to\s+(ti|the\s+international)/i
+  // 慈善/娱乐/表演赛（非竞技性，不收录）
+  /\b(charity|fun(ny)?|meme|joke|show\s*match|all[\s-]?star|streamers?\s+battle)\b/i,
+  // TI 预选路径专用
+  /road\s+to\s+the\s+international|path\s+to\s+(ti|the\s+international)/i,
+  // 国家队 / 国籍类赛事（Liquipedia 明确不收录）
+  /\b(national\s+team|nationals?)\b/i,
+  // 周赛 / 月赛（Liquipedia 明确不收录）
+  /\b(weekly|monthly)\b/i
 ];
 
-// 判断赛事名是否应被排除（命中任一规则返回 true）
+// 预选赛/资格赛：保留但降级（最高 B 级）+ qualifier 标注
+const QUALIFIER_RULES = [
+  /\b(open\s+qualifier|closed\s+qualifier|regional\s+qualifier|qualifiers?|qualification|play-?in)\b/i
+];
+const QUALIFIER_MAX_GRADE = 'B';
+const QUALIFIER_MAX_RANK = 1;
+
+// 判断赛事名是否应被硬排除（不收录）
 function shouldExclude(name) {
   if (!name) return false;
-  for (let i = 0; i < EXCLUSION_RULES.length; i++) {
-    if (EXCLUSION_RULES[i].test(name)) return true;
+  for (let i = 0; i < HARD_EXCLUDE_RULES.length; i++) {
+    if (HARD_EXCLUDE_RULES[i].test(name)) return true;
   }
   return false;
+}
+
+// 是否预选赛/资格赛（保留但降级）
+function isQualifier(name) {
+  if (!name) return false;
+  for (let i = 0; i < QUALIFIER_RULES.length; i++) {
+    if (QUALIFIER_RULES[i].test(name)) return true;
+  }
+  return false;
+}
+
+// 预选赛降级：扣到最高 B 级并打 qualifier 标记（原级别更低则保持，只补标记）
+function applyQualifierCap(tier, name) {
+  if (!tier || !isQualifier(name)) return tier;
+  if (tier.rank <= QUALIFIER_MAX_RANK) return Object.assign({}, tier, { qualifier: true });
+  return { grade: QUALIFIER_MAX_GRADE, rank: QUALIFIER_MAX_RANK, label: 'B级', qualifier: true };
 }
 
 // ===== 文档五档展示标签（与《DOTA2赛事级别分类全景》对齐）=====
@@ -145,14 +173,21 @@ function flagTopThirdParty(name) {
 // 根据赛事名返回社区等级（兜底规则），未命中返回 null
 function communityTierFromName(name) {
   if (!name) return null;
-  // §9 前置排除规则：命中关键词的赛事（预选/业余/慈善/TI 预选路径）跳过所有 community 规则，
-  // 返回 null 让其他源（curation/opendota/stratz/liquipedia）决定分级。
-  // 解决 major/premier/the international 等正则过宽导致的误升问题。
+  // ① 硬排除：命中即不收录（白名单准入 → 调用方据此丢弃）
   if (shouldExclude(name)) return null;
   for (let i = 0; i < COMMUNITY_TIERS.length; i++) {
     if (COMMUNITY_TIERS[i].test.test(name)) {
-      return { grade: COMMUNITY_TIERS[i].grade, rank: COMMUNITY_TIERS[i].rank, label: COMMUNITY_TIERS[i].label };
+      // ② 预选赛降级：即便命中赛事系列规则（如 "BLAST Slam IX China Qualifier" 命中 blast slam），
+      //    也要扣到最高 B 级并打 qualifier 标注（用户决策：保留但降级标注）
+      return applyQualifierCap(
+        { grade: COMMUNITY_TIERS[i].grade, rank: COMMUNITY_TIERS[i].rank, label: COMMUNITY_TIERS[i].label },
+        name
+      );
     }
+  }
+  // ③ 未命中系列规则，但属预选赛 → 保留（降级为 B 级 + 标注）
+  if (isQualifier(name)) {
+    return { grade: QUALIFIER_MAX_GRADE, rank: QUALIFIER_MAX_RANK, label: 'B级', qualifier: true };
   }
   return null;
 }
@@ -188,8 +223,15 @@ function mapLiquipediaTier(tier) {
 
 module.exports = {
   COMMUNITY_TIERS: COMMUNITY_TIERS,
-  EXCLUSION_RULES: EXCLUSION_RULES,
+  // ★ 2026-09-19：EXCLUSION_RULES 拆为「硬排除」+「预选赛降级」两类，EXCLUSION_RULES 保留为别名
+  HARD_EXCLUDE_RULES: HARD_EXCLUDE_RULES,
+  EXCLUSION_RULES: HARD_EXCLUDE_RULES,
+  QUALIFIER_RULES: QUALIFIER_RULES,
+  QUALIFIER_MAX_GRADE: QUALIFIER_MAX_GRADE,
+  QUALIFIER_MAX_RANK: QUALIFIER_MAX_RANK,
   shouldExclude: shouldExclude,
+  isQualifier: isQualifier,
+  applyQualifierCap: applyQualifierCap,
   communityTierFromName: communityTierFromName,
   DISPLAY_TIERS: DISPLAY_TIERS,
   displayOf: displayOf,

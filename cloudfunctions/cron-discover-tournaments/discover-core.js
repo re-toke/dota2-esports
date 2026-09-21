@@ -93,33 +93,68 @@ var COMMUNITY_TIERS = [
   { test: /(dreamleague\s+(division|div)\s*2|dl\s+div\s*2|d2cl|cosmic\s+clash|winline|perfect\s+world\s+league\s+2)/i, grade: 'B', rank: 1, label: 'B级' }
 ];
 
-var EXCLUSION_RULES = [
-  // ① 预选赛/资格赛
-  /\b(open\s+qualifier|closed\s+qualifier|regional\s+qualifier|qualifiers?|play-?in)\b/i,
-  // ② 业余/社区/青训/学生
+// ★ 2026-09-19（收录严谨化 · 黑名单排除 → 白名单准入）：原 EXCLUSION_RULES 拆为两类：
+//   ① 硬排除（不收录）② 预选赛（保留但降级为 B 级 + qualifier 标注，用户 2026-09-19 决策）。
+//   与 utils/tiers.js 逐条镜像（scripts/test/test-discover-mirror.js 校验）。
+var HARD_EXCLUDE_RULES = [
+  // 业余/社区/青训/学生（Liquipedia Tier 4，不收录）
   /\b(amateur|community|collegiate|university|school|student|youth|academy|junior|rookie|newbie)\b/i,
-  // ③ 慈善/娱乐/表演赛
-  /\b(charity|fun(ny)?|meme|joke|show\s*match|all[\s-]?star)\b/i,
-  // ④ TI 预选路径专用排除
-  /road\s+to\s+the\s+international|path\s+to\s+(ti|the\s+international)/i
+  // 慈善/娱乐/表演赛（含 streamers battle 类表演赛）
+  /\b(charity|fun(ny)?|meme|joke|show\s*match|all[\s-]?star|streamers?\s+battle)\b/i,
+  // TI 预选路径专用
+  /road\s+to\s+the\s+international|path\s+to\s+(ti|the\s+international)/i,
+  // 国家队 / 国籍类赛事（Liquipedia 明确不收录）
+  /\b(national\s+team|nationals?)\b/i,
+  // 周赛 / 月赛（Liquipedia 明确不收录）
+  /\b(weekly|monthly)\b/i
 ];
+var EXCLUSION_RULES = HARD_EXCLUDE_RULES;   // 向后兼容别名
+
+var QUALIFIER_RULES = [
+  /\b(open\s+qualifier|closed\s+qualifier|regional\s+qualifier|qualifiers?|qualification|play-?in)\b/i
+];
+var QUALIFIER_MAX_GRADE = 'B';
+var QUALIFIER_MAX_RANK = 1;
 
 function shouldExclude(name) {
   if (!name) return false;
-  for (var i = 0; i < EXCLUSION_RULES.length; i++) {
-    if (EXCLUSION_RULES[i].test(name)) return true;
+  for (var i = 0; i < HARD_EXCLUDE_RULES.length; i++) {
+    if (HARD_EXCLUDE_RULES[i].test(name)) return true;
   }
   return false;
 }
 
-/** 按名判社区等级；排除规则命中或未命中规则 → null */
+/** 是否预选赛/资格赛（保留但降级） */
+function isQualifier(name) {
+  if (!name) return false;
+  for (var i = 0; i < QUALIFIER_RULES.length; i++) {
+    if (QUALIFIER_RULES[i].test(name)) return true;
+  }
+  return false;
+}
+
+/** 预选赛降级：扣到最高 B 级并打 qualifier 标记 */
+function applyQualifierCap(tier, name) {
+  if (!tier || !isQualifier(name)) return tier;
+  if (tier.rank <= QUALIFIER_MAX_RANK) return Object.assign({}, tier, { qualifier: true });
+  return { grade: QUALIFIER_MAX_GRADE, rank: QUALIFIER_MAX_RANK, label: 'B级', qualifier: true };
+}
+
+/** 按名判社区等级；硬排除命中或未命中规则 → null */
 function communityTierFromName(name) {
   if (!name) return null;
   if (shouldExclude(name)) return null;
   for (var i = 0; i < COMMUNITY_TIERS.length; i++) {
     if (COMMUNITY_TIERS[i].test.test(name)) {
-      return { grade: COMMUNITY_TIERS[i].grade, rank: COMMUNITY_TIERS[i].rank, label: COMMUNITY_TIERS[i].label };
+      return applyQualifierCap(
+        { grade: COMMUNITY_TIERS[i].grade, rank: COMMUNITY_TIERS[i].rank, label: COMMUNITY_TIERS[i].label },
+        name
+      );
     }
+  }
+  // 未命中系列规则但属预选赛 → 保留（降级为 B 级 + 标注）
+  if (isQualifier(name)) {
+    return { grade: QUALIFIER_MAX_GRADE, rank: QUALIFIER_MAX_RANK, label: 'B级', qualifier: true };
   }
   return null;
 }
@@ -208,8 +243,14 @@ module.exports = {
   cleanTitle: cleanTitle,
   extractYear: extractYear,
   COMMUNITY_TIERS: COMMUNITY_TIERS,
+  HARD_EXCLUDE_RULES: HARD_EXCLUDE_RULES,
   EXCLUSION_RULES: EXCLUSION_RULES,
+  QUALIFIER_RULES: QUALIFIER_RULES,
+  QUALIFIER_MAX_GRADE: QUALIFIER_MAX_GRADE,
+  QUALIFIER_MAX_RANK: QUALIFIER_MAX_RANK,
   shouldExclude: shouldExclude,
+  isQualifier: isQualifier,
+  applyQualifierCap: applyQualifierCap,
   communityTierFromName: communityTierFromName,
   LIQUIPEDIA_TIER_MAP: LIQUIPEDIA_TIER_MAP,
   mapLiquipediaTier: mapLiquipediaTier,

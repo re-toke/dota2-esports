@@ -180,6 +180,8 @@
           <view class="league-badges">
             <t-tag theme="{{item.tagTheme}}" variant="{{item.tagVariant}}" size="small">{{item.displayLabel}}</t-tag>
             <text wx:if="{{item.valve}}" class="hl-badge hl-valve">Valve官方</text>
+            <!-- ★ 2026-09-19（收录严谨化 · 用户决策3）：预选赛保留但降级标注 -->
+            <text wx:if="{{item.qualifier}}" class="hl-badge hl-qualifier">预选赛</text>
             <text class="status-tag" style="color:{{item.statusColor}};border-color:{{item.statusColor}}">{{item.statusText}}</text>
           </view>
         </view>

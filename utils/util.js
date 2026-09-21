@@ -6,14 +6,32 @@ const config = require('./config.js');
 // 返回 { grade:'S'|'A'|'B'|'C', rank:0..3, label, source:'community'|'opendota' }
 // ★ v3 优化项27：修复 community 重复计权 bug — communityTierFromName 命中后 source 已正确标记为 'community'
 function unifiedTier(league) {
-  const odTier = league.tier || 'excluded';
-  const curated = tiers.communityTierFromName(league.name);
+  const src = league || {};
+  const name = src.name || '';
+  const odTier = src.tier || 'excluded';
+  // ★ 2026-09-19（收录严谨化 · 白名单准入）：硬排除优先于一切。
+  //   命中（业余/社区/青训/慈善/表演/周赛月赛/国家队/TI 预选路径）→ 直接判 C（不收录），
+  //   **不再回退到 OpenDota 的 professional → S**。
+  //   这正是「肛宝联赛-老婆杯」被显示为 S 级的根因（OpenDota 把它标成 professional）。
+  if (tiers.shouldExclude(name)) {
+    return { grade: 'C', rank: 0, label: '社区赛', source: 'excluded', excluded: true, odTier: odTier };
+  }
+  const curated = tiers.communityTierFromName(name);
   if (curated) {
-    return { grade: curated.grade, rank: curated.rank, label: curated.label, source: 'community', odTier: odTier };
+    return {
+      grade: curated.grade, rank: curated.rank, label: curated.label,
+      source: 'community', qualifier: !!curated.qualifier, odTier: odTier
+    };
+  }
+  // ★ 预选赛降级：未命中赛事系列规则但属预选赛 → 保留为 B 级 + qualifier 标注（用户决策）
+  if (tiers.isQualifier(name)) {
+    return { grade: 'B', rank: 1, label: 'B级', source: 'qualifier', qualifier: true, odTier: odTier };
   }
   if (odTier === 'professional') return { grade: 'S', rank: 3, label: 'S级', source: 'opendota', odTier: odTier };
   if (odTier === 'premium') return { grade: 'A', rank: 2, label: 'A级', source: 'opendota', odTier: odTier };
-  if (odTier === 'amateur') return { grade: 'B', rank: 1, label: 'B级', source: 'opendota', odTier: odTier };
+  // ★ 2026-09-19：amateur 不再映射为 B —— 新口径下 amateur 不收录（服务端 trimLeagues 亦已丢弃），
+  //   命中白名单的业余赛事会在上面的 community 分支提前返回。
+  if (odTier === 'amateur') return { grade: 'C', rank: 0, label: '社区赛', source: 'opendota', odTier: odTier };
   return { grade: 'C', rank: 0, label: '其他', source: 'opendota', odTier: odTier };
 }
 

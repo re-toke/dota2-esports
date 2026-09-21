@@ -154,7 +154,12 @@ async function getStaleCache(key: string): Promise<any | null> {
 // ⚠️ 镜像维护：下列正则须与 utils/tiers.js 的 COMMUNITY_TIERS 保持同源（改动同步三处：
 //   utils/tiers.js / 本文件 / cloudfunctions/aggregation/index.js）。
 // ⚠️ 缓存兼容：裁剪在**写入缓存前**做，老缓存（未裁剪）命中时也走一次 trim（幂等）。
-const KEEP_LEAGUE_TIERS: Record<string, number> = { professional: 1, premium: 1, amateur: 1 };
+// ★ 2026-09-19（收录严谨化 · 黑名单排除 → 白名单准入）：
+//   原 `{ professional, premium, amateur }` 全量放行，致 OpenDota 标为 professional 的
+//   社区/娱乐赛全部进入客户端（实测 professional 2488 条中仅 364 条命中共识白名单；
+//   「肛宝联赛-老婆杯」leagueid 19066 即被标为 professional）。
+//   新口径：premium 放行；**professional 需命中白名单**；amateur/excluded/null 丢弃。
+const KEEP_LEAGUE_TIERS: Record<string, number> = { premium: 1 };
 const COMMUNITY_TIER_RES: RegExp[] = [
   /the\s+international/i,
   /(riyadh\s+masters|esports\s+world\s+cup|ewc)/i,
@@ -180,7 +185,12 @@ function trimLeagues(payload: any): any {
   const out: any[] = [];
   for (const l of payload) {
     if (!l || !l.leagueid || !l.name) continue;
-    if (!KEEP_LEAGUE_TIERS[l.tier] && !communityTierHits(l.name)) continue;
+    // 白名单准入：premium 直接放行；其余 tier 一律需命中白名单。
+    // ⚠️ 必须保持「OR 白名单」语义 —— **The International 自身 tier=excluded**，靠
+    //   communityTierHits 才保留；写成 && 形式会把 TI 一并删除。
+    const hitWhitelist = communityTierHits(l.name);
+    const keep = KEEP_LEAGUE_TIERS[l.tier] || hitWhitelist;
+    if (!keep) continue;
     out.push({ leagueid: l.leagueid, tier: l.tier, name: l.name });
   }
   return out;
