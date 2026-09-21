@@ -151,6 +151,34 @@ Deno.serve(async (req: Request) => {
         return json({ success: true, version: 'v' + Date.now(), source: 'supabase' });
       }
 
+      // ★ 2026-09-21：「即将到来」赛程表 —— 微信云开发脱离前置。
+      //   替代云函数 getUpcomingSchedule 的「读缓存」接口（该接口实为「读云缓存 + 触发预热」的薄壳）。
+      //   集合语义：先整批 upsert，再删除**不在本次集合中**的旧行（避免下架赛事残留在表里）。
+      //   ⚠️ entries 为空时直接 400 —— 否则会把整表清空（幂等脚本的经典误伤）。
+      case 'upsertUpcoming': {
+        const entries = Array.isArray(params.entries) ? params.entries : [];
+        if (!entries.length) {
+          return json({ success: false, error: { message: 'entries 不能为空（避免误清空整表）' } }, 400);
+        }
+        const rows = entries
+          .map((e) => ({ league_id: Number(e && e.id), data: e, updated_at: new Date().toISOString() }))
+          .filter((r) => Number.isFinite(r.league_id));
+        if (!rows.length) {
+          return json({ success: false, error: { message: 'entries 缺少有效 id' } }, 400);
+        }
+        const { error } = await db.from('upcoming_schedule').upsert(rows, { onConflict: 'league_id' });
+        if (error) throw error;
+        // 清理不在本次集合中的行（保持「集合」语义）
+        const ids = rows.map((r) => r.league_id);
+        const { error: delErr } = await db
+          .from('upcoming_schedule')
+          .delete()
+          .not('league_id', 'in', '(' + ids.join(',') + ')');
+        if (delErr) throw delErr;
+        await afterWrite({ table: 'upcoming_schedule', key: 'n=' + rows.length, op: 'upsert' });
+        return json({ success: true, count: rows.length, source: 'supabase' });
+      }
+
       case 'updateMeta': {
         const data = params.data || {};
         const { error } = await db.from('curation_meta').upsert(

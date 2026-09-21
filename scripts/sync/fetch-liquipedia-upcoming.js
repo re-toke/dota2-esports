@@ -177,6 +177,46 @@ async function main() {
   fs.writeFileSync(jsPath, jsContent, 'utf8');
   console.log('Synced JS wrapper ->', jsPath);
 
+  // ★ 2026-09-21：同步写 Supabase `upcoming_schedule`（**微信云开发脱离**前置）
+  //   目的：替代云函数 getUpcomingSchedule 的「读云缓存」接口 → 客户端改为 PostgREST 直读本表。
+  //   鉴权：走 EF `admin-write` 的 `upsertUpcoming` + ADMIN_TOKEN（**不引入 service key**，
+  //        与 scripts/ops/sync-curation-dates.js 同一套路）。
+  //   未设 ADMIN_TOKEN（本地手动跑）→ 跳过；三件套 JSON 仍是主产物。
+  //   ⚠️ 带令牌却写失败 → 必须 exit 1：否则云端表会**静默陈旧**（最危险的失败模式）。
+  const adminToken = process.env.ADMIN_TOKEN || '';
+  if (!adminToken) {
+    console.log('（未设 ADMIN_TOKEN → 跳过 Supabase 同步；需要同步时带上令牌重跑）');
+  } else {
+    const cfg = require(path.join(__dirname, '..', '..', 'utils', 'config.js'));
+    const efUrl = cfg.supabase.url + '/functions/v1/admin-write';
+    let ok = false;
+    let desc = '';
+    try {
+      const r = await fetch(efUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: cfg.supabase.anonKey,
+          Authorization: 'Bearer ' + cfg.supabase.anonKey,
+          'x-admin-token': adminToken
+        },
+        body: JSON.stringify({ operation: 'upsertUpcoming', params: { entries: out } })
+      });
+      const body = await r.json().catch(() => null);
+      ok = r.status >= 200 && r.status < 300 && !!(body && body.success);
+      desc = 'HTTP ' + r.status + ' ' + JSON.stringify((body && body.error) || body).slice(0, 200);
+    } catch (e) {
+      desc = (e && e.message) || String(e);
+    }
+    if (ok) {
+      console.log('Synced Supabase upcoming_schedule ->', out.length, 'rows');
+    } else {
+      console.error('✗ Supabase upcoming_schedule 写入失败：' + desc);
+      console.error('  （表结构需先执行 supabase/migrations/004-upcoming-schedule.sql）');
+      process.exit(1);
+    }
+  }
+
   out.forEach((e) => console.log(' -', e.name, '(' + e.grade + ')', new Date(e.start * 1000).toISOString().slice(0, 10) + ' ~ ' + new Date(e.end * 1000).toISOString().slice(0, 10)));
 
   // ★ 2026-07-30 后置检查：扫描 upcoming-local 中未纳入 curation 的赛事
