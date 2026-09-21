@@ -143,9 +143,30 @@ function fetchToLocal(url) {
   return inflight[url];
 }
 
+/** 首帧优先用本地：已持久化 → 返回本地路径；否则原样返回 url（不改变原有行为） */
+function preferLocal(url) {
+  return cachedPath(url) || url;
+}
+
+/**
+ * 兜底便捷入口：给「裸 <image>」的 binderror 用。
+ * @param {string} url 失败时的原始地址（调用方需在清空 logo 前取到）
+ * @param {(localPath:string)=>void} onLocal 成功拿到本地路径时回调（调用方在此 setData 替换）
+ * @param {Function} [onFail] 失败回调（调用方在此走首字母/文字占位）
+ */
+function localizeOnError(url, onLocal, onFail) {
+  if (!isRemote(url)) { if (onFail) onFail(); return; }
+  fetchToLocal(url).then(function (p) {
+    if (p) { if (onLocal) onLocal(p); }
+    else if (onFail) onFail();
+  });
+}
+
 module.exports = {
   cachedPath: cachedPath,
   fetchToLocal: fetchToLocal,
+  preferLocal: preferLocal,
+  localizeOnError: localizeOnError,
   // 仅供测试/诊断
   _hash32: hash32,
   _MAX_FILES: MAX_FILES

@@ -3,6 +3,8 @@ const util = require('../../../utils/util.js');
 const sources = require('../../../utils/sources.js');
 // ★ 2026-09-20：队名「形状归一」单一实现（原先内联，须与快照 byName 键逐字一致）
 const names = require('../../../utils/names.js');
+// ★ 2026-09-21：队标本地化兜底（绕开 UGC 的 octet-stream MIME；见 utils/logoLocal.js）
+const logoLocal = require('../../../utils/logoLocal.js');
 const follow = require('../../../utils/follow.js');
 const subscribe = require('../../../utils/subscribe.js');
 // ★ 2026-08-07（审核 R2）：账号登录态（订阅授权手势红线——缓存命中才同步弹授权）
@@ -2189,9 +2191,20 @@ Page({
   onParticipantLogoError(e) {
     const { idx } = e.currentTarget.dataset;
     if (idx == null) return;
-    this.setData({
-      ['participantsList[' + idx + '].logo']: ''
-    });
+    const cur = (this.data.participantsList || [])[idx];
+    const url = cur && cur.logo;
+    const clear = () => this.setData({ ['participantsList[' + idx + '].logo']: '' });
+    // ★ 2026-09-21：先尝试本地化兜底（downloadFile 绕开 UGC 的 octet-stream MIME）；
+    //   成功换本地路径，失败才清空 → wxml 回退队名首字母（原逻辑）
+    if (url && /^https?:\/\//i.test(url)) {
+      logoLocal.localizeOnError(
+        url,
+        (localPath) => this.setData({ ['participantsList[' + idx + '].logo']: localPath }),
+        clear
+      );
+      return;
+    }
+    clear();
   },
 
   // ★ 已结束对阵胜负标识（2026-07-29）：金色多层级强调，区别于全站 .win/.lose 阵营语义
@@ -2623,6 +2636,14 @@ Page({
         }
       }
       return t;
+    });
+
+    // ★ 2026-09-21：首帧优先用**已持久化**的本地队标（零网络直出）；未缓存则原样保留远程 URL。
+    //   与 image-fallback 的本地化兜底配套：这里负责"第二次进来秒出"，那边负责"第一次失败后补上"。
+    participantsList = participantsList.map((t) => {
+      if (!t || !t.logo) return t;
+      const local = logoLocal.preferLocal(t.logo);
+      return local !== t.logo ? Object.assign({}, t, { logo: local }) : t;
     });
 
     this.setData({ metadata: meta, participantsList: participantsList });

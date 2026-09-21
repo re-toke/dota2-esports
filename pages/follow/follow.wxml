@@ -55,7 +55,7 @@
     <view class="follow-row anim-fade-up" wx:for="{{items}}" wx:key="id" hover-class="follow-row-hover" style="animation-delay: {{ (index % 12) * 50 }}ms">
       <view class="follow-main" bindtap="openItem" data-url="{{item.target}}">
         <view class="follow-avatar">
-          <image wx:if="{{item.type === 'teams' && item.logo}}" class="follow-avatar-img" src="{{item.logo}}" mode="aspectFill" lazy-load="{{true}}" />
+          <image wx:if="{{item.type === 'teams' && item.logo}}" class="follow-avatar-img" src="{{item.logo}}" mode="aspectFill" lazy-load="{{true}}" binderror="onFollowLogoError" data-idx="{{index}}" />
           <text wx:elif="{{item.iconText}}">{{item.iconText}}</text>
         </view>
         <text class="follow-name">{{item.displayName || item.name}}</text>

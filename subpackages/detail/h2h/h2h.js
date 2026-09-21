@@ -6,6 +6,8 @@
 const api = require('../../../utils/api.js');
 const util = require('../../../utils/util.js');
 const sources = require('../../../utils/sources.js');
+// ★ 2026-09-21：队标本地化兜底（绕开 UGC 的 octet-stream MIME；见 utils/logoLocal.js）
+const logoLocal = require('../../../utils/logoLocal.js');
 
 // 标签逻辑（spec B.3，阈值假设）
 //  - 连胜 N：最近连续同一方获胜且 N ≥ 3（从最近一场往前数）
@@ -133,6 +135,9 @@ Page({
           tag: mB.tag || ''
         };
 
+        // ★ 2026-09-21：首帧优先用已持久化的本地队标（零网络）；未缓存则原样返回远程 URL
+        teamA.logo = logoLocal.preferLocal(teamA.logo);
+        teamB.logo = logoLocal.preferLocal(teamB.logo);
         const vs = (matchesA || []).filter(
           (m) => String(m.opposing_team_id) === this.teamBId
         );
@@ -226,6 +231,20 @@ Page({
   },
 
   // 点击队标跳对应战队详情
+  // ★ 2026-09-21：队标加载失败 → 先尝试本地化兜底（downloadFile 绕开 UGC 的 octet-stream MIME），
+  //   成功则换本地路径；失败才清空 logo → wxml 的 vs-logo--fallback 显示队标 tag（原为破图）。
+  onTeamLogoError(e) {
+    const side = (e && e.currentTarget && e.currentTarget.dataset && e.currentTarget.dataset.side) || 'A';
+    const key = side === 'B' ? 'teamB' : 'teamA';
+    const cur = this.data[key];
+    const url = cur && cur.logo;
+    logoLocal.localizeOnError(
+      url,
+      (localPath) => this.setData({ [key + '.logo']: localPath }),
+      () => this.setData({ [key + '.logo']: '' })
+    );
+  },
+
   openTeam(e) {
     const id = e.currentTarget.dataset.id;
     if (!id) return;

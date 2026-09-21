@@ -20,7 +20,7 @@
     <!-- 双方 VS 头部 -->
     <view class="vs-head">
       <view class="vs-team" bindtap="openTeam" data-id="{{teamA.id}}">
-        <image wx:if="{{teamA.logo}}" class="vs-logo" src="{{teamA.logo}}" mode="aspectFit" lazy-load />
+        <image wx:if="{{teamA.logo}}" class="vs-logo" src="{{teamA.logo}}" mode="aspectFit" lazy-load binderror="onTeamLogoError" data-side="A" />
         <view wx:else class="vs-logo vs-logo--fallback">{{teamA.tag || '?'}}</view>
         <view class="vs-name-row">
           <text class="vs-name">{{teamA.name}}</text>
@@ -31,7 +31,7 @@
         <text class="vs-symbol">VS</text>
       </view>
       <view class="vs-team vs-team--away" bindtap="openTeam" data-id="{{teamB.id}}">
-        <image wx:if="{{teamB.logo}}" class="vs-logo" src="{{teamB.logo}}" mode="aspectFit" lazy-load />
+        <image wx:if="{{teamB.logo}}" class="vs-logo" src="{{teamB.logo}}" mode="aspectFit" lazy-load binderror="onTeamLogoError" data-side="B" />
         <view wx:else class="vs-logo vs-logo--fallback">{{teamB.tag || '?'}}</view>
         <view class="vs-name-row">
           <text class="vs-name">{{teamB.name}}</text>

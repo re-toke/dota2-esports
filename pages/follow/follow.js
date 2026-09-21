@@ -1,4 +1,6 @@
 const follow = require('../../utils/follow.js');
+// ★ 2026-09-21：队标本地化兜底（绕开 UGC 的 octet-stream MIME；见 utils/logoLocal.js）
+const logoLocal = require('../../utils/logoLocal.js');
 const subscribe = require('../../utils/subscribe.js');
 const config = require('../../utils/config.js');
 const experiment = require('../../utils/experiment.js');
@@ -319,6 +321,21 @@ Page({
     const key = e.currentTarget.dataset.key;
     if (key === this.data.activeTab) return;
     this.setData({ activeTab: key, items: [], page: 0, hasMore: false }, () => this.refresh());
+  },
+
+  // ★ 2026-09-21：队标加载失败 → 先尝试本地化兜底（downloadFile 绕开 UGC 的 octet-stream MIME），
+  //   成功则换本地路径；失败才清空 logo → wxml 的 wx:elif 显示 iconText 首字母（原为破图）。
+  //   与 _enrichFollowLogos 一致，用「路径更新 items[idx].logo」而非整体重建数组。
+  onFollowLogoError(e) {
+    const idx = Number((e && e.currentTarget && e.currentTarget.dataset && e.currentTarget.dataset.idx));
+    if (!Number.isFinite(idx)) return;
+    const item = (this.data.items || [])[idx];
+    const url = item && item.logo;
+    logoLocal.localizeOnError(
+      url,
+      (localPath) => this.setData({ ['items[' + idx + '].logo']: localPath }),
+      () => this.setData({ ['items[' + idx + '].logo']: '' })
+    );
   },
 
   openItem(e) {

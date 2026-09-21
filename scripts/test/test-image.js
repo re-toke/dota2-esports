@@ -188,6 +188,39 @@ check('logoLocal：hash 稳定（同 URL 同名、不同 URL 不同名）', () =
   assert(logoLocal._hash32('https://a/x.png') !== logoLocal._hash32('https://a/y.png'), '不同 URL 应不同 hash');
 });
 
+// ===== 2026-09-21：preferLocal / localizeOnError（供"裸 <image>"站点接入）=====
+check('logoLocal.preferLocal：未缓存 → 原样返回 URL（不改变原有渲染）', () => {
+  resetStub();
+  assert(logoLocal.preferLocal(LOGO_UGC) === LOGO_UGC, '未缓存时应原样返回远程 URL');
+});
+
+check('logoLocal.preferLocal：已缓存 → 返回本地路径（首帧直出、零网络）', async () => {
+  resetStub();
+  await logoLocal.fetchToLocal(LOGO_UGC);      // 先落盘
+  const p = logoLocal.preferLocal(LOGO_UGC);
+  assert(p.indexOf('/USER_DATA/team-logos/') === 0, '已缓存应返回本地路径，实际: ' + p);
+});
+
+check('logoLocal.localizeOnError：非 http → 直接回调 onFail，不下载', async () => {
+  resetStub();
+  let failCalled = 0, localCalled = 0;
+  await new Promise((r) => logoLocal.localizeOnError('wxfile://x.png', () => localCalled++, () => { failCalled++; r(); }));
+  assert(failCalled === 1 && localCalled === 0, '非 http 应走 onFail');
+  assert(dlCalls.length === 0, '不应发起下载');
+});
+
+check('logoLocal.localizeOnError：★ 下载成功 → 回调 onLocal(本地路径)；失败 → 回调 onFail', async () => {
+  resetStub();
+  let got = '';
+  await new Promise((r) => logoLocal.localizeOnError(LOGO_UGC, (p) => { got = p; r(); }, () => r()));
+  assert(got.indexOf('/USER_DATA/team-logos/') === 0, '成功应回调本地路径，实际: "' + got + '"');
+
+  resetStub(); dlBehavior = 'http404';
+  let failed = 0, localCalled = 0;
+  await new Promise((r) => logoLocal.localizeOnError(LOGO_UGC, () => localCalled++, () => { failed++; r(); }));
+  assert(failed === 1 && localCalled === 0, '404 应回调 onFail（调用方走首字母占位）');
+});
+
 // ===== 运行器 =====
 (async function runAll() {
   for (const t of tests) {
