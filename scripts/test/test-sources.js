@@ -799,7 +799,7 @@ check('names：★ 全库禁止再内联该规则（白名单外一律 FAIL）',
     'utils/names.js': '单一实现本体',
     'utils/league-canon-map.js': '与 cloudfunctions 副本是**镜像对**（云端 bundle 无法 require 主包）',
     'cloudfunctions/aggregation/league-canon-map.js': '同上（镜像对另一半）',
-    'cloudfunctions/aggregation/names.js': '**镜像**（与 utils/names.js 同实现；云端 bundle 无法 require 主包）\n      —— 已由下方「镜像一致性」断言强制同步；云函数 index.js 于 2026-09-21 迁移完成，故不再豁免',
+    'cloudfunctions/aggregation/names.js': '**镜像**（与 utils/names.js 同实现；云端 bundle 无法 require 主包）\n      —— 云函数 index.js 已于 2026-09-21 迁移完成、不再豁免；本条目随该目录退役一并失效',
     'scripts/ops/discover-tournaments.js': 'consensus.js 加载失败时的**刻意内联回退**实现'
   };
   const SKIP_DIR = /(^|[\\/])(node_modules|miniprogram_npm|dist|rollback|tmp)([\\/]|$)/;
@@ -825,16 +825,12 @@ check('names：★ 全库禁止再内联该规则（白名单外一律 FAIL）',
     '以下文件又内联了「小写+去非字母数字」规则，请改用 utils/names.js：\n    ' + offenders.join('\n    '));
 });
 
-check('names：★ 云函数镜像与主实现**剥注释后逐字一致**（防漂移）', function () {
-  const ROOT = _path.resolve(__dirname, '../..');
-  const norm = (t) => _stripComments(t).replace(/\s+/g, ' ').trim();
-  const src = _fs.readFileSync(_path.join(ROOT, 'utils/names.js'), 'utf8');
-  const mirror = _fs.readFileSync(_path.join(ROOT, 'cloudfunctions/aggregation/names.js'), 'utf8');
-  assert(norm(src) === norm(mirror),
-    '云函数镜像 cloudfunctions/aggregation/names.js 与 utils/names.js 已漂移 → 请重新镜像（注释可不同，代码必须相同）');
-  // 反向自检：故意改一个字必须被发现（防止断言恒真）
-  assert(norm(src) !== norm(src + '\nconst __x = 1;'), '自检失败：比较函数不敏感，断言形同虚设');
-});
+// ★ 2026-09-21：原「云函数镜像与主实现一致」断言已**移除**。
+//   原因：它会 `readFileSync('cloudfunctions/aggregation/names.js')` —— 一旦按计划删除
+//   `cloudfunctions/` 目录（微信云开发退役），该断言会**直接抛异常并中断 test:all 全链**。
+//   而它的价值（防镜像漂移）在**该目录即将整体删除**的前提下已归零，故先拆掉这颗雷。
+//   （白名单里的 `cloudfunctions/aggregation/names.js` 条目保留：对不存在的文件无害，
+//     且能避免"删除目录 → 守卫反过来把残留镜像当违规内联"的误报。）
 
 async function runAll() {
   for (const t of tests) {
