@@ -6,7 +6,10 @@
 const path = require('path');
 const fs = require('fs');
 const LP = require('../../utils/liquipedia-parse.js');
-const LPCloud = require('../../cloudfunctions/aggregation/liquipedia-parse.js');
+// ★★ 2026-09-22（微信云开发退役）：原云侧镜像 cloudfunctions/aggregation/liquipedia-parse.js 已随目录删除。
+//   此处指向同一实现（utils 侧）——本文件真正有价值的是下方 fixture（EWC/TI）解析断言，
+//   而「双源一致」这类镜像对照已无对象，相应断言随之成为等价断言（不再证明双源）。
+const LPCloud = LP;
 
 let pass = 0, fail = 0;
 function assert(cond, msg) {

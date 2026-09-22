@@ -16,7 +16,9 @@ const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const MINI_JS = path.join(ROOT, 'utils', 'liquipedia-parse.js');
-const CLOUD_JS = path.join(ROOT, 'cloudfunctions', 'aggregation', 'liquipedia-parse.js');
+// ★★ 2026-09-22（微信云开发退役）：原镜像目标为 cloudfunctions/aggregation/liquipedia-parse.js，
+//   该目录已删除。保留「字节一致 + 可 require」校验，但改到**系统临时目录**，不再写仓库。
+const CLOUD_JS = path.join(require('os').tmpdir(), 'dota2-esports-liquipedia-parse.check.js');
 
 function main() {
   if (!fs.existsSync(MINI_JS)) {

@@ -11,7 +11,9 @@ const fs = require('fs');
 const path = require('path');
 
 const SRC = path.join(__dirname, '..', '..', 'utils', 'liquipedia-slugmap.json');
-const DST = path.join(__dirname, '..', '..', 'cloudfunctions', 'aggregation', 'liquipedia-slugmap.json');
+// ★★ 2026-09-22（微信云开发退役）：原镜像目标为 cloudfunctions/aggregation/liquipedia-slugmap.json，
+//   该目录已删除。保留 JSON 往返校验（写→读→比对），但改写到**系统临时目录**，不再触碰仓库。
+const DST = path.join(require('os').tmpdir(), 'dota2-esports-liquipedia-slugmap.check.json');
 
 function fail(msg) { console.error('❌ ' + msg); process.exit(1); }
 
@@ -44,5 +46,5 @@ for (const k of sk) {
   }
 }
 
-console.log('✅ slugmap 已镜像到云端: ' + sk.length + ' 条映射（防漂移校验通过）');
+console.log('✅ slugmap 防漂移校验通过（JSON 往返，写到临时目录）: ' + sk.length + ' 条映射（防漂移校验通过）');
 process.exit(0);
