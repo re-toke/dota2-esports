@@ -86,9 +86,6 @@ var EDGE_ACTIONS = {
   stratzGql: 'stratz-proxy',
   // ★ v8.22 挂回：liquipedia-proxy 已改纯读表模式（sync 脚本灌缓存，EF 零 LP 请求）
   liquipediaFetchRawWikitext: 'liquipedia-proxy',
-  // ★ 2026-09-21（LP 解析链迁移）：与 liquipediaFetchRawWikitext 同一 EF —— 读缓存表 + 本地解析
-  liquipediaLeagueMeta: 'liquipedia-proxy',
-  liquipediaScheduledMatches: 'liquipedia-proxy',
   // ★ v8.25（M2.4 收尾）：详情页聚合 + haglund 兜底源
   getLeagueDetailBundle: 'bundle-aggregator',
   haglundUpcoming: 'haglund-proxy'
