@@ -136,7 +136,8 @@ var RAW_PAYLOAD_ACTIONS = { stratzGql: 1 };
 //   ✅ 安全性：EF 失败后由 utils/api.js 的 filterCollectableLeagues 兜底
 //      （它按 utils/tiers.js 判一遍，与数据来源无关）→ 不会漏出未收录赛事。
 //   ⚠️ 守卫：scripts/test/test-discover-mirror.js 断言本集合仍含 getLeagues。
-var NO_CLOUD_FALLBACK_ACTIONS = { getLeagues: 1 };
+// ★★ 2026-09-22（微信云开发脱离）：原 `NO_CLOUD_FALLBACK_ACTIONS` 黑名单**已删除** ——
+//   云开发回落整体移除后，所有 action 一律由 EF 唯一负责（失败即失败，由调用方各自兜底）。
 
 function call(action, params, extra) {
   // ★ M2.4：Supabase 数据代理优先；EF 熔断打开或失败 → 回落云开发（NO_CLOUD_FALLBACK_ACTIONS 除外）
@@ -166,7 +167,8 @@ function call(action, params, extra) {
     }
     return _efCall(action, efName, sbPayload);
   }
-  return callCloud(action, params, extra);
+  // ★ 2026-09-22：未在 EDGE_ACTIONS 注册的 action 不再回落云开发（云开发已退役）
+  return Promise.reject(new Error('action not mapped to any Edge Function: ' + action));
 }
 
 // EF 单次调用（含云开发回落 + 热缓存写回）
@@ -179,14 +181,10 @@ function _efCall(action, efName, sbPayload) {
     }
     throw new Error((r && r.error) || 'ef empty');
   }).catch(function (efErr) {
-    // ★ 2026-09-19（选项 C）：口径已「单一权威化」的 action 不回云函数（见 NO_CLOUD_FALLBACK_ACTIONS）
-    if (NO_CLOUD_FALLBACK_ACTIONS[action]) {
-      console.warn('[cloudProxy] EF ' + efName + ' fail(' + (efErr && efErr.message) + ') → 不回落云函数（'
-        + action + ' 口径由 EF 唯一负责；客户端 filterCollectableLeagues 兜底）');
-      throw efErr;
-    }
-    console.info('[cloudProxy] EF ' + efName + ' fail(' + (efErr && efErr.message) + ') → 回落云开发');
-    return callCloud(action, sbPayload.params, sbPayload.force != null ? { force: sbPayload.force } : null);
+    // ★★ 2026-09-22（微信云开发脱离）：**不再回落云开发** —— EF 是唯一后端，失败即失败，
+    //   由调用方各自兜底（api.js 直连 / leagues.js 本地快照 / filterCollectableLeagues 等）。
+    console.info('[cloudProxy] EF ' + efName + ' fail(' + (efErr && efErr.message) + ') → 无云开发回落（已退役）');
+    throw efErr;
   });
 }
 
@@ -195,49 +193,9 @@ function _efRefresh(action, efName, sbPayload) {
   console.info('[cloudProxy] 热缓存过期 ' + action + ' → 后台刷新');
   _efCall(action, efName, sbPayload).catch(function () { /* 静默：旧值仍可用 */ });
 }
+// ★★ 2026-09-22（微信云开发脱离）：原 `callCloud`（云函数直调）**已移除**。
+//   EF 是唯一后端；调用方在 EF 不可用时各自兜底。
 
-function callCloud(action, params, extra) {
-  if (!isAvailable()) {
-    return Promise.reject(new Error('cloud proxy unavailable'));
-  }
-  var payload = { action: action, params: params || {} };
-  if (extra && typeof extra === 'object') {
-    Object.keys(extra).forEach(function (k) { payload[k] = extra[k]; });
-  }
-  var timeoutMs = timeoutFor(action);
-  var cloud = wx.cloud.callFunction({
-    name: 'aggregation',
-    data: payload
-  });
-  // Promise.race：超时先到则提前 reject（isTimeout 标记）；正常返回则透传
-  var timed = Promise.race([
-    cloud,
-    new Promise(function (_, reject) {
-      setTimeout(function () {
-        var e = new Error('cloud call timeout (' + timeoutMs + 'ms): ' + action);
-        e.isTimeout = true;
-        reject(e);
-      }, timeoutMs);
-    })
-  ]);
-  return timed.then((res) => {
-    const r = res && res.result;
-    if (r && !r.error && r.data !== undefined) {
-      breaker.markSuccess();
-      return r.data;
-    }
-    breaker.markFailure(THRESHOLD);
-    throw new Error((r && r.error) || 'cloud proxy empty');
-  }).catch((err) => {
-    // 超时不计熔断（冷启动抖动 ≠ 源故障）；仅真实失败（业务 error/网络 reject）计入
-    if (!(err && err.isTimeout)) {
-      if (isAvailable()) breaker.markFailure(THRESHOLD);
-    } else {
-      console.info('[cloudProxy] ' + (err && err.message) + ' → 回退 direct（不计熔断）');
-    }
-    throw err;
-  });
-}
 
 // ===== OpenDota 代理（与 api.js 方法名对齐）=====
 const PARAM_MAP = {
@@ -318,26 +276,11 @@ proxy.liquipediaScheduledProxy = function (pageName, force) {
 proxy.liquipediaTeamLogoProxy = function (teamName) {
   return call('liquipediaTeamLogo', { teamName: teamName });
 };
-
-// ★ 2026-09-11（LP 服务迁 EF · 清理）：`liquipediaListTournamentsProxy` 已删除。
-//   原因：其唯一调用方 `listAllTournaments` 已于 O-11（2026-08-15）移除，
-//   此后 **0 业务引用** —— 属死代码。对应云函数 action 亦无客户端调用。
-//   （云函数侧 action 未删，避免影响服务端定时任务；如需彻底清理可另行处理。）
-// §9 P1（2026-07-30）Liquipedia raw wikitext 代理抓取
-// 调云函数 action=liquipediaFetchRawWikitext，返回 { wikitext: string }。
-// 用于 getTeamRoster/getPlayerProfile 等客户端本地解析的场景，
-// 云函数侧仅做合规抓取（设 UA+gzip），不解析，减少云函数负担。
-// ★ 2026-09-11：新增 cacheOnly 参数。
-//   cacheOnly=true → EF 仅查 `lp:w:*` 表，未命中**立即**返回 null（不尝试现抓 LP）。
-//   用途：客户端「EF 缓存优先」策略 —— 命中走快路径，未命中立刻回落云函数。
-// ★ 2026-09-11：**强制走云函数**的 LP raw 抓取 —— 用于「EF 缓存未命中」时的显式回落。
-//   为什么需要单独入口：`call()` 只在 EF **抛错**时才回落云开发；而 cacheOnly 未命中时
-//   EF 返回的是 `{data:null}`（正常响应，不抛错）→ 不会自动回落，故需显式调用。
-//   云函数是**唯一能现抓 LP 的出口**（WeChat 出口可访问；Supabase 出口被 429）。
-proxy.liquipediaFetchRawWikitextCloud = function (pageName) {
-  return callCloud('liquipediaFetchRawWikitext', { pageName: pageName });
-};
-
+// ★★ 2026-09-22（云开发退役 · 决策 (b) 接受降级）：原 `liquipediaFetchRawWikitextCloud`
+//   （云函数现抓 LP —— 云函数是**唯一能现抓 LP 的出口**，Supabase 出口被 LP 429 拦）**已移除**。
+//   影响评估（有据）：其唯一实质消费者是战队名册，而 sources.js:632-637 自述
+//   「Liquipedia 名册 account_id 全为 null → 被 consensus.crossMembers 丢弃 → **当前不进 UI**」
+//   ⇒ 移除后用户零感知。将来若要启用 LP 名册，应新增「第三方出口（CF Worker + EF 转发）」而非依赖云开发。
 proxy.liquipediaFetchRawWikitextProxy = function (pageName, cacheOnly) {
   return call('liquipediaFetchRawWikitext', { pageName: pageName },
               cacheOnly ? { cacheOnly: true } : null);

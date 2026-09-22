@@ -149,8 +149,11 @@ ok(!/l\.tier\s*===?\s*["']professional["']\s*&&\s*hitWhitelist/.test(efSrc),
   'EF：未出现「professional && whitelist」错误收紧');
 
 // 5.2 getLeagues 不再回落云函数（口径由 EF 唯一负责）
-ok(/NO_CLOUD_FALLBACK_ACTIONS\s*=\s*\{[^}]*getLeagues\s*:\s*1/.test(cpSrc),
-  'cloudProxy：getLeagues 已登记为「不回云函数」');
+// ★ 2026-09-22（微信云开发脱离）：原断言「NO_CLOUD_FALLBACK_ACTIONS 里登记了 getLeagues」已失效 ——
+//   云开发回落整体移除后，该黑名单**本身被删除**，所有 action 一律 EF 唯一负责。
+//   新契约（正向断言）：cloudProxy 里**不应再有任何云函数直调**。
+ok(!/callCloud\s*\(/.test(cpSrc), 'cloudProxy：已无云函数直调（云开发回落整体移除）');
+ok(!/NO_CLOUD_FALLBACK_ACTIONS/.test(cpSrc), 'cloudProxy：NO_CLOUD_FALLBACK_ACTIONS 已删除（EF 唯一负责）');
 
 // 5.3 客户端入口闸门存在且已接线（EF 失败/直连时兜底，与来源无关）
 ok(/function\s+filterCollectableLeagues/.test(apiSrc), 'api.js：存在 filterCollectableLeagues 入口闸门');

@@ -293,29 +293,23 @@ function fetchPageWikitext(pageName) {
     //   → 热门/已知赛事走快路径；冷门赛事由云函数兜底，且**整体比原来更快**
     //     （原来无论命中与否都要先等 EF 的 7s 超时）。
     // 已知未命中 → 跳过 EF，直接走云函数（省掉 0.7s）
-    if (knownMiss) return _viaCloudFn(pageName).then(function (w) { return _wtRemember(pageName, w); });
+    // ★ 2026-09-22（云开发退役 · 决策 b）：无云函数现抓 → 直接走本地兜底
+    if (knownMiss) return fetchPageWikitextLocal(pageName).then(function (w) { return _wtRemember(pageName, w); });
 
     return cloudProxy.liquipediaFetchRawWikitextProxy(pageName, true).then(function (remote) {
       if (remote && remote.wikitext) return _wtRemember(pageName, remote.wikitext);
       // 记住这次未命中（会话内不再重试 EF），随后显式回落云函数
       if (Object.keys(_efMissMemo).length < EF_MISS_MEMO_MAX) _efMissMemo[pageName] = 1;
-      return _viaCloudFn(pageName).then(function (w) { return _wtRemember(pageName, w); });
+      return fetchPageWikitextLocal(pageName).then(function (w) { return _wtRemember(pageName, w); });
     }).catch(function () {
-      return _viaCloudFn(pageName).then(function (w) { return _wtRemember(pageName, w); });
+      return fetchPageWikitextLocal(pageName).then(function (w) { return _wtRemember(pageName, w); });
     });
   }
   return fetchPageWikitextLocal(pageName).then(function (w) { return _wtRemember(pageName, w); });
 }
-
-/** EF 未命中时的显式回落：云函数 raw 抓取（唯一能现抓 LP 的可靠出口）→ 本地兜底 */
-function _viaCloudFn(pageName) {
-  return cloudProxy.liquipediaFetchRawWikitextCloud(pageName).then(function (c) {
-    if (c && c.wikitext) return c.wikitext;
-    return fetchPageWikitextLocal(pageName);
-  }).catch(function () {
-    return fetchPageWikitextLocal(pageName);
-  });
-}
+/** ★★ 2026-09-22（云开发退役 · 决策 b）：原 `_viaCloudFn`（EF 未命中时显式回落云函数现抓 LP）
+ *  **已移除** —— 云函数是唯一能现抓 LP 的出口，退役后改由 `fetchPageWikitextLocal` 兜底。
+ *  影响面见 cloudProxy.js 同名说明（战队名册当前不进 UI ⇒ 零感知）。 */
 
 // 本地抓取（wx.request 路径，云代理不可用/失败时兜底）
 // 注意：微信 wx.request 禁设 User-Agent，Liquipedia 可能返回 CAPTCHA/拦截页，

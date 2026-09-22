@@ -137,33 +137,10 @@ function gqlDirect(query, variables) {
   }
   return attempt(0);
 }
+// ★★ 2026-09-22（微信云开发脱离）：原 `gqlCloud`（云函数代理，key 来自云函数 env）**已移除**。
+//   EF `stratz-proxy` 是唯一中转路径（EDGE_ACTIONS 已映射）；其失败时调用方走直连/降级。
+//   ⚠️ 前置：EF 侧须已配 STRATZ_API_KEY（否则 STRATZ 整体不可用）——见本次提交说明。
 
-// 云代理模式：通过 wx.cloud.callFunction 中转，key 从云函数环境变量 STRATZ_API_KEY 读取。
-// 客户端不存 key，适合上线环境。失败返回 null，由上层回退到直连或降级。
-function gqlCloud(query, variables) {
-  // 熔断态下直接跳过云调用（避免无云环境时每次都失败一次）
-  if (!(cloudProxy.isAvailable() || cloudProxy.efAvailable())) return Promise.resolve(null);
-  try {
-    return wx.cloud.callFunction({
-      name: 'aggregation',
-      data: { action: 'stratzGql', query: query, variables: variables }
-    }).then((r) => {
-      const result = r && r.result;
-      if (result && result.data) {
-        console.log('[stratz] ✓ cloud', query);
-        return result.data;
-      }
-      console.warn('[stratz] cloud 返回空:', result && result.error);
-      return null;
-    }).catch((e) => {
-      console.warn('[stratz] cloud 调用失败:', e && e.errMsg);
-      return null;
-    });
-  } catch (e) {
-    // cloud未初始化（wx.cloud 不可用）时直接回退
-    return Promise.resolve(null);
-  }
-}
 
 // GraphQL 请求入口：云代理优先（key 安全），直连兜底。
 // ★ 2026-07-30：运行时再次检查 config.stratz.enabled，允许测试环境临时启用
@@ -199,11 +176,11 @@ function gql(query, variables) {
     // ---- 以下为原有降级链（EF 不可用 / 失败时），逻辑未改动 ----
     // 纯云代理模式：无本地 key，完全依赖云函数
     if (cloudEnabled && !config.stratz.apiKey) {
-      return gqlCloud(query, variables);
+      return Promise.resolve(null);   /* ★ 2026-09-22：云开发已退役，直连兜底 */
     }
     // 混合模式：有本地 key + 云代理，优先云函数加速，失败回退直连
     if (cloudEnabled) {
-      return gqlCloud(query, variables)
+      return Promise.resolve(null)
         .then((x) => x || gqlDirect(query, variables))
         .catch(() => gqlDirect(query, variables));
     }

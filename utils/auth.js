@@ -93,7 +93,7 @@ function ensureOpenId(fresh) {
         success: function (lr) {
           if (!lr.code) {
             console.warn('[auth] wx.login 返回无 code，回退云开发');
-            _cloudFallback(resolve);
+            resolve(null);   /* ★ 2026-09-22：云开发已退役 → 直接返回 null（未登录态） */
             return;
           }
           console.log('[auth] wx.login OK，调 Edge Function wechat-auth…');
@@ -109,24 +109,24 @@ function ensureOpenId(fresh) {
                 _ok(oid, data.token ? 'supabase+jwt' : 'supabase');
               } else {
                 console.warn('[auth] wechat-auth 返回无 openid，回退云开发:', JSON.stringify(data).slice(0, 200));
-                _cloudFallback(resolve);
+                resolve(null);   /* ★ 2026-09-22：云开发已退役 → 直接返回 null（未登录态） */
               }
             })
             .catch(function (err) {
               console.warn('[auth] wechat-auth EF 失败，回退云开发:', (err && (err.errMsg || err.message)) || err);
-              _cloudFallback(resolve);
+              resolve(null);   /* ★ 2026-09-22：云开发已退役 → 直接返回 null（未登录态） */
             });  // EF 失败回退云开发
         },
         fail: function (lr) {
           console.warn('[auth] wx.login 失败，回退云开发:', (lr && lr.errMsg) || lr);
-          _cloudFallback(resolve);
+          resolve(null);   /* ★ 2026-09-22：云开发已退役 → 直接返回 null（未登录态） */
         }
       });
       return;
     }
 
     console.log('[auth] supabase 未启用，直接走云开发 getOpenId');
-    _cloudFallback(resolve);
+    resolve(null);   /* ★ 2026-09-22：云开发已退役 → 直接返回 null（未登录态） */
   });
 }
 
@@ -140,33 +140,10 @@ function _sbEnabled() {
   return !!(c.enabled && c.url && c.anonKey);
 }
 function _sbClient() { return require('./supabaseClient.js'); }
+// ★★ 2026-09-22（微信云开发脱离）：原 `_cloudFallback`（云开发 getOpenId 回退）**已移除**。
+//   EF `wechat-auth`（code2session）是唯一登录路径；其失败时上面已直接 `resolve(null)`，
+//   调用方据 openid 为空走未登录态（不阻塞浏览）。
 
-/** 云开发回退路径（灰度期保留，原实现原样） */
-function _cloudFallback(resolve) {
-  if (typeof wx === 'undefined' || !wx.cloud || !wx.cloud.callFunction) {
-    console.warn('[auth] 云开发不可用（wx.cloud 缺失），openid 无法获取');
-    resolve(null);
-    return;
-  }
-  var _t0 = Date.now();
-  wx.cloud.callFunction({
-    name: 'aggregation',
-    data: { action: 'getOpenId' },
-    success: function (res) {
-      var oid = ((res && res.result) && res.result.openid) || null;
-      if (oid) {
-        try { wx.setStorageSync(OPENID_KEY, oid); } catch (e) {}
-      }
-      console.log('[auth] 云开发 getOpenId ' + (oid ? 'OK' : 'NULL') +
-                  ' (' + (Date.now() - _t0) + 'ms) result=' + JSON.stringify(res && res.result).slice(0, 160));
-      resolve(oid);
-    },
-    fail: function (err) {
-      console.error('[auth] 云开发 getOpenId 失败:', (err && err.errMsg) || err);
-      resolve(null);
-    }
-  });
-}
 
 /**
  * 预登录（R2 预热入口）：幂等，缓存命中零请求。
