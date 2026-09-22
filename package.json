@@ -3,8 +3,8 @@
   "version": "1.1.2",
   "description": "DOTA2赛事微信小程序（TDesign 版）",
   "scripts": {
-    "lint": "eslint --rulesdir scripts/eslint-rules utils/ pages/ subpackages/ cloudfunctions/ scripts/ --ext .js",
-    "lint:fix": "eslint --rulesdir scripts/eslint-rules utils/ pages/ subpackages/ cloudfunctions/ scripts/ --ext .js --fix",
+    "lint": "eslint --rulesdir scripts/eslint-rules utils/ pages/ subpackages/ scripts/ --ext .js",
+    "lint:fix": "eslint --rulesdir scripts/eslint-rules utils/ pages/ subpackages/ scripts/ --ext .js --fix",
     "test": "node scripts/test/test-canonical.js && node scripts/test/test-bo.js",
     "test:all": "node scripts/test/test-sources.js && node scripts/test/test-discover-mirror.js && node scripts/test/test-consensus.js && node scripts/test/test-canonical.js && node scripts/test/test-bo.js && node scripts/test/test-formatters.js && node scripts/test/test-incremental.js && node scripts/test/test-remote-curation.js && node scripts/test/test-search-history.js && node scripts/test/test-bo3-merge-split.js && node scripts/test/test-haglund-circuit.js && node scripts/test/test-image.js && node scripts/test/test-home-series.js && node scripts/ops/check-token-overreach.js && node scripts/ops/check-card-contract.js",
     "sync:canon": "node scripts/sync/sync-canon-map.js",

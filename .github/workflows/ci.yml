@@ -38,9 +38,9 @@ jobs:
       - name: Verify curation map is up to date
         run: |
           npm run sync:canon
-          if ! git diff --quiet -- utils/curation-shared.js cloudfunctions/aggregation/curation-shared.js; then
+          if ! git diff --quiet -- utils/curation-shared.js; then
             echo "::error::curation-shared.js 已过期，请运行 npm run sync:canon 后重新提交"
-            git --no-pager diff --stat -- utils/curation-shared.js cloudfunctions/aggregation/curation-shared.js
+            git --no-pager diff --stat -- utils/curation-shared.js
             exit 1
           fi
         shell: bash

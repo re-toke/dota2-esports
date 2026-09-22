@@ -26,7 +26,7 @@ const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const tiers = require(path.join(ROOT, 'utils/tiers.js'));
-const core = require(path.join(ROOT, 'cloudfunctions/cron-discover-tournaments/discover-core.js'));
+const core = require(path.join(ROOT, 'utils/discover-core.js'));
 
 let failed = 0;
 let passed = 0;

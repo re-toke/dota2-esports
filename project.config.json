@@ -44,7 +44,7 @@
       },
       {
         "type": "folder",
-        "value": "/cloudfunctions"
+        "value": ""
       },
       {
         "type": "folder",
@@ -412,7 +412,7 @@
     }
   },
   "compileType": "miniprogram",
-  "cloudfunctionRoot": "cloudfunctions/",
+  "_comment_cloudfunctionRoot": "★ 2026-09-22 微信云开发已退役，云函数根目录配置移除",
   "libVersion": "3.0.0",
   "appid": "wx838148b512800a3a",
   "projectname": "DOTA2赛事",

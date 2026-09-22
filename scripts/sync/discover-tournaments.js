@@ -29,7 +29,7 @@ const fs = require('fs');
 const https = require('https');
 const zlib = require('zlib');
 
-const CORE = require('./../../cloudfunctions/cron-discover-tournaments/discover-core.js');
+const CORE = require('./../../utils/discover-core.js');
 const CFG = require('./../../utils/config.js');
 
 const APPLY = process.argv.indexOf('--apply') >= 0;

@@ -158,9 +158,8 @@ async function main() {
 
   // ★ 2026-08-31 P1：镜像 JSON 到云函数目录（fetchLiquipediaUpcoming 的 Ongoing 回填兜底源）。
   //   此前靠手动复制，云侧镜像曾陈旧到 07-25（8 条）而本地已 08-31（6 条）。
-  const cloudPath = path.join(__dirname, '..', '..', 'cloudfunctions', 'aggregation', 'upcoming-local.json');
-  fs.writeFileSync(cloudPath, JSON.stringify(payload, null, 2), 'utf8');
-  console.log('Mirrored ->', cloudPath);
+  // ★ 2026-09-22：原镜像到 cloudfunctions/aggregation/upcoming-local.json —— 随微信云开发退役**已移除**
+  //   （保留会在此次同步时把已删除的 cloudfunctions/ 目录重新造出来）
 
   // ★ 2026-07-30 同步生成 JS 包装模块（upcoming-local-data.js）
   //   微信小程序分包对 require JSON 存在兼容性问题，JS 模块在主包/分包中 require 均稳定可靠。

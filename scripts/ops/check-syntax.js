@@ -7,7 +7,8 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const DIRS = ['utils', 'pages', 'subpackages', 'cloudfunctions', 'scripts'];
+// ★ 2026-09-22：cloudfunctions 已随微信云开发退役移除
+const DIRS = ['utils', 'pages', 'subpackages', 'scripts'];
 const SKIP = new Set(['node_modules', 'miniprogram_npm', '.git']);
 
 function walk(dir, out) {
