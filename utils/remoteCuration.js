@@ -424,67 +424,23 @@ function _doLoad(_sbOn, force, meta) {
           console.log('[remoteCuration] 走 Supabase 直读·全量, events:', sbData.events.length);
           if (_applyRemote(sbData)) return true;
         }
-        // ③ 都失败 → 云函数兜底
-        return _cloudLoad(force, clientVersion, meta);
+        // ★★ 2026-09-22（微信云开发退役）：原「③ 都失败 → 云函数兜底」**已移除**。
+        //   云开发已退役 ⇒ 两条远端路径都失败时，保持本地缓存生效并返回 false（不影响启动）。
+        ensure();
+        return false;
       });
     }).then(function (r) { loadingPromise = null; return r; });
     return loadingPromise;
   }
 
-  // 云函数路径（SB 不可用时）
-  return _cloudLoad(force, clientVersion, meta);
+  // ★★ 2026-09-22（微信云开发退役）：原「云函数路径（SB 不可用时）」**已移除** ⇒
+  //   SB 不可用时保持本地 curation 生效（ensure()），返回 false（未从远端更新）。
+  ensure();
+  return Promise.resolve(false);
 }
+/** ★★ 2026-09-22（微信云开发退役）：原 `_cloudLoad`（云函数取 curation）**已整体移除**。
+ *  curation 的远端来源唯一为 Supabase（PostgREST 直读 / EF）；本地 curation 始终可用。 */
 
-/** 云函数路径（原实现，拆分出来供回落/无 SB 时调用） */
-function _cloudLoad(force, clientVersion, meta) {
-  return new Promise((resolve) => {
-    wx.cloud.callFunction({
-      name: 'aggregation',
-      data: { action: 'getCuration', params: { clientVersion: clientVersion }, force: !!force }
-    }).then((res) => {
-      const r = res && res.result;
-      console.log('[remoteCuration] 云函数返回, source:', r && r.source,
-        'unchanged:', r && r.unchanged, 'version:', r && r.version,
-        'hasData:', !!(r && r.data), 'hasError:', !!(r && r.error));
-      if (r && r.error) {
-        console.warn('[remoteCuration] 云函数返回错误:', r.error);
-        ensure(); resolve(false); return;
-      }
-      // 版本一致：仅刷新缓存时间戳，不重新构建 lookups
-      if (r && r.unchanged) {
-        console.log('[remoteCuration] 版本一致 (' + r.version + ')，跳过数据传输');
-        // 刷新缓存时间戳（meta.value 保持不变）
-        if (meta.value) cache.set(CACHE_KEY, meta.value, config.remoteCuration.ttlSec);
-        resolve(true); return;
-      }
-      // 版本不一致或首次拉取：构建生效集合
-      if (r && r.data && r.data.events && r.data.teams) {
-        try {
-          const eff = buildEffective(r.data);
-          effectiveEvents = eff.events;
-          effectiveTeams = eff.teams;
-          effectiveTiIds = eff.tiContestantIds;
-          lookups = curation.buildLookups(eff.events, eff.teams);
-          cache.set(CACHE_KEY, { events: eff.events, teams: eff.teams, tiContestantIds: eff.tiContestantIds }, config.remoteCuration.ttlSec);
-          cache.set(VERSION_KEY, r.version, 365 * 24 * 3600);
-          console.log('[remoteCuration] 云端 curation 加载成功, version:', r.version,
-            'events:', eff.events.length, 'teams:', Object.keys(eff.teams).length);
-          resolve(true);
-        } catch (e) {
-          console.error('[remoteCuration] buildEffective 或缓存写入抛错:', e && e.message, e);
-          ensure(); resolve(false);
-        }
-        return;
-      }
-      // 数据不合法，回退到本地/旧缓存
-      console.warn('[remoteCuration] 云函数返回数据不合法, r:', r ? Object.keys(r) : 'null');
-      ensure(); resolve(false);
-    }).catch((err) => {
-      console.warn('[remoteCuration] 云函数调用失败:', err && err.errMsg);
-      ensure(); resolve(false);
-    });
-  }).then(function (r) { loadingPromise = null; return r; });
-}
 
 module.exports = {
   curatedEventFor: curatedEventFor,

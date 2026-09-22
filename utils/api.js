@@ -349,54 +349,14 @@ function cloudFetch(action, params, force) {
   if (cp && typeof cp.call === 'function') {
     return cp.call(action, params, force ? { force: true } : null);
   }
-  // 极端情况（cloudProxy 加载失败）→ 退回云函数直调，行为与修复前完全一致
-  return _cloudFetchViaCloud(action, params, force);
+  // ★★ 2026-09-22（微信云开发退役）：原「极端情况退回云函数直调」**已移除** ——
+  //   cloudfunctions/ 已删除，退无可退。此路径仅在 cloudProxy 模块加载失败时到达（极端），
+  //   直接以明确错误 reject，由上层（tryCloudOrDirect → 直连）兜底。
+  return Promise.reject(new Error('cloudProxy unavailable and cloud dev retired'));
 }
+// ★★ 2026-09-22（微信云开发退役）：原 `_cloudFetchViaCloud`（云函数直调兜底）**已整体移除**。
+//   EF 是唯一后端；不再存在任何云开发调用路径。
 
-// 云函数直调（原 cloudFetch 实现原样保留，作为 EF 不可用 / cloudProxy 加载失败时的兜底）
-function _cloudFetchViaCloud(action, params, force) {
-  const threshold = (config.cloudProxy && config.cloudProxy.circuitBreakerThreshold) || 0;
-  // 防御：wx.cloud 未初始化（测试环境 / 未开通云开发 / 用户拒绝授权）时直接 reject，
-  // 交由 tryCloudOrDirect 回退到直连，避免 `wx.cloud.callFunction` 同步抛 TypeError 击穿调用链。
-  if (!wx.cloud || !wx.cloud.callFunction) {
-    return Promise.reject(new Error('cloud proxy unavailable'));
-  }
-  const data = { action: action, params: params || {} };
-  if (force) data.force = true;
-  // ★ 2026-09-01（loadLeagues 12s 性能修复）：云调用超时守卫（与 cloudProxy.call 同款）。
-  //   原实现 wx.cloud.callFunction 裸调无限等待——云函数冷启动 / 云端 OpenDota 回源慢时，
-  //   loadLeagues 的 Promise.all 卡死（实测 12029ms），用户首屏空白。
-  //   读缓存/轻量 action 8s，实时抓取 action 12s（与 cloudProxy.ACTION_TIMEOUT_MS 对齐）。
-  //   超时 reject（err.isTimeout=true）→ tryCloudOrDirect 回退直连；不计熔断（冷启动抖动 ≠ 源故障）。
-  const timeoutMs = (CLOUD_ACTION_TIMEOUT[action] != null) ? CLOUD_ACTION_TIMEOUT[action] : CLOUD_ACTION_TIMEOUT._default;
-  const cloud = wx.cloud.callFunction({
-    name: 'aggregation',
-    data: data
-  });
-  const timed = Promise.race([
-    cloud,
-    new Promise((_, reject) => {
-      setTimeout(() => {
-        const e = new Error('cloud call timeout (' + timeoutMs + 'ms): ' + action);
-        e.isTimeout = true;
-        reject(e);
-      }, timeoutMs);
-    })
-  ]);
-  return timed.then((res) => {
-    const r = res && res.result;
-    if (r && !r.error && r.data) {
-      breaker.markSuccess();
-      return r.data;
-    }
-    breaker.markFailure(threshold);
-    throw new Error((r && r.error) || 'cloud proxy error');
-  }).catch((err) => {
-    // 超时不计熔断（冷启动抖动 ≠ 源故障）；仅真实失败（业务 error/网络 reject）计入
-    if (!(err && err.isTimeout)) breaker.markFailure(threshold);
-    throw err;
-  });
-}
 
 function cloudEnabled() {
   const threshold = (config.cloudProxy && config.cloudProxy.circuitBreakerThreshold) || 0;
