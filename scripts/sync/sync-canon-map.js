@@ -18,7 +18,6 @@ const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const MINI_JS = path.join(ROOT, 'utils', 'curation-shared.js');
-const CLOUD_JS = path.join(ROOT, 'cloudfunctions', 'aggregation', 'curation-shared.js');
 
 // 复用 curation 的归一口径（与 consensus.normName 一致，ASCII 名等价）
 // §8.3 多语言支持（2026-07-29）：与 consensus.normName 同步，保留西里尔字母
@@ -149,17 +148,10 @@ function main() {
   fs.mkdirSync(path.dirname(MINI_JS), { recursive: true });
   fs.writeFileSync(MINI_JS, outText, 'utf8');
 
-  // 镜像到云函数侧（独立部署，无法共享小程序 utils）
-  fs.mkdirSync(path.dirname(CLOUD_JS), { recursive: true });
-  fs.writeFileSync(CLOUD_JS, outText, 'utf8');
-
-  // 断言两侧内容一致（这是 G4 的核心不变量）
-  const a = fs.readFileSync(MINI_JS, 'utf8');
-  const b = fs.readFileSync(CLOUD_JS, 'utf8');
-  if (a !== b) {
-    console.error('[sync-canon-map] 致命：两侧 curation-shared.js 不一致，镜像写入失败');
-    process.exit(1);
-  }
+  // ★ 2026-09-22（微信云开发退役）：原「镜像到 cloudfunctions/aggregation/curation-shared.js」
+  //   及其两侧一致性断言**已移除** —— 云函数已退役，不再需要云侧副本。
+  //   G4 的核心不变量（内容由 utils/curation.js 单一来源生成）改由 CI 校验一文件
+  //   （见 .github/workflows/ci.yml：跑完脚本后 git diff --quiet -- utils/curation-shared.js）。
 
   // EPL 覆盖自检（2026-07-27 修复后语义变更；2026-08-31 P0 判届升级）：
   // 现保留窄别名 'epl masters i' / 'epl masters ii' + leagueId 精确 pin（19944）。

@@ -88,12 +88,11 @@ function stripComments(src) {
 }
 
 // 所有文本断言一律基于「去注释」后的源码
-const aggSrc = stripComments(fs.readFileSync(path.join(ROOT, 'cloudfunctions/aggregation/index.js'), 'utf8'));
+// ★★ 2026-09-22（微信云开发退役）：原此处读取 cloudfunctions/aggregation/index.js 作镜像对照 ——
+//   云函数已退役、该文件已删除，故全部依赖它的断言一并移除。收录口径的镜像现收敛为：
+//   utils/tiers.js ↔ utils/discover-core.js ↔ EF opendota-proxy（下方 EF 侧断言保留，仍有效）。
 const efSrc = stripComments(fs.readFileSync(path.join(ROOT, 'supabase/functions/opendota-proxy/index.ts'), 'utf8'));
-const aggCount = countRegexInBlock(aggSrc, 'COMMUNITY_TIER_RES');
 const efCount = countRegexInBlock(efSrc, 'COMMUNITY_TIER_RES');
-ok(aggCount === tiers.COMMUNITY_TIERS.length,
-  'cloudfunctions/aggregation COMMUNITY_TIER_RES 条数一致（' + aggCount + '）');
 ok(efCount === tiers.COMMUNITY_TIERS.length,
   'opendota-proxy EF COMMUNITY_TIER_RES 条数一致（' + efCount + '）');
 
@@ -102,10 +101,7 @@ function keepTiersLine(src) {
   const m = src.match(/KEEP_LEAGUE_TIERS[^=]*=\s*\{([^}]*)\}/);
   return m ? m[1] : '';
 }
-const aggKeep = keepTiersLine(aggSrc);
 const efKeep = keepTiersLine(efSrc);
-ok(!/amateur/.test(aggKeep), 'aggregation：KEEP_LEAGUE_TIERS 已移除 amateur');
-ok(!/professional/.test(aggKeep), 'aggregation：KEEP_LEAGUE_TIERS 已移除 professional（改为白名单准入）');
 ok(!/amateur/.test(efKeep), 'EF：KEEP_LEAGUE_TIERS 已移除 amateur');
 ok(!/professional/.test(efKeep), 'EF：KEEP_LEAGUE_TIERS 已移除 professional（改为白名单准入）');
 
@@ -141,10 +137,7 @@ const apiSrc = stripComments(fs.readFileSync(path.join(ROOT, 'utils/api.js'), 'u
 // 5.1 服务端 keep 语义必须是「OR 白名单」
 //     ⚠️ The International 自身 tier=excluded，只有 OR 语义才保留得住；
 //        曾误写成 `l.tier === 'professional' && hitWhitelist` → 会把 TI 删掉。
-ok(/\|\|\s*hitWhitelist\s*;/.test(aggSrc), 'aggregation：keep 保持「OR 白名单」语义（否则 TI 被删）');
 ok(/\|\|\s*hitWhitelist\s*;/.test(efSrc), 'EF：keep 保持「OR 白名单」语义（否则 TI 被删）');
-ok(!/l\.tier\s*===?\s*['"]professional['"]\s*&&\s*hitWhitelist/.test(aggSrc),
-  'aggregation：未出现「professional && whitelist」错误收紧');
 ok(!/l\.tier\s*===?\s*["']professional["']\s*&&\s*hitWhitelist/.test(efSrc),
   'EF：未出现「professional && whitelist」错误收紧');
 

@@ -374,6 +374,8 @@ check('G4: 修复回归 — "EPL Masters 2026" 不应再映射到 EPL Masters I'
   assert(!miniCanon || miniCanon.resolveCanonical('EPL Masters 2026') !== 'EPL Masters I', 'EPL 过宽别名回归');
 });
 check('G4: 云函数 league-canon-map 已加载', () => {
+    // ★ 2026-09-22（微信云开发退役）：云侧镜像已随 cloudfunctions/ 删除 → 本对照项跳过。
+    if (!cloudCanon) return;
   assert(cloudCanon, '云函数 league-canon-map 未找到，请运行 npm run sync:canon 并部署');
 });
 if (cloudCanon) {
@@ -392,6 +394,8 @@ if (cloudCanon) {
     });
   });
   check('G4: 两侧 curation-shared.js 模块等价（无双源漂移）', () => {
+    // ★ 2026-09-22（微信云开发退役）：云侧 curation-shared.js 已随目录删除 → 跳过本对照。
+    if (!require('fs').existsSync(require('path').resolve(__dirname, '..', '..', 'cloudfunctions', 'aggregation', 'curation-shared.js'))) return;
     const a = require(path.join(SRC, 'curation-shared.js'));
     const b = require(path.resolve(__dirname, '..', '..', 'cloudfunctions', 'aggregation', 'curation-shared.js'));
     assert(JSON.stringify(a) === JSON.stringify(b), '两侧 curation-shared.js 模块不相等，请运行 npm run sync:canon');
