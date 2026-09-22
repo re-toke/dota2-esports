@@ -37,21 +37,16 @@ function getFlags() {
 }
 
 // 启动拉取实验分组（best-effort，失败回退 DEFAULTS）。在 app.js onLaunch 调用。
-async function refresh() {
-  const action = (config && config.experiment && config.experiment.action) || 'getExperiments';
-  try {
-    const res = await wx.cloud.callFunction({ name: 'aggregation', data: { action: action } });
-    const exps = res && res.result && res.result.experiments;
-    if (exps && typeof exps === 'object') {
-      _flags = exps;
-      try { wx.setStorageSync(storageKey(), exps); } catch (e) {}
-      return exps;
-    }
-  } catch (e) {
-    // 云不可用 → 用本地默认值
-  }
+// ⚠️ 非 async（移除云调用后已无 await → 保留 async 会触发 eslint `require-await` error 阻断 CI）；
+//    仍**返回 Promise** 以保持对调用方的契约不变（await/then 均可继续使用）。
+function refresh() {
+  // ★★ 2026-09-22（微信云开发脱离）：**移除唯一的云开发调用**。
+  //   原实现 `wx.cloud.callFunction({action:'getExperiments'})` 是**云专一**（EDGE_ACTIONS 无此 action，
+  //   也无任何替代路径）；而其返回体只是云函数里**硬编码**的一份 experiment（`follow_cta_variant`），
+  //   与本文件 `DEFAULTS` 等价 ⇒ 改为直接使用本地默认值，**行为不变、零风险**。
+  //   若将来需要真正的服务端实验开关，应新增一个 EF action 并在此接入（届时仍是 EF，不回云开发）。
   _flags = Object.assign({}, DEFAULTS);
-  return _flags;
+  return Promise.resolve(_flags);
 }
 
 // 取实验分组（A/B）；优先级：云端 > 本地 DEFAULTS > 传入默认

@@ -337,50 +337,24 @@ function sendOnce(opts) {
     }).catch(function (err) {
       // EF 侧失败（熔断打开/网络）→ 交云开发重发（errorType 'network' 命中重试白名单）
       console.warn('[subscribe] supabase send fail, fallback cloud:', err && err.message);
-      return _cloudSendOnce(opts);
+      return _noSendChannel();
     });
   }
 
-  return _cloudSendOnce(opts);
+  return _noSendChannel();
 }
 
-/** 云开发原链路（灰度回退用，原实现原样保留） */
-function _cloudSendOnce(opts) {
-  var payload = {
-    action: 'sendSubscribeMessage',
-    params: {
-      touser: opts.toUser,
-      template_id: TMPL_ID,
-      page: opts.page || '/pages/index/index',
-      miniprogram_state: opts.miniprogramState || 'formal',  // 正式版必须用 formal
-      data: opts.data
-    }
-  };
-
-  return new Promise(function (resolve) {
-    wx.cloud.callFunction({
-      name: 'aggregation',
-      data: payload,
-      success: function (res) {
-        var result = (res && res.result) || {};
-        var ok = result.errcode === 0 || result.errcode === undefined;
-        resolve({
-          ok: ok,
-          msgid: result.msgid,
-          errcode: result.errcode,
-          errmsg: result.errmsg || '',
-          errorType: ok ? 'ok' : 'errcode'
-        });
-      },
-      fail: function (err) {
-        resolve({
-          ok: false,
-          errcode: null,
-          errmsg: err.errMsg || 'cloud call failed',
-          errorType: 'network'
-        });
-      }
-    });
+/**
+ * ★ 2026-09-22（微信云开发脱离）：原 `_cloudSendOnce`（云开发原链路）**已移除**。
+ *   EF `subscribe-send` 是本项目唯一的订阅消息发送路径（`sendSubscribeMessage` 主路径）；
+ *   云开发链路属灰度回退，随云函数退役一并删除。
+ *   下方返回「无可用发送通道」的失败结果，形状与原实现保持一致（调用方无需改动）。
+ */
+function _noSendChannel() {
+  return Promise.resolve({
+    ok: false, errcode: null,
+    errmsg: '无可用发送通道（云开发已退役；请检查 EF subscribe-send）',
+    errorType: 'network'
   });
 }
 
