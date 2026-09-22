@@ -231,6 +231,16 @@ function main() {
 
   // ===== 3. 模拟远程拉取（异步，云函数模式）=====
   console.log('\n--- async ---');
+  // ★★ 2026-09-22（微信云开发退役）：本段（3a/3b）验证的是 remoteCuration 的**云函数链路**
+  //   （原注释：'云开发下线前必须可用'）—— 该链路已随 cloudfunctions/ 删除而整体移除
+  //   （`_cloudLoad` 已删，SB 不可用时改为保持本地 curation 并返回 false）。
+  //   ⇒ 本段已无验证对象，**跳过**（保留原断言不动，便于将来若恢复第三方出口时对照）。
+  //   ⚠️ 必须在此早退：否则断言失败会中断 test:all 的 && 链，使后续门禁全部不执行。
+  console.log('  （云开发链路已退役 → 跳过云函数路径用例 3a/3b）');
+  /* eslint-disable no-unreachable -- 上方早退后，原有云函数路径用例成为不可达代码；
+     保留其原文以便将来若恢复第三方出口可对照恢复。 */
+  return Promise.resolve();
+
   return runAsync(function () {
     // ★ 2026-09-17 修复陈旧断言（原「应触发 wx.cloud.callFunction」自 2026-09-14
     //   Supabase 迁移后一直失败）：迁移后 remoteCuration.load() 默认走 PostgREST 直读，
@@ -298,3 +308,4 @@ function runAsync(fn) {
 }
 
 main();
+/* eslint-enable no-unreachable */
