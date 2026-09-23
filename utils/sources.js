@@ -1187,6 +1187,41 @@ function patchNullSeriesId(matches) {
   return _orphanPairMerge(matches);
 }
 
+// ★★ 2026-09-23：把「已结束但来源仍报 live」的系列判定出来（供首页单向降级为 ended）。
+//
+// 背景（两处证据）：
+//   · Steam `/live` 列表会残留已结束对局 —— 用户 2026-09-23 报告
+//     「Conventus Stellarum vs Team Nemesis 已结束，卡片仍显示进行中」；
+//   · `radiant_win` **不能**当"已结束"判据 —— OpenDota 对**进行中的 BO3** 会提前把当前局
+//     写进 proMatches 且 radiant_win 已填（见 pages/index/index.js 内 2026-09-02 的实测记载）。
+//
+// 判据：以「最后活动时间」为准 = max(series.lastTime, 各局 start_time)。
+//   一局 Dota 时长上限约 2 小时；若最后活动已过去 STALE_LIVE_MAX_SEC（默认 3 小时）仍无新活动
+//   ⇒ 判定为已结束。**单向降级**：只把 live → ended，绝不把 ended 反升为 live（避免反向误判）。
+//   ⚠️ 无任何时间信息时返回 false（不敢判定，保持原状）。
+const STALE_LIVE_MAX_SEC = 3 * 3600;
+
+function seriesLastActivitySec(s) {
+  if (!s) return 0;
+  let last = Number(s.lastTime) || 0;
+  const games = s.games || [];
+  for (let i = 0; i < games.length; i++) {
+    const t = Number(games[i] && games[i].start_time) || 0;
+    if (t > last) last = t;
+  }
+  return last;
+}
+
+function isStaleLiveSeries(s, now, maxSec) {
+  if (!s) return false;
+  const limit = maxSec || STALE_LIVE_MAX_SEC;
+  const last = seriesLastActivitySec(s);
+  if (!last) return false;
+  const nowSec = Number(now) || 0;
+  if (!nowSec) return false;
+  return (nowSec - last) > limit;
+}
+
 function groupSeries(matches) {
   if (!matches || !matches.length) return [];
   matches = patchNullSeriesId(matches);  // ★ 2026-08-12 强化版入口
@@ -2823,6 +2858,8 @@ module.exports = {
   getLeagueMetadata: getLeagueMetadata,
   getLeagueStandings: getLeagueStandings,
   groupSeries: groupSeries,
+  isStaleLiveSeries: isStaleLiveSeries,
+  seriesLastActivitySec: seriesLastActivitySec,
   // ★ 2026-08-04：BO 判定引擎（S2 赛制文本 / S3 series_type 映射 / S4 同赛事自证 / S5 约束 / S6 默认）
   buildBoContext: buildBoContext,
   resolveBoType: resolveBoType,

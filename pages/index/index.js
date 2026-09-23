@@ -76,6 +76,17 @@ const BO_META = {
 //   不再维护 groupProSeries 私有实现（v4.2 遗留）——它缺孤儿互并与 BO 判定，且与
 //   league-detail 的权威链路（buildBoContext → applyBo）重复。删除见 git 历史。
 
+// ★★ 2026-09-23：首页可见级别过滤 —— **单一口径**（渲染列表与周日历角标共用）。
+//   背景：首页三段只保留 S/A 级（2026-09-16 产品决策）；若角标用「全部级别」计数，
+//   就会与卡片数不符（用户报告：23 号角标 8、实际卡片 4）。
+//   提取为纯函数的目的：任何"计数/列表"两处口径都必须指向它，避免再次漂移。
+//   ⚠️ 判据是 `card.tier.grade`（卡片契约字段，见 _cardFromSeries/_cardFromCuration 的 `tier` 写入）。
+function _homePassGrade(c) {
+  if (!c || !c.tier) return false;
+  const g = c.tier.grade;
+  return g === 'S' || g === 'A';
+}
+
 Page({
   data: {
     followLoading: false,
@@ -852,8 +863,12 @@ Page({
 
     this._allMatches = Object.keys(byKey).map((k) => byKey[k]);
     // 按日期分桶 → 周日历角标（语义升级：角标 = 当日系列数，非局数）
+    // ★★ 2026-09-23 修复「角标数字与卡片数不符」：角标必须与**首页实际渲染的集合同口径** ——
+    //   首页只显示 S/A 级（见 _homePassGrade），而此处原实现统计了**全部级别** ⇒ 8 vs 4。
+    //   现统一：只统计会被渲染的卡（同一纯函数，单一口径，杜绝再次漂移）。
     const dayCounts = {};
     this._allMatches.forEach((c) => {
+      if (!_homePassGrade(c)) return;
       dayCounts[c.dateKey] = (dayCounts[c.dateKey] || 0) + 1;
     });
     this._dayCounts = dayCounts;
@@ -928,7 +943,15 @@ Page({
     // 点击目标：系列内第一个有真实 match_id 的局（upcoming 排期赛常为 0 → 走 leagueId 跳转）
     let matchId = 0;
     games.forEach((g) => { if (!matchId && g.match_id && g.match_id > 0) matchId = g.match_id; });
-    const status = s.phase === 'recent' ? 'ended' : s.phase;
+    let status = s.phase === 'recent' ? 'ended' : s.phase;
+    // ★★ 2026-09-23 修复「已结束的对局仍显示进行中」：来源报 live 但**最后活动已超时**的系列，
+    //   单向降级为 ended（判据见 utils/sources.js 的 isStaleLiveSeries 注释 —— 关键点：
+    //   `radiant_win` 不可作判据，OpenDota 会给进行中的 BO3 提前写入）。
+    if (status === 'live' && sources.isStaleLiveSeries(s, now)) {
+      status = 'ended';
+      console.log('[index] LIVE 超时降级为已结束（最后活动 >3h）：' + (s.teamA || s.team1Name || '') +
+                  ' vs ' + (s.teamB || s.team2Name || ''));
+    }
     // 分桶：进行中系列跟随「今天」（与 curation live 一致，防跨天角标漂移）；
     //   upcoming/ended 按系列最后一场时间（upcoming 的 lastTime 即开赛时间）。
     const lastSec = s.lastTime || 0;
@@ -1113,10 +1136,11 @@ Page({
     //   背景：此前无级别过滤，窗口内在赛的都是 S/A 时「看起来」是 S/A；
     //   补收录 B 级赛事（WINLINE S4 / EPL SEA S17 等）后它们正在进行 → 冒进首页。
     //   注意：只影响首页；赛事列表页（leagues）仍展示全部级别。
-    const HOME_GRADES = { S: 1, A: 1 };
-    const passGrade = (c) => !!(c.tier && HOME_GRADES[c.tier.grade]);
+    //   ★★ 2026-09-23：过滤口径提取为**模块级纯函数** `_homePassGrade`（见文件顶部），
+    //   供「渲染列表」与「周日历角标计数」共用 —— 此前角标统计了全部级别、而列表只显示 S/A，
+    //   导致「角标 8 张 / 实际 4 张」的不一致（用户 2026-09-23 报告）。
     const beforeGrade = all.filter((c) => c.dateKey === selected);
-    const dayMatches = beforeGrade.filter(passGrade);
+    const dayMatches = beforeGrade.filter(_homePassGrade);
     if (beforeGrade.length !== dayMatches.length) {
       console.log('[index] S/A 级别过滤：' + beforeGrade.length + ' → ' + dayMatches.length + ' 张（剔除 ' + (beforeGrade.length - dayMatches.length) + ' 张非 S/A）');
     }
