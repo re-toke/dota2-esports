@@ -81,6 +81,39 @@ const BO_META = {
 //   就会与卡片数不符（用户报告：23 号角标 8、实际卡片 4）。
 //   提取为纯函数的目的：任何"计数/列表"两处口径都必须指向它，避免再次漂移。
 //   ⚠️ 判据是 `card.tier.grade`（卡片契约字段，见 _cardFromSeries/_cardFromCuration 的 `tier` 写入）。
+// ★★ 2026-09-23：卡片级「同一对局」判定与择优 —— 修复首页同一对局显示两张卡。
+//
+// 根因（用户 2026-09-23 实测，线索决定性地指向"双来源"）：
+//   同一场比赛被两个来源各出一卡，且**主客顺序相反** ——
+//   已结束卡「Team Nemesis vs Conventus Stellarum」／进行中卡「Conventus Stellarum vs Team Nemesis」。
+//   ⇒ match 层弱键 `leagueid|队对(排序)|start_time`（见本文件 ~:626）**因 start_time 不同而失效** ✗：
+//     Steam `/live` 的 start_time 取「当前局 activate_time」，与 proMatches 的真实开赛时间不同。
+//
+// 做法：在**卡片层**按「归一化队名对（**排序** ⇒ 忽略主客顺序）+ 12h 内」合并。
+//   卡片已由 series 聚合，**比 match 层安全** —— match 层按队对合并会抹掉 BO3 的单局 ✗✗。
+//
+// 择优：两张并存时保留 **ended**（真·进行中的对局不会有 ended 卡；两者并存说明 live 那张是残留）；
+//   同状态时优先「有比分」的一方；否则保留先入表者。整个过程**打日志**（不静默丢弃）。
+function _pairKeyOfCard(c) {
+  const a = _normTeamToken(c && c.teamA), b = _normTeamToken(c && c.teamB);
+  if (!a || !b) return null;
+  return (a < b) ? (a + '|' + b) : (b + '|' + a);
+}
+function _normTeamToken(t) {
+  if (!t) return '';
+  const nm = String(t.name || t.tag || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (nm) return nm;
+  return t.id ? ('#' + t.id) : '';
+}
+function _preferSameMatchCard(x, y) {
+  const rank = (c) => (c.status === 'ended' ? 3 : (c.status === 'upcoming' ? 1 : 2));
+  const rx = rank(x), ry = rank(y);
+  if (rx !== ry) return rx > ry ? x : y;
+  const sx = (x.scoreA || 0) + (x.scoreB || 0), sy = (y.scoreA || 0) + (y.scoreB || 0);
+  if (sx !== sy) return sx > sy ? x : y;
+  return x;
+}
+
 function _homePassGrade(c) {
   if (!c || !c.tier) return false;
   const g = c.tier.grade;
@@ -861,7 +894,30 @@ Page({
       byKey[card.key] = card;
     });
 
-    this._allMatches = Object.keys(byKey).map((k) => byKey[k]);
+    // ★★ 2026-09-23：卡片级「同一对局」合并（说明见文件顶部的 _pairKeyOfCard/_preferSameMatchCard）。
+    //   插在此处（所有来源都已入表之后）——**不改动任何来源各自的取数/入表逻辑**，只做一次收口，
+    //   风险最小：两卡同时存在本就是异常态，合并只会让页面更正确。
+    const byPair = {};
+    Object.keys(byKey).forEach((k) => {
+      const c = byKey[k];
+      const pk = _pairKeyOfCard(c);
+      if (!pk) { byPair['\u0000' + k] = c; return; }   // 无法构造队对（队名缺失）→ 原样保留
+      const prev = byPair[pk];
+      if (!prev) { byPair[pk] = c; return; }
+      // 12h 内才视为同一对局（防"同日两次交手"被误并；同日同队两赛属极罕见，宁少勿滥）
+      if (Math.abs((prev.start || 0) - (c.start || 0)) > 12 * 3600) {
+        byPair['\u0000' + k] = c;
+        return;
+      }
+      const keep = _preferSameMatchCard(prev, c);
+      const drop = (keep === prev) ? c : prev;
+      console.log('[index] 同一对局卡片合并：保留 ' + keep.status + '（' +
+        ((keep.teamA && keep.teamA.name) || '?') + ' vs ' + ((keep.teamB && keep.teamB.name) || '?') +
+        '），丢弃 ' + drop.status + '（key=' + drop.key + '，start 差 ' +
+        Math.abs((prev.start || 0) - (c.start || 0)) + 's）');
+      byPair[pk] = keep;
+    });
+    this._allMatches = Object.keys(byPair).map((k) => byPair[k]);
     // 按日期分桶 → 周日历角标（语义升级：角标 = 当日系列数，非局数）
     // ★★ 2026-09-23 修复「角标数字与卡片数不符」：角标必须与**首页实际渲染的集合同口径** ——
     //   首页只显示 S/A 级（见 _homePassGrade），而此处原实现统计了**全部级别** ⇒ 8 vs 4。
