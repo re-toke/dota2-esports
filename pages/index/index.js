@@ -109,10 +109,22 @@ function _pairKeysOfCard(c) {
 }
 function _teamToken(t, loose) {
   if (!t) return '';
-  // ★ 归一化一律走 utils/names.js 单一实现（禁止内联；test-sources 有守卫）
-  const nm = loose ? names.normTeamNameLoose(t.name || t.tag || '') : names.normAsciiKey(t.name || t.tag || '');
-  if (nm) return nm;
+  // ★★ 2026-09-23（**基于线上真字段定位**）：上游 LP/LPDB 路径会把**查询失败的文案**混进队名 ——
+  //   实测（用户 Console 诊断）：`Conventus Stellarum (page does not exist)` ✗
+  //   ⇒ 归一化后成 `conventusstellarumpagedoesnotexist`，**与干净队名永远算不出同一个键** ✗
+  //   ⇒ 这正是「同一对局两张卡」合并失效的真正成因（此前两版都栽在这里）。
+  //   先剔除该文案，再去掉尾部括号补充（`(page does not exist)` / `(Peru)` 这类），最后才归一化。
+  const nm = _stripLpNoise(t.name || t.tag || '');
+  const norm = loose ? names.normTeamNameLoose(nm) : names.normAsciiKey(nm);
+  if (norm) return norm;
   return t.id ? ('#' + t.id) : '';
+}
+// 剔除 LP/LPDB 的错误文案与尾部括号补充（仅用于**合并键**，不改动展示用队名）
+function _stripLpNoise(name) {
+  var x = String(name || '');
+  x = x.replace(/\(\s*page does not exist\s*\)/ig, ' ');   // 已知上游文案
+  x = x.replace(/\s*\([^)]*\)\s*$/, ' ');                  // 尾部括号补充
+  return x.replace(/\s+/g, ' ').trim();
 }
 function _preferSameMatchCard(x, y) {
   const rank = (c) => (c.status === 'ended' ? 3 : (c.status === 'upcoming' ? 1 : 2));

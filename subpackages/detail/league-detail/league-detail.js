@@ -162,6 +162,21 @@ function mergeMetadataWithFallback(meta, name, leagueId) {
   return merged;
 }
 
+// ★★ 2026-09-23：由**比分**判定系列是否已终局（与来源 phase、BO 推导均无关）。
+//   实测依据：用户 Console 诊断 + 页面观察 —— 2:1（BO3）却仍被判 live ✗。
+//   规则：max(scoreA,scoreB) >= 2 ⇒ 至少 2 胜 ⇒ BO3 终局；BO5/BO2 的 2 胜不足以终局 ⇒ 不判（宁漏勿错）。
+//   ⚠️ 无比分（0:0）时一律不判 —— 不改变原有行为。
+function _decidedByScore(m, bo) {
+  if (!m) return false;
+  if (bo === 'BO5' || bo === 'BO2') return false;
+  var sa = Number(m.scoreA) || 0, sb = Number(m.scoreB) || 0;
+  if (Math.max(sa, sb) < 2) return false;
+  console.log('[league-detail] 比分达终局（' + sa + ':' + sb + ' bo=' + (bo || 'unknown') +
+              '）→ 判为已结束：' + (m.teamA && m.teamA.name ? m.teamA.name : '') + ' vs ' +
+              (m.teamB && m.teamB.name ? m.teamB.name : ''));
+  return true;
+}
+
 Page({
   data: {
     leagueId: '',
@@ -1052,7 +1067,12 @@ Page({
                 //   LP upcoming/recent 场次无 OpenDota 比分反推路径，mapSlots 是关键 BO 信号。
                 mapSlots: m.mapSlots || 0,
                 isDraw: liqIsDraw,
-                isLive: m.phase === 'live',
+                // ★★ 2026-09-23：除了来源 phase，再叠加一条**与来源、BO 推导均无关**的硬判据 ——
+                //   用户实测：该对局比分已 2:1（BO3）却仍显示「进行中」✗；而本页 L1112-1118 的
+                //   「④ 未达 BO 上限」规则依赖 boGames，BO 一旦被判大即失效 ✗。
+                //   判据：max(比分) >= 2 ⇒ 至少赢下 2 局 ⇒ BO3 必然终局（BO5/BO2 跳过，不误杀）。
+                isLive: (m.phase === 'live') && !_decidedByScore(m, m.boType),
+
                 isRecent: liqIsRecent,
                 isUpcoming: m.phase === 'upcoming',
                 phase: m.phase,
