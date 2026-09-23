@@ -101,7 +101,11 @@ function _pairKeyOfCard(c) {
 }
 function _normTeamToken(t) {
   if (!t) return '';
-  const nm = String(t.name || t.tag || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  // ★★ 2026-09-23：改用 `utils/names.js` 的单一实现 —— 原先在此内联了
+  //   `toLowerCase().replace(/[^a-z0-9]/g,'')`，被 test-sources 的「全库禁止再内联该规则」
+  //   守卫当场拦下（该守卫正是本项目 2026-09-20 收敛归一化的成果，规则必须只在 names.js 里有一份）。
+  //   `normAsciiKey` 与本处原内联**规则完全相同** ⇒ 行为零变化。
+  const nm = names.normAsciiKey(t.name || t.tag || '');
   if (nm) return nm;
   return t.id ? ('#' + t.id) : '';
 }
