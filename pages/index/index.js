@@ -94,18 +94,23 @@ const BO_META = {
 //
 // 择优：两张并存时保留 **ended**（真·进行中的对局不会有 ended 卡；两者并存说明 live 那张是残留）；
 //   同状态时优先「有比分」的一方；否则保留先入表者。整个过程**打日志**（不静默丢弃）。
-function _pairKeyOfCard(c) {
-  const a = _normTeamToken(c && c.teamA), b = _normTeamToken(c && c.teamB);
-  if (!a || !b) return null;
-  return (a < b) ? (a + '|' + b) : (b + '|' + a);
+// ★★ 2026-09-23（第二版）：改用「**双键**」方案 —— 严格键（normAsciiKey）∪ 宽松键（normTeamNameLoose）。
+//   为什么升级：首版只用严格键，而两个来源对**同一支队伍**的写法可能带/不带 "Team " 前缀
+//   （如 `Team Nemesis` vs `Nemesis`），严格键算不出同一个键 ⇒ 用户实测**仍未合并** ✗。
+//   `normTeamNameLoose` 会剥掉 TEAM_SUFFIX_RE（Team/战队 等后缀）⇒ 这类写法差异才能对上。
+//   风险控制：仍保留「|start 差| ≤ 12h」守卫；且**双键命中任一即合并**，宁可多并一次也不漏（重复卡是本 bug 的形态）。
+function _pairKeysOfCard(c) {
+  const a1 = _teamToken(c && c.teamA, false), b1 = _teamToken(c && c.teamB, false);
+  const a2 = _teamToken(c && c.teamA, true),  b2 = _teamToken(c && c.teamB, true);
+  const out = [];
+  if (a1 && b1) out.push((a1 < b1) ? (a1 + '|' + b1) : (b1 + '|' + a1));
+  if (a2 && b2) { const k = (a2 < b2) ? (a2 + '|' + b2) : (b2 + '|' + a2); if (out.indexOf(k) < 0) out.push(k); }
+  return out;
 }
-function _normTeamToken(t) {
+function _teamToken(t, loose) {
   if (!t) return '';
-  // ★★ 2026-09-23：改用 `utils/names.js` 的单一实现 —— 原先在此内联了
-  //   `toLowerCase().replace(/[^a-z0-9]/g,'')`，被 test-sources 的「全库禁止再内联该规则」
-  //   守卫当场拦下（该守卫正是本项目 2026-09-20 收敛归一化的成果，规则必须只在 names.js 里有一份）。
-  //   `normAsciiKey` 与本处原内联**规则完全相同** ⇒ 行为零变化。
-  const nm = names.normAsciiKey(t.name || t.tag || '');
+  // ★ 归一化一律走 utils/names.js 单一实现（禁止内联；test-sources 有守卫）
+  const nm = loose ? names.normTeamNameLoose(t.name || t.tag || '') : names.normAsciiKey(t.name || t.tag || '');
   if (nm) return nm;
   return t.id ? ('#' + t.id) : '';
 }
@@ -901,27 +906,100 @@ Page({
     // ★★ 2026-09-23：卡片级「同一对局」合并（说明见文件顶部的 _pairKeyOfCard/_preferSameMatchCard）。
     //   插在此处（所有来源都已入表之后）——**不改动任何来源各自的取数/入表逻辑**，只做一次收口，
     //   风险最小：两卡同时存在本就是异常态，合并只会让页面更正确。
-    const byPair = {};
+    const pairIndex = {};   // 键 → 已入表的卡（严格键/宽松键都指向它）
+    const keptCards = [];   // 最终保留的卡（顺序稳定）
     Object.keys(byKey).forEach((k) => {
       const c = byKey[k];
-      const pk = _pairKeyOfCard(c);
-      if (!pk) { byPair['\u0000' + k] = c; return; }   // 无法构造队对（队名缺失）→ 原样保留
-      const prev = byPair[pk];
-      if (!prev) { byPair[pk] = c; return; }
-      // 12h 内才视为同一对局（防"同日两次交手"被误并；同日同队两赛属极罕见，宁少勿滥）
-      if (Math.abs((prev.start || 0) - (c.start || 0)) > 12 * 3600) {
-        byPair['\u0000' + k] = c;
+      const keys = _pairKeysOfCard(c);
+      if (!keys.length) { keptCards.push(c); return; }   // 队名缺失 → 原样保留
+      let hit = null;
+      for (let i = 0; i < keys.length; i++) { if (pairIndex[keys[i]]) { hit = pairIndex[keys[i]]; break; } }
+      if (!hit) {
+        keys.forEach((kk) => { pairIndex[kk] = c; });
+        keptCards.push(c);
         return;
       }
-      const keep = _preferSameMatchCard(prev, c);
-      const drop = (keep === prev) ? c : prev;
+      // 12h 内才视为同一对局（防"同日两次交手"被误并）
+      if (Math.abs((hit.start || 0) - (c.start || 0)) > 12 * 3600) {
+        keys.forEach((kk) => { pairIndex[kk] = c; });
+        keptCards.push(c);
+        return;
+      }
+      const keep = _preferSameMatchCard(hit, c);
+      const drop = (keep === hit) ? c : hit;
+      if (keep === drop) { return; }
+      // 保留 keep、丢弃 drop：把两个候选的所有键都重新指向 keep，并把 keptCards 里的 drop 换掉
+      const at = keptCards.indexOf(drop);
+      if (at >= 0) keptCards[at] = keep; else keptCards.push(keep);
+      keys.forEach((kk) => { pairIndex[kk] = keep; });
+      const dKeys = _pairKeysOfCard(drop);
+      dKeys.forEach((kk) => { pairIndex[kk] = keep; });
       console.log('[index] 同一对局卡片合并：保留 ' + keep.status + '（' +
         ((keep.teamA && keep.teamA.name) || '?') + ' vs ' + ((keep.teamB && keep.teamB.name) || '?') +
         '），丢弃 ' + drop.status + '（key=' + drop.key + '，start 差 ' +
-        Math.abs((prev.start || 0) - (c.start || 0)) + 's）');
-      byPair[pk] = keep;
+        Math.abs((hit.start || 0) - (c.start || 0)) + 's，命中键=' + keys.join(' / ') + '）');
     });
-    this._allMatches = Object.keys(byPair).map((k) => byPair[k]);
+    // ★★ 2026-09-23：**同对局漏合并探测器**（自报告）——
+    //   用户实测「同一对局仍显示两张卡」，但我按队名对 + 12h 合并仍未生效 ⇒ 说明两卡的
+    //   队名字符串与我假设的写法不同（已连续两次推断失败 ✗）。
+    //   ⇒ 不再猜：把「疑似同对局却未合并」的两卡**原始字段**打出来，用线上真数据定案。
+    //   判据：任一队名（去空格小写）相同、或严格键的"单边"相同，即视为疑似。
+    (function detectMissedMerge(cards) {
+      const sig = (c) => {
+        const a = _teamToken(c && c.teamA, false), b = _teamToken(c && c.teamB, false);
+        return { a: a, b: b, pair: [a, b].sort().join('|') };
+      };
+      for (let i = 0; i < cards.length; i++) {
+        for (let j = i + 1; j < cards.length; j++) {
+          const x = cards[i], y = cards[j];
+          const sx = sig(x), sy = sig(y);
+          if (sx.pair === sy.pair) continue;                 // 同键 → 已被合并逻辑处理，跳过
+          const shareTeam = (sx.a && (sx.a === sy.a || sx.a === sy.b)) ||
+                            (sx.b && (sx.b === sy.a || sx.b === sy.b));
+          if (!shareTeam) continue;
+          console.warn('[index][诊断] 疑似同对局未合并 ||' +
+            ' A(k=' + x.key + ',st=' + x.status + ',start=' + x.start + ',dk=' + x.dateKey +
+            ',score=' + x.scoreA + ':' + x.scoreB + ',bo=' + x.bo +
+            ',teams=' + ((x.teamA && x.teamA.name) || '') + '/' + ((x.teamB && x.teamB.name) || '') + ')' +
+            ' B(k=' + y.key + ',st=' + y.status + ',start=' + y.start + ',dk=' + y.dateKey +
+            ',score=' + y.scoreA + ':' + y.scoreB + ',bo=' + y.bo +
+            ',teams=' + ((y.teamA && y.teamA.name) || '') + '/' + ((y.teamB && y.teamB.name) || '') + ')' +
+            ' keys=' + sx.pair + ' vs ' + sy.pair +
+            ' startDiff=' + Math.abs((x.start || 0) - (y.start || 0)) + 's');
+        }
+      }
+    })(keptCards);
+    // ★★ 2026-09-23：**同对局漏合并探测器**（自报告）——
+    //   用户实测「同一对局仍显示两张卡」，但我按队名对 + 12h 合并仍未生效 ⇒ 说明两卡的
+    //   队名字符串与我假设的写法不同（已连续两次推断失败 ✗）。
+    //   ⇒ 不再猜：把「疑似同对局却未合并」的两卡**原始字段**打出来，用线上真数据定案。
+    //   判据：任一队名（去空格小写）相同、或严格键的"单边"相同，即视为疑似。
+    (function detectMissedMerge(cards) {
+      const sig = (c) => {
+        const a = _teamToken(c && c.teamA, false), b = _teamToken(c && c.teamB, false);
+        return { a: a, b: b, pair: [a, b].sort().join('|') };
+      };
+      for (let i = 0; i < cards.length; i++) {
+        for (let j = i + 1; j < cards.length; j++) {
+          const x = cards[i], y = cards[j];
+          const sx = sig(x), sy = sig(y);
+          if (sx.pair === sy.pair) continue;                 // 同键 → 已被合并逻辑处理，跳过
+          const shareTeam = (sx.a && (sx.a === sy.a || sx.a === sy.b)) ||
+                            (sx.b && (sx.b === sy.a || sx.b === sy.b));
+          if (!shareTeam) continue;
+          console.warn('[index][诊断] 疑似同对局未合并 ||' +
+            ' A(k=' + x.key + ',st=' + x.status + ',start=' + x.start + ',dk=' + x.dateKey +
+            ',score=' + x.scoreA + ':' + x.scoreB + ',bo=' + x.bo +
+            ',teams=' + ((x.teamA && x.teamA.name) || '') + '/' + ((x.teamB && x.teamB.name) || '') + ')' +
+            ' B(k=' + y.key + ',st=' + y.status + ',start=' + y.start + ',dk=' + y.dateKey +
+            ',score=' + y.scoreA + ':' + y.scoreB + ',bo=' + y.bo +
+            ',teams=' + ((y.teamA && y.teamA.name) || '') + '/' + ((y.teamB && y.teamB.name) || '') + ')' +
+            ' keys=' + sx.pair + ' vs ' + sy.pair +
+            ' startDiff=' + Math.abs((x.start || 0) - (y.start || 0)) + 's');
+        }
+      }
+    })(keptCards);
+    this._allMatches = keptCards;
     // 按日期分桶 → 周日历角标（语义升级：角标 = 当日系列数，非局数）
     // ★★ 2026-09-23 修复「角标数字与卡片数不符」：角标必须与**首页实际渲染的集合同口径** ——
     //   首页只显示 S/A 级（见 _homePassGrade），而此处原实现统计了**全部级别** ⇒ 8 vs 4。
@@ -1007,6 +1085,17 @@ Page({
     // ★★ 2026-09-23 修复「已结束的对局仍显示进行中」：来源报 live 但**最后活动已超时**的系列，
     //   单向降级为 ended（判据见 utils/sources.js 的 isStaleLiveSeries 注释 —— 关键点：
     //   `radiant_win` 不可作判据，OpenDota 会给进行中的 BO3 提前写入）。
+    // ★★ 2026-09-23（第二重判据，**不依赖 BO 制式推导是否准确**）：
+    //   用户实测：该对局比分已 2:1（BO3）却仍显示「进行中」。既有路径都依赖来源的 phase
+    //   （详情页 L1112-1118 的「④ 未达 BO 上限」规则也依赖 boGames，一旦 BO 推导偏大就失效 ✗）。
+    //   本判据只用**比分本身**：`max(scoreA,scoreB) >= 2` ⇒ 该系列**至少赢下 2 局** ⇒
+    //   在 BO3 ⇒ 已结束；BO1 ⇒ 不可能出现（max 只能为 1）；**BO5/BO2 跳过**（2 胜不足以终局）。
+    if (status === 'live' && bo !== 'BO5' && bo !== 'BO2' &&
+        Math.max(Number(s.scoreA) || 0, Number(s.scoreB) || 0) >= 2) {
+      status = 'ended';
+      console.log('[index] 比分已达终局（' + s.scoreA + ':' + s.scoreB + '，' + bo +
+                  '）→ 状态修正为已结束：' + (s.teamA || '') + ' vs ' + (s.teamB || ''));
+    }
     if (status === 'live' && sources.isStaleLiveSeries(s, now)) {
       status = 'ended';
       console.log('[index] LIVE 超时降级为已结束（最后活动 >3h）：' + (s.teamA || s.team1Name || '') +
