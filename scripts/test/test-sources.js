@@ -844,6 +844,20 @@ async function runAll() {
       console.log('FAIL  ' + t.label + '  ->  ' + (e && e.message || e));
     }
   }
+  // ===== 2026-09-23：isStaleLiveSeries（LIVE 超时降级，修复「已结束仍显示进行中」）=====
+  check('sources：isStaleLiveSeries —— 仅「最后活动 > 3h」判陈旧（单向降级；无时间不判）', () => {
+    const now = 1700000000;
+    const mk = (ago) => ({ lastTime: now - ago, games: [{ start_time: now - ago }] });
+    assert(sources.isStaleLiveSeries(mk(300), now) === false, '5min 前活动不应判陈旧');
+    assert(sources.isStaleLiveSeries(mk(3600), now) === false, '1h 前活动不应判陈旧');
+    assert(sources.isStaleLiveSeries(mk(3 * 3600 - 60), now) === false, '临界内(2h59m)不应判陈旧');
+    assert(sources.isStaleLiveSeries(mk(4 * 3600), now) === true, '4h 前活动应判陈旧');
+    const mixed = { lastTime: now - 5 * 3600, games: [{ start_time: now - 5 * 3600 }, { start_time: now - 600 }] };
+    assert(sources.isStaleLiveSeries(mixed, now) === false, '有新局(10min 前) → 不算陈旧');
+    assert(sources.isStaleLiveSeries({ games: [] }, now) === false, '无时间信息不应判定');
+    assert(sources.isStaleLiveSeries(null, now) === false, 'null 不应抛错');
+  });
+
   console.log('\n=== 结果 ===');
   console.log('通过: ' + passed + '  失败: ' + failed);
   console.log(failed === 0 ? '全部通过 ✅' : '存在失败 ❌');
