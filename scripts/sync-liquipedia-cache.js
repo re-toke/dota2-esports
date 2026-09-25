@@ -27,7 +27,7 @@ const LP_UA = 'DOTA2-Esports-Hub/1.0 (WeChat Mini Program; contact: dev@local)';
 const RATE_LIMIT_MS = 2200;
 const TTL_SEC = 26 * 3600;
 
-const slugmap = require('./../cloudfunctions/aggregation/liquipedia-slugmap.json');
+const slugmap = require('./../utils/liquipedia-slugmap.json');
 
 // ★★ 2026-09-11（关键修复）：抓取范围扩展 —— 原有范围**无法让赛程命中**。
 //
@@ -43,12 +43,14 @@ const slugmap = require('./../cloudfunctions/aggregation/liquipedia-slugmap.json
 //   后者补齐 slugmap 未覆盖的历史赛事主页。
 //   `utils/curation.js` 零 wx 依赖 → 可在 Node/GH Actions 直接 require。
 const curation = require('./../utils/curation.js');
-// ★ 2026-09-12：索引构建器与云函数**共用同一份实现**（cloudfunctions/aggregation/index-builders.js）。
+// ★ 2026-09-25（云开发退役）：本脚本原 require cloudfunctions/ 下三份文件 —— 该目录已删除，
+//   现全部改为 utils/ 侧（index-builders.js 已从退役备份 .cloudfunctions-backup-20260922 恢复到 utils/）
+//   ⚠️ 此前该脚本因此**启动即崩**（CI：Sync Liquipedia Cache / Failed in 8 seconds）✗
 //   该模块必须放在云函数目录内（微信云函数只能 require 自己目录下的文件），
 //   同步脚本反向 require 进去 —— 与 liquipedia-slugmap.json 同一套路。
-const BUILDERS = require('./../cloudfunctions/aggregation/index-builders.js');
+const BUILDERS = require('./../utils/index-builders.js');
 // ★ 2026-09-12：队标解析器（与云函数共用同一份 liquipedia-parse，避免双源漂移）
-const LIQUI_PARSE = require('./../cloudfunctions/aggregation/liquipedia-parse.js');
+const LIQUI_PARSE = require('./../utils/liquipedia-parse.js');
 
 const baseSlugs = Object.values(slugmap.mappings || {});
 const curatedSlugs = [];
