@@ -6,22 +6,10 @@
 // 数据来源：utils/upcoming-local.json（由本脚本生成）
 
 module.exports = {
-  "generatedAt": 1790325335,
+  "generatedAt": 1790363346,
   "source": "liquipedia",
   "note": "build-time snapshot (Upcoming+Ongoing, Tier1-3), refresh via scripts/sync/fetch-liquipedia-upcoming.js",
   "events": [
-    {
-      "id": -1854668,
-      "name": "European Pro League Season 40",
-      "grade": "B",
-      "rank": 1,
-      "label": "B级",
-      "tier": 3,
-      "start": 1789171200,
-      "end": 1790351999,
-      "date": "Sep 12–25, 2026",
-      "source": "liquipedia"
-    },
     {
       "id": -1973943,
       "name": "PGL Wallachia Season 9",
