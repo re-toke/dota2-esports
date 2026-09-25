@@ -31,10 +31,35 @@ function _teamToken(t, loose) {
 function _preferSameMatchCard(x, y) {
   const rank = (c) => (c.status === 'ended' ? 3 : (c.status === 'upcoming' ? 1 : 2));
   const rx = rank(x), ry = rank(y);
-  if (rx !== ry) return rx > ry ? x : y;
-  const sx = (x.scoreA || 0) + (x.scoreB || 0), sy = (y.scoreA || 0) + (y.scoreB || 0);
-  if (sx !== sy) return sx > sy ? x : y;
-  return x;
+  let win, lose;
+  if (rx !== ry) {
+    win = (rx > ry) ? x : y;
+    lose = (rx > ry) ? y : x;
+  } else {
+    const sx = (x.scoreA || 0) + (x.scoreB || 0), sy = (y.scoreA || 0) + (y.scoreB || 0);
+    if (sx === sy) return x;
+    win = (sx > sy) ? x : y;
+    lose = (sx > sy) ? y : x;
+  }
+  // ★★ 2026-09-25（方案 1，用户拍板）：**合并而非二选一** —— 修「同一场对局两页口径矛盾」的首页半边。
+  //   实测：首页已结束卡来自 LP 排期链路（本身无小场比分，比分依赖 absorbSettledGames 注入
+  //   OpenDota 已结算局），EF 熔断窗口内注入失败 ⇒ 0:0；并存 live 卡却带比分（LP wikitext 的
+  //   per-game 数据，不依赖 EF）⇒ 旧规则「保留 ended」把正确比分也丢了（详情页同场显示 1:2）。
+  //   规则：胜者保留（状态/队伍/赛制等以**状态更可信**的卡为准）；**仅当**胜者无比分（总分 0）
+  //   且败者有比分时，吸收败者的比分 —— 其余字段一律不动（宁少勿错）。
+  //   ⚠️ 0:0 是合法比分（平局/未录入）⇒ 条件必须限定「败者总分 > 0」，否则会把真平局误当缺数据。
+  //   ⚠️ 纯函数：返回**新对象**，不改写入参（本模块约定「只做纯计算」）。
+  const wsum = (Number(win.scoreA) || 0) + (Number(win.scoreB) || 0);
+  const lsum = (Number(lose.scoreA) || 0) + (Number(lose.scoreB) || 0);
+  if (wsum === 0 && lsum > 0) {
+    const sa = Number(lose.scoreA) || 0, sb = Number(lose.scoreB) || 0;
+    const merged = Object.assign({}, win, { scoreA: sa, scoreB: sb });
+    // 胜负标记必须与新比分一致（ended 卡通常无 games ⇒ 原 winA/winB 不可信，按比分重导）
+    merged.winA = sa > sb;
+    merged.winB = sb > sa;
+    return merged;
+  }
+  return win;
 }
 
 function _homePassGrade(c) {

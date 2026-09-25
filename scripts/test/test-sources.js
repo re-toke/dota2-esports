@@ -1079,6 +1079,26 @@ check('names：★ 全库禁止再内联该规则（白名单外一律 FAIL）',
     assert(home.preferSameMatchCard(dirty, clean) === dirty, 'ended 应优先于 live');
     const s0 = { status: 'live', scoreA: 0, scoreB: 0 }, s1 = { status: 'live', scoreA: 2, scoreB: 1 };
     assert(home.preferSameMatchCard(s0, s1) === s1, '同状态时应有比分者优先');
+    // ③' ★ 2026-09-25 方案 1（用户拍板）：**合并而非二选一** ——
+    //    修「首页已结束 0:0、详情页同场 1:2」的首页半边：ended 卡（LP 链路无小场比分，
+    //    比分依赖 absorbSettledGames 注入 OD 局，EF 熔断期注入失败）+ 并存 live 卡带比分
+    //    ⇒ 状态保留 ended、比分吸收非零方（旧规则「保留 ended」把正确比分也丢了）。
+    const e0 = { status: 'ended', scoreA: 0, scoreB: 0 };
+    const l12 = { status: 'live', scoreA: 1, scoreB: 2 };
+    const m1 = home.preferSameMatchCard(e0, l12);
+    assert(m1.status === 'ended' && m1.scoreA === 1 && m1.scoreB === 2,
+      'ended 0:0 + live 1:2 ⇒ 应合并为 ended 1:2（状态取 ended、比分取非零方），实际: ' +
+      JSON.stringify({ status: m1.status, scoreA: m1.scoreA, scoreB: m1.scoreB }));
+    assert(m1.winA === false && m1.winB === true, '胜负标记应与新比分一致（1:2 ⇒ B 胜）');
+    //    反向①：ended 已有比分 ⇒ 不得被改写（吸收只发生在胜者无比分时）
+    const e21 = { status: 'ended', scoreA: 2, scoreB: 1 };
+    assert(home.preferSameMatchCard(e21, l12) === e21, 'ended 已有比分时不得被 live 卡改写');
+    //    反向②：双方都 0:0（真平局/都无数据）⇒ 不得凭空造分
+    assert(home.preferSameMatchCard({ status: 'ended', scoreA: 0, scoreB: 0 },
+      { status: 'live', scoreA: 0, scoreB: 0 }).scoreA === 0, '双方都 0:0 时不得造分');
+    //    反向③：入参不得被改写（纯函数约定）
+    assert(e0.scoreA === 0 && e0.scoreB === 0 && e0.winA === undefined,
+      '合并不得改写入参（本模块约定只做纯计算）');
     // ④ 首页可见级别：只放行 S/A（角标计数与列表共用同一判据）
     assert(home.homePassGrade({ tier: { grade: 'S' } }) === true, 'S 应放行');
     assert(home.homePassGrade({ tier: { grade: 'A' } }) === true, 'A 应放行');
