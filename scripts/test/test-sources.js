@@ -634,6 +634,90 @@ check('展示名：中文 / 空值边界', function () {
   assert(_srcTest.leagueDisplayName(null) === '', 'null 应安全返回空串');
 });
 
+// ===== ⑥ LP slug 覆盖 + 预选赛命名/分级守卫（2026-09-25 补）=====
+// ★★ 本节存在的理由（教训，勿删）：
+//   1) curation 的 `liquipediaSlug` 是**人工录入的自由文本**。此前只验证过「curatedEventFor 能返回
+//      slug」就当成通过 ⇒ **假绿灯**：3 条预选赛的 slug 在 LP 上**根本不存在**
+//      （`BLAST/Slam/9/China`、`RES_Unchained/6/BLAST_SLAM_IX/Europe`、`.../Southeast_Asia`），
+//      详情页对阵 tab 静默取不到任何数据。
+//      存在性必须联网核验（`npm run verify:lp-slugs -- --curation`，依赖外网**不入 CI**）；
+//      但「值本身」与「别名覆盖」可以离线锁死 —— 本节即为此。
+//      教训口诀：**「能取到值」≠「值有效」**。
+//   2) curation 的 tier 曾漏过「预选赛降级 B 级」口径：3 条 BLAST SLAM IX 预选赛按 **S 级**
+//      上了首页（同批另 2 条却是 B）⇒ 分级完全取决于人工录入是否自觉，必须用断言锁住。
+//   3) canonical 若不含 `qualifier|regional`，会被 `pages/leagues.js` 的 IS_FLAGSHIP
+//      当成 TI/EWC **旗舰赛事**（可能顶掉正赛焦点卡）—— 命名规则要能被测试挡住。
+section('\n--- LP slug 覆盖 + 预选赛命名/分级守卫（2026-09-25 补）---');
+const cura = require('../../utils/curation.js');
+
+// 与 pages/leagues.js buildFocusNode 内的 IS_FLAGSHIP 保持同步（改一处必须改两处）
+const IS_FLAGSHIP_REF = function (c) {
+  if (!c) return false;
+  if (/qualifier|open|regional/i.test(c)) return false;
+  return /^the international/i.test(c) || /^esports world cup/i.test(c);
+};
+
+// ★ 2026-09-25 用 LP API 逐条**实测存在**的真身（+ `{{Match}}` 数）。
+//   ⚠️ 大小写是真实值，别凭"看起来更整齐"改回 `BLAST/Slam/...`：
+//   LP 只有**首字母**大小写不敏感，且手建 redirect **不跨届次**
+//   （`BLAST/Slam/7/China` ✅ 有 redirect，`BLAST/Slam/9/China` ❌ 没有）。
+const VERIFIED_SLUGS = [
+  ['The International 2026 - Regional Qualifier Europe', 'The_International/2026/Europe', 26],
+  ['The International 2026 - Regional Qualifier North America', 'The_International/2026/North America', 6],
+  ['The International 2026 - Regional Qualifier South America', 'The_International/2026/South America', 18],
+  ['The International 2026 - Regional Qualifier China', 'The_International/2026/China', 13],
+  ['The International 2026 - Regional Qualifier Southeast Asia', 'The_International/2026/Southeast Asia', 18],
+  ['BLAST Slam VII China Qualifier', 'BLAST/SLAM/7/China', 7],
+  ['RES Unchained - A Blast Dota Slam IX Qualifier EU', 'BLAST/SLAM/9/Europe', 0],
+  ['RES Unchained - A Blast Dota Slam IX Qualifier SEA', 'BLAST/SLAM/9/Southeast Asia', 0]
+];
+
+check('★ LP slug：8 条活跃缺口的「源名 → 真身」必须逐字命中（防别名漂移 / slug 回退）', function () {
+  VERIFIED_SLUGS.forEach(function (p) {
+    const ev = cura.curatedEventFor(p[0], { game: 'dota2' });
+    assert(ev, '源名未命中 curation（别名缺失，来自 OpenDota 的原名）: ' + p[0]);
+    assert(ev.liquipediaSlug === p[1],
+      p[0] + '\\n  期望 slug: ' + p[1] + '\\n  实际 slug: ' + ev.liquipediaSlug);
+  });
+});
+
+check('★ LP slug：源名的展示名必须等于 canonical（详情页入参链路自洽）', function () {
+  VERIFIED_SLUGS.forEach(function (p) {
+    const ev = cura.curatedEventFor(p[0], { game: 'dota2' });
+    const d = _srcTest.leagueDisplayName({ name: p[0] });
+    assert(ev && d === ev.canonical,
+      p[0] + '\\n  展示名应为 canonical「' + (ev && ev.canonical) + '」\\n  实际展示名: ' + d +
+      '\\n  （展示名与 canonical 不一致 = 详情页拿它查 curation 会 MISS）');
+  });
+});
+
+check('★★ 预选赛 canonical 必须含 qualifier|regional（否则会被 IS_FLAGSHIP 当旗舰卡）', function () {
+  const bad = cura.CURATED_EVENTS.filter(function (e) {
+    return e && e.tier && e.tier.qualifier === true && IS_FLAGSHIP_REF(e.canonical);
+  });
+  assert(bad.length === 0,
+    '以下预选赛会被当成 TI/EWC 旗舰赛事 → 请**改 canonical 命名**（补 Qualifier/Regional 字样），' +
+    '不要改 IS_FLAGSHIP 判据: ' + bad.map(function (e) { return e.canonical; }).join(' / '));
+});
+
+check('★ 预选赛分级：canonical 含 qualifier|play-in 的条目不得高于 B 级（2026-09-19 口径）', function () {
+  const bad = cura.CURATED_EVENTS.filter(function (e) {
+    return e && /qualifier|play-?in/i.test(e.canonical || '') && e.tier && e.tier.grade === 'S';
+  });
+  assert(bad.length === 0,
+    '预选赛应降级 B 级，实际仍为 S: ' + bad.map(function (e) { return e.canonical; }).join(' / '));
+});
+
+check('★ 首页分级：curation 命中预选赛时也必须降级 B（getMatchTierForHome 闸门）', function () {
+  const q = _srcTest.getMatchTierForHome('BLAST SLAM IX China Closed Qualifier');
+  assert(q && q.grade === 'B', '预选赛首页分级应为 B，实际: ' + (q && q.grade));
+  assert(q.qualifier === true, '预选赛应带 qualifier 标记（leagues.js 据此补展示标注）');
+  const reg = _srcTest.getMatchTierForHome('The International 2026');
+  assert(reg && reg.grade === 'S', '非预选赛（TI 正赛）不得被降级，实际: ' + (reg && reg.grade));
+  const bal = _srcTest.getMatchTierForHome('BLAST SLAM IX');
+  assert(bal && bal.grade === 'S', '非预选赛（SLAM IX 正赛）不得被降级，实际: ' + (bal && bal.grade));
+});
+
 // ===== ⑤ 跨源赛期合并 mergeEventPeriod（2026-09-19 落地）=====
 // 口径经用户确认：官方赛期（LP 系）优先、缺口**按字段**回退 OpenDota ——
 //   · 首个起止都完整的源 → 全取

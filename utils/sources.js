@@ -713,11 +713,22 @@ function getMatchTierForHome(leagueName, leagueId) {
   // ① curation 优先（人工策展，权威源；leagueId 启用精确 pin + 跨游戏隔离）
   const cu = curation.curatedEventFor(name, { leagueId: lid, game: 'dota2' });
   if (cu && cu.tier && cu.tier.grade) {
-    return { grade: cu.tier.grade, rank: cu.tier.rank, label: cu.tier.label, source: 'curation' };
+    // ★ 2026-09-25：**curation 的 tier 也必须过预选赛降级闸门**（补口径漏洞）。
+    //   原实现直接返回 `cu.tier` ⇒ 2026-09-19 拍板的「预选赛保留但降级 B 级」在 curation 路径**静默失效**：
+    //   实测 3 条 BLAST SLAM IX 预选赛按 **S 级**上了首页（同批另 2 条却是 B）——分级完全取决于人工录入是否自觉。
+    //   `applyQualifierCap` 此前只被 `tiers.js` / `discover-core.js` 的 `communityTierFromName` 路径调用，
+    //   这里补上，使「人工录入错级别」不再能绕过口径（与 ② 的 community 路径行为对齐）。
+    //   ⚠️ 传入的 tier 对象要**新建**（applyQualifierCap 返回新对象；勿把 cu.tier 直接传进去改）。
+    const capped = tiers.applyQualifierCap(
+      { grade: cu.tier.grade, rank: cu.tier.rank, label: cu.tier.label }, name) || cu.tier;
+    return {
+      grade: capped.grade, rank: capped.rank, label: capped.label,
+      qualifier: !!capped.qualifier, source: 'curation'
+    };
   }
   // ② curation 未收录 → 回退 community 正则（保持对未策展赛事的分级能力）
   const t = tiers.communityTierFromName(name);
-  return t ? { grade: t.grade, rank: t.rank, label: t.label, source: 'community' } : null;
+  return t ? { grade: t.grade, rank: t.rank, label: t.label, qualifier: !!t.qualifier, source: 'community' } : null;
 }
 
 // ★ 2026-09-19 新增：**跨源赛事名归一（去重 / 比对用）** —— 两步归一：

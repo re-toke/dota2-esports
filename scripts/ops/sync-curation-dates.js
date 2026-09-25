@@ -100,6 +100,17 @@ async function upsertEvent(data) {
     curation.CURATED_EVENTS.filter((e) => e && e.canonical && e.start && e.end).length + ' 条');
   console.log('');
 
+  // ★ 2026-09-25 扩展：除赛期外，**slug 与分级也必须能订正到远端**。
+  //   依据：运行时 `sources.js:41` 用的是 `remoteCuration`（`mergeEventFields` 让远端**非 null 字段覆盖本地**）
+  //   ⇒ 只改本地不推远端，列表页分级（`leagues.js` 直读 `curTier.grade`）与详情页 slug 仍是旧值。
+  //   ⚠️ 只订正「远端**已有值但写错**」的情况（不主动 backfill 远端缺失字段），
+  //      否则会把大量历史条目一次性刷进库，风险远大于收益。
+  const tierGradeOf = (t) => {
+    if (!t) return '';
+    if (typeof t === 'string') { try { t = JSON.parse(t); } catch (err) { return ''; } }
+    return (t && t.grade) ? String(t.grade) : '';
+  };
+
   const diffs = [];
   const missing = [];
   curation.CURATED_EVENTS.forEach((e) => {
@@ -109,24 +120,50 @@ async function upsertEvent(data) {
     const row = remote[key];
     if (!row) { missing.push({ canonical: e.canonical, key: key }); return; }
     const d = row.data || {};
-    if (Number(d.start) === Number(e.start) && Number(d.end) === Number(e.end)) return;
+    const drift = [];
+    if (Number(d.start) !== Number(e.start)) drift.push('start');
+    if (Number(d.end) !== Number(e.end)) drift.push('end');
+    // slug：远端有非空值且与本地不同才订正
+    if (d.liquipediaSlug && String(d.liquipediaSlug) !== String(e.liquipediaSlug || '')) drift.push('liquipediaSlug');
+    if (d.scheduledMatchesSlug && String(d.scheduledMatchesSlug) !== String(e.scheduledMatchesSlug || '')) {
+      drift.push('scheduledMatchesSlug');
+    }
+    // 分级：远端有 grade 且与本地不同才订正（覆盖「预选赛误标 S」这类口径漂移）
+    if (tierGradeOf(d.tier) && tierGradeOf(d.tier) !== tierGradeOf(e.tier)) drift.push('tier');
+    if (!drift.length) return;
+    // 只把**本地有值**的字段写回（本地缺省 = 不主张，不动远端）
+    const patch = { canonical: e.canonical };
+    if (e.start != null) patch.start = e.start;
+    if (e.end != null) patch.end = e.end;
+    if (e.liquipediaSlug) patch.liquipediaSlug = e.liquipediaSlug;
+    if (e.scheduledMatchesSlug) patch.scheduledMatchesSlug = e.scheduledMatchesSlug;
+    if (e.tier) patch.tier = e.tier;
     diffs.push({
       canonical: e.canonical,
       key: key,
-      remote: { start: d.start, end: d.end },
-      local: { start: e.start, end: e.end },
-      merged: Object.assign({}, d, { canonical: e.canonical, start: e.start, end: e.end }),
+      drift: drift,
+      remote: { start: d.start, end: d.end, slug: d.liquipediaSlug, tier: tierGradeOf(d.tier) },
+      local: { start: e.start, end: e.end, slug: e.liquipediaSlug, tier: tierGradeOf(e.tier) },
+      merged: Object.assign({}, d, patch),
     });
   });
 
   if (!diffs.length) {
-    console.log('✅ 远端赛期与本地完全一致，无需同步。');
+    console.log('✅ 远端 curation 与本地权威字段完全一致，无需同步。');
   } else {
     console.log('=== 待订正 ' + diffs.length + ' 条 ===');
     diffs.forEach((x) => {
-      console.log('  ' + x.canonical);
-      console.log('      远端 ' + bjDay(x.remote.start) + ' ~ ' + bjDay(x.remote.end) +
-        '   →   本地 ' + bjDay(x.local.start) + ' ~ ' + bjDay(x.local.end));
+      console.log('  ' + x.canonical + '   [' + x.drift.join(', ') + ']');
+      if (x.drift.indexOf('start') >= 0 || x.drift.indexOf('end') >= 0) {
+        console.log('      赛期  远端 ' + bjDay(x.remote.start) + ' ~ ' + bjDay(x.remote.end) +
+          '   →   本地 ' + bjDay(x.local.start) + ' ~ ' + bjDay(x.local.end));
+      }
+      if (x.drift.indexOf('liquipediaSlug') >= 0 || x.drift.indexOf('scheduledMatchesSlug') >= 0) {
+        console.log('      slug  远端 ' + (x.remote.slug || '-') + '   →   本地 ' + (x.local.slug || '-'));
+      }
+      if (x.drift.indexOf('tier') >= 0) {
+        console.log('      分级  远端 ' + (x.remote.tier || '-') + '   →   本地 ' + (x.local.tier || '-'));
+      }
     });
   }
   if (missing.length) {

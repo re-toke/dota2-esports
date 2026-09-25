@@ -109,6 +109,74 @@ const CURATED_EVENTS = [
     boFormat: { group: 'BO3', playoff: 'BO3', grandFinal: 'BO5' },
     valve: true, topThirdParty: false },
 
+  // ── 2026-09-25 新增：TI 2026 五大赛区预选赛（OpenDota leagueid 19890-19894）──
+  //   背景：这 5 条在快照 / 列表页里全部「slug 未命中」→ 详情页对阵 tab 取不到任何赛程。
+  //   真身已用 `npm run verify:lp-slugs -- --curation` 实测存在（`{{Match}}` 26/6/18/13/18 场）；
+  //   ⚠️ LP 路径是 `The International/2026/<赛区>`，**不含 Regional Qualifier 字样** —— 别按源名猜。
+  //   ⚠️ canonical **必须保留 `Regional Qualifier`**：`pages/leagues.js` 的 IS_FLAGSHIP 靠
+  //      `/qualifier|open|regional/i` 排除预选赛；若取名成 `The International 2026 - Europe`
+  //      会被当成 TI 旗舰赛事、可能顶掉正赛焦点卡。
+  //   ⚠️ canonical 与 OpenDota 源名**逐字一致** ⇒ 卡片标题不变（展示走 curation canonical 优先）。
+  //   tier 一律 B 级 + qualifier 标注（2026-09-19 用户决策：预选赛保留但降级）。
+  //   赛期取自 LP Infobox `|sdate= / |edate=`；end = 该日 BJ 23:59:59 = UTC 15:59:59（只有「日末」会溢出）。
+  { canonical: 'The International 2026 - Regional Qualifier Europe',
+    tier: { grade: 'B', rank: 1, label: 'B级', qualifier: true },
+    aliases: ['theinternational2026regionalqualifiereurope', 'ti2026regionalqualifiereurope',
+              'theinternational2026europe', 'ti2026euqualifier'], year: 2026,
+    leagueId: 19892,
+    start: 1782000000, end: 1782662399,
+    organizer: 'Valve', region: '欧洲', format: '区域预选',
+    status: '已结束', liquipediaSlug: 'The_International/2026/Europe',
+    valve: true, topThirdParty: false },
+  { canonical: 'The International 2026 - Regional Qualifier North America',
+    tier: { grade: 'B', rank: 1, label: 'B级', qualifier: true },
+    aliases: ['theinternational2026regionalqualifiernorthamerica', 'ti2026regionalqualifiernorthamerica',
+              'theinternational2026northamerica', 'ti2026naqualifier'], year: 2026,
+    leagueId: 19890,
+    start: 1782259200, end: 1782489599,
+    organizer: 'Valve', region: '北美', format: '区域预选',
+    status: '已结束', liquipediaSlug: 'The_International/2026/North America',
+    valve: true, topThirdParty: false },
+  { canonical: 'The International 2026 - Regional Qualifier South America',
+    tier: { grade: 'B', rank: 1, label: 'B级', qualifier: true },
+    aliases: ['theinternational2026regionalqualifiersouthamerica', 'ti2026regionalqualifiersouthamerica',
+              'theinternational2026southamerica', 'ti2026saqualifier'], year: 2026,
+    leagueId: 19891,
+    start: 1781481600, end: 1781884799,
+    organizer: 'Valve', region: '南美', format: '区域预选',
+    status: '已结束', liquipediaSlug: 'The_International/2026/South America',
+    valve: true, topThirdParty: false },
+  { canonical: 'The International 2026 - Regional Qualifier China',
+    tier: { grade: 'B', rank: 1, label: 'B级', qualifier: true },
+    aliases: ['theinternational2026regionalqualifierchina', 'ti2026regionalqualifierchina',
+              'theinternational2026china', 'ti2026cnqualifier'], year: 2026,
+    leagueId: 19893,
+    start: 1781481600, end: 1781798399,
+    organizer: 'Valve', region: '中国', format: '区域预选',
+    status: '已结束', liquipediaSlug: 'The_International/2026/China',
+    valve: true, topThirdParty: false },
+  { canonical: 'The International 2026 - Regional Qualifier Southeast Asia',
+    tier: { grade: 'B', rank: 1, label: 'B级', qualifier: true },
+    aliases: ['theinternational2026regionalqualifiersoutheastasia', 'ti2026regionalqualifiersoutheastasia',
+              'theinternational2026southeastasia', 'ti2026seaqualifier'], year: 2026,
+    leagueId: 19894,
+    start: 1781827200, end: 1782230399,
+    organizer: 'Valve', region: '东南亚', format: '区域预选',
+    status: '已结束', liquipediaSlug: 'The_International/2026/Southeast Asia',
+    valve: true, topThirdParty: false },
+  // BLAST Slam VII 中国预选：2026-04-02 ~ 04-03（LP `BLAST/SLAM/7/China`，7 场 {{Match}}）
+  //   ⚠️ LP 真身是 **全大写 `SLAM` 且无 `Qualifier` 后缀**；`BLAST/Slam/7/China` 能命中
+  //      只因该届有手建 redirect（`Slam/9/China` 就没有 → 见下方 SLAM IX 中国预选已修）。
+  { canonical: 'BLAST Slam VII China Qualifier',
+    tier: { grade: 'B', rank: 1, label: 'B级', qualifier: true },
+    aliases: ['blastslamviichinaqualifier', 'blastslam7chinaqualifier',
+              'blastslamviichina', 'blastslam7china'], year: 2026,
+    leagueId: 20169,
+    start: 1775088000, end: 1775231999,
+    organizer: 'BLAST', region: '中国', format: '中国预选',
+    status: '已结束', liquipediaSlug: 'BLAST/SLAM/7/China',
+    valve: false, topThirdParty: false },
+
   // ── 知名 S 级（顶级第三方 S-Tier 巡回赛）2024 ──
   // 2024 起统一 $1M 级奖金，是 Dota2 职业生态骨架
   // ESL One Birmingham 2024 完整条目见下方「ESL One 分站」区块（含 liquipediaSlug/region/status 等）
@@ -387,33 +455,53 @@ const CURATED_EVENTS = [
   //    fetch:upcoming 告警触发人工 curation，防止详情页赛期截断。日期为 UTC。）──
   // RES Unchained 6: BLAST SLAM IX 欧洲封闭预选：9月12-13日
   { canonical: 'RES Unchained 6: BLAST SLAM IX Europe Closed Qualifier',
-    tier: { grade: 'S', rank: 3, label: 'S级' },
+    // ★ 2026-09-25：tier S → B + qualifier 标注（2026-09-19 决策「预选赛保留但降级 B 级」
+    //   此前**只落在 tiers.js 的分级路径、未落到 curation** ⇒ 首页/列表按 S 级展示。
+    //   同批漏的还有下方 SEA 与中国两条；sources.getMatchTierForHome 已加同规则闸门防再犯。
+    tier: { grade: 'B', rank: 1, label: 'B级', qualifier: true },
     aliases: ['resunchained6blastslamixeurope', 'resunchained6eu', 'resblastslamixeuq',
-              'resunchained6europe', 'blastslamixeuropequalifier', 'resunchainedblastslamixeurope'], year: 2026,
+              'resunchained6europe', 'blastslamixeuropequalifier', 'resunchainedblastslamixeurope',
+              // ★ 2026-09-25 补：OpenDota 源名 "RES Unchained - A Blast Dota Slam IX Qualifier EU"
+              //   归一后与旧别名完全不同 → 此前这种写法必 MISS（实测快照里就 miss 了）
+              'resunchainedablastdotaslamixqualifiereu',
+              'resunchainedablastdotaslamixqualifiereurope'], year: 2026,
     start: 1789171200, end: 1789257599,
     prizePool: '$25,000', organizer: 'RES Esports', region: '欧洲', format: '封闭预选',
-    participants: 8, status: '即将到来', liquipediaSlug: 'RES_Unchained/6/BLAST_SLAM_IX/Europe',
+    participants: 8, status: '即将到来',
+    // ★ 2026-09-25：原 `RES_Unchained/6/BLAST_SLAM_IX/Europe` 在 LP 上 **missing**（假绿灯实例），
+    //   真身为 `BLAST/SLAM/9/Europe`（同系列 VIII 用的就是 `BLAST/SLAM/8/Europe`，风格一致）。
+    liquipediaSlug: 'BLAST/SLAM/9/Europe',
     valve: false, topThirdParty: false },
   // RES Unchained 6: BLAST SLAM IX 东南亚封闭预选：9月12-13日
   { canonical: 'RES Unchained 6: BLAST SLAM IX Southeast Asia Closed Qualifier',
-    tier: { grade: 'S', rank: 3, label: 'S级' },
+    tier: { grade: 'B', rank: 1, label: 'B级', qualifier: true },   // ★ 2026-09-25 S → B + qualifier（同上方 Europe）
     aliases: ['resunchained6blastslamixsea', 'resunchained6sea', 'resblastslamixseq',
-              'blastslamixsoutheastasiaqualifier', 'resunchainedblastslamixsea'], year: 2026,
+              'blastslamixsoutheastasiaqualifier', 'resunchainedblastslamixsea',
+              // ★ 2026-09-25 补：OpenDota 源名 "RES Unchained - A Blast Dota Slam IX Qualifier SEA"
+              'resunchainedablastdotaslamixqualifiersea',
+              'resunchainedablastdotaslamixqualifiersoutheastasia'], year: 2026,
     start: 1789171200, end: 1789257599,
     prizePool: '$25,000', organizer: 'RES Esports', region: '东南亚', format: '封闭预选',
-    participants: 8, status: '即将到来', liquipediaSlug: 'RES_Unchained/6/BLAST_SLAM_IX/Southeast_Asia',
+    participants: 8, status: '即将到来',
+    // ★ 2026-09-25：原 `RES_Unchained/6/BLAST_SLAM_IX/Southeast_Asia` 在 LP 上 missing → 真身如下
+    //   ⚠️ 注意真身里是 **空格**（`Southeast Asia`），不是下划线。
+    liquipediaSlug: 'BLAST/SLAM/9/Southeast Asia',
     valve: false, topThirdParty: false },
   // BLAST SLAM IX 中国封闭预选：10月15-16日
   // ★ 2026-09-20 按 LP 订正（原写 9月19-20日，与 LP 差近一个月）：
   //   LP 页 `BLAST/SLAM/9/China` 的 `|sdate=2026-10-15` / `|edate=2026-10-16`
   //   （正赛 11/20 前一个月开预选，逻辑自洽；原 9/19 疑为复制粘贴 PGL Wallachia 赛期所致）。
   { canonical: 'BLAST SLAM IX China Closed Qualifier',
-    tier: { grade: 'S', rank: 3, label: 'S级' },
+    tier: { grade: 'B', rank: 1, label: 'B级', qualifier: true },   // ★ 2026-09-25 S → B + qualifier
     aliases: ['blastslamixchina', 'blastslamixcn', 'blastslamixchinaq',
               'blastslamixchinaqualifier', 'blastslam9china'], year: 2026,
     start: 1792022400, end: 1792108800,
     prizePool: '$25,000', organizer: 'BLAST', region: '中国', format: '封闭预选',
-    participants: 8, status: '即将到来', liquipediaSlug: 'BLAST/Slam/9/China',
+    participants: 8, status: '即将到来',
+    // ★ 2026-09-25：原 `BLAST/Slam/9/China` 在 LP 上 **missing** —— 关键事实：
+    //   `BLAST/Slam/7/China` 能命中只因该届**有手建 redirect**，而 9 届**没有**
+    //   ⇒ **redirect 兜底不跨届次，必须写真实大小写 `SLAM`**。
+    liquipediaSlug: 'BLAST/SLAM/9/China',
     valve: false, topThirdParty: false },
 
   // ── B 级（B-Tier 区域联赛 + 次级国际赛）──
