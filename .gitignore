@@ -31,3 +31,6 @@ scripts/ops/output/
 supabase/.temp/
 
 # Supabase CLI 本地状态（机器相关，CLI 自行清理 —— 2026-09-22：此前误提交，导致 CLI 一跑工作区就变脏）
+
+# 临时脚手架（批量替换脚本 / 提交信息文件等，一律 _ 前缀）
+scripts/tmp/_*
