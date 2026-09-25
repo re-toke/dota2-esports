@@ -512,57 +512,31 @@ check('G13: Offstage 官方确认的 12 支小组赛队名均在列表中', () =
   assert(missing.length === 0, '缺少官方队伍: ' + missing.join(', '));
 });
 
-section('\n--- G14: Liquipedia 解析双源一致性（客户端 / 云函数镜像）---');
+section('\n--- G14: Liquipedia 解析 —— 客户端实现完好 + 云开发退役状态 ---');
 check('G14: 客户端 liquipedia-parse 导出 parseParticipants / parseLeagueMetadata', () => {
   const lp = require(path.join(SRC, 'liquipedia-parse.js'));
   assert(typeof lp.parseParticipants === 'function', 'parseParticipants 应为函数');
   assert(typeof lp.parseLeagueMetadata === 'function', 'parseLeagueMetadata 应为函数');
 });
-check('G14: 云函数镜像 liquipedia-parse 与客户端一致（防双源漂移）', () => {
+check('G14: 云开发已退役 —— 仓库内不得再出现 liquipedia-parse 镜像', () => {
+  // ★ 2026-09-25：原断言是「镜像存在才逐字节比对，不存在就告警后 return」——
+  //   云开发退役（2026-09-22，cloudfunctions/ 已删）后镜像必然不存在 ⇒ 该断言**恒通过**：
+  //   看着有「双源漂移守卫」，实际什么都没查。这叫**永真断言**，比没有断言更危险
+  //   （它给人一种已被保护的错觉）。
+  //   改法：**正向断言退役状态** —— 若有人重新引入镜像，本断言立刻 FAIL，
+  //   提示必须先恢复「镜像与主实现逐字节一致」的比对，而不是让它静默通过。
   const fs = require('fs');
   const ROOT = path.resolve(__dirname, '..', '..');
-  const miniPath = path.join(SRC, 'liquipedia-parse.js');
-  const cloudPath = path.join(ROOT, 'cloudfunctions', 'aggregation', 'liquipedia-parse.js');
-  const mini = require(miniPath);
-  let cloud;
-  try {
-    cloud = require(cloudPath);
-  } catch (e) {
-    // 云函数镜像尚未由 npm run sync:parse 生成：仅告警，不阻断 npm test（sync:parse 是硬闸）。
-    console.log('  ⚠️ 云函数镜像 liquipedia-parse.js 不存在，跳过逐字节比对（请运行 npm run sync:parse）');
-    return;
-  }
-  // 逐字节一致（sync-liquipedia-parse.js 的核心不变量）
-  const a = fs.readFileSync(miniPath, 'utf8');
-  const b = fs.readFileSync(cloudPath, 'utf8');
-  assert(a === b, '两侧 liquipedia-parse.js 必须字节一致（防双源漂移）');
-  // 同一合成输入解析结果一致
-  const synthetic = [
-    '{{Infobox league',
-    '|name=Drift Check Cup',
-    '|prizepool=1000000',
-    '}}',
-    '{{TeamParticipants',
-    '|{{Opponent|Team Alpha|qualification={{Qualification|method=invite|qual}}}}',
-    '|{{Opponent|Team Beta|qualification={{Qualification|method=qual|qual}}}}',
-    '}}'
-  ].join('\n');
-  const o1 = mini.parseLeagueMetadata(synthetic, 'Drift Check Cup');
-  const o2 = cloud.parseLeagueMetadata(synthetic, 'Drift Check Cup');
-  assert(JSON.stringify(o1) === JSON.stringify(o2), 'parseLeagueMetadata 两侧结果必须一致');
-
-  // 真实 EPL wikitext 漂移校验（若 fixture 存在）
-  const eplFixture = path.join(__dirname, 'epl-wikitext.json');
-  if (fs.existsSync(eplFixture)) {
-    const raw = JSON.parse(fs.readFileSync(eplFixture, 'utf8'));
-    const wt = raw.query.pages[0].revisions[0].slots.main.content;
-    const p1 = mini.parseParticipants(wt);
-    const p2 = cloud.parseParticipants(wt);
-    assert(JSON.stringify(p1) === JSON.stringify(p2), 'EPL parseParticipants 两侧结果必须一致');
-  }
+  assert(!fs.existsSync(path.join(ROOT, 'cloudfunctions')),
+    'cloudfunctions/ 不应再存在（微信云开发已于 2026-09-22 退役）；' +
+    '若确要重新引入云端镜像，必须同时恢复「镜像与主实现逐字节一致」的断言');
+  // 退役只删云端副本：客户端主实现必须仍然可用（防「退役时顺手删错」）
+  const mini = require(path.join(SRC, 'liquipedia-parse.js'));
+  assert(typeof mini.parseParticipants === 'function' && typeof mini.parseLeagueMetadata === 'function',
+    '客户端 liquipedia-parse 在退役后必须仍导出 parseParticipants / parseLeagueMetadata');
 });
 
-section('\n--- G15: Liquipedia slug 映射表双源一致性（客户端 / 云函数镜像）---');
+section('\n--- G15: slugmap —— 客户端映射表完好 + 云开发退役状态 ---');
 check('G15: 客户端 slugmap 存在且含 mappings 对象', () => {
   const fs = require('fs');
   const ROOT = path.resolve(__dirname, '..', '..');
@@ -571,24 +545,15 @@ check('G15: 客户端 slugmap 存在且含 mappings 对象', () => {
   const mini = require(miniPath);
   assert(mini && typeof mini.mappings === 'object' && mini.mappings !== null, 'mappings 应为对象');
 });
-check('G15: 云函数镜像 slugmap 与客户端一致（防双源漂移）', () => {
+check('G15: 云开发已退役 —— 仓库内不得再出现 slugmap 镜像', () => {
+  // 同 G14：原断言在镜像缺失时「告警 + return」⇒ 退役后恒通过。详见 G14 的说明。
   const fs = require('fs');
   const ROOT = path.resolve(__dirname, '..', '..');
-  const miniPath = path.join(ROOT, 'utils', 'liquipedia-slugmap.json');
-  const cloudPath = path.join(ROOT, 'cloudfunctions', 'aggregation', 'liquipedia-slugmap.json');
-  if (!fs.existsSync(cloudPath)) {
-    // 镜像尚未由 npm run sync:slugmap 生成：仅告警，不阻断 npm test（sync:slugmap 是硬闸）。
-    console.log('  ⚠️ 云函数镜像 liquipedia-slugmap.json 不存在，跳过比对（请运行 npm run sync:slugmap）');
-    return;
-  }
-  const mini = require(miniPath);
-  const cloud = require(cloudPath);
-  const sk = Object.keys(mini.mappings);
-  const dk = Object.keys(cloud.mappings);
-  assert(sk.length === dk.length, '映射条数不一致: 源 ' + sk.length + ' vs 镜像 ' + dk.length);
-  for (const k of sk) {
-    assert(cloud.mappings[k] === mini.mappings[k], '映射不一致 key=' + k);
-  }
+  assert(!fs.existsSync(path.join(ROOT, 'cloudfunctions')),
+    'cloudfunctions/ 不应再存在（微信云开发已于 2026-09-22 退役）');
+  const mini = require(path.join(ROOT, 'utils', 'liquipedia-slugmap.json'));
+  assert(mini && typeof mini.mappings === 'object' && mini.mappings !== null, 'mappings 应为对象');
+  assert(Object.keys(mini.mappings).length > 0, 'mappings 不应为空（空表 = slug 解析全线失效）');
 });
 
 // ===== 5. 运行全部测试（与 test-sources 同范式：顺序执行，支持 async，末尾输出汇总与退出码）=====

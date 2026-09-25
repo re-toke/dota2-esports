@@ -29,7 +29,8 @@
 //     --token <值>              直接给令牌（优先级最高，注意 shell 历史泄露风险）
 //
 // ## 同步哪些字段（2026-09-25 扩展）
-//   原先只同步赛期；现在还会订正 **liquipediaSlug / scheduledMatchesSlug / tier.grade** ——
+//   原先只同步赛期；现在还会订正 **liquipediaSlug / scheduledMatchesSlug / tier.grade / year** ——
+//   （year 于 2026-09-25 补入：它进 consensus 的事件指纹，两侧不一致会让同一届事件被去重逻辑判成两个）
 //   因为运行时 `sources.js` 用的是 `remoteCuration`（远端非 null 字段覆盖本地），
 //   只改本地不推远端 ⇒ 赛事 tab 分级（`leagues.js:676`）与详情页 slug 仍是旧值。
 //   ⚠️ 只订正「远端**已有值但写错**」的情况，**不主动 backfill 远端缺失字段**
@@ -207,15 +208,21 @@ async function deleteEvent(key) {
   const diffs = [];
   const missing = [];
   curation.CURATED_EVENTS.forEach((e) => {
-    if (!e || !e.canonical || !e.start || !e.end) return;
+    // ★ 2026-09-25：guard 由「必须有 start/end」放宽为「必须有 canonical」——
+    //   本脚本早已从"只同步赛期"扩展为订正 slug/分级/届次，而**恰好是那些没有 start/end 的条目**
+    //   最需要这条通路（实测 `BetBoom Dacha`、`Clavision Masters` 都无赛期字段，
+    //   原 guard 会把它们整条跳过 ⇒ 届次永远订正不到）。
+    //   ⚠️ 相应地，start/end 的比较改成「**本地有值**才比」（否则 e.start 为 undefined，
+    //      Number(undefined)=NaN 会让每条无赛期条目都误报 'start' 漂移）。
+    if (!e || !e.canonical) return;
     if (ONLY && String(e.canonical).indexOf(ONLY) < 0) return;
     const key = normalizeEventName(e.canonical);
     const row = remote[key];
     if (!row) { missing.push({ canonical: e.canonical, key: key }); return; }
     const d = row.data || {};
     const drift = [];
-    if (Number(d.start) !== Number(e.start)) drift.push('start');
-    if (Number(d.end) !== Number(e.end)) drift.push('end');
+    if (e.start != null && Number(d.start) !== Number(e.start)) drift.push('start');
+    if (e.end != null && Number(d.end) !== Number(e.end)) drift.push('end');
     // slug：远端有非空值且与本地不同才订正
     if (d.liquipediaSlug && String(d.liquipediaSlug) !== String(e.liquipediaSlug || '')) drift.push('liquipediaSlug');
     if (d.scheduledMatchesSlug && String(d.scheduledMatchesSlug) !== String(e.scheduledMatchesSlug || '')) {
@@ -223,6 +230,12 @@ async function deleteEvent(key) {
     }
     // 分级：远端有 grade 且与本地不同才订正（覆盖「预选赛误标 S」这类口径漂移）
     if (tierGradeOf(d.tier) && tierGradeOf(d.tier) !== tierGradeOf(e.tier)) drift.push('tier');
+    // ★ 2026-09-25 新增：**届次 year 也必须订正**。两条依据：
+    //   ① `consensus.js` 用 `nameKey + year + org + weekBucket` 组成事件指纹 ⇒ 两侧 year 不一致
+    //      会让「同一届事件」在本地/远端被判成**不同事件**（去重失效 → 重复卡）；
+    //   ② `sources.js` 会把 `year` 透传给客户端（首页赛事级卡片 / 本地快照）。
+    //   仅当**两侧都有值且不同**才订正（避免把远端缺失顺手刷成一条）。
+    if (d.year != null && e.year != null && Number(d.year) !== Number(e.year)) drift.push('year');
     if (!drift.length) return;
     // 只把**本地有值**的字段写回（本地缺省 = 不主张，不动远端）
     const patch = { canonical: e.canonical };
@@ -231,12 +244,13 @@ async function deleteEvent(key) {
     if (e.liquipediaSlug) patch.liquipediaSlug = e.liquipediaSlug;
     if (e.scheduledMatchesSlug) patch.scheduledMatchesSlug = e.scheduledMatchesSlug;
     if (e.tier) patch.tier = e.tier;
+    if (e.year != null) patch.year = e.year;
     diffs.push({
       canonical: e.canonical,
       key: key,
       drift: drift,
-      remote: { start: d.start, end: d.end, slug: d.liquipediaSlug, tier: tierGradeOf(d.tier) },
-      local: { start: e.start, end: e.end, slug: e.liquipediaSlug, tier: tierGradeOf(e.tier) },
+      remote: { start: d.start, end: d.end, slug: d.liquipediaSlug, tier: tierGradeOf(d.tier), year: d.year },
+      local: { start: e.start, end: e.end, slug: e.liquipediaSlug, tier: tierGradeOf(e.tier), year: e.year },
       merged: Object.assign({}, d, patch),
     });
   });
@@ -256,6 +270,10 @@ async function deleteEvent(key) {
       }
       if (x.drift.indexOf('tier') >= 0) {
         console.log('      分级  远端 ' + (x.remote.tier || '-') + '   →   本地 ' + (x.local.tier || '-'));
+      }
+      if (x.drift.indexOf('year') >= 0) {
+        console.log('      届次  远端 ' + (x.remote.year != null ? x.remote.year : '-') +
+          '   →   本地 ' + (x.local.year != null ? x.local.year : '-'));
       }
     });
   }
