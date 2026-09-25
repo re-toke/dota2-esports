@@ -13,7 +13,7 @@
  *   node scripts/ops/verify-lp-slugs.js --curation       # 核验 curation 全部 slug（推荐定期跑）
  *   node scripts/ops/verify-lp-slugs.js --slug "BLAST/SLAM/9/China"
  *   node scripts/ops/verify-lp-slugs.js --slugs "A,B,C"  # 逗号分隔批量
- *   node scripts/ops/verify-lp-slugs.js --find "The International 2026"   # 查真身（allpages + search）
+ *   node scripts/ops/verify-lp-slugs.js --find "The International 2026" [--limit 60]   # 查真身（allpages + search）
  *   node scripts/ops/verify-lp-slugs.js --curation --json
  *
  * 退出码：0 = 全部存在；1 = 有 missing（可直接当门禁用）
@@ -84,14 +84,15 @@ async function searchTitles(q, limit) {
 }
 
 // --find：查真身。**优先 allpages（拿全子页面清单），search 仅作线索**（search 会混进队名/选手名）
-async function find(term) {
-  console.log(`[find] "${term}" —— allpages 前缀清单：`);
-  const pages = await allpages(term);
+async function find(term, limit) {
+  console.log(`[find] "${term}" —— allpages 前缀清单（limit ${limit}）：`);
+  const pages = await allpages(term, limit);
   pages.forEach((t) => console.log('   · ' + t));
   if (!pages.length) console.log('   (空)');
+  if (pages.length >= limit) console.log('   ⚠️ 已达 limit 上限，可能有更多页 —— 调大 --limit 再看');
   await sleep(RATE_LIMIT_MS);
   console.log(`[find] "${term}" —— search 线索（含噪）：`);
-  const hits = await searchTitles(term);
+  const hits = await searchTitles(term, 8);
   hits.forEach((t) => console.log('   · ' + t));
   if (!hits.length) console.log('   (空)');
 }
@@ -116,7 +117,9 @@ async function main() {
   const asJson = args.includes('--json');
   const findIdx = args.indexOf('--find');
   if (findIdx >= 0 && args[findIdx + 1]) {
-    await find(args[findIdx + 1]);
+    const li = args.indexOf('--limit');
+    const lim = (li >= 0 && args[li + 1]) ? parseInt(args[li + 1], 10) : 30;
+    await find(args[findIdx + 1], (Number.isFinite(lim) && lim > 0) ? lim : 30);
     process.exit(0);
   }
   let items = [];

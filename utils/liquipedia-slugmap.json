@@ -153,10 +153,9 @@
     "DreamLeague Season 23": "DreamLeague/Season 23",
     "DreamLeague Season 24": "DreamLeague/Season 24",
     "DreamLeague Season 25": "DreamLeague/Season 25",
-    "ESL One Kuala Lumpur 2024": "ESL One/Kuala Lumpur/2024",
+    "ESL One Kuala Lumpur 2024": "ESL One/Kuala Lumpur/2023",
     "ESL One Birmingham 2024": "ESL One/Birmingham/2024",
     "ESL One Bangkok 2024": "ESL One/Bangkok/2024",
-    "Esports World Cup 2024": "Esports World Cup/2024",
     "Esports World Cup 2025": "Esports World Cup/2025",
     "Esports World Cup 2026": "Esports World Cup/2026",
     "Esports Nations Cup 2026": "Esports Nations Cup/2026",
@@ -177,7 +176,6 @@
     "BLAST SLAM IX": "BLAST/Slam/9",
     "FISSURE Playground": "FISSURE/PLAYGROUND/1",
     "FISSURE Universe": "FISSURE/Universe/6",
-    "PGL Astana 2025": "PGL/Astana/2025",
     "EPL Masters I": "EPL/Masters/1"
   },
   "pending": [
@@ -384,6 +382,8 @@
     "Major-Bets Cup",
     "DPCS",
     "Winter Panama Major",
-    "成电Major~"
+    "成电Major~",
+    "Esports World Cup 2024",
+    "PGL Astana 2025"
   ]
 }

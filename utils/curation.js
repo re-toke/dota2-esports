@@ -230,13 +230,21 @@ const CURATED_EVENTS = [
     aliases: ['esloneraleigh2025', 'raleigh2025', 'eslraleigh2025'], year: 2025,
     leagueId: 17795,
     prizePool: '$1,000,000', organizer: 'ESL', region: '北美', format: '双败淘汰', participants: 16,
-    status: '已结束', liquipediaSlug: 'ESL_One/2025/Raleigh', valve: false, topThirdParty: false },
+    // ★ 2026-09-25：原 'ESL_One/2025/Raleigh' —— **层级写反**（把年份放中间）且用下划线当分隔
+    //   → LP 无此页。LP 约定为 `ESL One/<城市>/<年份>`（用 `--find "ESL One/"` 前缀清单实测确认）。
+    status: '已结束', liquipediaSlug: 'ESL One/Raleigh/2025', valve: false, topThirdParty: false },
   { canonical: 'Riyadh Masters 2025', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['riyadhmasters2025', 'rm2025', 'riyadh2025'], year: 2025,
     liquipediaSlug: 'Riyadh_Masters/2025' },
   { canonical: 'PGL Astana 2025', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['pglastana2025', 'astana2025', 'pglastana'], year: 2025,
-    liquipediaSlug: 'PGL/Astana/2025' },
+    // ★ 2026-09-25：原 'PGL/Astana/2025' 在 LP 上 **missing**。
+    //   `--find "Astana"` 与 `--find "PGL/Astana"` 的 allpages 前缀清单**全空**
+    //   ⇒ dota2 wiki 上根本没有该赛事页面（不是改名、也不是大小写问题）。
+    //   故**不再保留死值**：'' 会让 liquipediaSlugFor 走「告警 + 原样返回」，
+    //   比每次去查一个不存在的页面更诚实（两条路径的运行结果相同，但日志不再误导）。
+    //   ⚠️ 待办：需人工确认该赛事在 LP 上的真实名，或确认它未被 LP 收录。
+    liquipediaSlug: '' },
   // Clavision / Elite League：A-Tier 第三方
   { canonical: 'Clavision Masters', tier: { grade: 'A', rank: 2, label: 'A级' },
     aliases: ['clavisionmasters', 'clavision'], year: 2024,
@@ -511,7 +519,11 @@ const CURATED_EVENTS = [
   { canonical: 'ESL One Kuala Lumpur 2024', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['eslkualalumpur2024', 'kualalumpur2024', 'kl2024'], year: 2024,
     prizePool: '$1,000,000', organizer: 'ESL', region: '东南亚', format: '双败淘汰', participants: 16,
-    status: '已结束', liquipediaSlug: 'ESL_One/2024/Kuala_Lumpur', valve: false, topThirdParty: false },
+    // ★ 2026-09-25：原 'ESL_One/2024/Kuala_Lumpur' → 真身 `ESL One/Kuala Lumpur/2023`
+    //   ⚠️ 注意是 **2023**：`--find "ESL One/Kuala Lumpur"` 只列出 `/2023` 一版（该赛事 2023-12 举办）。
+    //   本条目 canonical 仍沿用 OpenDota 源名（"…2024"）—— 改 canonical 会同时改卡片标题，
+    //   属产品决策，**未擅自改**（已在落地记录中标注待确认）。
+    status: '已结束', liquipediaSlug: 'ESL One/Kuala Lumpur/2023', valve: false, topThirdParty: false },
   { canonical: 'TritonLeague', tier: { grade: 'B', rank: 1, label: 'B级' },
     aliases: ['tritonleague', 'triton'], year: 2024,
     liquipediaSlug: 'Triton_League' },
@@ -545,25 +557,35 @@ const CURATED_EVENTS = [
     aliases: ['esportsworldcup2024', 'ewc2024', 'ewcdota2024'], year: 2024,
     prizePool: '$1,000,000', organizer: 'Savvy Games', region: '沙特阿拉伯',
     format: '双败淘汰', participants: 16, status: '已结束',
-    liquipediaSlug: 'Esports_World_Cup/2024/Dota_2', valve: false, topThirdParty: true },
+    // ★ 2026-09-25：原 'Esports_World_Cup/2024/Dota_2' 在 LP 上 missing。
+    //   实测 `--find "Esports World Cup/2024"` 前缀**全空**，search 只回 `Esports World Cup/2025`
+    //   与 `Riyadh Masters/2024` ⇒ 2024 年该赛事在 dota2 wiki 上的页面是 **`Riyadh Masters/2024`**
+    //   （EWC 2024 的 Dota2 分项即 Riyadh Masters），而本库另有 `Riyadh Masters 2024` 条目。
+    //   ⚠️ 按「宁可 pending，不存错映射」：**不指向 `Riyadh_Masters/2024`** —— 那会让两个
+    //      OpenDota 赛事共享同一 LP 页（赛程雷同 / 重复卡，与 Road to ENC 同一类风险）。
+    //   ★ 待办（需产品决策）：`Esports World Cup 2024` 与 `Riyadh Masters 2024` 疑为**同一赛事的两条条目**。
+    liquipediaSlug: '', valve: false, topThirdParty: true },
   { canonical: 'Esports World Cup 2025', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['esportsworldcup2025', 'ewc2025', 'ewcdota2025'], year: 2025,
     leagueId: 18375,
     prizePool: '$1,000,000', organizer: 'Savvy Games', region: '沙特阿拉伯',
     format: '双败淘汰', participants: 16, status: '已结束',
-    liquipediaSlug: 'Esports_World_Cup/2025/Dota_2', valve: false, topThirdParty: true },
+    // ★ 2026-09-25：原 'Esports_World_Cup/2025/Dota_2' 多余 `/Dota_2` 后缀 → 真身无该后缀。
+    //   （2026 那条的同类错误早前已修，2024/2025 漏修 —— 典型「修 A 忘 B」。）
+    liquipediaSlug: 'Esports World Cup/2025', valve: false, topThirdParty: true },
   // EWC 2026 已在上方（S 级）
 
   // ── ESL One 分站（统一 S-Tier）──
   { canonical: 'ESL One Birmingham 2024', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['eslonebirmingham2024', 'birminghammajor2024'], year: 2024,
     prizePool: '$1,000,000', organizer: 'ESL', region: '欧洲', format: '双败淘汰',
-    participants: 16, status: '已结束', liquipediaSlug: 'ESL_One/2024/Birmingham',
+    participants: 16, status: '已结束', liquipediaSlug: 'ESL One/Birmingham/2024',
     valve: false, topThirdParty: false },
   { canonical: 'ESL One Bangkok 2024', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['eslonebangkok2024', 'bangkok2024', 'eslbangkok'], year: 2024,
     prizePool: '$1,000,000', organizer: 'ESL', region: '东南亚', format: '双败淘汰',
-    participants: 16, status: '已结束', liquipediaSlug: 'ESL_One/2024/Bangkok',
+    // ★ 2026-09-25：原 'ESL_One/2024/Bangkok' 层级写反 → 真身 'ESL One/Bangkok/2024'（41 场）。
+    participants: 16, status: '已结束', liquipediaSlug: 'ESL One/Bangkok/2024',
     valve: false, topThirdParty: false },
   // ESL One Raleigh 2025 / Kuala Lumpur 2024 已在上方（已统一 S 级）
 
@@ -761,7 +783,9 @@ const CURATED_EVENTS = [
   { canonical: 'PGL Wallachia Season 10', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['pglwallachiaseason10'], year: 2027,
     start: Math.floor(Date.UTC(2027, 2, 2) / 1000), end: Math.floor(Date.UTC(2027, 2, 14) / 1000),
-    liquipediaSlug: 'PGL_Wallachia_Season_10' }
+    // ★ 2026-09-25：原 'PGL_Wallachia_Season_10'（用下划线而非斜杠）→ 真身 `PGL/Wallachia/10`（14 场）。
+    //   同系列 S1-S5、S9 都是 `PGL/Wallachia/<N>`，本条是唯一写错的。
+    liquipediaSlug: 'PGL/Wallachia/10' }
 ];
 
 // ===== 知名战队（team_id -> 规范信息）=====
