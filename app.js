@@ -58,18 +58,12 @@ App({
       // ★ 2026-09-25：启动期改用**分片版** prune（原同步版会一次阻塞 ~900ms ✗）；
       //   写入路径（cache.set 内部）仍用同步 prune ✓ —— 那条路径依赖"返回时空间已腾出" ✓
       try { cache.pruneIdle(); } catch (e) {}
-      // CloudBase 初始化（若启用云代理）。
-      // 传入 envId（config.cloudProxy.envId）确保真机与模拟器行为一致；
-      // 留空则走默认环境（仅单环境账号有效）。
-      if (config.cloudProxy && config.cloudProxy.enabled) {
-        try {
-          const envId = config.cloudProxy.envId;
-          wx.cloud.init({
-            env: envId || undefined,
-            traceUser: true
-          });
-        } catch (e) {}
-      }
+      // ★★ 2026-09-25（微信云开发**彻底脱离**收尾）：原「CloudBase 初始化」块**已删除** ——
+      //   云函数/云数据库/云存储均已退役（客户端 0 处 wx.cloud.* 调用，已全库核查 ✓），
+      //   再调用 wx.cloud.init() 只会去初始化一个**正在关闭/已关闭**的云环境 ✗
+      //   （真机启动期 `[Violation] 'setTimeout' handler took 410ms` 的高度可疑来源 ✓）。
+      //   ⚠️ 保留 config.cloudProxy.enabled **不动** —— 该 flag 现被 cloudProxy/api 的
+      //      `breaker.isAvailable(...)` 用作 **Supabase EF 熔断闸门** ✓（名字已名不副实，但改名风险高 ✓）
       // 远程 curation（若配置 url）后台静默加载，失败不阻塞
       remoteCuration.load();
       api.getHeroes()
