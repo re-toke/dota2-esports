@@ -16,7 +16,14 @@
 var config = require('./config');
 
 var EF_BREAKER_THRESHOLD = 3;              // 连续失败阈值
-var EF_BREAKER_TTL_MS = 10 * 60 * 1000;    // OPEN 冷却时长（对齐 cloudBreaker.js 的 10min）
+// ★ 2026-09-25：OPEN 冷却 10min → **2min**。
+//   实测（真机/模拟器 Console）：一次约 3 秒的境外网络抖动（supabase 与 steam CDN **同时** timeout）
+//   会把 opendota-proxy 熔断 10 分钟 ⇒ **首页主数据源停摆 10 分钟**（只能靠本地快照兜底出卡）。
+//   改 2min 的代价：硬故障期间每 ~2min 一次半开探测（单请求 12s 超时）⇒ 30min 故障约 15 次探测，可忽略；
+//   收益：抖动恢复后 **≤2min** 自动回血（原 10min），首页少空 8 分钟。
+//   ⚠️ 不再是「对齐 cloudBreaker.js 的 10min」——本熔断器只管 EF（supabaseClient），
+//      cloudBreaker.js 是云函数时代的另一套（调用方 api.js / cloudProxy.js 仍存活，语义不同）。
+var EF_BREAKER_TTL_MS = 2 * 60 * 1000;     // OPEN 冷却时长（到期后 efAvailable 放行一次半开探测）
 // ★ 2026-09-17（P1-10 修复）：熔断状态改为「按 EF 名分桶 + TTL 冷却 + 半开探测」。
 //   原实现是单一全局布尔（_efBreakerOpen），三个缺陷：
 //     ① 不分桶：最不稳定的 haglund-proxy 连续 3 次 502，会把 opendota-proxy /
