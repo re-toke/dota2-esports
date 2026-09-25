@@ -120,6 +120,86 @@ function prune() {
   }
 }
 
+// ★★ 2026-09-25：**分片版 prune（仅供启动期调用）** —— 消除启动期长任务。
+//
+// 真机实测（用户 Console）：`[Violation] 'setTimeout' handler took 922ms` ✗
+//   根因：启动定时器首句就是 `cache.prune()` ✓，而超限时它会**逐条同步读 + JSON.parse 全量扫描** ✗
+//   算术对账：日志「淘汰 46 条」÷ PRUNE_BATCH_RATIO(0.2) ≈ **230 条**；
+//   230 × ~4ms（同步 storage 桥调用）≈ **920ms** ✓ 与实测吻合 ✓
+//   （即：**主要成本是"扫描"而非"删除"** —— 删除 46 条仅约 100~200ms）
+//
+// ⚠️ **为什么另开函数而不是改造 prune()**：`set()` 的写入路径（下方 L132/L136）依赖
+//    「prune 返回时空间已腾出」✗ —— 改成异步会破坏该保证 ✗。故保留原同步 `prune()` 一字不动 ✓，
+//    本函数仅供 `app.js` 启动期调用 ✓。
+//
+// ⚠️ 分片**只切分循环**（扫描 / 删除），**淘汰策略逐字不变**（先清过期 → 再按 fetchedAt 淘汰 20% ✓），
+//    且未超限时与同步版一样**零成本返回** ✓。
+function pruneIdle(chunkSize, onDone) {
+  const step = chunkSize || 20;
+  let info = null;
+  try { info = wx.getStorageInfoSync(); } catch (e) { info = null; }
+  if (!info) { if (onDone) onDone(0); return; }
+  const keys = (info.keys || []).filter((k) => k.indexOf(PREFIX) === 0);
+  if (!keys.length || (info.currentSize || 0) * 1024 <= MAX_BYTES) {
+    if (onDone) onDone(0);
+    return;
+  }
+  const t0 = Date.now();
+  const now = Date.now();
+  const items = [];
+  let i = 0;
+  let removed = 0;
+  function finish() {
+    if (typeof console !== 'undefined' && console.info) {
+      console.info('[cache] prune(分片): 扫描 ' + keys.length + ' 条 / 淘汰 ' + removed +
+                   ' 条 / 耗时 ' + (Date.now() - t0) + 'ms');
+    }
+    if (onDone) onDone(removed);
+  }
+  // 阶段 2：分片扫描（读 + parse）
+  function scan() {
+    const end = Math.min(i + step, keys.length);
+    for (; i < end; i++) {
+      const k = keys[i];
+      try {
+        const raw = wx.getStorageSync(k);
+        if (!raw) continue;
+        const obj = JSON.parse(raw);
+        items.push({ key: k, fetchedAt: obj.fetchedAt || 0, expire: obj.expire || 0,
+                     expired: obj.expire && now > obj.expire });
+      } catch (e) { try { wx.removeStorageSync(k); } catch (e2) {} }
+    }
+    if (i < keys.length) { setTimeout(scan, 0); return; }
+    evict();
+  }
+  // 阶段 3：分片删除（策略与同步版逐条一致）
+  function evict() {
+    const expiredKeys = items.filter((it) => it.expired).map((it) => it.key);
+    if (expiredKeys.length) { removeKeys(expiredKeys, afterExpired); }
+    else { afterExpired(); }
+  }
+  function removeKeys(list, cb) {
+    let j = 0;
+    (function step2() {
+      const end = Math.min(j + step, list.length);
+      for (; j < end; j++) { try { wx.removeStorageSync(list[j]); removed++; } catch (e) {} }
+      if (j < list.length) { setTimeout(step2, 0); return; }
+      cb();
+    })();
+  }
+  function afterExpired() {
+    let after = { currentSize: 0 };
+    try { after = wx.getStorageInfoSync() || after; } catch (e) {}
+    if ((after.currentSize || 0) * 1024 <= MAX_BYTES) { finish(); return; }
+    const valid = items.filter((it) => !it.expired).sort((a, b) => a.fetchedAt - b.fetchedAt);
+    const evictCount = Math.ceil(valid.length * PRUNE_BATCH_RATIO);
+    const toRemove = valid.slice(0, Math.min(evictCount, valid.length)).map((it) => it.key);
+    if (!toRemove.length) { finish(); return; }
+    removeKeys(toRemove, finish);
+  }
+  setTimeout(scan, 0);
+}
+
 function set(key, value, ttlSec) {
   try {
     const expire = Date.now() + (ttlSec || 3600) * 1000;
@@ -162,5 +242,7 @@ function touch(key, ttlSec) {
 module.exports = {
   get: get, peek: peek, getStale: getStale,
   set: set, remove: remove, touch: touch,
-  prune: prune
+  prune: prune,
+  // ★ 2026-09-25：启动期专用（分片，不阻塞主线程）；写入路径仍用同步 prune ✓
+  pruneIdle: pruneIdle
 };

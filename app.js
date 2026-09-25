@@ -55,7 +55,9 @@ App({
     // 页面已用 heroReady / itemReady 守卫，延迟填充不影响首屏与交互。
     setTimeout(() => {
       // §6.4 启动时清理过期/超限缓存（LRU prune），释放存储空间
-      try { cache.prune(); } catch (e) {}
+      // ★ 2026-09-25：启动期改用**分片版** prune（原同步版会一次阻塞 ~900ms ✗）；
+      //   写入路径（cache.set 内部）仍用同步 prune ✓ —— 那条路径依赖"返回时空间已腾出" ✓
+      try { cache.pruneIdle(); } catch (e) {}
       // CloudBase 初始化（若启用云代理）。
       // 传入 envId（config.cloudProxy.envId）确保真机与模拟器行为一致；
       // 留空则走默认环境（仅单环境账号有效）。
