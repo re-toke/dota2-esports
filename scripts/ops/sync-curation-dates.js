@@ -14,14 +14,39 @@
 //   # 预览（默认，只读，不写库）
 //   node scripts/ops/sync-curation-dates.js
 //
-//   # 实际写入（需要管理令牌；令牌取自 admin/.env.local 的 VITE_ADMIN_TOKEN）
-//   ADMIN_TOKEN=<令牌> node scripts/ops/sync-curation-dates.js --apply
+//   # 实际写入
+//   node scripts/ops/sync-curation-dates.js --apply
+//
+//   ★ **不需要登录 / 不需要 supabase CLI** —— 本脚本零 CLI、零 supabase-js 依赖，
+//     只用两个凭据走纯 HTTPS：
+//       · `utils/config.js` 的 anon key（只读 REST）
+//       · 管理令牌（写 EF 的 `x-admin-token`），按 **--token > 环境变量 ADMIN_TOKEN > admin/.env.local** 依次取
+//     ⇒ 正常情况下**直接跑 `--apply` 即可**，令牌会自动从 `admin/.env.local` 读取（值不会被打印）。
 //
 //   可选：
-//     --only <关键词>   只处理名称包含关键词的条目（便于单条试跑）
-//     --token <值>      直接给令牌（等价于环境变量，注意 shell 历史泄露风险）
+//     --only <关键词>           只处理名称包含关键词的条目（便于单条试跑）
+//     --delete-event "<canonical>"  定向删除远端该条（合并赛事时必须做，见下方说明）
+//     --token <值>              直接给令牌（优先级最高，注意 shell 历史泄露风险）
 //
-// ## 只改 start/end
+// ## 同步哪些字段（2026-09-25 扩展）
+//   原先只同步赛期；现在还会订正 **liquipediaSlug / scheduledMatchesSlug / tier.grade** ——
+//   因为运行时 `sources.js` 用的是 `remoteCuration`（远端非 null 字段覆盖本地），
+//   只改本地不推远端 ⇒ 赛事 tab 分级（`leagues.js:676`）与详情页 slug 仍是旧值。
+//   ⚠️ 只订正「远端**已有值但写错**」的情况，**不主动 backfill 远端缺失字段**
+//      （否则会把大量历史条目一次性刷进库，风险远大于收益）。
+//
+// ## 为什么需要它
+//   小程序运行时读的是 **远端** curation（`utils/remoteCuration.js` → Supabase
+//   `curation_events`），且 `mergeEventFields` 让**远端字段覆盖本地**（非 null 即覆盖）。
+//   所以只改本地 `utils/curation.js` **不会生效于真机** ——
+//   实测教训：本地已订正 PGL Wallachia Season 9 起始日为 9/19，但界面仍显示 9/17，
+//   因为远端表里 `data.start` 还是 1789603200（9/17）。
+//
+//   ⚠️⚠️ 反向陷阱：`buildEffective` 对远端行是「同键字段级合并；**新键直接采用**」——
+//   **本地删掉一条条目后，远端那一行会被原样复活**（本地删了等于没删）。
+//   ⇒ 合并/删除 curation 条目时，必须同时 `--delete-event "<canonical>" --apply`。
+//
+// ## 写库安全性
 //   写库走 `admin-write` EF 的 `upsertEvent`，而该 operation 是**整体替换** `data` 字段
 //   （`data: { ...data, updatedAt }`）→ 本脚本会先读远端现有 `data`，**合并**后再提交，
 //   绝不丢 prizePool / organizer / aliases 等其它字段。
@@ -32,6 +57,9 @@
 // ============================================================
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
+
 const argv = process.argv.slice(2);
 const APPLY = argv.includes('--apply');
 const getArg = (name) => {
@@ -40,7 +68,27 @@ const getArg = (name) => {
 };
 const ONLY = getArg('only');
 const DELETE_EVENT = getArg('delete-event');
-const TOKEN = getArg('token') || process.env.ADMIN_TOKEN || '';
+
+// ★ 2026-09-25：令牌第三级回落 —— 直接读 `admin/.env.local` 的 VITE_ADMIN_TOKEN。
+//   此前必须让用户在 shell 里拼 `ADMIN_TOKEN=$(grep ... | cut ...)`，在 Windows/Git-Bash 下
+//   引号与反斜杠极易出错；而该文件本就在仓库内、脚本原本就提示「值见 admin/.env.local」，
+//   故本地直读既不扩大安全边界、又能消除这一整类操作失误。
+//   ⚠️ 任何分支都**不打印令牌本身**（只打印来源）。
+function readTokenFromEnvLocal() {
+  try {
+    const p = path.join(__dirname, '..', '..', 'admin', '.env.local');
+    if (!fs.existsSync(p)) return '';
+    const m = fs.readFileSync(p, 'utf8').match(/^\s*VITE_ADMIN_TOKEN\s*=\s*(.+)$/m);
+    return m ? m[1].trim().replace(/^["']|["']$/g, '') : '';
+  } catch (e) {
+    return '';
+  }
+}
+const _argTok = getArg('token');
+const _envTok = process.env.ADMIN_TOKEN || '';
+const _fileTok = (_argTok || _envTok) ? '' : readTokenFromEnvLocal();
+const TOKEN = _argTok || _envTok || _fileTok;
+const TOKEN_SRC = _argTok ? '--token 参数' : (_envTok ? '环境变量 ADMIN_TOKEN' : (TOKEN ? 'admin/.env.local' : '(未找到)'));
 
 const CFG = require('./../../utils/config.js');
 const curation = require('./../../utils/curation.js');
@@ -114,6 +162,7 @@ async function deleteEvent(key) {
 
 (async () => {
   console.log('[sync-curation-dates] 远端：' + SB_URL);
+  console.log('[sync-curation-dates] 管理令牌来源：' + TOKEN_SRC + '（值不回显）');
 
   if (DELETE_EVENT) {
     const dk = normalizeEventName(DELETE_EVENT);
