@@ -1019,6 +1019,16 @@ Page({
                 else if (diffSec < 86400) countdownText = Math.floor(diffSec / 3600) + '小时后';
                 else countdownText = Math.floor(diffSec / 86400) + '天后';
               }
+              // ★★ 2026-09-25：**先做「比分终局」归一，再算所有 phase 相关展示** ——
+              //   LP 的 series phase 会滞后（对局已打完仍报 live）。此处把「比分已达 BO 终局」
+              //   （如 1:2 BO3，_decidedByScore）的 series 的 phase 归一为 recent，
+              //   让下方 liqScoreACls / liqElapsedSec / 卡片 LIVE 徽标全部一致。
+              //   （09-23 的修复只改了 isLive 一个字段，分段与徽标仍用原始 phase ⇒ **只修了一半**，
+              //     实测：详情页 1:2 BO3 仍标 LIVE 挂在「进行中」段，首页同一场却标「已结束 0:0」。）
+              if (m.phase === 'live' && _decidedByScore(m, m.boType)) {
+                m.phase = 'recent';
+                console.log('[league-detail] 比分达终局（LP）→ phase 归一为 recent');
+              }
               // ★ v3 优化项22：从 Liquipedia 提取比分（TeamOpponent|score=N）
               var liqScoreA = m.score1 || 0;
               var liqScoreB = m.score2 || 0;
@@ -1301,6 +1311,17 @@ Page({
         // ★ v3 优化项28：懒计算 — 只对当前页可见 series 计算新字段（在 setData 前计算）
         const liveList = [], upcomingList = [], recentList = [];
         allSeries.forEach(function (s) {
+          // ★★ 2026-09-25：分段前也做「比分终局」归一（与 LP map 内同一判据 _decidedByScore）——
+          //   覆盖**非 LP 来源**的 series（OpenDota / steam 直连等）：它们不经过上方 LP map，
+          //   若 phase 滞后为 live 而比分已达终局，会继续被分进「进行中」段并挂 LIVE 徽标。
+          //   （实测截图：详情页 1:2 BO3 仍标 LIVE，首页同场却标「已结束 0:0」——两页口径不一致。）
+          //   写回 s.phase ⇒ 分段、WXML 分隔符/徽标、isLive 三处同源（单一事实源）。
+          //   对象由本次 buildSeriesFromSources 新建（非跨页共享缓存），原地改写安全。
+          if (s.phase === 'live' && _decidedByScore(s, s.boType)) {
+            s.phase = 'recent';
+            console.log('[league-detail] 比分达终局 → phase 归一为 recent：' +
+              (s.team1Name || s.teamA || '') + ' vs ' + (s.team2Name || s.teamB || ''));
+          }
           if (s.phase === 'live') liveList.push(s);
           else if (s.phase === 'upcoming') upcomingList.push(s);
           else recentList.push(s);
