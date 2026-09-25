@@ -558,13 +558,15 @@ const CURATED_EVENTS = [
     status: '已结束', liquipediaSlug: 'ESL One/Kuala Lumpur/2023', valve: false, topThirdParty: false },
   { canonical: 'TritonLeague', tier: { grade: 'B', rank: 1, label: 'B级' },
     aliases: ['tritonleague', 'triton'], year: 2024,
-    liquipediaSlug: 'Triton_League' },
+    liquipediaSlug: '' },   // ★ 2026-09-25 P3：LP 无此页（--find 前缀/搜索实测）⇒ 留空，不保留死值
   { canonical: 'Dota 2 World Invitational', tier: { grade: 'B', rank: 1, label: 'B级' },
-    aliases: ['dotaworldinvitational', 'd2wi'], year: 2024,
-    liquipediaSlug: 'Dota_2_World_Invitational' },
+    aliases: ['dotaworldinvitational', 'd2wi', 'portaldota2worldinvitationals'], year: 2024,
+   // ↑ 2026-09-25 P3 补：OpenDota 的**真实 league 名**是 'Portal Dota2 World Invitationals'（16527），
+   //   原别名集里没有它 ⇒ 名字匹配必 MISS（只能靠 leagueId 或新别名）
+    liquipediaSlug: 'Portal Dota 2 World Invitationals/2024' },   // ★ 2026-09-25 P3：原值为死链，真身经 --find 实测（14 场）
   { canonical: 'Mega Arena', tier: { grade: 'B', rank: 1, label: 'B级' },
     aliases: ['megaarena', 'megaarena2025'], year: 2025,
-    liquipediaSlug: 'Mega_Arena' },
+    liquipediaSlug: '' },   // ★ 2026-09-25 P3：LP 无此页（--find 前缀/搜索实测）⇒ 留空，不保留死值（year=2025，LP 只有 X5/Brasil Mega Arena 等**别的品牌**）
 
   // =====================================================================
   // 扩展收录（依据《DOTA2赛事级别分类全景》P0/P1 优化）：
@@ -664,22 +666,22 @@ const CURATED_EVENTS = [
   { canonical: 'CCT 2024', tier: { grade: 'A', rank: 2, label: 'A级' },
     aliases: ['cct2024', 'cct2024dota'], year: 2024,
     prizePool: '$250,000', organizer: 'CCT', region: '欧洲', format: '双败淘汰',
-    participants: 16, status: '已结束', liquipediaSlug: 'CCT/2024',
+    participants: 16, status: '已结束', liquipediaSlug: '',   // ★ 2026-09-25 P3：LP 无此页（--find 前缀/搜索实测）⇒ 留空，不保留死值（LP 只有 CCT/Season N/M 子页，无年度页）
     valve: false, topThirdParty: false },
   { canonical: 'CCT 2025', tier: { grade: 'A', rank: 2, label: 'A级' },
     aliases: ['cct2025', 'cct2025dota'], year: 2025,
     prizePool: '$250,000', organizer: 'CCT', region: '欧洲', format: '双败淘汰',
-    participants: 16, status: '已结束', liquipediaSlug: 'CCT/2025',
+    participants: 16, status: '已结束', liquipediaSlug: '',   // ★ 2026-09-25 P3：LP 无此页（--find 前缀/搜索实测）⇒ 留空，不保留死值（同上）
     valve: false, topThirdParty: false },
   { canonical: 'Pinnacle 2024', tier: { grade: 'A', rank: 2, label: 'A级' },
     aliases: ['pinnacle2024', 'pinnacle2024dota'], year: 2024,
     prizePool: '$250,000', organizer: 'Pinnacle', region: '欧洲', format: '双败淘汰',
-    participants: 16, status: '已结束', liquipediaSlug: 'Pinnacle/2024',
+    participants: 16, status: '已结束', liquipediaSlug: '',   // ★ 2026-09-25 P3：LP 无此页（--find 前缀/搜索实测）⇒ 留空，不保留死值（LP 只有 Pinnacle Cup/… 子页）
     valve: false, topThirdParty: false },
   { canonical: 'Pinnacle 2025', tier: { grade: 'A', rank: 2, label: 'A级' },
     aliases: ['pinnacle2025', 'pinnacle2025dota'], year: 2025,
     prizePool: '$250,000', organizer: 'Pinnacle', region: '欧洲', format: '双败淘汰',
-    participants: 16, status: '已结束', liquipediaSlug: 'Pinnacle/2025',
+    participants: 16, status: '已结束', liquipediaSlug: '',   // ★ 2026-09-25 P3：LP 无此页（--find 前缀/搜索实测）⇒ 留空，不保留死值（同上）
     valve: false, topThirdParty: false },
 
   // ── DPC 历史赛事（Valve 官方，已停办 defunct）──
@@ -768,23 +770,23 @@ const CURATED_EVENTS = [
   { canonical: 'EPL World Series: Southeast Asia Season 17', tier: { grade: 'B', rank: 1, label: 'B级' },
     aliases: ['eplworldseriessoutheastasiaseason17'], year: 2026,
     start: Math.floor(Date.UTC(2026, 8, 1) / 1000), end: Math.floor(Date.UTC(2026, 8, 16) / 1000),
-    liquipediaSlug: 'EPL_World_Series:_Southeast_Asia_Season_17' },
+    liquipediaSlug: 'EPL/World Series/Southeast Asia/17' },   // ★ 2026-09-25 P3：原值为死链，真身经 --find 实测（36 场）
   // ★ 2026-09-14 补收录（原缺失 → 首页/「即将」看不到对局）
   { canonical: 'WINLINE Star Series Season 4', tier: { grade: 'B', rank: 1, label: 'B级' },
     aliases: ['winlinestarseriesseason4'], year: 2026,
     leagueId: 20159,   // 实测 OpenDota leagueId（补收录时正在进行的联赛）
     start: Math.floor(Date.UTC(2026, 8, 10) / 1000), end: Math.floor(Date.UTC(2026, 8, 19) / 1000),
-    liquipediaSlug: 'WINLINE_Star_Series_Season_4' },
+    liquipediaSlug: '' },   // ★ 2026-09-25 P3：LP 无此页（--find 前缀/搜索实测）⇒ 留空，不保留死值（LP 只有 Winline/Super Mixer Cup 与 Winline Insight/N，无 Star Series）
   // ★ 2026-09-14 补收录（原缺失 → 首页/「即将」看不到对局）
   { canonical: 'European Pro League Season 40', tier: { grade: 'B', rank: 1, label: 'B级' },
     aliases: ['europeanproleagueseason40'], year: 2026,
     start: Math.floor(Date.UTC(2026, 8, 12) / 1000), end: Math.floor(Date.UTC(2026, 8, 25) / 1000),
-    liquipediaSlug: 'European_Pro_League_Season_40' },
+    liquipediaSlug: 'European Pro League/40' },   // ★ 2026-09-25 P3：原值为死链，真身经 --find 实测（44 场）
   // ★ 2026-09-14 补收录（原缺失 → 首页/「即将」看不到对局）
   { canonical: 'Sber Tournament 2026', tier: { grade: 'B', rank: 1, label: 'B级' },
     aliases: ['sbertournament2026'], year: 2026,
     start: Math.floor(Date.UTC(2026, 9, 10) / 1000), end: Math.floor(Date.UTC(2026, 10, 1) / 1000),
-    liquipediaSlug: 'Sber_Tournament_2026' },
+    liquipediaSlug: '' },   // ★ 2026-09-25 P3：LP 无此页（--find 前缀/搜索实测）⇒ 留空，不保留死值（2026 届 LP 拆成 /2026/Amateur 与 /2026/Pro，无单一主页）
   // ★ 2026-09-14 补收录（原缺失 → 首页/「即将」看不到对局）
   { canonical: 'DreamLeague Division 2 Series 5', tier: { grade: 'B', rank: 1, label: 'B级' },
     aliases: ['dreamleaguedivision2series5'], year: 2026,

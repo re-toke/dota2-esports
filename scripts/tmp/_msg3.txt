@@ -1,0 +1,29 @@
+fix(slug): P3 —— LP slug 死链归零（32 → 21 → 11 → 0）
+
+verify:lp-slugs --curation：总数 73 | 存在 73 | **不存在 0**（余 9 条「0 场」= TI 主页/结构页，属正常）
+
+★ 复核推翻了我自己原报告 §3.3 的分类：11 条里**有 3 条其实有真身**（当初只对 4 条取证、其余靠推断）。
+  教训：判「LP 无页面」必须实查 allpages 前缀 + search，不能靠名字像不像。
+
+【修真身 3 条】逐条 --find 实测（含 {{Match}} 数）
+  · Dota 2 World Invitational           -> Portal Dota 2 World Invitationals/2024  (14 场)
+      并补别名 portaldota2worldinvitationals —— OpenDota 真实 league 名是
+      'Portal Dota2 World Invitationals'(16527)，原别名集里没有它 ⇒ 名字匹配必 MISS
+  · EPL World Series: Southeast Asia Season 17 -> EPL/World Series/Southeast Asia/17 (36 场)
+  · European Pro League Season 40       -> European Pro League/40  (44 场)
+
+【留空 8 条】实测 LP 确无对应页面（置 ''，与 DPC 2022-23 处理一致；不留死值）
+  TritonLeague（前缀/搜索全空）· Mega Arena（LP 只有 X5/Brasil Mega Arena 等别的品牌）
+  · CCT 2024 / CCT 2025（LP 只有 CCT/Season N/M 子页，无年度页）
+  · Pinnacle 2024 / Pinnacle 2025（LP 只有 Pinnacle Cup/… 子页）
+  · WINLINE Star Series Season 4（LP 只有 Winline/Super Mixer Cup 与 Winline Insight/N）
+  · Sber Tournament 2026（LP 拆成 /2026/Amateur 与 /2026/Pro，无单一主页）
+
+守卫：test-sources 87 → 88（新增「P3 三条真身锁定 + 十条必须保持留空」）
+  后者是**反向锁**：谁再往这 10 条里填一个"看似合理"的 slug，断言即失败。
+门槛：sync:canon 已重生成（313 条，+1 映射）· test 13/13 + 2 守卫全绿 · lint 0 errors
+工具：verify-lp-slugs 的 --find 支持逗号分隔批量（一次跑多个前缀，内部串行限流）
+
+遗留（另记，待产品决策）：EPL World Series 的 OpenDota 名（'… 2024-2025 Season'，17659）
+  与本条 canonical（'… Season 17'）不是同一种写法，名字匹配 MISS —— 因届次对应关系不确定，
+  本轮**未擅自加别名**（避免误映射）。

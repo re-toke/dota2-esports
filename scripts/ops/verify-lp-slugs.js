@@ -119,7 +119,14 @@ async function main() {
   if (findIdx >= 0 && args[findIdx + 1]) {
     const li = args.indexOf('--limit');
     const lim = (li >= 0 && args[li + 1]) ? parseInt(args[li + 1], 10) : 30;
-    await find(args[findIdx + 1], (Number.isFinite(lim) && lim > 0) ? lim : 30);
+    const limN = (Number.isFinite(lim) && lim > 0) ? lim : 30;
+    // ★ 2026-09-25：支持**逗号分隔批量** —— 一次跑多个前缀（内部串行 + 已按 RATE_LIMIT_MS 限流），
+    //   避免为 10+ 个待查条目来回开多个进程/并发打 LP（并发可能触发限流 → 假 missing）。
+    const terms = args[findIdx + 1].split(',').map((x) => x.trim()).filter(Boolean);
+    for (let i = 0; i < terms.length; i++) {
+      if (i) await sleep(RATE_LIMIT_MS);
+      await find(terms[i], limN);
+    }
     process.exit(0);
   }
   let items = [];

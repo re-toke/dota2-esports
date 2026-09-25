@@ -5,9 +5,9 @@
 // cannot load .json directly).
 module.exports = {
   "version": 3,
-  "generatedAt": "2026-09-25T09:13:53.090Z",
+  "generatedAt": "2026-09-25T09:43:34.478Z",
   "source": "utils/curation.js#CURATED_EVENTS",
-  "eventCount": 312,
+  "eventCount": 313,
   "map": {
     "theinternational2025": "The International 2025",
     "ti2025": "The International 2025",
@@ -168,6 +168,7 @@ module.exports = {
     "dota2worldinvitational": "Dota 2 World Invitational",
     "dotaworldinvitational": "Dota 2 World Invitational",
     "d2wi": "Dota 2 World Invitational",
+    "portaldota2worldinvitationals": "Dota 2 World Invitational",
     "megaarena": "Mega Arena",
     "megaarena2025": "Mega Arena",
     "riyadhmasters2023": "Riyadh Masters 2023",
@@ -286,5 +287,5 @@ module.exports = {
     "20169": "BLAST Slam VII China Qualifier",
     "20208": "BLAST SLAM IX"
   },
-  "dataVersion": "1790327633084"
+  "dataVersion": "1790329414473"
 };

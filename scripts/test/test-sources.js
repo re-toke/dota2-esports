@@ -775,6 +775,35 @@ check('★ LP slug P2：10 条历史错值必须锁定为实测真身（防回�
     'Clavision Masters 届次应为 2025（LP 只有 Masters/2025，无 /1、无 2024 届）');
 });
 
+check('★ LP slug P3：3 条真身锁定 + 10 条「LP 无页面」必须保持留空', function () {
+  // 3 条曾被我**误判**为「LP 无页面」（原报告 §3.3），逐条 --find 后发现有真身 ⇒ 修正。
+  // ★ 教训：判「LP 无页面」必须实查 allpages 前缀 + search，**不能靠名字像不像**。
+  const P3FIX = [
+    ['Dota 2 World Invitational', 'Portal Dota 2 World Invitationals/2024'],
+    ['EPL World Series: Southeast Asia Season 17', 'EPL/World Series/Southeast Asia/17'],
+    ['European Pro League Season 40', 'European Pro League/40']
+  ];
+  P3FIX.forEach(function (p) {
+    const ev = cura.curatedEventFor(p[0], { game: 'dota2' });
+    assert(ev, '未命中 curation: ' + p[0]);
+    assert(String(ev.liquipediaSlug || '') === p[1],
+      p[0] + '\n  期望 slug: ' + p[1] + '\n  实际 slug: ' + String(ev.liquipediaSlug));
+  });
+  // 这些条目实测 LP 上**确无对应页面**（allpages 前缀全空或只有别的品牌/年度子页）
+  // ⇒ slug 必须留空。**若有人又填回一个看似合理的值，本断言会失败**（这正是它的用途）。
+  const P3BLANK = [
+    'PGL Astana 2025', 'TritonLeague', 'Mega Arena', 'CCT 2024', 'CCT 2025',
+    'Pinnacle 2024', 'Pinnacle 2025', 'DPC 2022-2023 Tour',
+    'WINLINE Star Series Season 4', 'Sber Tournament 2026'
+  ];
+  P3BLANK.forEach(function (n) {
+    const ev = cura.curatedEventFor(n, { game: 'dota2' });
+    assert(ev, '未命中 curation: ' + n);
+    assert(ev.liquipediaSlug === '',
+      n + ' 的 slug 必须留空（LP 无此页，填任何值都会是死链），实际: ' + JSON.stringify(ev.liquipediaSlug));
+  });
+});
+
 // ===== ⑤ 跨源赛期合并 mergeEventPeriod（2026-09-19 落地）=====
 // 口径经用户确认：官方赛期（LP 系）优先、缺口**按字段**回退 OpenDota ——
 //   · 首个起止都完整的源 → 全取
