@@ -114,18 +114,13 @@ function _teamToken(t, loose) {
   //   ⇒ 归一化后成 `conventusstellarumpagedoesnotexist`，**与干净队名永远算不出同一个键** ✗
   //   ⇒ 这正是「同一对局两张卡」合并失效的真正成因（此前两版都栽在这里）。
   //   先剔除该文案，再去掉尾部括号补充（`(page does not exist)` / `(Peru)` 这类），最后才归一化。
-  const nm = _stripLpNoise(t.name || t.tag || '');
+  const nm = names.sanitizeTeamName(t.name || t.tag || '');
   const norm = loose ? names.normTeamNameLoose(nm) : names.normAsciiKey(nm);
   if (norm) return norm;
   return t.id ? ('#' + t.id) : '';
 }
-// 剔除 LP/LPDB 的错误文案与尾部括号补充（仅用于**合并键**，不改动展示用队名）
-function _stripLpNoise(name) {
-  var x = String(name || '');
-  x = x.replace(/\(\s*page does not exist\s*\)/ig, ' ');   // 已知上游文案
-  x = x.replace(/\s*\([^)]*\)\s*$/, ' ');                  // 尾部括号补充
-  return x.replace(/\s+/g, ' ').trim();
-}
+// ★ 2026-09-25：原本地 _stripLpNoise 已收敛到 utils/names.js 的单一实现（sanitizeTeamName）
+//   —— 避免「同一清洗规则两处实现」再次漂移（与本项目 names.js 归一化守卫同一教训）。
 function _preferSameMatchCard(x, y) {
   const rank = (c) => (c.status === 'ended' ? 3 : (c.status === 'upcoming' ? 1 : 2));
   const rx = rank(x), ry = rank(y);
@@ -951,66 +946,6 @@ Page({
         '），丢弃 ' + drop.status + '（key=' + drop.key + '，start 差 ' +
         Math.abs((hit.start || 0) - (c.start || 0)) + 's，命中键=' + keys.join(' / ') + '）');
     });
-    // ★★ 2026-09-23：**同对局漏合并探测器**（自报告）——
-    //   用户实测「同一对局仍显示两张卡」，但我按队名对 + 12h 合并仍未生效 ⇒ 说明两卡的
-    //   队名字符串与我假设的写法不同（已连续两次推断失败 ✗）。
-    //   ⇒ 不再猜：把「疑似同对局却未合并」的两卡**原始字段**打出来，用线上真数据定案。
-    //   判据：任一队名（去空格小写）相同、或严格键的"单边"相同，即视为疑似。
-    (function detectMissedMerge(cards) {
-      const sig = (c) => {
-        const a = _teamToken(c && c.teamA, false), b = _teamToken(c && c.teamB, false);
-        return { a: a, b: b, pair: [a, b].sort().join('|') };
-      };
-      for (let i = 0; i < cards.length; i++) {
-        for (let j = i + 1; j < cards.length; j++) {
-          const x = cards[i], y = cards[j];
-          const sx = sig(x), sy = sig(y);
-          if (sx.pair === sy.pair) continue;                 // 同键 → 已被合并逻辑处理，跳过
-          const shareTeam = (sx.a && (sx.a === sy.a || sx.a === sy.b)) ||
-                            (sx.b && (sx.b === sy.a || sx.b === sy.b));
-          if (!shareTeam) continue;
-          console.warn('[index][诊断] 疑似同对局未合并 ||' +
-            ' A(k=' + x.key + ',st=' + x.status + ',start=' + x.start + ',dk=' + x.dateKey +
-            ',score=' + x.scoreA + ':' + x.scoreB + ',bo=' + x.bo +
-            ',teams=' + ((x.teamA && x.teamA.name) || '') + '/' + ((x.teamB && x.teamB.name) || '') + ')' +
-            ' B(k=' + y.key + ',st=' + y.status + ',start=' + y.start + ',dk=' + y.dateKey +
-            ',score=' + y.scoreA + ':' + y.scoreB + ',bo=' + y.bo +
-            ',teams=' + ((y.teamA && y.teamA.name) || '') + '/' + ((y.teamB && y.teamB.name) || '') + ')' +
-            ' keys=' + sx.pair + ' vs ' + sy.pair +
-            ' startDiff=' + Math.abs((x.start || 0) - (y.start || 0)) + 's');
-        }
-      }
-    })(keptCards);
-    // ★★ 2026-09-23：**同对局漏合并探测器**（自报告）——
-    //   用户实测「同一对局仍显示两张卡」，但我按队名对 + 12h 合并仍未生效 ⇒ 说明两卡的
-    //   队名字符串与我假设的写法不同（已连续两次推断失败 ✗）。
-    //   ⇒ 不再猜：把「疑似同对局却未合并」的两卡**原始字段**打出来，用线上真数据定案。
-    //   判据：任一队名（去空格小写）相同、或严格键的"单边"相同，即视为疑似。
-    (function detectMissedMerge(cards) {
-      const sig = (c) => {
-        const a = _teamToken(c && c.teamA, false), b = _teamToken(c && c.teamB, false);
-        return { a: a, b: b, pair: [a, b].sort().join('|') };
-      };
-      for (let i = 0; i < cards.length; i++) {
-        for (let j = i + 1; j < cards.length; j++) {
-          const x = cards[i], y = cards[j];
-          const sx = sig(x), sy = sig(y);
-          if (sx.pair === sy.pair) continue;                 // 同键 → 已被合并逻辑处理，跳过
-          const shareTeam = (sx.a && (sx.a === sy.a || sx.a === sy.b)) ||
-                            (sx.b && (sx.b === sy.a || sx.b === sy.b));
-          if (!shareTeam) continue;
-          console.warn('[index][诊断] 疑似同对局未合并 ||' +
-            ' A(k=' + x.key + ',st=' + x.status + ',start=' + x.start + ',dk=' + x.dateKey +
-            ',score=' + x.scoreA + ':' + x.scoreB + ',bo=' + x.bo +
-            ',teams=' + ((x.teamA && x.teamA.name) || '') + '/' + ((x.teamB && x.teamB.name) || '') + ')' +
-            ' B(k=' + y.key + ',st=' + y.status + ',start=' + y.start + ',dk=' + y.dateKey +
-            ',score=' + y.scoreA + ':' + y.scoreB + ',bo=' + y.bo +
-            ',teams=' + ((y.teamA && y.teamA.name) || '') + '/' + ((y.teamB && y.teamB.name) || '') + ')' +
-            ' keys=' + sx.pair + ' vs ' + sy.pair +
-            ' startDiff=' + Math.abs((x.start || 0) - (y.start || 0)) + 's');
-        }
-      }
-    })(keptCards);
     this._allMatches = keptCards;
     // 按日期分桶 → 周日历角标（语义升级：角标 = 当日系列数，非局数）
     // ★★ 2026-09-23 修复「角标数字与卡片数不符」：角标必须与**首页实际渲染的集合同口径** ——

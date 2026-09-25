@@ -1,3 +1,9 @@
+// ★ 2026-09-25：清洗上游混入队名的系统文案时，复用 names.js 的单一实现。
+//   ⚠️ 本模块此前是「零 require 的纯函数模块」（曾作为 EF/Deno 侧可复用的前提）——
+//   现引入唯一依赖 names.js（其自身零依赖、无循环风险）。若将来再需要把它搬到别的运行时，
+//   请连同 names.js 一起复制（或改回自包含）。
+var names = require('./names.js');
+
 // utils/liquipedia-parse.js
 // Liquipedia wikitext 纯解析层（零 wx / 零云 / 零 config 依赖）。
 //
@@ -265,6 +271,8 @@ function parseOpponentBlock(body) {
       break;
     }
   }
+  // ★ 2026-09-25：清洗上游混入的系统文案（见 names.sanitizeTeamName）
+  name = names.sanitizeTeamName(name);
   if (!name) name = 'TBD';
   return { name: name, status: status, liquipediaSlug: slug };
 }

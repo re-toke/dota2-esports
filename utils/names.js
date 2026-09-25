@@ -66,7 +66,26 @@ function normTeamNameLoose(s) {
   return normAsciiKey(s).replace(TEAM_SUFFIX_RE, '');
 }
 
+// ★★ 2026-09-25：清理**上游 LP/LPDB 混进队名的系统文案**（队名清洗的单一实现处）。
+//
+// 背景（线上实测，用户 2026-09-23 Console 诊断）：
+//   上游把「页面不存在」的系统文案混进了队名 ⇒ 形如 Conventus Stellarum + (page does not exist) ✗
+//   ⇒ 归一化后与干净队名**算不出同一个键** ⇒ 首页「同一对局两张卡」的合并失效 ✓
+//
+// 规则（只去噪，不做语义改写）：
+//   1) 剔除已知系统文案 page does not exist（含括号、大小写不敏感）
+//   2) 剔除**尾部**括号补充（如 Brazil / Peru 这类地区标注）
+//   ⚠️ 与 normAsciiKey 的分工：本函数**保留可读文本**（不去符号、不转小写），
+//      供展示清洗与「先清洗再归一化」的链路使用。
+function sanitizeTeamName(name) {
+  var x = String(name == null ? '' : name);
+  x = x.replace(/\(\s*page does not exist\s*\)/ig, ' ');
+  x = x.replace(/\s*\([^)]*\)\s*$/, ' ');
+  return x.replace(/\s+/g, ' ').trim();
+}
+
 module.exports = {
+  sanitizeTeamName: sanitizeTeamName,
   normAsciiKey: normAsciiKey,
   normTeamName: normTeamName,
   normTeamNameLoose: normTeamNameLoose,
