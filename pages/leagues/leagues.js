@@ -130,7 +130,8 @@ function mergeAllWithUpcoming(allLeagues, upcomingList) {
         // 同 key 已存在 → 择优：新条目更全则替换，否则丢弃
         const prev = out[at];
         if (_scoreOf(x) > _scoreOf(prev)) {
-          console.log('[leagues] mergeAllWithUpcoming 择优替换：' +
+          // 2026-09-25: per-replacement log -> verbose (behavior unchanged; TI edition merge confirmed OK)
+          if (config.debug && config.debug.verboseLog) console.log('[leagues] mergeAllWithUpcoming 择优替换：' +
             (prev.displayName || prev.name) + '(完整度 ' + _scoreOf(prev) + ') → ' +
             (x.displayName || x.name) + '(完整度 ' + _scoreOf(x) + ')');
           out[at] = x;

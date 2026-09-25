@@ -2,6 +2,16 @@
 // 集中管理可配置项：订阅消息模板、缓存 TTL、分页大小、限流参数。
 
 module.exports = {
+  // ★ 2026-09-25: per-item diagnostic log switch (**default false**).
+  // Why: this project repeatedly hit "diagnostic logs left on per-item / hot paths"
+  //      (leagueBaseName year-variant, slug hit, merge replace...) which floods the
+  //      Console, buries real signals, and makes log-based debugging painful.
+  // Convention: **summary logs stay on (1 line per round)**;
+  //             **per-item logs must go through this switch**.
+  debug: {
+    verboseLog: false
+  },
+
   // 订阅消息模板 id：在微信公众平台「功能 → 订阅消息 → 我的模板」中申请后填入。
   // 留空时，关注功能仅做本地收藏，不会弹出微信订阅授权（避免无模板时崩溃）。
   subscribeTemplateId: 'eLHDZtOvcGghXBZnnwcvsO3SX3fBPdB9cz9PKi_NwRQ',

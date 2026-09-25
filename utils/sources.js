@@ -772,7 +772,10 @@ function leagueBaseName(rawName) {
       let cu2 = null;
       try { cu2 = curation.curatedEventFor(noYear, { game: 'dota2' }); } catch (e) { cu2 = null; }
       if (cu2 && cu2.canonical) {
-        console.log('[sources] leagueBaseName 年份变体命中：' + stripped + ' → ' + cu2.canonical);
+        // 2026-09-25: semantic guard (only log when the OUTPUT really differs) + verbose switch.
+        if (config.debug && config.debug.verboseLog && name !== cu2.canonical) {
+          console.log('[sources] leagueBaseName 年份变体命中：' + stripped + ' → ' + cu2.canonical);
+        }
         return cu2.canonical;
       }
     }
@@ -859,7 +862,10 @@ function canonicalLeagueName(rawName, ctx) {
   if (alt && alt !== name) {
     const r2 = _canonLookupOnce(alt, ctx);
     if (r2.hit) {
-      console.log('[sources] canonicalLeagueName 年份变体命中：' + name + ' → ' + r2.name);
+      // 2026-09-25: same guard as above (skip no-op renames like 'X 2026 -> X 2026')
+      if (config.debug && config.debug.verboseLog && name !== r2.name) {
+        console.log('[sources] canonicalLeagueName 年份变体命中：' + name + ' → ' + r2.name);
+      }
       return r2.name;
     }
   }

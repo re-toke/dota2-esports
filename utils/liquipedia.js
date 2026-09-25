@@ -55,6 +55,7 @@ function getSlugMap() {
 var _slugHitCount = 0;
 var _slugMissCount = 0;
 var _slugMissedNames = {};
+var _slugMissReported = false;   // 2026-09-25: 本会话是否已打印过「全量缺失清单」
 var SLUG_MISS_LIMIT = 50;
 function liquipediaSlugFor(name) {
   var m = getSlugMap();
@@ -96,7 +97,10 @@ function liquipediaSlugFor(name) {
     var _cu = require('./curation.js').curatedEventFor(name, { game: 'dota2' });
     if (_cu && _cu.liquipediaSlug) {
       _slugHitCount++;
-      console.log('[liquipedia] slug 命中 curation 登记表：' + name + ' → ' + _cu.liquipediaSlug);
+      // 2026-09-25: per-item hit log -> verbose switch (summary is kept in the miss line below)
+      if (config.debug && config.debug.verboseLog) {
+        console.log('[liquipedia] slug 命中 curation 登记表：' + name + ' → ' + _cu.liquipediaSlug);
+      }
       return _cu.liquipediaSlug;
     }
   } catch (e) { /* 隔离：查表失败不影响原路径 */ }
@@ -109,8 +113,19 @@ function liquipediaSlugFor(name) {
   //   变成「拿中文/带阶段的名字当 LP 页面路径」，必然 miss 却无任何痕迹）。
   //   仅每个未命中名**首次**告警，避免刷屏（`_slugMissedNames` 本身有 LIMIT 去重）。
   if (_isNewMiss) {
-    console.warn('[liquipedia] slug 未命中（将原样用作 LP 页面路径）：' + name +
-      (norm && norm !== name ? '（归一化后 "' + norm + '" 仍未命中）' : ''));
+    // ★★ 2026-09-25: succeeded-silent + one informative line on miss (with running tally).
+    //   Rationale (from self-review): the old per-hit log flooded Console on the leagues/detail
+    //   pages; but switching to "log only on miss" would LOSE the hit-rate signal that we
+    //   actually rely on for verification -> so keep the tally in this single line.
+    console.warn('[liquipedia] slug 未命中（累计 命中 ' + _slugHitCount + ' / 未命中 ' + _slugMissCount +
+      '）：' + name + (norm && norm !== name ? '（归一化后 "' + norm + '" 仍未命中）' : ''));
+    // First miss of this session -> also dump the FULL accumulated list, so gaps are discovered
+    // proactively instead of one-by-one from user-pasted logs.
+    if (!_slugMissReported) {
+      _slugMissReported = true;
+      console.warn('[liquipedia] slug 未命中清单（本会话累计，上限 ' + SLUG_MISS_LIMIT + '）：' +
+        Object.keys(_slugMissedNames).join(' | '));
+    }
   }
   return name;
 }
