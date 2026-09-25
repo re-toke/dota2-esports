@@ -33,7 +33,8 @@
     "verify:tokenize": "node scripts/ops/verify-tokenize-equivalence.js",
     "check:handlers": "node scripts/ops/check-page-handlers.js",
     "check:token-overreach": "node scripts/ops/check-token-overreach.js",
-    "check:card-contract": "node scripts/ops/check-card-contract.js"
+    "check:card-contract": "node scripts/ops/check-card-contract.js",
+    "verify:lp-slugs": "node scripts/ops/verify-lp-slugs.js"
   },
   "dependencies": {
     "tdesign-miniprogram": "^1.15.3",
