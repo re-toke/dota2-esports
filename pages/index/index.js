@@ -12,6 +12,7 @@ const reminderStrategy = require('../../utils/reminderStrategy.js');
 const logoCache = require('../../utils/logoCache.js');
 // ★ 2026-09-20：队名「形状归一」单一实现（原先内联，须与快照 byName 键逐字一致）
 const names = require('../../utils/names.js');
+const homeDedupe = require('../../utils/homeDedupe.js');
 // v5.1（2026-09-01）：首页「对局级 upcoming」源 —— Liquipedia/Steam/haglund 排期（云代理，30min 缓存）
 const liquipedia = require('../../utils/liquipedia.js');
 // ★ 2026-09-01：构建时队徽快照（byName 键 = consensus.normName 规范化队名 → Steam CDN 可靠域）。
@@ -99,43 +100,8 @@ const BO_META = {
 //   （如 `Team Nemesis` vs `Nemesis`），严格键算不出同一个键 ⇒ 用户实测**仍未合并** ✗。
 //   `normTeamNameLoose` 会剥掉 TEAM_SUFFIX_RE（Team/战队 等后缀）⇒ 这类写法差异才能对上。
 //   风险控制：仍保留「|start 差| ≤ 12h」守卫；且**双键命中任一即合并**，宁可多并一次也不漏（重复卡是本 bug 的形态）。
-function _pairKeysOfCard(c) {
-  const a1 = _teamToken(c && c.teamA, false), b1 = _teamToken(c && c.teamB, false);
-  const a2 = _teamToken(c && c.teamA, true),  b2 = _teamToken(c && c.teamB, true);
-  const out = [];
-  if (a1 && b1) out.push((a1 < b1) ? (a1 + '|' + b1) : (b1 + '|' + a1));
-  if (a2 && b2) { const k = (a2 < b2) ? (a2 + '|' + b2) : (b2 + '|' + a2); if (out.indexOf(k) < 0) out.push(k); }
-  return out;
-}
-function _teamToken(t, loose) {
-  if (!t) return '';
-  // ★★ 2026-09-23（**基于线上真字段定位**）：上游 LP/LPDB 路径会把**查询失败的文案**混进队名 ——
-  //   实测（用户 Console 诊断）：`Conventus Stellarum (page does not exist)` ✗
-  //   ⇒ 归一化后成 `conventusstellarumpagedoesnotexist`，**与干净队名永远算不出同一个键** ✗
-  //   ⇒ 这正是「同一对局两张卡」合并失效的真正成因（此前两版都栽在这里）。
-  //   先剔除该文案，再去掉尾部括号补充（`(page does not exist)` / `(Peru)` 这类），最后才归一化。
-  const nm = names.sanitizeTeamName(t.name || t.tag || '');
-  const norm = loose ? names.normTeamNameLoose(nm) : names.normAsciiKey(nm);
-  if (norm) return norm;
-  return t.id ? ('#' + t.id) : '';
-}
-// ★ 2026-09-25：原本地 _stripLpNoise 已收敛到 utils/names.js 的单一实现（sanitizeTeamName）
-//   —— 避免「同一清洗规则两处实现」再次漂移（与本项目 names.js 归一化守卫同一教训）。
-function _preferSameMatchCard(x, y) {
-  const rank = (c) => (c.status === 'ended' ? 3 : (c.status === 'upcoming' ? 1 : 2));
-  const rx = rank(x), ry = rank(y);
-  if (rx !== ry) return rx > ry ? x : y;
-  const sx = (x.scoreA || 0) + (x.scoreB || 0), sy = (y.scoreA || 0) + (y.scoreB || 0);
-  if (sx !== sy) return sx > sy ? x : y;
-  return x;
-}
-
-function _homePassGrade(c) {
-  if (!c || !c.tier) return false;
-  const g = c.tier.grade;
-  return g === 'S' || g === 'A';
-}
-
+// ★ 2026-09-25：原本地 4 个纯函数（_pairKeysOfCard/_teamToken/_preferSameMatchCard/_homePassGrade）
+//   已整段搬到 `utils/homeDedupe.js`（可测），本页改为 require 使用。
 Page({
   data: {
     followLoading: false,
@@ -917,7 +883,7 @@ Page({
     const keptCards = [];   // 最终保留的卡（顺序稳定）
     Object.keys(byKey).forEach((k) => {
       const c = byKey[k];
-      const keys = _pairKeysOfCard(c);
+      const keys = homeDedupe.pairKeysOfCard(c);
       if (!keys.length) { keptCards.push(c); return; }   // 队名缺失 → 原样保留
       let hit = null;
       for (let i = 0; i < keys.length; i++) { if (pairIndex[keys[i]]) { hit = pairIndex[keys[i]]; break; } }
@@ -932,14 +898,14 @@ Page({
         keptCards.push(c);
         return;
       }
-      const keep = _preferSameMatchCard(hit, c);
+      const keep = homeDedupe.preferSameMatchCard(hit, c);
       const drop = (keep === hit) ? c : hit;
       if (keep === drop) { return; }
       // 保留 keep、丢弃 drop：把两个候选的所有键都重新指向 keep，并把 keptCards 里的 drop 换掉
       const at = keptCards.indexOf(drop);
       if (at >= 0) keptCards[at] = keep; else keptCards.push(keep);
       keys.forEach((kk) => { pairIndex[kk] = keep; });
-      const dKeys = _pairKeysOfCard(drop);
+      const dKeys = homeDedupe.pairKeysOfCard(drop);
       dKeys.forEach((kk) => { pairIndex[kk] = keep; });
       console.log('[index] 同一对局卡片合并：保留 ' + keep.status + '（' +
         ((keep.teamA && keep.teamA.name) || '?') + ' vs ' + ((keep.teamB && keep.teamB.name) || '?') +
@@ -953,7 +919,7 @@ Page({
     //   现统一：只统计会被渲染的卡（同一纯函数，单一口径，杜绝再次漂移）。
     const dayCounts = {};
     this._allMatches.forEach((c) => {
-      if (!_homePassGrade(c)) return;
+      if (!homeDedupe.homePassGrade(c)) return;
       dayCounts[c.dateKey] = (dayCounts[c.dateKey] || 0) + 1;
     });
     this._dayCounts = dayCounts;
@@ -1236,7 +1202,7 @@ Page({
     //   供「渲染列表」与「周日历角标计数」共用 —— 此前角标统计了全部级别、而列表只显示 S/A，
     //   导致「角标 8 张 / 实际 4 张」的不一致（用户 2026-09-23 报告）。
     const beforeGrade = all.filter((c) => c.dateKey === selected);
-    const dayMatches = beforeGrade.filter(_homePassGrade);
+    const dayMatches = beforeGrade.filter(homeDedupe.homePassGrade);
     if (beforeGrade.length !== dayMatches.length) {
       console.log('[index] S/A 级别过滤：' + beforeGrade.length + ' → ' + dayMatches.length + ' 张（剔除 ' + (beforeGrade.length - dayMatches.length) + ' 张非 S/A）');
     }

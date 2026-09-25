@@ -1060,7 +1060,7 @@ function _orphanPairMerge(matches) {
       cluster.forEach(function (it) {
         it.m._patchedSeriesKey = synKey;
         if (typeof console !== 'undefined' && console.warn) {
-          console.warn('[patchNullSeriesId]', { matchId: it.m.match_id, toKey: synKey, reason: 'orphan_pair_chain' });
+          if (DEBUG_LOG_PATCH_NULL_SERIES) console.warn('[patchNullSeriesId]', { matchId: it.m.match_id, toKey: synKey, reason: 'orphan_pair_chain' });
         }
       });
     };
@@ -1221,6 +1221,11 @@ function isStaleLiveSeries(s, now, maxSec) {
   if (!nowSec) return false;
   return (nowSec - last) > limit;
 }
+
+// ★ 2026-09-25：`patchNullSeriesId` 的修复日志跑在 `groupSeries` **热路径**上（每轮 2 条）✗ ——
+//   按「诊断日志不得留在轮询/tick 热路径」的约束，改为**模块内开关**（默认关闭，需要时改此行即可）。
+//   注意：此处的修复本身**不受影响**，仅日志被门控 ✓。
+const DEBUG_LOG_PATCH_NULL_SERIES = false;
 
 function groupSeries(matches) {
   if (!matches || !matches.length) return [];

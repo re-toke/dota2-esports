@@ -832,18 +832,6 @@ check('names：★ 全库禁止再内联该规则（白名单外一律 FAIL）',
 //   （白名单里的 `cloudfunctions/aggregation/names.js` 条目保留：对不存在的文件无害，
 //     且能避免"删除目录 → 守卫反过来把残留镜像当违规内联"的误报。）
 
-async function runAll() {
-  for (const t of tests) {
-    if (t.kind === 'section') { console.log(t.title); continue; }
-    try {
-      await t.fn();
-      passed++;
-      console.log('PASS  ' + t.label);
-    } catch (e) {
-      failed++;
-      console.log('FAIL  ' + t.label + '  ->  ' + (e && e.message || e));
-    }
-  }
   // ===== 2026-09-23：isStaleLiveSeries（LIVE 超时降级，修复「已结束仍显示进行中」）=====
   check('sources：isStaleLiveSeries —— 仅「最后活动 > 3h」判陈旧（单向降级；无时间不判）', () => {
     const now = 1700000000;
@@ -857,6 +845,48 @@ async function runAll() {
     assert(sources.isStaleLiveSeries({ games: [] }, now) === false, '无时间信息不应判定');
     assert(sources.isStaleLiveSeries(null, now) === false, 'null 不应抛错');
   });
+
+  // ===== 2026-09-25：homeDedupe（从页面层抽出的可测纯函数）=====
+  //  目的：把「同一对局合并」「首页可见级别」这两条**承载正确性**的逻辑纳入回归保护
+  //  （此前是页面内私有函数，零测试 ✗）。
+  check('homeDedupe：脏队名/主客反相同键 + 不误并 + 择优 + 首页可见级别', () => {
+    const home = require('../../utils/homeDedupe.js');
+    // ① 线上真实脏名（2026-09-23 重复卡真因）→ 与干净名必须产生**交集键**
+    const dirty = { key: 'a', status: 'ended', start: 100,
+      teamA: { name: 'Conventus Stellarum (page does not exist)' }, teamB: { name: 'Team Nemesis' } };
+    const clean = { key: 'b', status: 'live', start: 200,
+      teamA: { name: 'Team Nemesis' }, teamB: { name: 'Conventus Stellarum' } };
+    const kd = home.pairKeysOfCard(dirty), kc = home.pairKeysOfCard(clean);
+    assert(kd.length > 0 && kc.length > 0 && kd.some((k) => kc.indexOf(k) >= 0),
+      '脏名 + 主客相反 应产生交集键（否则合并失效 → 重复卡复现）');
+    // ② 不同对局 → 无交集（防误并）
+    const other = { key: 'c', teamA: { name: 'LGD Gaming' }, teamB: { name: 'Team Spirit' } };
+    assert(!home.pairKeysOfCard(other).some((k) => kd.indexOf(k) >= 0), '不同对局不得有交集键');
+    // ③ 择优：ended 优先；同状态取有比分者
+    assert(home.preferSameMatchCard(dirty, clean) === dirty, 'ended 应优先于 live');
+    const s0 = { status: 'live', scoreA: 0, scoreB: 0 }, s1 = { status: 'live', scoreA: 2, scoreB: 1 };
+    assert(home.preferSameMatchCard(s0, s1) === s1, '同状态时应有比分者优先');
+    // ④ 首页可见级别：只放行 S/A（角标计数与列表共用同一判据）
+    assert(home.homePassGrade({ tier: { grade: 'S' } }) === true, 'S 应放行');
+    assert(home.homePassGrade({ tier: { grade: 'A' } }) === true, 'A 应放行');
+    assert(home.homePassGrade({ tier: { grade: 'B' } }) === false, 'B 不应放行');
+    assert(home.homePassGrade({ tier: { grade: 'C' } }) === false, 'C 不应放行');
+    assert(home.homePassGrade({}) === false, '无 tier 不应放行');
+    assert(home.homePassGrade(null) === false, 'null 不应抛错');
+  });
+
+async function runAll() {
+  for (const t of tests) {
+    if (t.kind === 'section') { console.log(t.title); continue; }
+    try {
+      await t.fn();
+      passed++;
+      console.log('PASS  ' + t.label);
+    } catch (e) {
+      failed++;
+      console.log('FAIL  ' + t.label + '  ->  ' + (e && e.message || e));
+    }
+  }
 
   console.log('\n=== 结果 ===');
   console.log('通过: ' + passed + '  失败: ' + failed);

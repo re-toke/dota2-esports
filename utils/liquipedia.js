@@ -85,6 +85,21 @@ function liquipediaSlugFor(name) {
     console.log('[liquipedia] slug 归一化命中：' + name + ' → ' + norm);
     return mm[norm];
   }
+  // ★★ 2026-09-25（用户线上日志定位）：③.5 查 **curation 登记表** —— 手工维护的权威来源 ✓
+  //   真因：5 个已策展赛事（PGL Wallachia Season 9 / BLAST SLAM VIII·IX 及其中国预选 /
+  //   Esports Nations Cup 2026）运行时全部报「slug 未命中」✗，而它们 curation 条目里**都已配好**
+  //   `liquipediaSlug`（实测 5/5 命中 curatedEventFor）—— 本函数此前**只查 slugmap**（精确 / 归一化后）
+  //   ⇒ 落到「原样返回」⇒ LP 取不到赛程 ✓。curation 以**规范展示名**为键，正是这里传入的名字 ✓。
+  //   ⚠️ 位置：slugmap 两条之后、告警之前 ⇒ 今天能命中的输入**行为完全不变**（零回归 ✓）
+  //   ⚠️ 函数内延迟 require 防环（同文件对 sources.js 的既有模式；curation 只依赖 consensus ✓）
+  try {
+    var _cu = require('./curation.js').curatedEventFor(name, { game: 'dota2' });
+    if (_cu && _cu.liquipediaSlug) {
+      _slugHitCount++;
+      console.log('[liquipedia] slug 命中 curation 登记表：' + name + ' → ' + _cu.liquipediaSlug);
+      return _cu.liquipediaSlug;
+    }
+  } catch (e) { /* 隔离：查表失败不影响原路径 */ }
   _slugMissCount++;
   var _isNewMiss = !_slugMissedNames[name];
   if (Object.keys(_slugMissedNames).length < SLUG_MISS_LIMIT) {
