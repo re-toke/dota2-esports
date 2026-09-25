@@ -34,3 +34,7 @@ supabase/.temp/
 
 # 临时脚手架（批量替换脚本 / 提交信息文件等，一律 _ 前缀）
 scripts/tmp/_*
+
+# 微信开发者工具**私有**配置（libVersion / urlCheck / 编译热重载…都是每台机器不同的设置）
+# ⚠️ 提交它 = 把某个人的基础库版本强加给全队（曾因此把全队钉在灰度版 3.17.0 上）
+project.private.config.json

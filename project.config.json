@@ -413,7 +413,7 @@
   },
   "compileType": "miniprogram",
   "cloudfunctionRoot": "cloudfunctions/",
-  "libVersion": "3.0.0",
+  "libVersion": "3.16.3",
   "appid": "wx838148b512800a3a",
   "projectname": "DOTA2赛事",
   "condition": {},
