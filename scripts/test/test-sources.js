@@ -749,6 +749,32 @@ check('★ curation 改名：Kuala Lumpur 按真身改为 2023，旧名必须仍
   assert(d === want, '旧名的展示名应升级为真身名，实际: ' + d);
 });
 
+check('★ LP slug P2：10 条历史错值必须锁定为实测真身（防回退）', function () {
+  // 2026-09-25 逐条 `--find` / `--slugs` 实测；**不要按"模式"重写**（LP 路径层级不统一，猜必错）
+  const P2 = [
+    ['DreamLeague Season 30', 'DreamLeague/30'],
+    ['DreamLeague Season 31', 'DreamLeague/31'],
+    ['DreamLeague Division 2 Series 5', 'DreamLeague/Division 2/5'],
+    ['DreamLeague Division 2 Series 6', 'DreamLeague/Division 2/6'],
+    ['BetBoom Dacha', 'BetBoom Dacha/2023'],
+    ['FISSURE Playground', 'FISSURE/PLAYGROUND/1'],           // 真身**全大写** PLAYGROUND（无 redirect）
+    ['Clavision Masters', 'Clavision/Masters/2025'],
+    ['The Chongqing Major', 'Chongqing Major/2019'],          // LP 用 `Chongqing Major/2019`，无 "The"
+    ['MDL Disneyland Paris Major', 'Mars Dota 2 League/Disneyland Paris Major'],
+    ['DPC 2022-2023 Tour', '']                                // LP 无该页（allpages 前缀全空）⇒ 刻意留空
+  ];
+  P2.forEach(function (p) {
+    const ev = cura.curatedEventFor(p[0], { game: 'dota2' });
+    assert(ev, '未命中 curation: ' + p[0]);
+    assert(String(ev.liquipediaSlug || '') === p[1],
+      p[0] + '\n  期望 slug: ' + (p[1] || '(空)') + '\n  实际 slug: ' + String(ev.liquipediaSlug));
+  });
+  assert(cura.curatedEventFor('BetBoom Dacha', { game: 'dota2' }).year === 2023,
+    'BetBoom Dacha 届次应为 2023（LP Infobox 实测赛期 2023-09-10 ~ 09-16）');
+  assert(cura.curatedEventFor('Clavision Masters', { game: 'dota2' }).year === 2025,
+    'Clavision Masters 届次应为 2025（LP 只有 Masters/2025，无 /1、无 2024 届）');
+});
+
 // ===== ⑤ 跨源赛期合并 mergeEventPeriod（2026-09-19 落地）=====
 // 口径经用户确认：官方赛期（LP 系）优先、缺口**按字段**回退 OpenDota ——
 //   · 首个起止都完整的源 → 全取

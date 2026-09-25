@@ -5,9 +5,9 @@
 // cannot load .json directly).
 module.exports = {
   "version": 3,
-  "generatedAt": "2026-09-25T08:27:44.790Z",
+  "generatedAt": "2026-09-25T09:13:53.090Z",
   "source": "utils/curation.js#CURATED_EVENTS",
-  "eventCount": 310,
+  "eventCount": 312,
   "map": {
     "theinternational2025": "The International 2025",
     "ti2025": "The International 2025",
@@ -64,6 +64,7 @@ module.exports = {
     "dreamleague25": "DreamLeague Season 25",
     "dl2025s25": "DreamLeague Season 25",
     "betboomdacha": "BetBoom Dacha",
+    "betboomdacha2023": "BetBoom Dacha",
     "betboomdacha2024": "BetBoom Dacha",
     "bbdacha": "BetBoom Dacha",
     "pglwallachia": "PGL Wallachia",
@@ -93,6 +94,7 @@ module.exports = {
     "pglastana": "PGL Astana 2025",
     "clavisionmasters": "Clavision Masters",
     "clavision": "Clavision Masters",
+    "clavisiondota2masters2025snowruyi": "Clavision Masters",
     "eliteleague": "Elite League",
     "eliteleague2024": "Elite League",
     "dreamleagueseason26": "DreamLeague Season 26",
@@ -263,6 +265,7 @@ module.exports = {
     "17795": "ESL One Raleigh 2025",
     "18111": "DreamLeague Season 26",
     "18324": "The International 2025",
+    "18359": "Clavision Masters",
     "18375": "Esports World Cup 2025",
     "19099": "BLAST Slam VI",
     "19101": "BLAST Slam VII",
@@ -283,5 +286,5 @@ module.exports = {
     "20169": "BLAST Slam VII China Qualifier",
     "20208": "BLAST SLAM IX"
   },
-  "dataVersion": "1790324864784"
+  "dataVersion": "1790327633084"
 };

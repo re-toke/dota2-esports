@@ -215,9 +215,14 @@ const CURATED_EVENTS = [
     liquipediaSlug: 'DreamLeague/Season_25' },
   // BetBoom Dacha：高额新秀系列
   { canonical: 'BetBoom Dacha', tier: { grade: 'S', rank: 3, label: 'S级' },
-    aliases: ['betboomdacha', 'betboomdacha2024', 'bbdacha'], year: 2024,
+    // ★ 2026-09-25 P2：原 year=2024 有误 —— LP `BetBoom Dacha/2023` 的 Infobox 赛期实测为
+    //   **2023-09-10 ~ 09-16**；且 LP 无「BetBoom Dacha 2024」裸页（2024 两届分别叫
+    //   `BetBoom Dacha Belgrade/2024` 与 `BetBoom Dacha Dubai/2024`）。
+    //   旧别名 `betboomdacha2024` 保留（兼容历史数据），另补 2023 写法。
+    aliases: ['betboomdacha', 'betboomdacha2023', 'betboomdacha2024', 'bbdacha'], year: 2023,
     leagueId: 15638,
-    liquipediaSlug: 'BetBoom_Dacha' },
+    liquipediaSlug: 'BetBoom Dacha/2023' },   // ★ 2026-09-25 P2（逐条 --find/--slugs 实测，禁推断）： LP 无裸 `BetBoom Dacha`；leagueId 15638 即该届
+   //   （OpenDota 原名是 'BetBoom Dacha ' —— **带尾空格**）→ 真身 27 场
   // PGL Wallachia：PGL 三年马拉松系列
   { canonical: 'PGL Wallachia', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['pglwallachia', 'pglwallachia2024', 'wallachia2024'], year: 2024,
@@ -235,7 +240,7 @@ const CURATED_EVENTS = [
   // FISSURE Playground / Universe：高额新秀系列
   { canonical: 'FISSURE Playground', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['fissureplayground', 'fissure', 'fissure2025'], year: 2025,
-    liquipediaSlug: 'FISSURE/Playground/1' },
+    liquipediaSlug: 'FISSURE/PLAYGROUND/1' },   // ★ 2026-09-25 P2（逐条 --find/--slugs 实测，禁推断）： 真身**全大写 PLAYGROUND**（无 redirect）→ 14 场
   { canonical: 'FISSURE Universe', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['fissureuniverse', 'fissureuniverse2025'], year: 2025,
     liquipediaSlug: 'FISSURE/Universe/1' },
@@ -262,8 +267,12 @@ const CURATED_EVENTS = [
     liquipediaSlug: '' },
   // Clavision / Elite League：A-Tier 第三方
   { canonical: 'Clavision Masters', tier: { grade: 'A', rank: 2, label: 'A级' },
-    aliases: ['clavisionmasters', 'clavision'], year: 2024,
-    liquipediaSlug: 'Clavision/Masters/1' },
+    aliases: ['clavisionmasters', 'clavision', 'clavisiondota2masters2025snowruyi'],
+    leagueId: 18359, year: 2025,   // ★ 2026-09-25 P2（逐条 --find/--slugs 实测，禁推断）： LP **只有** `Clavision/Masters/2025`（无 /1、无 2024 届）。
+   //   条目标题写 Masters 而 year 原写 2024 ⇒ 以**名称**为准对齐 2025
+   //   （OpenDota 18359 = 'Clavision DOTA2 Masters 2025: Snow-Ruyi'）。
+   //   ⚠️ 2024 那届 LP 名为 `Clavision/Snow Ruyi/2024`（OpenDota 16901）⇒ **另一赛事，未并入**。
+    liquipediaSlug: 'Clavision/Masters/2025' },
   { canonical: 'Elite League', tier: { grade: 'A', rank: 2, label: 'A级' },
     aliases: ['eliteleague', 'eliteleague2024'], year: 2024,
     liquipediaSlug: 'Elite_League/1' },
@@ -690,7 +699,8 @@ const CURATED_EVENTS = [
     // 'dpc2023' 现专属 DPC 2023 Tour；本赛事靠 'dpc20222023'/'dpc202223' 精确匹配
     aliases: ['dpc20222023', 'dpc202223'], year: 2023,
     organizer: 'Valve', region: '全球', format: '区域联赛(Div I/II)+Major',
-    status: '已结束', liquipediaSlug: 'Dota_Pro_Circuit/2022-23',
+    status: '已结束', liquipediaSlug: '',   // ★ 2026-09-25 P2（逐条 --find/--slugs 实测，禁推断）： 'Dota_Pro_Circuit/2022-23' 在 LP 上**不存在**
+   //   （allpages 前缀全空）—— 同系列 2020-21/2021-22/2023 都在，仅此届缺页 ⇒ 不保留死值。
     valve: true, topThirdParty: false, defunct: true },
   { canonical: 'DPC 2023 Tour', tier: { grade: 'A', rank: 2, label: 'A级' },
     aliases: ['dpc2023tour', 'dpc2023'], year: 2023,
@@ -708,13 +718,13 @@ const CURATED_EVENTS = [
     aliases: ['chongqingmajor', 'cqmajor2019'], year: 2019,
     leagueId: 10482,
     prizePool: '$1,000,000', organizer: 'Valve / Perfect World', region: '中国', format: '双败淘汰',
-    participants: 16, status: '已结束', liquipediaSlug: 'The_Chongqing_Major',
+    participants: 16, status: '已结束', liquipediaSlug: 'Chongqing Major/2019',   // ★ 2026-09-25 P2（逐条 --find/--slugs 实测，禁推断）： 真身为 `Chongqing Major/2019`
     valve: true, topThirdParty: false, defunct: true },
   { canonical: 'MDL Disneyland Paris Major', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['mdldisneylandparismajor', 'parismajor2019'], year: 2019,
     leagueId: 10810,
     prizePool: '$1,000,000', organizer: 'Valve / MarsTV', region: '欧洲', format: '双败淘汰',
-    participants: 16, status: '已结束', liquipediaSlug: 'MDL_Disneyland_Paris_Major',
+    participants: 16, status: '已结束', liquipediaSlug: 'Mars Dota 2 League/Disneyland Paris Major',   // ★ 2026-09-25 P2（逐条 --find/--slugs 实测，禁推断）： 真身属 MDL 系列页
     valve: true, topThirdParty: false, defunct: true },
   { canonical: 'EPICENTER Major', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['epicentermajor', 'epicenter2019'], year: 2019,
@@ -779,22 +789,22 @@ const CURATED_EVENTS = [
   { canonical: 'DreamLeague Division 2 Series 5', tier: { grade: 'B', rank: 1, label: 'B级' },
     aliases: ['dreamleaguedivision2series5'], year: 2026,
     start: Math.floor(Date.UTC(2026, 10, 6) / 1000), end: Math.floor(Date.UTC(2026, 10, 19) / 1000),
-    liquipediaSlug: 'DreamLeague_Division_2_Series_5' },
+    liquipediaSlug: 'DreamLeague/Division 2/5' },   // ★ 2026-09-25 P2（逐条 --find/--slugs 实测，禁推断）： 原用下划线而非斜杠 → 真身 18 场
   // ★ 2026-09-14 补收录（原缺失 → 首页/「即将」看不到对局）
   { canonical: 'DreamLeague Season 30', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['dreamleagueseason30'], year: 2026,
     start: Math.floor(Date.UTC(2026, 11, 2) / 1000), end: Math.floor(Date.UTC(2026, 11, 13) / 1000),
-    liquipediaSlug: 'DreamLeague_Season_30' },
+    liquipediaSlug: 'DreamLeague/30' },   // ★ 2026-09-25 P2（逐条 --find/--slugs 实测，禁推断）： LP 是 `DreamLeague/<N>` → 14 场
   // ★ 2026-09-14 补收录（原缺失 → 首页/「即将」看不到对局）
   { canonical: 'DreamLeague Division 2 Series 6', tier: { grade: 'B', rank: 1, label: 'B级' },
     aliases: ['dreamleaguedivision2series6'], year: 2027,
     start: Math.floor(Date.UTC(2027, 0, 9) / 1000), end: Math.floor(Date.UTC(2027, 0, 18) / 1000),
-    liquipediaSlug: 'DreamLeague_Division_2_Series_6' },
+    liquipediaSlug: 'DreamLeague/Division 2/6' },   // ★ 2026-09-25 P2（逐条 --find/--slugs 实测，禁推断）： 真身 36 场
   // ★ 2026-09-14 补收录（原缺失 → 首页/「即将」看不到对局）
   { canonical: 'DreamLeague Season 31', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['dreamleagueseason31'], year: 2027,
     start: Math.floor(Date.UTC(2027, 0, 20) / 1000), end: Math.floor(Date.UTC(2027, 0, 31) / 1000),
-    liquipediaSlug: 'DreamLeague_Season_31' },
+    liquipediaSlug: 'DreamLeague/31' },   // ★ 2026-09-25 P2（逐条 --find/--slugs 实测，禁推断）： 真身 18 场
   // ★ 2026-09-14 补收录（原缺失 → 首页/「即将」看不到对局）
   { canonical: 'PGL Wallachia Season 10', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['pglwallachiaseason10'], year: 2027,
