@@ -718,6 +718,37 @@ check('★ 首页分级：curation 命中预选赛时也必须降级 B（getMatc
   assert(bal && bal.grade === 'S', '非预选赛（SLAM IX 正赛）不得被降级，实际: ' + (bal && bal.grade));
 });
 
+check('★ curation 合并：Esports World Cup 2024 必须归并到 Riyadh Masters 2024（同一赛事）', function () {
+  const d = _srcTest.leagueDisplayName({ name: 'Esports World Cup 2024' });
+  assert(d === 'Riyadh Masters 2024', '展示名应为 Riyadh Masters 2024，实际: ' + d);
+  const cu = cura.curatedEventFor('Esports World Cup 2024', { game: 'dota2' });
+  assert(cu && cu.canonical === 'Riyadh Masters 2024', '应命中合并后的条目');
+  assert(cu.liquipediaSlug === 'Riyadh_Masters/2024', '应继承真身 slug，实际: ' + cu.liquipediaSlug);
+});
+
+check('★★ curation 合并的边界：预选赛不得被并入正赛（共享 LP 页会串数据）', function () {
+  // leagueid 16881 = 正赛，16740 = 预选 —— 两条 OpenDota 赛事，**不可**共用一个 curation 条目
+  assert(cura.curatedEventFor('Riyadh Masters 2024 at Esports World Cup Qualifiers', { game: 'dota2' }) === null,
+    '预选赛名不应命中正赛条目');
+  assert(cura.curatedEventFor('Riyadh Masters 2024 at Esports World Cup Qualifiers',
+    { leagueId: 16740, game: 'dota2' }) === null, '预选赛 leagueId(16740) 不应被正赛 pin 命中');
+  const main = cura.curatedEventFor('Riyadh Masters 2024 at Esports World Cup', { leagueId: 16881, game: 'dota2' });
+  assert(main && main.canonical === 'Riyadh Masters 2024', '正赛 leagueId(16881) 应 pin 命中');
+});
+
+check('★ curation 改名：Kuala Lumpur 按真身改为 2023，旧名必须仍能命中（零断链）', function () {
+  const want = 'ESL One Kuala Lumpur 2023';
+  ['ESL One Kuala Lumpur 2024', 'ESL One Kuala Lumpur powered by Intel', 'ESL One Kuala Lumpur 2023']
+    .forEach(function (nm) {
+      const cu = cura.curatedEventFor(nm, { game: 'dota2' });
+      assert(cu && cu.canonical === want, nm + ' 应命中 ' + want + '，实际: ' + (cu && cu.canonical));
+      assert(cu.liquipediaSlug === 'ESL One/Kuala Lumpur/2023',
+        nm + ' 的 slug 应为真身 /2023，实际: ' + cu.liquipediaSlug);
+    });
+  const d = _srcTest.leagueDisplayName({ name: 'ESL One Kuala Lumpur 2024' });
+  assert(d === want, '旧名的展示名应升级为真身名，实际: ' + d);
+});
+
 // ===== ⑤ 跨源赛期合并 mergeEventPeriod（2026-09-19 落地）=====
 // 口径经用户确认：官方赛期（LP 系）优先、缺口**按字段**回退 OpenDota ——
 //   · 首个起止都完整的源 → 全取

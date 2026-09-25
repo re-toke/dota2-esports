@@ -39,6 +39,7 @@ const getArg = (name) => {
   return i >= 0 && argv[i + 1] ? argv[i + 1] : '';
 };
 const ONLY = getArg('only');
+const DELETE_EVENT = getArg('delete-event');
 const TOKEN = getArg('token') || process.env.ADMIN_TOKEN || '';
 
 const CFG = require('./../../utils/config.js');
@@ -90,8 +91,51 @@ async function upsertEvent(data) {
   return { status: r.status, body };
 }
 
+// ★ 2026-09-25 新增：定向删除远端某条 curation。
+//   为何必须：`remoteCuration.buildEffective` 对远端行是「同键字段级合并；**新键直接采用**」——
+//   本地删掉一条条目后，远端那一行会被**原样复活**（本地删了等于没删）。
+//   合并赛事（如 `Esports World Cup 2024` → `Riyadh Masters 2024`）时必须同时删远端行。
+//   ⚠️ 刻意**不做**「远端有而本地没有就自动删」—— 远端存量条目远多于本地，自动删会误伤。
+async function deleteEvent(key) {
+  const r = await fetch(SB_URL + '/functions/v1/admin-write', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: ANON,
+      Authorization: 'Bearer ' + ANON,
+      'x-admin-token': TOKEN,
+    },
+    body: JSON.stringify({ operation: 'deleteEvent', params: { docId: key } }),
+  });
+  let body = null;
+  try { body = await r.json(); } catch (e) { /* 非 JSON */ }
+  return { status: r.status, body };
+}
+
 (async () => {
   console.log('[sync-curation-dates] 远端：' + SB_URL);
+
+  if (DELETE_EVENT) {
+    const dk = normalizeEventName(DELETE_EVENT);
+    console.log('[delete-event] canonical = ' + DELETE_EVENT);
+    console.log('[delete-event] canonical_key = ' + dk);
+    if (!APPLY) {
+      console.log('（预览模式，未删除）确认后执行：');
+      console.log('  ADMIN_TOKEN=<管理令牌> node scripts/ops/sync-curation-dates.js --delete-event "' +
+        DELETE_EVENT + '" --apply');
+      return;
+    }
+    if (!TOKEN) {
+      console.error('✗ 缺少管理令牌。请设置 ADMIN_TOKEN（值见 admin/.env.local 的 VITE_ADMIN_TOKEN）。');
+      process.exit(1);
+    }
+    const r = await deleteEvent(dk);
+    const ok = r.status >= 200 && r.status < 300 && r.body && r.body.success;
+    console.log(ok ? ('✅ 已删除 ' + dk) :
+      ('✗ 删除失败 HTTP ' + r.status + ' ' + JSON.stringify((r.body && r.body.error) || r.body).slice(0, 200)));
+    process.exit(ok ? 0 : 1);
+  }
+
   const remoteRows = await fetchRemoteRows();
   const remote = Object.create(null);
   remoteRows.forEach((x) => { if (x && x.canonical_key) remote[x.canonical_key] = x; });

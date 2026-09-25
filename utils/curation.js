@@ -182,8 +182,23 @@ const CURATED_EVENTS = [
   // ESL One Birmingham 2024 完整条目见下方「ESL One 分站」区块（含 liquipediaSlug/region/status 等）
   // Riyadh Masters：顶级第三方（史上非 TI 最高奖金 $15.12M）
   { canonical: 'Riyadh Masters 2024', tier: { grade: 'S', rank: 3, label: 'S级' },
-    aliases: ['riyadhmasters2024', 'rm2024', 'riyadh2024'], year: 2024,
+    // ★ 2026-09-25（用户拍板「合并」）：吸收原独立的 `Esports World Cup 2024` 条目 ——
+    //   两者本是**同一赛事**（EWC 2024 的 Dota2 分项即 Riyadh Masters 2024），
+    //   且 LP 页也是同一个 `Riyadh Masters/2024`（`--find "Esports World Cup/2024"` 前缀全空 ⇒
+    //   该页在 dota2 wiki 上根本不存在）。
+    //   ⚠️ OpenDota 侧真实 league 名**从来不是** `Esports World Cup 2024`，而是
+    //      `Riyadh Masters 2024 at Esports World Cup`（leagueid 16881）—— 原条目名匹配不上任何源
+    //      （**自造名**），故删除并把其独有别名并入本条目。
+    //   ⚠️ **不并入**原条目的 prizePool / participants / organizer（未经证实，不传播可疑数据）：
+    //      只并入可验证的三项 —— leagueId + 别名 + topThirdParty（flagTopThirdParty 的 riyadh 规则本就命中）。
+    //   ⚠️ 预选赛是**另一赛事**：`Riyadh Masters 2024 at Esports World Cup Qualifiers`（leagueid 16740）
+    //      ⇒ **严禁并入本条目**（并入会把预选赛误映射成正赛）。
+    aliases: ['riyadhmasters2024', 'rm2024', 'riyadh2024',
+              'riyadhmasters2024atesportsworldcup',
+              'esportsworldcup2024', 'ewc2024', 'ewcdota2024'], year: 2024,
+    leagueId: 16881,
     start: Math.floor(Date.UTC(2024, 6, 4) / 1000), end: Math.floor(Date.UTC(2024, 6, 21) / 1000),
+    status: '已结束', topThirdParty: true,
     liquipediaSlug: 'Riyadh_Masters/2024' },
   // DreamLeague：ESL 线上联赛，每赛季 $1M，稳定高频
   { canonical: 'DreamLeague Season 23', tier: { grade: 'S', rank: 3, label: 'S级' },
@@ -516,13 +531,21 @@ const CURATED_EVENTS = [
   { canonical: 'Games of the Future 2024', tier: { grade: 'B', rank: 1, label: 'B级' },
     aliases: ['gamesofthefuture2024', 'gof2024'], year: 2024,
     liquipediaSlug: 'Games_of_the_Future/2024' },
-  { canonical: 'ESL One Kuala Lumpur 2024', tier: { grade: 'S', rank: 3, label: 'S级' },
-    aliases: ['eslkualalumpur2024', 'kualalumpur2024', 'kl2024'], year: 2024,
+  { canonical: 'ESL One Kuala Lumpur 2023', tier: { grade: 'S', rank: 3, label: 'S级' },
+    // ★ 2026-09-25（用户拍板「按真身来，连同 aliases 一起处理」）：canonical 由 `…2024` 改为 **2023**。
+    //   依据：① `--find "ESL One/Kuala Lumpur"` 的 allpages 前缀只有 `/2023` 一版；
+    //        ② 该赛事 2023-12 举办；③ OpenDota 侧 league 名**从未含 2024** ——
+    //           真实名为 `ESL One Kuala Lumpur powered by Intel`（leagueid 15910），
+    //           「ESL One Kuala Lumpur 2024」是个**谁都不发的自造名**。
+    //   旧名（含 2024 的各种写法）**全部下沉为 aliases**，历史数据/关注列表仍能命中（零断链）。
+    aliases: ['eslonekualalumpur2023', 'kualalumpur2023', 'kl2023',
+              'eslonekualalumpurpoweredbyintel',
+              // ★ 旧名下沉（保证历史数据/关注列表零断链）。
+              //   ⚠️ 原别名 `eslkualalumpur2024` **少了个 "one"** —— 是个死别名，
+              //      此前全靠 canonical 直接命中掩盖了它；改 canonical 后必须补正确写法。
+              'eslonekualalumpur2024', 'eslkualalumpur2024', 'kualalumpur2024', 'kl2024'], year: 2023,
+    leagueId: 15910,
     prizePool: '$1,000,000', organizer: 'ESL', region: '东南亚', format: '双败淘汰', participants: 16,
-    // ★ 2026-09-25：原 'ESL_One/2024/Kuala_Lumpur' → 真身 `ESL One/Kuala Lumpur/2023`
-    //   ⚠️ 注意是 **2023**：`--find "ESL One/Kuala Lumpur"` 只列出 `/2023` 一版（该赛事 2023-12 举办）。
-    //   本条目 canonical 仍沿用 OpenDota 源名（"…2024"）—— 改 canonical 会同时改卡片标题，
-    //   属产品决策，**未擅自改**（已在落地记录中标注待确认）。
     status: '已结束', liquipediaSlug: 'ESL One/Kuala Lumpur/2023', valve: false, topThirdParty: false },
   { canonical: 'TritonLeague', tier: { grade: 'B', rank: 1, label: 'B级' },
     aliases: ['tritonleague', 'triton'], year: 2024,
@@ -553,18 +576,11 @@ const CURATED_EVENTS = [
     liquipediaSlug: 'Riyadh_Masters/2023', valve: false, topThirdParty: true },
 
   // ── 电竞世界杯 EWC（顶级第三方，利雅得）──
-  { canonical: 'Esports World Cup 2024', tier: { grade: 'S', rank: 3, label: 'S级' },
-    aliases: ['esportsworldcup2024', 'ewc2024', 'ewcdota2024'], year: 2024,
-    prizePool: '$1,000,000', organizer: 'Savvy Games', region: '沙特阿拉伯',
-    format: '双败淘汰', participants: 16, status: '已结束',
-    // ★ 2026-09-25：原 'Esports_World_Cup/2024/Dota_2' 在 LP 上 missing。
-    //   实测 `--find "Esports World Cup/2024"` 前缀**全空**，search 只回 `Esports World Cup/2025`
-    //   与 `Riyadh Masters/2024` ⇒ 2024 年该赛事在 dota2 wiki 上的页面是 **`Riyadh Masters/2024`**
-    //   （EWC 2024 的 Dota2 分项即 Riyadh Masters），而本库另有 `Riyadh Masters 2024` 条目。
-    //   ⚠️ 按「宁可 pending，不存错映射」：**不指向 `Riyadh_Masters/2024`** —— 那会让两个
-    //      OpenDota 赛事共享同一 LP 页（赛程雷同 / 重复卡，与 Road to ENC 同一类风险）。
-    //   ★ 待办（需产品决策）：`Esports World Cup 2024` 与 `Riyadh Masters 2024` 疑为**同一赛事的两条条目**。
-    liquipediaSlug: '', valve: false, topThirdParty: true },
+  // ★ 2026-09-25（用户拍板「合并」）：原 `Esports World Cup 2024` 条目**已删除** ——
+  //   它与 `Riyadh Masters 2024` 是同一赛事，别名 / leagueId 已并入该条目。
+  //   ⚠️⚠️ **远端 curation_events 的那一行必须一并删除**，否则 `remoteCuration` 的
+  //      `buildEffective`「新键直接采用」会把它**原样复活**（本地删了等于没删）。
+  //      命令：node scripts/ops/sync-curation-dates.js --delete-event "Esports World Cup 2024" --apply
   { canonical: 'Esports World Cup 2025', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['esportsworldcup2025', 'ewc2025', 'ewcdota2025'], year: 2025,
     leagueId: 18375,

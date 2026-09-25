@@ -5,9 +5,9 @@
 // cannot load .json directly).
 module.exports = {
   "version": 3,
-  "generatedAt": "2026-09-25T07:59:10.910Z",
+  "generatedAt": "2026-09-25T08:27:44.790Z",
   "source": "utils/curation.js#CURATED_EVENTS",
-  "eventCount": 305,
+  "eventCount": 310,
   "map": {
     "theinternational2025": "The International 2025",
     "ti2025": "The International 2025",
@@ -47,6 +47,10 @@ module.exports = {
     "riyadhmasters2024": "Riyadh Masters 2024",
     "rm2024": "Riyadh Masters 2024",
     "riyadh2024": "Riyadh Masters 2024",
+    "riyadhmasters2024atesportsworldcup": "Riyadh Masters 2024",
+    "esportsworldcup2024": "Riyadh Masters 2024",
+    "ewc2024": "Riyadh Masters 2024",
+    "ewcdota2024": "Riyadh Masters 2024",
     "dreamleagueseason23": "DreamLeague Season 23",
     "dreamleague23": "DreamLeague Season 23",
     "dl2024s23": "DreamLeague Season 23",
@@ -149,10 +153,14 @@ module.exports = {
     "blastslam9china": "BLAST SLAM IX China Closed Qualifier",
     "gamesofthefuture2024": "Games of the Future 2024",
     "gof2024": "Games of the Future 2024",
-    "eslonekualalumpur2024": "ESL One Kuala Lumpur 2024",
-    "eslkualalumpur2024": "ESL One Kuala Lumpur 2024",
-    "kualalumpur2024": "ESL One Kuala Lumpur 2024",
-    "kl2024": "ESL One Kuala Lumpur 2024",
+    "eslonekualalumpur2023": "ESL One Kuala Lumpur 2023",
+    "kualalumpur2023": "ESL One Kuala Lumpur 2023",
+    "kl2023": "ESL One Kuala Lumpur 2023",
+    "eslonekualalumpurpoweredbyintel": "ESL One Kuala Lumpur 2023",
+    "eslonekualalumpur2024": "ESL One Kuala Lumpur 2023",
+    "eslkualalumpur2024": "ESL One Kuala Lumpur 2023",
+    "kualalumpur2024": "ESL One Kuala Lumpur 2023",
+    "kl2024": "ESL One Kuala Lumpur 2023",
     "tritonleague": "TritonLeague",
     "triton": "TritonLeague",
     "dota2worldinvitational": "Dota 2 World Invitational",
@@ -163,9 +171,6 @@ module.exports = {
     "riyadhmasters2023": "Riyadh Masters 2023",
     "rm2023": "Riyadh Masters 2023",
     "riyadh2023": "Riyadh Masters 2023",
-    "esportsworldcup2024": "Esports World Cup 2024",
-    "ewc2024": "Esports World Cup 2024",
-    "ewcdota2024": "Esports World Cup 2024",
     "esportsworldcup2025": "Esports World Cup 2025",
     "ewc2025": "Esports World Cup 2025",
     "ewcdota2025": "Esports World Cup 2025",
@@ -252,6 +257,8 @@ module.exports = {
     "14268": "The International 2022",
     "15638": "BetBoom Dacha",
     "15728": "The International 2023",
+    "15910": "ESL One Kuala Lumpur 2023",
+    "16881": "Riyadh Masters 2024",
     "16935": "The International 2024",
     "17795": "ESL One Raleigh 2025",
     "18111": "DreamLeague Season 26",
@@ -276,5 +283,5 @@ module.exports = {
     "20169": "BLAST Slam VII China Qualifier",
     "20208": "BLAST SLAM IX"
   },
-  "dataVersion": "1790323150905"
+  "dataVersion": "1790324864784"
 };
