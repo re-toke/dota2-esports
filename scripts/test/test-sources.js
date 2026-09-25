@@ -727,11 +727,18 @@ check('★ curation 合并：Esports World Cup 2024 必须归并到 Riyadh Maste
 });
 
 check('★★ curation 合并的边界：预选赛不得被并入正赛（共享 LP 页会串数据）', function () {
-  // leagueid 16881 = 正赛，16740 = 预选 —— 两条 OpenDota 赛事，**不可**共用一个 curation 条目
-  assert(cura.curatedEventFor('Riyadh Masters 2024 at Esports World Cup Qualifiers', { game: 'dota2' }) === null,
-    '预选赛名不应命中正赛条目');
-  assert(cura.curatedEventFor('Riyadh Masters 2024 at Esports World Cup Qualifiers',
-    { leagueId: 16740, game: 'dota2' }) === null, '预选赛 leagueId(16740) 不应被正赛 pin 命中');
+  // leagueid 16881 = 正赛，16740 = 预选 —— 两条 OpenDota 赛事，**不可**共用一个 curation 条目。
+  // ⚠️ 2026-09-25 修订：预选赛后来**补录了自己的条目**（见下方「curation 补录」），
+  //    故判据从「必须返回 null」改成「**不得解析到正赛条目**」——
+  //    后者才是真正的不变量；原写法把「当时还没有该条目」当成了不变式（**过约束**，
+  //    一旦有人正经补录就会误报）。这正是这条守卫发现问题的样子。
+  const byName = cura.curatedEventFor('Riyadh Masters 2024 at Esports World Cup Qualifiers', { game: 'dota2' });
+  assert(!byName || byName.canonical !== 'Riyadh Masters 2024',
+    '预选赛名不得命中正赛条目，实际: ' + (byName && byName.canonical));
+  const byPin = cura.curatedEventFor('Riyadh Masters 2024 at Esports World Cup Qualifiers',
+    { leagueId: 16740, game: 'dota2' });
+  assert(!byPin || byPin.canonical !== 'Riyadh Masters 2024',
+    '预选赛 leagueId(16740) 不得被正赛条目命中，实际: ' + (byPin && byPin.canonical));
   const main = cura.curatedEventFor('Riyadh Masters 2024 at Esports World Cup', { leagueId: 16881, game: 'dota2' });
   assert(main && main.canonical === 'Riyadh Masters 2024', '正赛 leagueId(16881) 应 pin 命中');
 });
@@ -802,6 +809,42 @@ check('★ LP slug P3：3 条真身锁定 + 10 条「LP 无页面」必须保持
     assert(ev.liquipediaSlug === '',
       n + ' 的 slug 必须留空（LP 无此页，填任何值都会是死链），实际: ' + JSON.stringify(ev.liquipediaSlug));
   });
+});
+
+check('★ curation 补录：Riyadh 预选(16740) / Clavision 2024(16901) 必须与正赛／另一届区分开', function () {
+  // 补录背景：两条 OpenDota league 此前**没有 curation 条目**（只能靠 community 正则兜底，
+  //   分级/赛期/权威名都拿不到）。2026-09-25 补齐。
+  // ★★ 本断言的核心是**边界**：预选赛 vs 正赛、同系列不同届 —— **绝不可互相命中**
+  //    （命中错 = 共享 LP 页/赛期，属「Road to ENC」同一类数据串味风险）。
+  const CASES = [
+    ['Riyadh Masters 2024 at Esports World Cup Qualifiers', null, 'Riyadh Masters 2024 at Esports World Cup Qualifiers'],
+    ['Riyadh Masters 2024 at Esports World Cup Qualifiers', 16740, 'Riyadh Masters 2024 at Esports World Cup Qualifiers'],
+    ['Riyadh Masters 2024 at Esports World Cup', null, 'Riyadh Masters 2024'],
+    ['Riyadh Masters 2024 at Esports World Cup', 16881, 'Riyadh Masters 2024'],
+    ['Clavision DOTA League S1 : Snow-Ruyi', null, 'Clavision DOTA League S1 : Snow-Ruyi'],
+    ['Clavision DOTA League S1 : Snow-Ruyi', 16901, 'Clavision DOTA League S1 : Snow-Ruyi'],
+    ['Clavision DOTA2 Masters 2025: Snow-Ruyi', 18359, 'Clavision Masters']
+  ];
+  CASES.forEach(function (c) {
+    const ev = cura.curatedEventFor(c[0], c[1] ? { leagueId: c[1], game: 'dota2' } : { game: 'dota2' });
+    const got = ev ? ev.canonical : '__MISS__';
+    assert(got === c[2],
+      '[' + (c[1] || '按名') + '] ' + c[0] + '\n  期望: ' + c[2] + '\n  实际: ' + got);
+  });
+  // 补录**不得改变展示分级**（补录前 community 正则就判 B(q) / A）
+  const qh = _srcTest.getMatchTierForHome('Riyadh Masters 2024 at Esports World Cup Qualifiers');
+  assert(qh && qh.grade === 'B' && qh.qualifier === true,
+    'Riyadh 预选赛应为 B(q)，实际: ' + JSON.stringify(qh));
+  const sh = _srcTest.getMatchTierForHome('Clavision DOTA League S1 : Snow-Ruyi');
+  assert(sh && sh.grade === 'A', 'Clavision 2024 应为 A，实际: ' + JSON.stringify(sh));
+  // 预选赛 slug 必须留空：LP 按赛区分页（无单一预选赛主页），指向正赛页会共享数据
+  const qev = cura.curatedEventFor('Riyadh Masters 2024 at Esports World Cup Qualifiers', { game: 'dota2' });
+  assert(qev.liquipediaSlug === '',
+    'Riyadh 预选赛 slug 必须留空，实际: ' + JSON.stringify(qev.liquipediaSlug));
+  // 而 Clavision 2024 有真身页
+  const cev = cura.curatedEventFor('Clavision DOTA League S1 : Snow-Ruyi', { game: 'dota2' });
+  assert(cev.liquipediaSlug === 'Clavision/Snow Ruyi/2024',
+    'Clavision 2024 真身应为 Clavision/Snow Ruyi/2024，实际: ' + cev.liquipediaSlug);
 });
 
 // ===== ⑤ 跨源赛期合并 mergeEventPeriod（2026-09-19 落地）=====

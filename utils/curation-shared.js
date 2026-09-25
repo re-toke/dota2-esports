@@ -5,9 +5,9 @@
 // cannot load .json directly).
 module.exports = {
   "version": 3,
-  "generatedAt": "2026-09-25T09:43:34.478Z",
+  "generatedAt": "2026-09-25T09:53:25.845Z",
   "source": "utils/curation.js#CURATED_EVENTS",
-  "eventCount": 313,
+  "eventCount": 321,
   "map": {
     "theinternational2025": "The International 2025",
     "ti2025": "The International 2025",
@@ -51,6 +51,9 @@ module.exports = {
     "esportsworldcup2024": "Riyadh Masters 2024",
     "ewc2024": "Riyadh Masters 2024",
     "ewcdota2024": "Riyadh Masters 2024",
+    "riyadhmasters2024atesportsworldcupqualifiers": "Riyadh Masters 2024 at Esports World Cup Qualifiers",
+    "riyadhmasters2024qualifiers": "Riyadh Masters 2024 at Esports World Cup Qualifiers",
+    "riyadh2024qualifier": "Riyadh Masters 2024 at Esports World Cup Qualifiers",
     "dreamleagueseason23": "DreamLeague Season 23",
     "dreamleague23": "DreamLeague Season 23",
     "dl2024s23": "DreamLeague Season 23",
@@ -95,6 +98,9 @@ module.exports = {
     "clavisionmasters": "Clavision Masters",
     "clavision": "Clavision Masters",
     "clavisiondota2masters2025snowruyi": "Clavision Masters",
+    "clavisiondotaleagues1snowruyi": "Clavision DOTA League S1 : Snow-Ruyi",
+    "clavisionsnowruyi": "Clavision DOTA League S1 : Snow-Ruyi",
+    "snowruyi2024": "Clavision DOTA League S1 : Snow-Ruyi",
     "eliteleague": "Elite League",
     "eliteleague2024": "Elite League",
     "dreamleagueseason26": "DreamLeague Season 26",
@@ -261,7 +267,9 @@ module.exports = {
     "15638": "BetBoom Dacha",
     "15728": "The International 2023",
     "15910": "ESL One Kuala Lumpur 2023",
+    "16740": "Riyadh Masters 2024 at Esports World Cup Qualifiers",
     "16881": "Riyadh Masters 2024",
+    "16901": "Clavision DOTA League S1 : Snow-Ruyi",
     "16935": "The International 2024",
     "17795": "ESL One Raleigh 2025",
     "18111": "DreamLeague Season 26",
@@ -287,5 +295,5 @@ module.exports = {
     "20169": "BLAST Slam VII China Qualifier",
     "20208": "BLAST SLAM IX"
   },
-  "dataVersion": "1790329414473"
+  "dataVersion": "1790330005838"
 };

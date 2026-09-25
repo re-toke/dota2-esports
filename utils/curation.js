@@ -200,6 +200,21 @@ const CURATED_EVENTS = [
     start: Math.floor(Date.UTC(2024, 6, 4) / 1000), end: Math.floor(Date.UTC(2024, 6, 21) / 1000),
     status: '已结束', topThirdParty: true,
     liquipediaSlug: 'Riyadh_Masters/2024' },
+  // ★ 2026-09-25 补：Riyadh Masters 2024 的**预选赛**（OpenDota 独立 league 16740）——
+  //   此前本库无此条目（只能靠 community 正则兜底）。实测 communityTierFromName 本就判 **B(q)**，
+  //   故本条填 B + qualifier **不改变展示**，但补上权威分级 / 届次 / leagueId pin
+  //   （名字匹配会因 OpenDota 改名而失效，leagueId 不会）。
+  //   ⚠️ LP 的预选赛**按赛区分页**（`Riyadh Masters/2024/<赛区>/{Closed,Open} Qualifier`），
+  //      **没有单一预选赛主页** ⇒ slug 刻意留空。
+  //      **严禁**指向 `Riyadh_Masters/2024`（那是正赛页）—— 会让两个赛事共享同一 LP 页、
+  //      赛程雷同，与 Road to ENC 同一类风险。
+  { canonical: 'Riyadh Masters 2024 at Esports World Cup Qualifiers',
+    tier: { grade: 'B', rank: 1, label: 'B级', qualifier: true },
+    aliases: ['riyadhmasters2024atesportsworldcupqualifiers',
+              'riyadhmasters2024qualifiers', 'riyadh2024qualifier'], year: 2024,
+    leagueId: 16740,
+    status: '已结束', liquipediaSlug: '',
+    valve: false, topThirdParty: true },
   // DreamLeague：ESL 线上联赛，每赛季 $1M，稳定高频
   { canonical: 'DreamLeague Season 23', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['dreamleagueseason23', 'dreamleague23', 'dl2024s23'], year: 2024,
@@ -273,6 +288,22 @@ const CURATED_EVENTS = [
    //   （OpenDota 18359 = 'Clavision DOTA2 Masters 2025: Snow-Ruyi'）。
    //   ⚠️ 2024 那届 LP 名为 `Clavision/Snow Ruyi/2024`（OpenDota 16901）⇒ **另一赛事，未并入**。
     liquipediaSlug: 'Clavision/Masters/2025' },
+  // ★ 2026-09-25 补：Clavision **2024 年**的赛事（OpenDota league 16901
+  //   'Clavision DOTA League S1 : Snow-Ruyi'）—— 此前本库无此条目。
+  //   它与 `Clavision Masters`（2025）是**同系列的不同届**，故上一轮修 Masters 时**未并入**
+  //   （并入会把两届混成一个条目）。
+  //   分级沿用 community 的现行结果 **A**（实测 communityTierFromName 判 A）⇒ **不改变展示**。
+  //   canonical 与 OpenDota 源名逐字一致（含 ` : ` 两侧空格），保证标题不变。
+  //   赛期取自 LP `Clavision/Snow Ruyi/2024` 的 Infobox（sdate=2024-07-28 / edate=2024-08-04）；
+  //   end 按铁律取**该日 BJ 23:59:59**（只有「日末」会溢出）。
+  { canonical: 'Clavision DOTA League S1 : Snow-Ruyi',
+    tier: { grade: 'A', rank: 2, label: 'A级' },
+    aliases: ['clavisiondotaleagues1snowruyi', 'clavisionsnowruyi', 'snowruyi2024'], year: 2024,
+    leagueId: 16901,
+    start: 1722124800, end: 1722787199,
+    organizer: 'Clavision', status: '已结束',
+    liquipediaSlug: 'Clavision/Snow Ruyi/2024',
+    valve: false, topThirdParty: false },
   { canonical: 'Elite League', tier: { grade: 'A', rank: 2, label: 'A级' },
     aliases: ['eliteleague', 'eliteleague2024'], year: 2024,
     liquipediaSlug: 'Elite_League/1' },
