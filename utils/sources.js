@@ -1174,7 +1174,8 @@ function patchNullSeriesId(matches) {
       nm._patchedSeriesKey = bestNbr.key;
       // 结构化日志（开发期可观测；线上自动收集到 wx 结算日志）
       if (typeof console !== 'undefined' && console.warn) {
-        console.warn('[patchNullSeriesId]', {
+        // ★ 2026-09-25：与 L1063 同一门控（真机日志证明此处才是实际触发点 ✗ —— 上次只门控了一处）
+        if (DEBUG_LOG_PATCH_NULL_SERIES) console.warn('[patchNullSeriesId]', {
           matchId: nm.match_id, fromSid: null, toKey: bestNbr.key,
           nbrSpan: [bestNbr.first, bestNbr.last], nullStart: nStart,
           reason: 'qualified_neighbor_in_window'
