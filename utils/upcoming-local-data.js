@@ -6,7 +6,7 @@
 // 数据来源：utils/upcoming-local.json（由本脚本生成）
 
 module.exports = {
-  "generatedAt": 1790319734,
+  "generatedAt": 1790325335,
   "source": "liquipedia",
   "note": "build-time snapshot (Upcoming+Ongoing, Tier1-3), refresh via scripts/sync/fetch-liquipedia-upcoming.js",
   "events": [
@@ -44,6 +44,18 @@ module.exports = {
       "start": 1789948800,
       "end": 1791043199,
       "date": "Sep 21 – Oct 03, 2026",
+      "source": "liquipedia"
+    },
+    {
+      "id": -1463658,
+      "name": "EPL World Series: Southeast Asia Season 18",
+      "grade": "B",
+      "rank": 1,
+      "label": "B级",
+      "tier": 3,
+      "start": 1790294400,
+      "end": 1791475199,
+      "date": "Sep 25 – Oct 08, 2026",
       "source": "liquipedia"
     },
     {
