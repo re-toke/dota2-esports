@@ -189,6 +189,23 @@ async function main() {
   const SB_URL = process.env.SUPABASE_URL || (require(path.join(__dirname, '..', '..', 'utils', 'config.js')).supabase.url || '');
   const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || '';
   const adminToken = process.env.ADMIN_TOKEN || '';
+  // ★★ 2026-09-25: EMPTY-UPSTREAM GUARD (fixes recurring CI failure).
+  //   Root cause of "Sync Upcoming Schedule / All jobs have failed":
+  //   when the LP fetch yields 0 events, the previous code still attempted:
+  //     (a) upsert with body=[]            -> meaningless write
+  //     (b) DELETE ...?league_id=not.in.() -> MALFORMED PostgREST query (400)
+  //   -> threw -> process.exit(1) -> CI red. The exit(1) guard was doing its job,
+  //      but the message could not tell "upstream empty" from "write failed".
+  //   Now: never touch the DB on an empty upstream; fail with a precise message.
+  //   (mirrors the EF-side upsertUpcoming, which already returns 400 on empty entries)
+  if (!out.length) {
+    console.error('[upcoming] ✗ 上游返回 0 条赛事 —— LP 可能限流/被拦，或抓取逻辑失效；'
+      + '本次**不写库**（避免空列表 DELETE 误伤整表）');
+    if (process.env.SUPABASE_SERVICE_KEY || process.env.ADMIN_TOKEN) {
+      process.exit(1);   // 有凭据却拿不到上游 ⇒ 明确失败（避免云端表静默陈旧）
+    }
+  }
+
   const ids = out.map((e) => Number(e.id)).filter((n) => Number.isFinite(n));
 
   async function syncByServiceKey() {
@@ -203,6 +220,8 @@ async function main() {
       throw new Error('upsert HTTP ' + up.status + ' ' + (await up.text()).slice(0, 200));
     }
     // 清理不在本次集合中的旧行（保持「集合」语义）
+    // ★ 2026-09-25: 空 ids 时 not.in.() 是畸形查询（会被 PostgREST 400）⇒ 直接跳过清理 ✓
+    if (!ids.length) return;
     const del = await fetch(SB_URL + '/rest/v1/upcoming_schedule?league_id=not.in.(' + ids.join(',') + ')', {
       method: 'DELETE', headers: hdr
     });
