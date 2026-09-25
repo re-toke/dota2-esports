@@ -135,7 +135,9 @@ function prune() {
 // ⚠️ 分片**只切分循环**（扫描 / 删除），**淘汰策略逐字不变**（先清过期 → 再按 fetchedAt 淘汰 20% ✓），
 //    且未超限时与同步版一样**零成本返回** ✓。
 function pruneIdle(chunkSize, onDone) {
-  const step = chunkSize || 20;
+  // 2026-09-25: 10 items per slice (~40ms/slice on device, under the 50ms long-task threshold)
+  // Chunk size only affects slicing granularity, NOT the eviction result.
+  const step = chunkSize || 10;
   let info = null;
   try { info = wx.getStorageInfoSync(); } catch (e) { info = null; }
   if (!info) { if (onDone) onDone(0); return; }
