@@ -23,7 +23,7 @@ const slugMap = (() => {
   catch (e) { return {}; }
 })();
 
-const UA = 'DOTA2-Esports-Hub/1.0 (WeChat Mini Program; contact: dev@local)';
+const UA = require('../../utils/lp-ua.js').LP_UA;   // ★ 单点：utils/lp-ua.js（LP ToS 要求标识项目 + 联系方式）
 const LIQUIPEDIA_BASE = 'https://liquipedia.net/dota2/api.php';
 // 与云端 KNOWN_KEYWORDS 对齐（\btour\b 词边界，避免误中 TOURNAMENT）
 const KNOWN_KEYWORDS = /(international|major|esl\s+one|esl\s+pro|dreamleague|blast|riyadh|pgl|betboom|clavision|fissure|the\s+summit|games\s+of\s+the\s+future|heroic|resurrection|weplay|moonstorm|dpc|\btour\b|division\s+i)/i;

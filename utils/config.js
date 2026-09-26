@@ -166,7 +166,7 @@ module.exports = {
     // wx.request 设置 UA），规避历史 IP 封禁问题。启用后作为独立于 Valve 比赛数据的交叉来源。
     enabled: true,
     base: 'https://liquipedia.net/dota2/api.php',
-    userAgent: 'DOTA2-Esports-Hub/1.0 (WeChat Mini Program; contact: dev@local)',
+    userAgent: require('./lp-ua.js').LP_UA,   // ★ 单点：utils/lp-ua.js（LP ToS 要求标识项目 + 联系方式）
     rateLimitMs: 2200,   // 官方要求 ≥ 2 秒，留 200ms 余量
     cacheTTL: 6 * 3600,
     // 赛程缓存 TTL（对阵 LIVE/UPCOMING/RECENT 用，2026-08-03 优化）：

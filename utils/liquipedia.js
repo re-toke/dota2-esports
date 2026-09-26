@@ -134,7 +134,7 @@ function liquipediaSlugFor(name) {
 
 var ENABLED = !!(config.liquipedia && config.liquipedia.enabled);
 var BASE = (config.liquipedia && config.liquipedia.base) || 'https://liquipedia.net/dota2/api.php';
-var USER_AGENT = (config.liquipedia && config.liquipedia.userAgent) || 'DOTA2-Esports-Hub/1.0 (WeChat Mini Program; contact: dev@local)';
+var USER_AGENT = (config.liquipedia && config.liquipedia.userAgent) || require('./lp-ua.js').LP_UA;
 // 官方要求普通端点 ≤ 1 次/2 秒；这里留余量用 2200ms
 var RATE_GAP_MS = (config.liquipedia && config.liquipedia.rateLimitMs) || 2200;
 var CACHE_TTL = (config.liquipedia && config.liquipedia.cacheTTL) || (6 * 3600);

@@ -23,7 +23,7 @@ const zlib = require('zlib');
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 const LP_BASE = 'https://liquipedia.net/dota2/api.php';
-const LP_UA = 'DOTA2-Esports-Hub/1.0 (WeChat Mini Program; contact: dev@local)';
+const LP_UA = require('../utils/lp-ua.js').LP_UA;   // ★ 单点：utils/lp-ua.js（LP ToS 要求标识项目 + 联系方式）
 const RATE_LIMIT_MS = 2200;
 const TTL_SEC = 26 * 3600;
 

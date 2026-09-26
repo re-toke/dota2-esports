@@ -20,7 +20,7 @@ const fs = require('fs');
 const path = require('path');
 const Parse = require('../../utils/liquipedia-parse.js');
 
-const UA = 'DOTA2-Esports-Hub/1.0 (WeChat Mini Program; contact: dev@local)';
+const UA = require('../../utils/lp-ua.js').LP_UA;   // ★ 单点：utils/lp-ua.js（LP ToS 要求标识项目 + 联系方式）
 const LIQUIPEDIA_BASE = 'https://liquipedia.net/dota2/api.php';
 const OPENDOTA_LEAGUES = 'https://api.opendota.com/api/leagues';
 const KNOWN_KEYWORDS = /(international|major|esl\s+one|esl\s+pro|dreamleague|blast|riyadh|pgl|betboom|clavision|fissure|the\s+summit|games\s+of\s+the\s+future|heroic|resurrection|weplay|moonstorm|dpc|\btour\b|division\s+i)/i;

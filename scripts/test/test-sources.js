@@ -1108,6 +1108,57 @@ check('names：★ 全库禁止再内联该规则（白名单外一律 FAIL）',
     assert(home.homePassGrade(null) === false, 'null 不应抛错');
   });
 
+  check('★ LP UA 合规：标识性 UA 单点化（禁伪装浏览器 UA / 禁占位联系方式）', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const ROOT = path.resolve(__dirname, '..', '..');
+    // ★ 只扫**代码目录**，不含 deliverables/ 文档 ——
+    //   文档（方案/复核意见）会**引用**这些违规字符串做说明，全仓 grep 是**不可达判据**
+    //   （实测：方案文档自身就含 dev@local，`grep -rn "dev@local" .` 永远不为 0）。
+    const DIRS = ['utils', 'scripts', 'pages', 'subpackages', 'components', 'supabase'];
+    // ★ 违规串用**拼接**构造：本守卫自身若含字面量会被自己扫出来（自指陷阱，实测踩到）。
+    //   拼接后文件里不存在该字面量 ⇒ 无需"排除自身"，扫描保持全域覆盖。
+    const PLACEHOLDER = 'dev@' + 'local';
+    const BAD = [];
+    const walk = (dir) => {
+      let ents = [];
+      try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return; }
+      ents.forEach((e) => {
+        if (e.name === 'node_modules' || e.name === '.git') return;
+        const full = path.join(dir, e.name);
+        if (e.isDirectory()) { walk(full); return; }
+        if (!/\.(js|ts)$/.test(e.name)) return;
+        // ★ 先剥注释再判定 —— 注释里**允许**引用历史违规字符串（如 utils/lp-ua.js 的成因说明）。
+        //   （同项目既有纪律：检测工具先剥注释，行内 `//` 用 `^\s*` 保守剥。）
+        const code = fs.readFileSync(full, 'utf8').split('\n')
+          .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+        if (/User-Agent["']?\s*:\s*["'][^"']*Mozilla/.test(code)) {
+          BAD.push(path.relative(ROOT, full) + ' → 伪装浏览器 UA（违反 LP ToS）');
+        }
+        if (code.indexOf(PLACEHOLDER) >= 0) {
+          BAD.push(path.relative(ROOT, full) + ' → 占位联系方式 ' + PLACEHOLDER);
+        }
+      });
+    };
+    DIRS.forEach((d) => walk(path.join(ROOT, d)));
+    assert(BAD.length === 0, 'LP UA 合规违规：\n  ' + BAD.join('\n  '));
+
+    // 镜像一致性：两侧的**联系渠道**必须逐字相同。
+    //   ⚠️ 不能比对"组装后的 UA 字面量" —— 两侧组装方式本就不同（客户端用字符串拼接、
+    //   EF 用模板串 `${LP_CONTACT}`），正则只会匹配到其中之一（实测踩到过一次）。
+    //   故比**同一份常数**（联系渠道 URL）+ 两侧 UA 前缀，与组装方式无关。
+    const CONTACT_RE = /https:\/\/github\.com\/[\w.-]+\/[\w.-]+/;
+    const miniSrc = fs.readFileSync(path.join(ROOT, 'utils/lp-ua.js'), 'utf8');
+    const efSrc = fs.readFileSync(path.join(ROOT, 'supabase/functions/_shared/lp-ua.ts'), 'utf8');
+    const cm = (miniSrc.match(CONTACT_RE) || [])[0] || '';
+    const ce = (efSrc.match(CONTACT_RE) || [])[0] || '';
+    assert(cm && ce && cm === ce, '两侧 LP 联系渠道必须逐字一致：mini=' + cm + '  ef=' + ce);
+    assert(/DOTA2-Esports-Hub\/1\.0 \(\+/.test(miniSrc) && /DOTA2-Esports-Hub\/1\.0 \(\+/.test(efSrc),
+      '两侧 UA 必须以「DOTA2-Esports-Hub/1.0 (+」开头（ToS 要求标识项目）');
+    assert(cm.indexOf('re-toke/dota2-esports') >= 0,
+      'LP UA 必须含真实联系方式渠道（当前为项目主页）：' + cm);
+  });
+
 async function runAll() {
   for (const t of tests) {
     if (t.kind === 'section') { console.log(t.title); continue; }

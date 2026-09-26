@@ -11,7 +11,7 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 
-const UA = 'DOTA2-Esports-Hub/1.0 (WeChat Mini Program; contact: dev@local)';
+const UA = require('../../utils/lp-ua.js').LP_UA;   // ★ 单点：utils/lp-ua.js（LP ToS 要求标识项目 + 联系方式）
 const LIQUIPEDIA_BASE = 'https://liquipedia.net/dota2/api.php';
 const RATE_LIMIT_MS = 2200;
 

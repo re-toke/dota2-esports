@@ -58,7 +58,7 @@ async function fetchOd(path: string): Promise<any> {
   const timer = setTimeout(() => controller.abort(), 6000);
   try {
     const res = await fetch(OD_BASE + path, {
-      headers: { "User-Agent": "DOTA2-Esports-Hub/1.0" },
+      headers: { "User-Agent": "DOTA2-Esports-Hub/1.0" },   // 注：这是 **OpenDota** 的 UA，非 LP（见 OD_BASE）；LP 的 UA 见 _shared/lp-ua.ts
       signal: controller.signal
     });
     if (!res.ok) throw new Error("OpenDota " + res.status);

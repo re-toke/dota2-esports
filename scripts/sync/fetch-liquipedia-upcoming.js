@@ -23,7 +23,7 @@ const path = require('path');
 const names = require('../../utils/names.js');
 
 // 合规 UA（Liquipedia 要求带联系方式/项目说明，否则可能被限流或封禁）
-const UA = 'DOTA2-Esports-Hub/1.0 (WeChat Mini Program build-time snapshot; contact: dev@local)';
+const UA = require('../../utils/lp-ua.js').LP_UA;   // ★ 单点：utils/lp-ua.js（LP ToS）
 const API = 'https://liquipedia.net/dota2/api.php?action=parse&page=Portal:Tournaments&prop=text&format=json';
 
 const MONTHS = { jan:0, feb:1, mar:2, apr:3, may:4, jun:5, jul:6, aug:7, sep:8, oct:9, nov:10, dec:11 };

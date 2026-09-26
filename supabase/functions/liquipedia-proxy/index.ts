@@ -22,9 +22,17 @@ import { cors, db } from "../_shared/auth.ts";
 // ★ v8.16：slugmap 改为 TS 内联常量（Supabase EF 运行时对 `with { type: "json" }`
 //   import attributes 支持不稳，导致 500 启动错误）。由 scripts/gen-slugmap-ts.js 生成。
 import { SLUGMAP_MAPPINGS } from "./slugmap.ts";
+import { LP_UA } from "../_shared/lp-ua.ts";
 
 const LP_BASE = "https://liquipedia.net/dota2/api.php";
-// UA 改用浏览器指纹（见 lpHeaders，v8.19）
+// ★★ 2026-09-26（P0-E-1）：UA 由「伪装浏览器指纹」**回退为标识性 UA**（LP_UA，定义见 _shared/lp-ua.ts）。
+//   原因：伪装浏览器 UA **明确违反 Liquipedia API ToS**（要求「标识项目 + 含联系方式」），
+//   违规可致**自动临时 IP 封禁**、反复触发转**永久** —— 而在本架构下 LP 是「族 B」权威锚点，
+//   一旦被封会连带击穿分级体系（P0-A / P1-C 一并失效）。
+//   ★ 落地前做过**真实请求预检**（2026-09-26）：伪装 UA / 标识性 UA / 早期合规 UA
+//     对 LP API **均返回 HTTP 200 + 有效内容**，标识性 UA 无副作用
+//     ⇒ 「换回合规 UA 会被 Cloudflare 挑战」的担忧**未被证实**（当年的"更隐蔽"是错误应对，
+//        正确应对是降频 / 加缓存 / 走缓存表）。
 const RATE_LIMIT_MS = 2200;               // LP 官方 ≥2s，留 200ms 余量
 
 const SCHEDULE_TTL_MS = 24 * 3600 * 1000; // 对齐 cacheStaleTtlSchedule（24h）
@@ -38,11 +46,12 @@ function slugFor(name: string): string {
 // ===== 全局限流队列（2.2s 串行，实例级） =====
 let _lastLpFetch = 0;
 let _queue: Promise<void> = Promise.resolve();
-// ★ v8.19（方案 1）：补齐浏览器指纹头——此前只带 UA+gzip 裸请求被 LP Cloudflare
-//   挑战（返回 HTML 挑战页）。补 Accept/Accept-Language 提升 IP+指纹综合评分。
+// ★ 2026-09-26（P0-E-1）：UA 回退为标识性（LP_UA）。其余头**必须保留** ——
+//   `Accept-Encoding: gzip` 是 ToS 明列要求（缺它会 HTTP 406，那是请求头不合法而非被封，历史踩过）；
+//   `Accept` / `Accept-Language` 是正常内容协商头，与"伪装"无关，保留。
 function lpHeaders(): Record<string, string> {
   return {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    "User-Agent": LP_UA,
     "Accept": "application/json",
     "Accept-Language": "en-US,en;q=0.9",
     "Accept-Encoding": "gzip"

@@ -32,7 +32,7 @@ function fetchWikitext(pageName) {
     const url = 'https://liquipedia.net/dota2/api.php?' + params.toString();
     const options = {
       headers: {
-        'User-Agent': 'DOTA2-Esports-Hub/1.0 (test; contact: dev@local)',
+        'User-Agent': require('../../utils/lp-ua.js').LP_UA,
         'Accept': 'application/json',
         'Accept-Encoding': 'gzip'  // ★ Liquipedia 强制要求 gzip（否则返回 406）
       }
