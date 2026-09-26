@@ -13,6 +13,8 @@ const logoCache = require('../../utils/logoCache.js');
 // ★ 2026-09-20：队名「形状归一」单一实现（原先内联，须与快照 byName 键逐字一致）
 const names = require('../../utils/names.js');
 const homeDedupe = require('../../utils/homeDedupe.js');
+const diagnostics = require('../../utils/diagnostics.js');
+const config = require('../../utils/config.js');   // ★ P0-B：诊断明细开关（config.debug.verboseLog）
 // v5.1（2026-09-01）：首页「对局级 upcoming」源 —— Liquipedia/Steam/haglund 排期（云代理，30min 缓存）
 const liquipedia = require('../../utils/liquipedia.js');
 // ★ 2026-09-01：构建时队徽快照（byName 键 = consensus.normName 规范化队名 → Steam CDN 可靠域）。
@@ -913,6 +915,18 @@ Page({
         Math.abs((hit.start || 0) - (c.start || 0)) + 's，命中键=' + keys.join(' / ') + '）');
     });
     this._allMatches = keptCards;
+    // ★★ 2026-09-26（P0-B）：**数据质量指标采集** —— 一行汇总**常开**，明细走 config.debug.verboseLog。
+    //   为什么在这里打：此刻 `keptCards` 是「同一对局合并」之后的**最终卡片集合**，
+    //   正是重复卡率 / 状态误判 / 比分缺失率三项指标的观测点（与 CI 侧同一纯模块 ⇒ 数字可对账）。
+    //   ★ 口径单一来源 = `utils/diagnostics.js`（客户端与 CI 共用，避免两处漂移）。
+    //   ★ 诊断失败**绝不影响渲染**（整体 try 包裹，与本项目"监控安全降级"约定一致）。
+    try {
+      const _dm = diagnostics.computeCardMetrics(keptCards);
+      console.log(diagnostics.formatSummary(_dm));
+      if (config.debug && config.debug.verboseLog) {
+        diagnostics.formatDetails(_dm).forEach((line) => console.log(line));
+      }
+    } catch (e) { /* 诊断失败静默：不得影响首页渲染 */ }
     // 按日期分桶 → 周日历角标（语义升级：角标 = 当日系列数，非局数）
     // ★★ 2026-09-23 修复「角标数字与卡片数不符」：角标必须与**首页实际渲染的集合同口径** ——
     //   首页只显示 S/A 级（见 _homePassGrade），而此处原实现统计了**全部级别** ⇒ 8 vs 4。
