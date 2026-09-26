@@ -7,7 +7,8 @@
 // `utils/lp-ua.js` 的**镜像**；一致性由 `scripts/test/test-sources.js` 的守卫断言
 // （逐字比对两文件）保证，防止再次漂移。
 //
-// ⚠️ 待补：真实联系邮箱（当前以项目主页充当联系方式渠道）。
-//    补法：本文件 + `utils/lp-ua.js` 各改一行。
+// ✅ 联系邮箱已补（2026-09-26，用户提供）—— 公开性已知情并接受（仓库 public + UA 随请求发送）。
+//    若要更换联系人渠道：本文件 + `utils/lp-ua.js` 各改 LP_EMAIL 一行。
 export const LP_CONTACT = "https://github.com/re-toke/dota2-esports";
-export const LP_UA = `DOTA2-Esports-Hub/1.0 (+${LP_CONTACT})`;
+export const LP_EMAIL = "295231347@qq.com";
+export const LP_UA = `DOTA2-Esports-Hub/1.0 (+${LP_CONTACT}; ${LP_EMAIL})`;

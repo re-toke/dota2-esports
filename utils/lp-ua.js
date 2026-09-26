@@ -15,15 +15,19 @@
 //   ⇒「换回合规 UA 会被 Cloudflare 拦」的担忧**未被证实**。
 //
 // ⚠️ 与 `supabase/functions/_shared/lp-ua.ts` 是**镜像**（EF 跑 Deno，无法 require 本文件）；
-//    一致性由 `scripts/test/test-sources.js` 的「LP UA 单点」守卫断言（含镜像逐字比对）。
-// ⚠️ 待补：**真实联系邮箱** —— 当前以项目主页充当联系方式渠道。
-//    补法：只改本文件（与 EF 镜像）这一行，全仓 11 处引用自动跟随（这正是单点化的目的）。
+//    一致性由 `scripts/test/test-sources.js` 的「LP UA 合规」守卫断言（含联系渠道逐字比对）。
+// ✅ 联系邮箱已补（2026-09-26，用户提供）。
+//    ⚠️ 已知情并接受的公开性：本仓库为 **public**，且该 UA 会随**每次 LP 请求**发送
+//       ⇒ 该邮箱是公开可见的。若要换匿名渠道（如专用转发地址 / 仅留仓库 Issues 链接），
+//         只改 LP_EMAIL 这一行（+ EF 镜像），全仓 11 处引用自动跟随 —— 这正是单点化的目的。
 'use strict';
 
 var LP_CONTACT = 'https://github.com/re-toke/dota2-esports';
-var LP_UA = 'DOTA2-Esports-Hub/1.0 (+' + LP_CONTACT + ')';
+var LP_EMAIL = '295231347@qq.com';
+var LP_UA = 'DOTA2-Esports-Hub/1.0 (+' + LP_CONTACT + '; ' + LP_EMAIL + ')';
 
 module.exports = {
   LP_CONTACT: LP_CONTACT,
+  LP_EMAIL: LP_EMAIL,
   LP_UA: LP_UA
 };

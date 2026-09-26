@@ -134,7 +134,11 @@ function liquipediaSlugFor(name) {
 
 var ENABLED = !!(config.liquipedia && config.liquipedia.enabled);
 var BASE = (config.liquipedia && config.liquipedia.base) || 'https://liquipedia.net/dota2/api.php';
-var USER_AGENT = (config.liquipedia && config.liquipedia.userAgent) || require('./lp-ua.js').LP_UA;
+// ★ 2026-09-26（P0-E-2）：原 `USER_AGENT` 常量已删除 —— 它**从未被使用**（eslint `no-unused-vars` 早已告警）。
+//   原因（方案 E-3 的结论）：小程序 `wx.request` **不允许自定义 User-Agent**，
+//   因此客户端侧**不存在 UA 的生效点**；真正决定 LP 侧 UA 的是
+//   **EF `liquipedia-proxy` 的 `lpHeaders()`**（读 `supabase/functions/_shared/lp-ua.ts`）。
+//   客户端只保留 `config.liquipedia.userAgent` 作为**语义声明**（不参与请求，便于对照）。
 // 官方要求普通端点 ≤ 1 次/2 秒；这里留余量用 2200ms
 var RATE_GAP_MS = (config.liquipedia && config.liquipedia.rateLimitMs) || 2200;
 var CACHE_TTL = (config.liquipedia && config.liquipedia.cacheTTL) || (6 * 3600);

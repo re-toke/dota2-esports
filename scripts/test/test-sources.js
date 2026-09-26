@@ -1143,20 +1143,25 @@ check('names：★ 全库禁止再内联该规则（白名单外一律 FAIL）',
     DIRS.forEach((d) => walk(path.join(ROOT, d)));
     assert(BAD.length === 0, 'LP UA 合规违规：\n  ' + BAD.join('\n  '));
 
-    // 镜像一致性：两侧的**联系渠道**必须逐字相同。
+    // 镜像一致性：两侧的**联系渠道**必须逐字相同（URL + 邮箱**分别**比对）。
     //   ⚠️ 不能比对"组装后的 UA 字面量" —— 两侧组装方式本就不同（客户端用字符串拼接、
     //   EF 用模板串 `${LP_CONTACT}`），正则只会匹配到其中之一（实测踩到过一次）。
-    //   故比**同一份常数**（联系渠道 URL）+ 两侧 UA 前缀，与组装方式无关。
-    const CONTACT_RE = /https:\/\/github\.com\/[\w.-]+\/[\w.-]+/;
+    //   ⚠️ 也不能只比 URL：邮箱是**独立常量**（LP_EMAIL），只比 URL 会漏掉邮箱漂移。
+    const URL_RE = /https:\/\/github\.com\/[\w.-]+\/[\w.-]+/;
+    const MAIL_RE = /[\w.+-]+@[\w-]+\.[\w.-]+/;
     const miniSrc = fs.readFileSync(path.join(ROOT, 'utils/lp-ua.js'), 'utf8');
     const efSrc = fs.readFileSync(path.join(ROOT, 'supabase/functions/_shared/lp-ua.ts'), 'utf8');
-    const cm = (miniSrc.match(CONTACT_RE) || [])[0] || '';
-    const ce = (efSrc.match(CONTACT_RE) || [])[0] || '';
-    assert(cm && ce && cm === ce, '两侧 LP 联系渠道必须逐字一致：mini=' + cm + '  ef=' + ce);
+    const pick = (src, re) => (src.match(re) || [])[0] || '';
+    const mu = pick(miniSrc, URL_RE), eu = pick(efSrc, URL_RE);
+    const mm = pick(miniSrc, MAIL_RE), em = pick(efSrc, MAIL_RE);
+    assert(mu && eu && mu === eu, '两侧 LP 联系 URL 必须逐字一致：mini=' + mu + '  ef=' + eu);
+    assert(mm && em && mm === em, '两侧 LP 联系邮箱必须逐字一致：mini=' + mm + '  ef=' + em);
     assert(/DOTA2-Esports-Hub\/1\.0 \(\+/.test(miniSrc) && /DOTA2-Esports-Hub\/1\.0 \(\+/.test(efSrc),
       '两侧 UA 必须以「DOTA2-Esports-Hub/1.0 (+」开头（ToS 要求标识项目）');
-    assert(cm.indexOf('re-toke/dota2-esports') >= 0,
-      'LP UA 必须含真实联系方式渠道（当前为项目主页）：' + cm);
+    assert(mu.indexOf('re-toke/dota2-esports') >= 0,
+      'LP UA 必须含项目主页（ToS 要求 identifies your project）：' + mu);
+    assert(mm.indexOf('@') > 0 && mm.indexOf('.') > 0,
+      'LP UA 必须含**可用邮箱**（ToS 要求 includes contact information）：' + mm);
   });
 
 async function runAll() {
