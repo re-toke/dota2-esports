@@ -927,6 +927,8 @@ Page({
       if (config.debug && config.debug.verboseLog) {
         diagnostics.formatDetails(_dm).forEach((line) => console.log(line));
       }
+      // ★ P0-B 下半：把最近一次指标留给消费方（"我的"页展示）—— 避免两页各算一遍
+      diagnostics.recordLast(_dm, { source: 'index' });
     } catch (e) { /* 诊断失败静默：不得影响首页渲染 */ }
     // 按日期分桶 → 周日历角标（语义升级：角标 = 当日系列数，非局数）
     // ★★ 2026-09-23 修复「角标数字与卡片数不符」：角标必须与**首页实际渲染的集合同口径** ——

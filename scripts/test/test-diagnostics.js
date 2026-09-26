@@ -117,6 +117,34 @@ assert('★ 硬判据收敛目标 5min 必须**严于**降级路径（否则口�
 assert('重复卡率严格目标为 0', diag.SLO.dupCardRateStrict.target === 0);
 assert('启发式降级率"只建基线不设阈值"（target 为 null）', diag.SLO.heuristicRate.target === null);
 
+console.log('\n--- ④ P0-B 下半：消费方读取（recordLast / getLast / describeFreshness）---');
+assert('recordLast 前 getLast 为 null（内存态，重启即空）', diag.getLast() === null);
+diag.recordLast(m, { source: 'test' });
+const last = diag.getLast();
+assert('recordLast 后可读回指标快照', !!last && !!last.metrics && last.metrics.total === m.total);
+assert('快照带时间戳（供展示"多久前"）', typeof last.at === 'number' && last.at > 0);
+assert('recordLast(null) 不覆盖已有快照', (function () {
+  diag.recordLast(null);
+  return !!diag.getLast();
+})());
+
+const fresh = diag.describeFreshness();
+assert('新鲜度返回结构完整（items/oldest/ageText/targetSec）',
+  Array.isArray(fresh.items) && fresh.items.length > 0 &&
+  typeof fresh.ageText === 'string' && fresh.targetSec === 24 * 3600,
+  JSON.stringify({ n: fresh.items.length, age: fresh.ageText, t: fresh.targetSec }));
+assert('每项含各自年龄与超限判定', fresh.items.every((x) =>
+  typeof x.ageText === 'string' && typeof x.overTarget === 'boolean'));
+assert('★ overTarget 必须与 ageSec 的判定一致（关系断言，不写死具体值）',
+  fresh.overTarget === (fresh.ageSec != null && fresh.ageSec > fresh.targetSec),
+  JSON.stringify({ ageSec: fresh.ageSec, over: fresh.overTarget }));
+assert('★ 取**最旧**快照作口径（不被最新者掩盖）',
+  fresh.oldest === null || fresh.items.every((x) => (x.ts <= 0) || (fresh.oldest.ts <= x.ts)),
+  JSON.stringify(fresh.items.map((x) => ({ n: x.name, ts: x.ts }))));
+assert('formatPct：null → n/a，0.063 → 6.3%',
+  diag.formatPct(null) === 'n/a' && diag.formatPct(0.063) === '6.3%',
+  diag.formatPct(0.063));
+
 console.log('\n=== 结果 ===');
 console.log('通过: ' + pass + '  失败: ' + fail);
 if (fail) { console.log('存在失败 ❌'); process.exit(1); }

@@ -8,6 +8,7 @@ const reminderStrategy = require('../../utils/reminderStrategy.js');
 const sources = require('../../utils/sources.js');
 // ★ 2026-08-07（审核 R1/R2）：账号登录态（ensureOpenId 上移单点实现 + 预登录前置）
 const auth = require('../../utils/auth.js');
+const diagnostics = require('../../utils/diagnostics.js');   // ★ P0-B 下半：数据健康展示
 // ★ 2026-09-10（账号体系重构）：云同步开关状态（替代原「隐式自动上云」）
 const cloudSync = require('../../utils/cloudSync.js');
 // ★ 2026-09-14（极简改造）：数据管理 3 项 + 资料重置已下沉到 /subpackages/detail/settings
@@ -48,6 +49,8 @@ Page({
     // 2.2 订阅状态
     subStatus: null,   // { subscribed, time } | null
     subReady: false,   // 是否已配置模板
+    // ★ P0-B 下半：数据健康（快照新鲜度 + 本机融合指标）—— 让"静默问题"可见
+    health: null,
     // #20 智能提醒策略（提前量/级别的编辑入口已下沉到「设置」页；本页只读展示提前量）
     reminder: { leadSec: 1800, tiers: ['S', 'A'] },
     // ★ 批次4（2026-08-30）· PRD §11.2：用户卡身份升级为 chooseAvatar + 昵称 input，
@@ -102,7 +105,28 @@ Page({
     }
 
     const counts = follow.counts();
+    // ★★ 2026-09-26（P0-B 下半）：**数据健康**（让指标与新鲜度"有人消费"）
+    //   · 新鲜度：读本地快照 generatedAt，取**最旧**者（保守口径 —— 不被最新那个掩盖；
+    //     实测两个快照刷新周期不同，差可达十余天）
+    //   · 本机指标：首页融合后写入的最近一次快照（内存态；未访问首页/刚重启时为空 ⇒ 展示层须容忍）
+    const _fresh = diagnostics.describeFreshness();
+    const _last = diagnostics.getLast();
+    const _lm = _last && _last.metrics;
+    const _health = {
+      ageText: _fresh.ageText,
+      overTarget: _fresh.overTarget,
+      targetHours: Math.round(_fresh.targetSec / 3600),
+      oldestName: _fresh.oldest ? _fresh.oldest.name : '',
+      items: _fresh.items,
+      hasMetrics: !!_lm,
+      metricHint: _lm
+        ? ('降级率 ' + diagnostics.formatPct(_lm.heuristicRate) +
+           ' · 结束无比分 ' + diagnostics.formatPct(_lm.endedNoScoreRate) +
+           ' · 状态误判 ' + _lm.statusMismatch + ' · 样本 ' + _lm.total)
+        : '打开一次「首页」后生成'
+    };
     const patch = {
+      health: _health,
       ctaVariant: ctaVariant,
       items: slice,
       counts: counts,

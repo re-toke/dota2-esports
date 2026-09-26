@@ -38,6 +38,16 @@
     </view>
   </view>
 
+  <!-- ===== ②b 数据健康（P0-B 下半）：把「静默问题」变成用户/开发者可见 =====
+       口径：新鲜度取**最旧**快照（保守）；指标为本机最近一次首页融合的结果 -->
+  <view class="row-card" wx:if="{{health}}">
+    <view class="row-main">
+      <text class="row-title">数据健康</text>
+      <text class="row-sub">快照更新于 {{health.ageText}}前{{health.oldestName ? '（取最旧：' + health.oldestName + '）' : ''}}{{health.overTarget ? ' · 已超 ' + health.targetHours + 'h 目标' : ''}}</text>
+      <text class="row-sub">{{health.metricHint}}</text>
+    </view>
+  </view>
+
   <!-- ===== ③ 关注阵容（页面主体） ===== -->
   <view class="seg">
     <view

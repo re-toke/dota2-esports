@@ -64,6 +64,11 @@ function _rate(n, d) {
   return d > 0 ? (n / d) : null;
 }
 
+/** 比率 → 一位小数百分比（`null` 显示 n/a）；供日志与展示共用，避免两处格式化漂移。 */
+function formatPct(r) {
+  return (r === null || r === undefined) ? 'n/a' : (Math.round(r * 1000) / 10) + '%';
+}
+
 /**
  * 统计一组**卡片**（首页 `_allMatches` 那种形状）的数据质量指标。
  * @param {Array} cards 卡片数组：{ status, scoreA, scoreB, bo, identitySource?, teamA?, teamB?, key? }
@@ -157,7 +162,7 @@ function computeCardMetrics(cards, opts) {
  */
 function formatSummary(m) {
   if (!m) return '[diag][cards] (无数据)';
-  var pct = function (r) { return (r === null) ? 'n/a' : (Math.round(r * 1000) / 10) + '%'; };
+  var pct = formatPct;
   return '[diag][cards] 总' + m.total +
     ' (结束' + m.ended + '/进行' + m.live + '/待赛' + m.upcoming + ')' +
     ' | 重复卡 严格' + m.dupGroupsStrict + '(' + pct(m.dupRateStrict) + ')' +
@@ -185,9 +190,69 @@ function formatDetails(m) {
   return out;
 }
 
+// ===== 最近一次指标（**唯一的可变状态**，供消费方读取；不参与任何计算）=====
+// 为什么放这里：首页完成融合后写入，"我的"页读取展示 —— 避免两页各算一遍（口径与开销都省）。
+// ⚠️ 仅**内存**快照（不落盘）：小程序重启后为空，展示层须容忍"暂无数据"。
+var _last = null;
+function recordLast(metrics, ctx) {
+  if (!metrics) return;
+  _last = {
+    at: Math.floor(Date.now() / 1000),
+    metrics: metrics,
+    ctx: ctx || null
+  };
+}
+function getLast() { return _last; }
+
+function _fmtAge(sec) {
+  if (sec == null) return '未知';
+  if (sec < 3600) return Math.max(1, Math.round(sec / 60)) + ' 分钟';
+  if (sec < 86400) return Math.round(sec / 3600) + ' 小时';
+  return Math.round(sec / 86400) + ' 天';
+}
+
+/**
+ * 数据新鲜度（读本地快照的 generatedAt）。
+ * ★ 取**最旧**的那个作为"数据更新时间" —— 保守口径：用户看到的是**最差**新鲜度，
+ *   而不是被最新那个掩盖（两个快照的刷新周期不同，实测差可达十余天）。
+ * @returns {{items:Array, oldest:Object|null, ageSec:number|null, ageText:string, overTarget:boolean, targetSec:number}}
+ */
+function describeFreshness(nowSec) {
+  var now = nowSec || Math.floor(Date.now() / 1000);
+  var items = [];
+  function push(name, loader) {
+    try {
+      var v = loader();
+      if (v && v.generatedAt) items.push({ name: name, ts: Number(v.generatedAt) || 0 });
+    } catch (e) { /* 快照缺失不影响展示 */ }
+  }
+  push('赛程快照', function () { return require('./upcoming-local.json'); });
+  push('联赛快照', function () { return require('./leagues-local.json'); });
+  items.forEach(function (x) {
+    x.ageSec = x.ts > 0 ? (now - x.ts) : null;
+    x.ageText = _fmtAge(x.ageSec);
+    x.overTarget = (x.ageSec != null) && (x.ageSec > SLO.snapshotAgeSec.target);
+  });
+  var valid = items.filter(function (x) { return x.ts > 0; });
+  var oldest = valid.length ? valid.reduce(function (a, b) { return (a.ts < b.ts) ? a : b; }) : null;
+  var ageSec = oldest ? (now - oldest.ts) : null;
+  return {
+    items: items,
+    oldest: oldest,
+    ageSec: ageSec,
+    ageText: _fmtAge(ageSec),
+    overTarget: (ageSec != null) && (ageSec > SLO.snapshotAgeSec.target),
+    targetSec: SLO.snapshotAgeSec.target
+  };
+}
+
 module.exports = {
   SLO: SLO,
   computeCardMetrics: computeCardMetrics,
   formatSummary: formatSummary,
-  formatDetails: formatDetails
+  formatDetails: formatDetails,
+  formatPct: formatPct,
+  recordLast: recordLast,
+  getLast: getLast,
+  describeFreshness: describeFreshness
 };
