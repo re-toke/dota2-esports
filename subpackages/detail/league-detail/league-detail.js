@@ -1,6 +1,7 @@
 const api = require('../../../utils/api.js');
 const util = require('../../../utils/util.js');
 const sources = require('../../../utils/sources.js');
+const seriesStatus = require('../../../utils/seriesStatus.js');   // ★ P0-A：终局判据单一纯实现
 // ★ 2026-09-20：队名「形状归一」单一实现（原先内联，须与快照 byName 键逐字一致）
 const names = require('../../../utils/names.js');
 // ★ 2026-09-21：队标本地化兜底（绕开 UGC 的 octet-stream MIME；见 utils/logoLocal.js）
@@ -168,13 +169,15 @@ function mergeMetadataWithFallback(meta, name, leagueId) {
 //   ⚠️ 无比分（0:0）时一律不判 —— 不改变原有行为。
 function _decidedByScore(m, bo) {
   if (!m) return false;
-  if (bo === 'BO5' || bo === 'BO2') return false;
-  var sa = Number(m.scoreA) || 0, sb = Number(m.scoreB) || 0;
-  if (Math.max(sa, sb) < 2) return false;
-  console.log('[league-detail] 比分达终局（' + sa + ':' + sb + ' bo=' + (bo || 'unknown') +
-              '）→ 判为已结束：' + (m.teamA && m.teamA.name ? m.teamA.name : '') + ' vs ' +
-              (m.teamB && m.teamB.name ? m.teamB.name : ''));
-  return true;
+  // ★★ 2026-09-26（P0-A）：判据**收敛到单一纯实现** `utils/seriesStatus.js`
+  //   （本页只保留"判定成立时的日志包装"，规则本身不再在本文件重复实现）。
+  var decided = seriesStatus.isDecidedByScore(m.scoreA, m.scoreB, bo);
+  if (decided) {
+    console.log('[league-detail] 比分达终局（' + (Number(m.scoreA) || 0) + ':' + (Number(m.scoreB) || 0) +
+      ' bo=' + (bo || 'unknown') + '）→ 判为已结束：' +
+      (m.teamA && m.teamA.name ? m.teamA.name : '') + ' vs ' + (m.teamB && m.teamB.name ? m.teamB.name : ''));
+  }
+  return decided;
 }
 
 Page({

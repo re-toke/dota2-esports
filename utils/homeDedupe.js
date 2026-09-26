@@ -28,6 +28,30 @@ function _teamToken(t, loose) {
 }
 // ★ 2026-09-25：原本地 _stripLpNoise 已收敛到 utils/names.js 的单一实现（sanitizeTeamName）
 //   —— 避免「同一清洗规则两处实现」再次漂移（与本项目 names.js 归一化守卫同一教训）。
+// ★★ 2026-09-26（P0-A）：判定输赢两卡的**主客序关系**（采纳比分前必须过这一关）。
+//   为什么必须做：`_pairKeysOfCard` 正是为「**主客反相同键**」而设计 ——
+//   说明"同一对局的两张卡主客相反"在本项目是**已知现实**；而 2026-09-25（`7da1161`）
+//   的采纳逻辑**直接取 `scoreA/scoreB`** ⇒ 主客相反时会把比分**反向**（当时恰好同序才没出事）。
+//
+//   返回值语义（**只做正向确认，不推测**）：
+//     false = 同序（可直接采纳）· true = 互换（采纳时需对调）· null = 无法判定（**不采纳**）
+//   ⚠️ 判不出就返回 null —— 宁可保留 0:0（由 `utils/diagnostics.js` 的「已结束无比分率」暴露），
+//      也不要凭空写一个可能反向的比分（错误比分比缺失比分更危险：用户无法察觉）。
+function _swapAt(win, lose, loose) {
+  const wa = _teamToken(win && win.teamA, loose), wb = _teamToken(win && win.teamB, loose);
+  const la = _teamToken(lose && lose.teamA, loose), lb = _teamToken(lose && lose.teamB, loose);
+  if (!wa || !wb || !la || !lb) return null;
+  if (wa === la && wb === lb) return false;
+  if (wa === lb && wb === la) return true;
+  return null;
+}
+function _scoreSwap(win, lose) {
+  // 先严格键（能吸收 `(page does not exist)` 类脏名），判不出再退宽松键
+  const strict = _swapAt(win, lose, false);
+  if (strict !== null) return strict;
+  return _swapAt(win, lose, true);
+}
+
 function _preferSameMatchCard(x, y) {
   const rank = (c) => (c.status === 'ended' ? 3 : (c.status === 'upcoming' ? 1 : 2));
   const rx = rank(x), ry = rank(y);
@@ -52,7 +76,12 @@ function _preferSameMatchCard(x, y) {
   const wsum = (Number(win.scoreA) || 0) + (Number(win.scoreB) || 0);
   const lsum = (Number(lose.scoreA) || 0) + (Number(lose.scoreB) || 0);
   if (wsum === 0 && lsum > 0) {
-    const sa = Number(lose.scoreA) || 0, sb = Number(lose.scoreB) || 0;
+    // ★★ 2026-09-26（P0-A）：**采纳前先归一主客序**（见上方 `_scoreSwap` 的说明）。
+    //   主客相反的两卡若直接取 scoreA/scoreB，会把比分反向 —— 这是 `7da1161` 引入的隐患。
+    const swap = _scoreSwap(win, lose);
+    if (swap === null) return win;   // 无法判定 ⇒ 不采纳（宁缺勿错；由 SLO 指标暴露）
+    const sa = Number(swap ? lose.scoreB : lose.scoreA) || 0;
+    const sb = Number(swap ? lose.scoreA : lose.scoreB) || 0;
     const merged = Object.assign({}, win, { scoreA: sa, scoreB: sb });
     // 胜负标记必须与新比分一致（ended 卡通常无 games ⇒ 原 winA/winB 不可信，按比分重导）
     merged.winA = sa > sb;

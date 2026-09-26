@@ -14,6 +14,7 @@ const logoCache = require('../../utils/logoCache.js');
 const names = require('../../utils/names.js');
 const homeDedupe = require('../../utils/homeDedupe.js');
 const diagnostics = require('../../utils/diagnostics.js');
+const seriesStatus = require('../../utils/seriesStatus.js');   // ★ P0-A：终局判据单一纯实现
 const config = require('../../utils/config.js');   // ★ P0-B：诊断明细开关（config.debug.verboseLog）
 // v5.1（2026-09-01）：首页「对局级 upcoming」源 —— Liquipedia/Steam/haglund 排期（云代理，30min 缓存）
 const liquipedia = require('../../utils/liquipedia.js');
@@ -1017,8 +1018,9 @@ Page({
     //   （详情页 L1112-1118 的「④ 未达 BO 上限」规则也依赖 boGames，一旦 BO 推导偏大就失效 ✗）。
     //   本判据只用**比分本身**：`max(scoreA,scoreB) >= 2` ⇒ 该系列**至少赢下 2 局** ⇒
     //   在 BO3 ⇒ 已结束；BO1 ⇒ 不可能出现（max 只能为 1）；**BO5/BO2 跳过**（2 胜不足以终局）。
-    if (status === 'live' && bo !== 'BO5' && bo !== 'BO2' &&
-        Math.max(Number(s.scoreA) || 0, Number(s.scoreB) || 0) >= 2) {
+    //   ★★ 2026-09-26（P0-A）：判据**收敛到单一纯实现** `utils/seriesStatus.js`
+    //   （此前首页 / 详情页 / sources.js 各写一份，口径一漂移就出现"同一场对局两页状态矛盾"）。
+    if (status === 'live' && seriesStatus.isDecidedByScore(s.scoreA, s.scoreB, bo)) {
       status = 'ended';
       console.log('[index] 比分已达终局（' + s.scoreA + ':' + s.scoreB + '，' + bo +
                   '）→ 状态修正为已结束：' + (s.teamA || '') + ' vs ' + (s.teamB || ''));

@@ -43,6 +43,23 @@ function isStaleLiveByScore(status, scoreA, scoreB, boType) {
   return status === 'live' && isDecidedByScore(scoreA, scoreB, boType);
 }
 
+// ===== 收敛清单（2026-09-26，可审计）=====
+//
+// ✅ **已收敛到本模块**（语义等价，逐字对齐）：
+//   1. `pages/index/index.js` 的 `_cardFromSeries`（首页「比分达终局 → 状态修正为 ended」）
+//   2. `subpackages/detail/league-detail/league-detail.js` 的 `_decidedByScore`（本页只保留日志包装）
+//   3. `utils/sources.js` 的 `_orphanPairMerge` 内「非完整终局不并」（原 `max < 2` ⇒ 传 undefined 等价）
+//
+// ⛔ **刻意不收敛**（名字像、**语义不同** —— 收敛会改变行为，故本次不动；列此备查）：
+//   · `sources.js` ≈1355 `_seriesStillGoing`：用 **BO 局数阈值**（`ceil(boNum/2)`）且先看 `games.length`
+//     ⇒ 比"2 胜"更精细，且依赖 boNum ⇒ 不等价
+//   · `sources.js` ≈1481 `maxSc` + `BO_LIMIT`：**越界回滚**（约束⑤），用 BO 上限表判定"比分越界"
+//   · `sources.js` ≈1673 / ≈2251 `maxScore >= 3 → BO5`：**BO 制式推导**，不是状态判定
+//   · `sources.js` ≈1695：变量定义（供后续逻辑），非判据
+//   · `league-detail.js` ≈1139「④ 系列比分未达 BO 上限」：用 `boGames` 的**另一套表述**
+//     （09-23 注释已指出它"依赖 BO 推导，一旦偏大即失效"）⇒ 后续可评估收敛，但**本次不等价，不动**
+//
+// ★ 纪律：**收敛只做"语义等价点"**；形态相似但语义不同的，宁可留注释备案，也不要"看起来统一了"却改了行为。
 module.exports = {
   isDecidedByScore: isDecidedByScore,
   isStaleLiveByScore: isStaleLiveByScore

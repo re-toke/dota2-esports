@@ -35,6 +35,7 @@ const util = require('./util.js');
 const names = require('./names.js');
 const api = require('./api.js');
 const stratz = require('./stratz.js');
+const seriesStatus = require('./seriesStatus.js');   // ★ P0-A：终局判据单一纯实现（见 seriesStatus.js 的收敛清单）
 const steam = require('./steam.js');
 const liquipedia = require('./liquipedia.js');
 const consensus = require('./consensus.js');
@@ -2239,7 +2240,9 @@ function mergeSplittedBo3Series(allSeries) {
       if (radiantWon) { if (radiantIsA) scoreA++; else scoreB++; }
       else { if (radiantIsA) scoreB++; else scoreA++; }
     });
-    if (Math.max(scoreA, scoreB) < 2) return;  // 非完整终局不并
+    // ★ 2026-09-26（P0-A）：收敛到单一纯实现（此刻 boType **尚未推导** ⇒ 传 undefined，
+    //   与原先的 `max(scoreA,scoreB) < 2` **语义等价**）。
+    if (!seriesStatus.isDecidedByScore(scoreA, scoreB, undefined)) return;  // 非完整终局不并
     // ⑤ 局间隔 ≥10min 校验
     for (var j = 1; j < sorted.length; j++) {
       if ((sorted[j].lastTime || 0) - (sorted[j - 1].lastTime || 0) < MIN_GAP) return;

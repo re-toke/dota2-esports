@@ -1083,19 +1083,36 @@ check('names：★ 全库禁止再内联该规则（白名单外一律 FAIL）',
     //    修「首页已结束 0:0、详情页同场 1:2」的首页半边：ended 卡（LP 链路无小场比分，
     //    比分依赖 absorbSettledGames 注入 OD 局，EF 熔断期注入失败）+ 并存 live 卡带比分
     //    ⇒ 状态保留 ended、比分吸收非零方（旧规则「保留 ended」把正确比分也丢了）。
-    const e0 = { status: 'ended', scoreA: 0, scoreB: 0 };
-    const l12 = { status: 'live', scoreA: 1, scoreB: 2 };
+    // ★★ 2026-09-26（P0-A）：采纳前**必须过主客序归一**（`_scoreSwap`）——
+    //    `_pairKeysOfCard` 正是为「主客反相同键」而设计 ⇒ "两卡主客相反"是已知现实，
+    //    直接取 scoreA/scoreB 会把比分**反向**。故用例必须**带队名**（真实卡片一定有）。
+    const TA = { name: 'Team Nemesis' }, TB = { name: 'Natus Vincere' };
+    const e0 = { status: 'ended', scoreA: 0, scoreB: 0, teamA: TA, teamB: TB };
+    // 同序并存卡：A 1 : 2 B
+    const l12 = { status: 'live', scoreA: 1, scoreB: 2, teamA: TA, teamB: TB };
     const m1 = home.preferSameMatchCard(e0, l12);
     assert(m1.status === 'ended' && m1.scoreA === 1 && m1.scoreB === 2,
-      'ended 0:0 + live 1:2 ⇒ 应合并为 ended 1:2（状态取 ended、比分取非零方），实际: ' +
+      'ended 0:0 + live 1:2（同序）⇒ 应合并为 ended 1:2，实际: ' +
       JSON.stringify({ status: m1.status, scoreA: m1.scoreA, scoreB: m1.scoreB }));
     assert(m1.winA === false && m1.winB === true, '胜负标记应与新比分一致（1:2 ⇒ B 胜）');
+    // ★ 互换并列卡：主客相反、比分 2:1（B 视角）⇒ 采纳**必须对调**为 A 1 : 2 B
+    const lswapped = { status: 'live', scoreA: 2, scoreB: 1, teamA: TB, teamB: TA };
+    const m2 = home.preferSameMatchCard(e0, lswapped);
+    assert(m2.scoreA === 1 && m2.scoreB === 2,
+      '★ 主客相反时必须对调比分（B 视角 2:1 ⇒ A 视角 1:2），实际: ' +
+      JSON.stringify({ scoreA: m2.scoreA, scoreB: m2.scoreB }));
+    assert(m2.winB === true, '对调后胜负标记必须随比分（B 胜）');
+    // ★ 无法判定主客序（无队名/队名不可比）⇒ **不采纳**（宁缺勿错，由 SLO 指标暴露）
+    const noTeam = home.preferSameMatchCard({ status: 'ended', scoreA: 0, scoreB: 0 },
+      { status: 'live', scoreA: 1, scoreB: 2 });
+    assert(noTeam.scoreA === 0 && noTeam.scoreB === 0,
+      '★ 判不出主客序时不得采纳（宁可保留 0:0，也不写可能反向的比分）');
     //    反向①：ended 已有比分 ⇒ 不得被改写（吸收只发生在胜者无比分时）
-    const e21 = { status: 'ended', scoreA: 2, scoreB: 1 };
+    const e21 = { status: 'ended', scoreA: 2, scoreB: 1, teamA: TA, teamB: TB };
     assert(home.preferSameMatchCard(e21, l12) === e21, 'ended 已有比分时不得被 live 卡改写');
     //    反向②：双方都 0:0（真平局/都无数据）⇒ 不得凭空造分
-    assert(home.preferSameMatchCard({ status: 'ended', scoreA: 0, scoreB: 0 },
-      { status: 'live', scoreA: 0, scoreB: 0 }).scoreA === 0, '双方都 0:0 时不得造分');
+    assert(home.preferSameMatchCard({ status: 'ended', scoreA: 0, scoreB: 0, teamA: TA, teamB: TB },
+      { status: 'live', scoreA: 0, scoreB: 0, teamA: TA, teamB: TB }).scoreA === 0, '双方都 0:0 时不得造分');
     //    反向③：入参不得被改写（纯函数约定）
     assert(e0.scoreA === 0 && e0.scoreB === 0 && e0.winA === undefined,
       '合并不得改写入参（本模块约定只做纯计算）');
