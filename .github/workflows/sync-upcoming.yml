@@ -20,6 +20,15 @@ on:
   schedule:
     - cron: '0 3,15 * * *'
   workflow_dispatch:
+  # ★ P1-A（2026-09-26）：**互补触发** —— 允许由 Supabase `pg_cron` 经 `repository_dispatch` 唤醒本工作流。
+  #   为什么需要：GitHub 的 scheduled workflow **在高峰期会被丢弃/延迟**（实测本仓 ef-health 的
+  #   "每 2 小时"实际跑成 5~7 小时一次；另有"近 11 次全失败、9/18 才由人工发现"的记录）。
+  #   ⚠️ **这不是"双轨调度"** —— 两个触发源唤醒的是**同一个工作、同一套 Node 脚本**，
+  #      因此**只互补、不独立**（真独立需把管道逻辑搬进 EF，而该路线项目已明确否决：
+  #      `b5d228f Revert` + `bfe7c7f`「撤回不必要的 LP 迁移」）。
+  #      它解决的是"**同一个任务被漏触发**"，不解决"GitHub 整体不可用"。
+  repository_dispatch:
+    types: [sync-upcoming-backup]
 
 permissions:
   contents: write
