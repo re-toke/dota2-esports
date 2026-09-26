@@ -76,6 +76,21 @@ assert('formatSummary 返回一行且含关键字段', (function () {
 assert('formatSummary(空) 不抛错', diag.formatSummary(null).indexOf('[diag][cards]') === 0);
 assert('formatDetails 返回明细数组', diag.formatDetails(m).length >= 3);
 
+console.log('\n--- ②b 身份来源计数（P0-A 三态：authoritative / heuristic / standalone）---');
+const idCards = [
+  mkCard({ key: 'i1', identitySource: 'series_id', teamA: { name: 'A1' }, teamB: { name: 'B1' } }),
+  mkCard({ key: 'i2', identitySource: 'heuristic', teamA: { name: 'A2' }, teamB: { name: 'B2' } }),
+  mkCard({ key: 'i3', identitySource: 'standalone', teamA: { name: 'A3' }, teamB: { name: 'B3' } }),
+  mkCard({ key: 'i4', teamA: { name: 'A4' }, teamB: { name: 'B4' } }),   // 未打标（旧数据/未接线）
+];
+const mi = diag.computeCardMetrics(idCards);
+assert('权威 1 / 推断 1 / 单局 1', mi.heuristic === 1 && mi.standalone === 1 && mi.heuristicKnown === 3,
+  JSON.stringify({ h: mi.heuristic, s: mi.standalone, k: mi.heuristicKnown }));
+assert('★ 降级率 = 推断 ÷ 已打标 = 1/3', Math.abs(mi.heuristicRate - 1 / 3) < 1e-9, '实际 ' + mi.heuristicRate);
+assert('未打标卡片**不计入分母**（total=4 / 已打标=3）⇒ 不虚报为 0% 也不稀释',
+  mi.total === 4 && mi.heuristicKnown === 3, JSON.stringify({ t: mi.total, k: mi.heuristicKnown }));
+assert('汇总一行含身份三态', diag.formatSummary(mi).indexOf('身份') > 0);
+
 console.log('\n--- ③ ★ 漂移守卫：SLO 阈值必须与代码常量一致 ---');
 // 只允许「数字 * 数字」形态（不做 eval，避免执行任意代码）
 function readConst(file, name) {

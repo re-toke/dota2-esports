@@ -1087,6 +1087,8 @@ Page({
                 isLive: (m.phase === 'live') && !_decidedByScore(m, m.boType),
 
                 isRecent: liqIsRecent,
+                // ★ P0-A：身份来源透传（'series_id' 权威 / 'heuristic' 软关联推断 / 'standalone' 单局）
+                identitySource: m.identitySource || null,
                 isUpcoming: m.phase === 'upcoming',
                 phase: m.phase,
                 isMulti: m.boType !== 'BO1',

@@ -1436,6 +1436,25 @@ function groupSeries(matches) {
       //   ② /live 错误卡（league_name 缺失 → 「职业赛事」）时需匹配同系列。
       //   原实现只有 seriesType 无 series_id，_cardFromSeries 读 s.series_id 恒 undefined。
       series_id: first.series_id != null ? first.series_id : null,
+      // ★★ 2026-09-26（P0-A）：**身份来源显式打标**（"降级显式化"）。
+      //   为什么要有：`series_id` 缺失时本模块会用 `patchNullSeriesId` / `_orphanPairMerge`
+      //   的**软关联**（队名 + 时间窗）**推断**身份 —— 推断会误并/漏并（这正是"同一对局重复卡"
+      //   与"两页状态矛盾"的根因域）。此前推断结果与权威身份**长得一样**，无从统计 ⇒ 现在显式区分：
+      //     'series_id'  = 由**真实** series_id 分组（权威身份，**绝对优先**）
+      //     'heuristic'  = series_id 缺失，靠软关联推断（**可能误并/漏并**，需可统计）
+      //     'standalone' = series_id 缺失且无可关联邻居（单局独立）⇒ 无歧义但也无权威身份
+      //   ⚠️ 判据用 games 上的 `_patchedSeriesKey`（软关联**不污染**真实 series_id，便于审计与回滚）。
+      //   ⚠️ **判定顺序很关键**：先查软关联标记、再查真实 id ——
+      //      因为"真 id + 借 id 的 null 邻居"这种**混合系列**，其**成员构成是推断出来的**
+      //      （null 局借了邻居的 id），属降级 ⇒ 必须标 heuristic。
+      //      实测教训：顺序写反时，混合系列会被标成 'series_id'（漏报降级）。
+      identitySource: (function () {
+        var hasPatched = games.some(function (g) { return !!g._patchedSeriesKey; });
+        if (hasPatched) return 'heuristic';
+        var hasRealId = games.some(function (g) { return g.series_id != null && g.series_id !== 0; });
+        if (hasRealId) return 'series_id';
+        return 'standalone';
+      })(),
       isDraw: isDraw,
       isLive: isLive,
       isRecent: isRecent,

@@ -88,8 +88,9 @@ function computeCardMetrics(cards, opts) {
     // 比分缺失
     endedNoScore: 0,
     endedNoScoreRate: null,
-    // 启发式降级（P0-A 引入字段前恒为"未采集"）
+    // 身份来源（P0-A 起有值）：'series_id' 权威 / 'heuristic' 软关联推断 / 'standalone' 单局
     heuristic: 0,
+    standalone: 0,
     heuristicKnown: 0,
     heuristicRate: null,
     // 达标判定
@@ -118,9 +119,10 @@ function computeCardMetrics(cards, opts) {
       if (sum === 0) m.endedNoScore++;
     }
 
-    // ③ 启发式降级（字段未引入前不计入分母 ⇒ 不虚报为 0%）
+    // ③ 身份来源（P0-A 起有值）—— 分母只含**已打标**的卡片，未打标（旧数据/未接线）不计入 ⇒ 不虚报为 0%
     if (c.identitySource === 'heuristic') { m.heuristic++; m.heuristicKnown++; }
-    else if (c.identitySource === 'series_id') { m.heuristicKnown++; }
+    else if (c.identitySource === 'series_id' || c.identitySource === 'standalone') { m.heuristicKnown++; }
+    if (c.identitySource === 'standalone') m.standalone++;
 
     // ④ 重复卡：用与真实去重**同一套键函数**（严格 / 宽松分别统计）
     var keys;
@@ -162,7 +164,9 @@ function formatSummary(m) {
     ' 宽松' + m.dupGroupsLoose + '(' + pct(m.dupRateLoose) + ')' +
     ' | ★状态误判 ' + m.statusMismatch + (m.pass.statusMismatch ? '' : ' ❌') +
     ' | 已结束无比分 ' + m.endedNoScore + '(' + pct(m.endedNoScoreRate) + ')' + (m.pass.endedNoScore ? '' : ' ❌') +
-    ' | 启发式降级 ' + (m.heuristicKnown ? (m.heuristic + '(' + pct(m.heuristicRate) + ')') : '未采集(P0-A)');
+    ' | 身份 权威' + (m.heuristicKnown ? (m.heuristicKnown - m.heuristic - m.standalone) : 0) +
+    '/推断' + m.heuristic + '/单局' + m.standalone +
+    (m.heuristicKnown ? (' 降级率' + pct(m.heuristicRate)) : ' 未采集');
 }
 
 /**
@@ -175,7 +179,9 @@ function formatDetails(m) {
   out.push('[diag][cards][detail] 重复卡 严格组=' + m.dupGroupsStrict + ' 宽松组=' + m.dupGroupsLoose);
   out.push('[diag][cards][detail] 状态误判（比分达终局却 live）=' + m.statusMismatch + ' ⇒ SLO 目标 ' + SLO.statusMismatch.target);
   out.push('[diag][cards][detail] 已结束无比分=' + m.endedNoScore + '/' + m.ended + ' ⇒ SLO 目标 ≤' + (SLO.endedNoScoreRate.target * 100) + '%');
-  out.push('[diag][cards][detail] 启发式降级=' + (m.heuristicKnown ? m.heuristic : '未采集（需 P0-A 引入 identitySource）'));
+  out.push('[diag][cards][detail] 身份来源 权威=' + (m.heuristicKnown - m.heuristic - m.standalone) +
+    ' 推断=' + m.heuristic + ' 单局=' + m.standalone + ' 已打标=' + m.heuristicKnown +
+    (m.heuristicKnown ? '' : '（未采集：卡片未带 identitySource）'));
   return out;
 }
 

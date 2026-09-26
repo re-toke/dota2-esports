@@ -1107,6 +1107,9 @@ Page({
       //   → 过滤恒空 → 首页三段全部为空（必现）。
       //   守卫：scripts/ops/check-card-contract.js（已接入 test:all）
       tier: tier || null,
+      // ★ P0-A：身份来源透传 —— 'series_id'（权威）/ 'heuristic'（软关联推断）/ 'standalone'（单局）
+      //   供 utils/diagnostics.js 统计「启发式降级率」，也是后续 UI 显示"估算"的依据。
+      identitySource: s.identitySource || null,
       bo: bo,                          // 权威 BO 类型（dots 渲染依据）
       boText: boMeta.label,            // 中文赛制说明（单局制 / 三局两胜 …）
       boGames: boMeta.games,           // 局间色点渲染

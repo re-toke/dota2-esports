@@ -528,6 +528,45 @@ function mkLp(id, sId, t1, t2, st, extra) {
   })();
 })();
 
+// ===== P0-A（2026-09-26）：series 的**身份来源打标** identitySource =====
+//   口径（在 utils/sources.js 的 groupSeries 里实现，断言值均为**实测所得**，非推断）：
+//     'series_id'  = 全部成员都有真实 series_id（权威身份）
+//     'heuristic'  = **含软关联成员**（`_patchedSeriesKey`）⇒ 成员构成是推断出来的，属降级
+//     'standalone' = series_id 缺失且无可关联邻居（单局独立）
+//   ★ 关键：**判定顺序**必须先查软关联 —— 否则"真 id + 借 id 的 null 邻居"这种混合系列
+//     会被误标成 'series_id'（漏报降级）。该顺序错误在实现时**实测抓到过一次**。
+(function () {
+  const T = 1780000000;
+  const real = resolveAll([
+    mkPro(901001, 555, 1, true, 1, 2, 'Team A', 'Team B', T),
+    mkPro(901002, 555, 1, false, 1, 2, 'Team A', 'Team B', T + 3000),
+  ]);
+  assert('P0-A: 纯真实 series_id 分组 ⇒ identitySource=series_id',
+    real.length === 1 && real[0].identitySource === 'series_id',
+    JSON.stringify(real.map((s) => s.identitySource)));
+
+  const lone = resolveAll([mkPro(901003, null, 0, true, 1, 2, 'Team C', 'Team D', T)]);
+  assert('P0-A: 无 series_id 且无邻居 ⇒ identitySource=standalone',
+    lone.length === 1 && lone[0].identitySource === 'standalone',
+    JSON.stringify(lone.map((s) => s.identitySource)));
+
+  const mixed = resolveAll([
+    mkPro(901004, 556, 1, true, 1, 2, 'Team E', 'Team F', T),
+    mkPro(901005, null, 0, false, 1, 2, 'Team E', 'Team F', T + 1800),
+  ]);
+  assert('★ P0-A: 真 id + 借 id 的 null 邻居（混合系列）⇒ identitySource=heuristic（降级可见）',
+    mixed.length === 1 && mixed[0].identitySource === 'heuristic',
+    '系列数=' + mixed.length + ' 打标=' + JSON.stringify(mixed.map((s) => s.identitySource)));
+
+  const unlinked = resolveAll([
+    mkPro(901006, null, 0, true, 3, 4, 'Team G', 'Team H', T),
+    mkPro(901007, null, 0, false, 3, 4, 'Team G', 'Team H', T + 1800),
+  ]);
+  assert('P0-A: 纯 null 且未被软关联 ⇒ 各自 standalone（不虚标为 heuristic）',
+    unlinked.length === 2 && unlinked.every((s) => s.identitySource === 'standalone'),
+    '系列数=' + unlinked.length + ' 打标=' + JSON.stringify(unlinked.map((s) => s.identitySource)));
+})();
+
 // ===== 收尾 =====
 console.log('\n===== test-home-series: ' + pass + ' passed, ' + fail + ' failed =====');
 if (fail > 0) process.exit(1);
