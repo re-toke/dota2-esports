@@ -145,6 +145,35 @@ assert('formatPct：null → n/a，0.063 → 6.3%',
   diag.formatPct(null) === 'n/a' && diag.formatPct(0.063) === '6.3%',
   diag.formatPct(0.063));
 
+console.log('\n--- ④b 管道指标（computePipelineMetrics，CI 与客户端共用）---');
+const NOW0 = 1800000000;
+const pm = diag.computePipelineMetrics([
+  { name: '赛程快照', ts: NOW0 - 3600, count: 17 },      // 1 小时前（新）
+  { name: '联赛快照', ts: NOW0 - 12 * 86400, count: 40 }, // 12 天前（旧）
+], NOW0);
+assert('取最旧快照为口径（赛程 1h vs 联赛 12d ⇒ 取 12d）',
+  pm.oldest && pm.oldest.name === '联赛快照' && pm.ageSec === 12 * 86400,
+  JSON.stringify({ oldest: pm.oldest && pm.oldest.name, ageSec: pm.ageSec }));
+assert('★ 12 天 > 目标 24h ⇒ overTarget=true', pm.overTarget === true);
+assert('ageText 可读（年长者用"天"）', pm.ageText === '12 天', pm.ageText);
+assert('条目数汇总 = 17 + 40', pm.totalCount === 57, '实际 ' + pm.totalCount);
+const pm2 = diag.computePipelineMetrics([{ name: '赛程快照', ts: NOW0 - 60, count: 5 }], NOW0);
+assert('新鲜快照 ⇒ overTarget=false；ageText 用"分钟"',
+  pm2.overTarget === false && pm2.ageText === '1 分钟', JSON.stringify({ o: pm2.overTarget, t: pm2.ageText }));
+assert('空/非法输入不抛错且比率为 null', (function () {
+  const a = diag.computePipelineMetrics([], NOW0);
+  const b = diag.computePipelineMetrics(null, NOW0);
+  const c = diag.computePipelineMetrics([{ name: 'x', ts: 0 }], NOW0);
+  return a.ageSec === null && a.overTarget === false && b.ageSec === null && c.ageSec === null;
+})());
+assert('count 缺省不参与汇总也不报错', diag.computePipelineMetrics([{ name: 'x', ts: NOW0 - 10 }], NOW0).totalCount === 0);
+assert('★ describeFreshness 必须委托同一实现（口径不两处）',
+  (function () {
+    const f = diag.describeFreshness(NOW0);
+    const same = diag.computePipelineMetrics(f.items, NOW0);
+    return f.ageSec === same.ageSec && f.overTarget === same.overTarget && f.ageText === same.ageText;
+  })());
+
 console.log('\n=== 结果 ===');
 console.log('通过: ' + pass + '  失败: ' + fail);
 if (fail) { console.log('存在失败 ❌'); process.exit(1); }

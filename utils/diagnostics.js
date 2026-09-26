@@ -212,38 +212,65 @@ function _fmtAge(sec) {
 }
 
 /**
- * 数据新鲜度（读本地快照的 generatedAt）。
- * ★ 取**最旧**的那个作为"数据更新时间" —— 保守口径：用户看到的是**最差**新鲜度，
- *   而不是被最新那个掩盖（两个快照的刷新周期不同，实测差可达十余天）。
- * @returns {{items:Array, oldest:Object|null, ageSec:number|null, ageText:string, overTarget:boolean, targetSec:number}}
+ * **管道指标**（纯函数：输入快照元数据，输出年龄/超限判定）。
+ * 为什么纯：CI（Node）与客户端**共用同一实现** ⇒ 两边算出的口径不会漂移。
+ * @param {Array<{name:string, ts:number, count?:number}>} snaps 快照元数据
+ * @param {number} [nowSec]
+ * @returns {{at:number, items:Array, oldest:Object|null, ageSec:number|null, ageText:string, overTarget:boolean, targetSec:number, totalCount:number}}
  */
-function describeFreshness(nowSec) {
+function computePipelineMetrics(snaps, nowSec) {
   var now = nowSec || Math.floor(Date.now() / 1000);
-  var items = [];
-  function push(name, loader) {
-    try {
-      var v = loader();
-      if (v && v.generatedAt) items.push({ name: name, ts: Number(v.generatedAt) || 0 });
-    } catch (e) { /* 快照缺失不影响展示 */ }
-  }
-  push('赛程快照', function () { return require('./upcoming-local.json'); });
-  push('联赛快照', function () { return require('./leagues-local.json'); });
-  items.forEach(function (x) {
-    x.ageSec = x.ts > 0 ? (now - x.ts) : null;
-    x.ageText = _fmtAge(x.ageSec);
-    x.overTarget = (x.ageSec != null) && (x.ageSec > SLO.snapshotAgeSec.target);
+  var items = (Array.isArray(snaps) ? snaps : []).map(function (s) {
+    var ts = Number(s && s.ts) || 0;
+    var ageSec = ts > 0 ? (now - ts) : null;
+    return {
+      name: (s && s.name) || '',
+      ts: ts,
+      count: (s && s.count != null) ? Number(s.count) : null,
+      ageSec: ageSec,
+      ageText: _fmtAge(ageSec),
+      overTarget: (ageSec != null) && (ageSec > SLO.snapshotAgeSec.target)
+    };
   });
   var valid = items.filter(function (x) { return x.ts > 0; });
   var oldest = valid.length ? valid.reduce(function (a, b) { return (a.ts < b.ts) ? a : b; }) : null;
   var ageSec = oldest ? (now - oldest.ts) : null;
+  var totalCount = 0;
+  items.forEach(function (x) { if (x.count) totalCount += x.count; });
   return {
+    at: now,
     items: items,
     oldest: oldest,
     ageSec: ageSec,
     ageText: _fmtAge(ageSec),
     overTarget: (ageSec != null) && (ageSec > SLO.snapshotAgeSec.target),
-    targetSec: SLO.snapshotAgeSec.target
+    targetSec: SLO.snapshotAgeSec.target,
+    totalCount: totalCount
   };
+}
+
+/**
+ * 数据新鲜度（读本地快照的 generatedAt）。
+ * ★ 取**最旧**的那个作为"数据更新时间" —— 保守口径：用户看到的是**最差**新鲜度，
+ *   而不是被最新那个掩盖（两个快照的刷新周期不同，实测差可达十余天）。
+ * ★ 实现委托给纯函数 `computePipelineMetrics`（同一口径，CI 侧也用它）。
+ * @returns {{items:Array, oldest:Object|null, ageSec:number|null, ageText:string, overTarget:boolean, targetSec:number}}
+ */
+function describeFreshness(nowSec) {
+  var snaps = [];
+  function push(name, loader, pickCount) {
+    try {
+      var v = loader();
+      if (v && v.generatedAt) {
+        snaps.push({ name: name, ts: Number(v.generatedAt) || 0, count: pickCount(v) });
+      }
+    } catch (e) { /* 快照缺失不影响展示 */ }
+  }
+  push('赛程快照', function () { return require('./upcoming-local.json'); },
+    function (v) { return (v.events || []).length; });
+  push('联赛快照', function () { return require('./leagues-local.json'); },
+    function (v) { return (v.leagues || []).length; });
+  return computePipelineMetrics(snaps, nowSec);
 }
 
 module.exports = {
@@ -252,7 +279,9 @@ module.exports = {
   formatSummary: formatSummary,
   formatDetails: formatDetails,
   formatPct: formatPct,
+  formatAge: _fmtAge,          // 年龄格式化单一实现（客户端展示心跳/快照年龄时复用，避免各自造）
   recordLast: recordLast,
   getLast: getLast,
+  computePipelineMetrics: computePipelineMetrics,
   describeFreshness: describeFreshness
 };

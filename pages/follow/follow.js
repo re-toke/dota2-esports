@@ -148,6 +148,36 @@ Page({
     this.setData(patch);
     this.syncProfile();
     this._loadProfile();
+    // ★ P0-C（2026-09-26）：读**云端心跳** —— 由 CI 的定时任务写 curation_meta['diag_report']。
+    //   为什么这一步不可省：本地快照年龄只能说明"这台设备上的包有多旧"，
+    //   而**调度是否还在跑**必须由"来源不同"的一方回答（CI 写 / 客户端读）——
+    //   这正是方案里"静默死亡是唯一系统性脆弱点"的落点（原 `ef-health` 只探 EF，不探调度）。
+    this._loadRemoteHeartbeat();
+  },
+
+  /** 读云端心跳（fire-and-forget；失败静默，不影响页面） */
+  _loadRemoteHeartbeat() {
+    try {
+      const sb = require('../../utils/supabaseClient.js');
+      if (!sb.enabled()) return;
+      sb.rest('curation_meta', { select: 'key,value', eq: { key: 'diag_report' }, limit: 1 })
+        .then((rows) => {
+          const v = rows && rows[0] && rows[0].value;
+          if (!v || !v.at) return;
+          const ageSec = Math.floor(Date.now() / 1000) - Number(v.at);
+          // 心跳周期 = sync-upcoming 的 12h × 2（留一倍余量）⇒ 超 24h 视为停摆
+          const overdue = ageSec > 24 * 3600;
+          this.setData({
+            'health.remote': {
+              ageText: diagnostics.formatAge(ageSec),
+              overdue: overdue,
+              head: v.head || '',
+              oldestName: v.oldest ? v.oldest.name : ''
+            }
+          });
+        })
+        .catch(() => { /* 云端不可达时静默：本地新鲜度仍可展示 */ });
+    } catch (e) { /* 同上 */ }
   },
 
   // ★ 批次4 §11.2：chooseAvatar 回调——持久化到用户目录（临时路径重启失效），
