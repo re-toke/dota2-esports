@@ -1,5 +1,17 @@
 # 本地快照更新频率机制与依赖模块影响分析
 
+<!-- ARCHIVED-BANNER -->
+> ⚠️ **本文档已归档**（最后更新 2026-07-25，项目此后已演进约 2 个月）。
+> **请勿以本文作为现状依据。** 证据优先级：**代码 / `git log` > `deliverables/` > 本文 > 整合版**。
+> 已核实的两处典型失真：
+> · 文中描述的**微信云函数链路（`aggregation` / `upcoming_schedule` 预热等）已彻底退役** —— 现为 **Supabase 单后端**；
+> · **「进行中 = 最近 7 天」已改为「2 小时」**（见 `utils/config.js` 的 `leagueWindow`）。
+> 权威入口（均在**本仓库内**且最新）：
+> · `deliverables/项目复核与优化方案-v2-2026-09-26.md`
+> · `deliverables/复核意见-优化方案v2-2026-09-26.md`
+> · `deliverables/P0-B-SLO口径与采集点-2026-09-26.md`
+> 完整技术文档：`../DOTA2赛事通-项目技术文档-整合版.md`（工作区外 · v8.93 · 2026-09-25）
+
 > 对象：`utils/upcoming-local.json`（由 `scripts/fetch-liquipedia-upcoming.js` 生成），经 `pages/leagues/leagues.js` 的 `tryLocalUpcoming()` 在「即将到来」tab 回退链末端消费。
 > 结论先行：**本地快照本质是用「发版频率」换「零服务端」**。它的有效刷新天花板是小程序重新上传 + 审核发布的周期，不是任何 cron 频率。
 

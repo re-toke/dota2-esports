@@ -1,5 +1,17 @@
 # DOTA2赛事 · 本轮优化更新范围报告（UPDATE_SCOPE）
 
+<!-- ARCHIVED-BANNER -->
+> ⚠️ **本文档已归档**（最后更新 2026-07-27，项目此后已演进约 2 个月）。
+> **请勿以本文作为现状依据。** 证据优先级：**代码 / `git log` > `deliverables/` > 本文 > 整合版**。
+> 已核实的两处典型失真：
+> · 文中描述的**微信云函数链路（`aggregation` / `upcoming_schedule` 预热等）已彻底退役** —— 现为 **Supabase 单后端**；
+> · **「进行中 = 最近 7 天」已改为「2 小时」**（见 `utils/config.js` 的 `leagueWindow`）。
+> 权威入口（均在**本仓库内**且最新）：
+> · `deliverables/项目复核与优化方案-v2-2026-09-26.md`
+> · `deliverables/复核意见-优化方案v2-2026-09-26.md`
+> · `deliverables/P0-B-SLO口径与采集点-2026-09-26.md`
+> 完整技术文档：`../DOTA2赛事通-项目技术文档-整合版.md`（工作区外 · v8.93 · 2026-09-25）
+
 > 依据 `OPTIMIZATION_PLAN.md` 对项目的全面更新。本报告覆盖 **T1 / F1（前序）+ V1 / T2 / T3 / I3 / I4 / F2 / I5 / V2 / V3 / F3（前序本轮）+ V4 / T4 / T6（本轮客户端骨架）**。
 > 代码已通过 ESLint 校验：**0 error**；其余 warning 均为历史存量（`no-var`/`no-return-await`），本轮新增文件无 warning。
 
