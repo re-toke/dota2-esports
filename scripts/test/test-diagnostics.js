@@ -174,6 +174,39 @@ assert('★ describeFreshness 必须委托同一实现（口径不两处）',
     return f.ageSec === same.ageSec && f.overTarget === same.overTarget && f.ageText === same.ageText;
   })());
 
+console.log('\n--- ⑤ ★ 真机约束守卫：小程序里不得直接 require 主包 JSON ---');
+// 背景（2026-09-26 真机实测抓到）：微信对「主包 JSON 被分包 require」有兼容问题 ⇒ **返回 null**，
+//   这是 `*-data.js` 包装存在的原因（见 utils/upcoming-local-data.js 头注释）。
+//   实测：`diagnostics.describeFreshness` 原写法在小程序里恒为空 ⇒「我的」页显示「快照更新于 未知前」。
+//   ⚠️ Node 侧测试**看不出**这个问题（Node 里 JSON normal）⇒ 必须用**源码级**守卫锁住写法。
+const dsrc = fs.readFileSync(path.join(ROOT, 'utils/diagnostics.js'), 'utf8');
+assert('★ diagnostics.js 必须使用 *-data.js 包装读取快照',
+  dsrc.indexOf("require('./upcoming-local-data.js')") >= 0 &&
+  dsrc.indexOf("require('./leagues-local-data.js')") >= 0,
+  '未找到包装 require');
+// 真正的不变量是「**包装优先**」：`.json` 允许出现（作 Node/CI 兜底），但**必须排在包装之后**。
+//   （首版守卫写成了"完全禁止 .json"，误伤了刻意的兜底写法 —— 判据要落在不变量上。）
+assert('★ 包装必须优先于 .json（.json 仅可作 Node/CI 兜底）',
+  dsrc.indexOf("require('./upcoming-local-data.js')") < dsrc.indexOf("require('./upcoming-local.json')") &&
+  dsrc.indexOf("require('./leagues-local-data.js')") < dsrc.indexOf("require('./leagues-local.json')"),
+  'upcoming 包装 idx=' + dsrc.indexOf("require('./upcoming-local-data.js')") +
+  ' json idx=' + dsrc.indexOf("require('./upcoming-local.json')"));
+// 包装与 JSON 的导出必须一致（包装由脚本生成；若生成漏了，客户端会读到旧值/空值）
+const wUp = require('../../utils/upcoming-local-data.js');
+const jUp = require('../../utils/upcoming-local.json');
+assert('upcoming 包装与 JSON 的 generatedAt 一致（防包装过期）',
+  wUp.generatedAt === jUp.generatedAt, 'wrapper=' + wUp.generatedAt + ' json=' + jUp.generatedAt);
+assert('upcoming 包装与 JSON 的 events 数一致',
+  (wUp.events || []).length === (jUp.events || []).length,
+  'wrapper=' + (wUp.events || []).length + ' json=' + (jUp.events || []).length);
+const wLg = require('../../utils/leagues-local-data.js');
+const jLg = require('../../utils/leagues-local.json');
+assert('leagues 包装与 JSON 的 generatedAt 一致（防包装过期）',
+  wLg.generatedAt === jLg.generatedAt, 'wrapper=' + wLg.generatedAt + ' json=' + jLg.generatedAt);
+assert('leagues 包装与 JSON 的 leagues 数一致',
+  (wLg.leagues || []).length === (jLg.leagues || []).length,
+  'wrapper=' + (wLg.leagues || []).length + ' json=' + (jLg.leagues || []).length);
+
 console.log('\n=== 结果 ===');
 console.log('通过: ' + pass + '  失败: ' + fail);
 if (fail) { console.log('存在失败 ❌'); process.exit(1); }

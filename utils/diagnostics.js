@@ -258,17 +258,26 @@ function computePipelineMetrics(snaps, nowSec) {
  */
 function describeFreshness(nowSec) {
   var snaps = [];
-  function push(name, loader, pickCount) {
-    try {
-      var v = loader();
-      if (v && v.generatedAt) {
-        snaps.push({ name: name, ts: Number(v.generatedAt) || 0, count: pickCount(v) });
-      }
-    } catch (e) { /* 快照缺失不影响展示 */ }
+  // ★★ 2026-09-26（**真机实测抓到**）：小程序里**不能直接 require 主包 JSON** ——
+  //   微信对"主包 JSON 被分包 require"存在兼容问题（**返回 null**），`*-data.js` 包装正是为此生成
+  //   （见 `utils/upcoming-local-data.js` 头注释）。实测：原写法在小程序里恒为空
+  //   ⇒ 「我的」页显示「快照更新于 **未知**前」（Node 侧测试看不出来，因为 Node 里 JSON 正常）。
+  //   ⇒ 优先 JS 包装；`.json` 仅作 Node/CI 侧兜底（两侧导出形状一致：generatedAt / events|leagues）。
+  function push(name, wrapLoader, jsonLoader, pickCount) {
+    var v = null;
+    try { v = wrapLoader(); } catch (e) { v = null; }
+    if (!v || !v.generatedAt) { try { v = jsonLoader(); } catch (e2) { v = null; } }
+    if (v && v.generatedAt) {
+      snaps.push({ name: name, ts: Number(v.generatedAt) || 0, count: pickCount(v) });
+    }
   }
-  push('赛程快照', function () { return require('./upcoming-local.json'); },
+  push('赛程快照',
+    function () { return require('./upcoming-local-data.js'); },
+    function () { return require('./upcoming-local.json'); },
     function (v) { return (v.events || []).length; });
-  push('联赛快照', function () { return require('./leagues-local.json'); },
+  push('联赛快照',
+    function () { return require('./leagues-local-data.js'); },
+    function () { return require('./leagues-local.json'); },
     function (v) { return (v.leagues || []).length; });
   return computePipelineMetrics(snaps, nowSec);
 }
