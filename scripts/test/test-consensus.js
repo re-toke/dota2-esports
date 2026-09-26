@@ -202,6 +202,48 @@ check('weightOf 未知来源默认 1', () => {
 // ===== 运行结果 =====
 const total = passed + failed;
 console.log('\n=== 结果 ===');
+// ===== P1-C 阶段一（2026-09-26）：来源「族」标注（零行为变更，只让"假独立"可见）=====
+check('P1-C: 来源族划分正确（Valve 派生 / Liquipedia 派生 / 本地）', function () {
+  eq(C.familyOf('steam'), 'valve', 'steam 属 Valve 派生');
+  eq(C.familyOf('stratz'), 'valve', 'stratz 属 Valve 派生');
+  eq(C.familyOf('opendota'), 'valve', 'opendota 属 Valve 派生');
+  eq(C.familyOf('liquipedia'), 'lp', 'liquipedia 属 LP 族');
+  // ★ 关键结论：curation 是**人工转录自 LP** ⇒ 与 liquipedia 同族，**不是独立票**
+  eq(C.familyOf('curation'), 'lp', 'curation 属 LP 族（人工转录，非独立源）');
+  eq(C.familyOf('haglund'), 'lp', 'haglund 属 LP 族（第三方镜像，自认派生自 LP）');
+  eq(C.familyOf('community'), 'local', 'community 属本地族（正则兜底）');
+  eq(C.familyOf('某个新来源'), 'other', '未知来源归 other（不猜）');
+});
+
+check('P1-C: ★ 六源全上时"表面 6 票、实际仅 3 族"（LP 族占 56%）', function () {
+  const entries = Object.keys(C.SOURCE_WEIGHT).map((s) => ({ source: s }));
+  const r = C.familiesOf(entries);
+  eq(r.distinctFamilies, 3, '应只有 3 个族，实际 ' + r.distinctFamilies + '：' + JSON.stringify(r.byFamily));
+  eq(r.byFamily.lp, 7, 'LP 族权重应为 4+3=7，实际 ' + r.byFamily.lp);
+  eq(r.byFamily.valve, 4.5, 'Valve 族权重应为 2+1.5+1=4.5，实际 ' + r.byFamily.valve);
+  eq(r.byFamily.local, 1, '本地族权重应为 1');
+  eq(r.totalWeight, 12.5, '总权重 12.5，实际 ' + r.totalWeight);
+  assert(Math.abs(r.maxFamilyShare - 7 / 12.5) < 1e-9,
+    '最大族占比应为 7/12.5=56%，实际 ' + r.maxFamilyShare);
+  eq(r.dominant.family, 'lp', '主导族应为 LP');
+});
+
+check('P1-C: ★ 同族多源不得被当作跨族（反向断言）', function () {
+  const r = C.familiesOf([{ source: 'steam' }, { source: 'stratz' }, { source: 'opendota' }]);
+  eq(r.distinctFamilies, 1, '三个 Valve 派生源应只算 1 族，实际 ' + r.distinctFamilies);
+  eq(r.dominant.family, 'valve', '主导族应为 valve');
+  eq(r.maxFamilyShare, 1, '单一族占比应为 1');
+});
+
+check('P1-C: familiesOf 边界（空/非法/零权不抛错）', function () {
+  const a = C.familiesOf([]);
+  const b = C.familiesOf(null);
+  const c = C.familiesOf([{ source: 'steam', weight: 0 }]);
+  assert(a.distinctFamilies === 0 && a.maxFamilyShare === 0 && a.dominant === null, '空输入应返回零值');
+  assert(b.distinctFamilies === 0, 'null 不应抛错');
+  assert(c.totalWeight === 0 && c.dominant === null, '零权候选不计入');
+});
+
 console.log('通过: ' + passed + '  失败: ' + failed);
 if (failed === 0) {
   console.log('[test-consensus] 全部通过（' + passed + '/' + total + '）');

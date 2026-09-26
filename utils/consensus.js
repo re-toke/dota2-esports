@@ -30,6 +30,67 @@ function weightOf(source) {
   return SOURCE_WEIGHT[source] != null ? SOURCE_WEIGHT[source] : 1;
 }
 
+// ★★ 2026-09-26（P1-C 阶段一）：**来源"族"标注** —— 零行为变更，只让"假独立"可见。
+//
+// 为什么必须标注（复核意见 D.1-④）：
+//   上表 6 个来源**看着像 6 票独立**，实际它们只属于 **3 个族**：
+//     · 族 A `valve`  = steam / stratz / opendota —— **全是 Valve 派生**（同源数据互相印证毫无意义）
+//     · 族 B `lp`     = liquipedia + **curation**（curation 大量条目的注释写明"来源：Liquipedia"，
+//                        例如 `curation.js` 的 L60/L476/L517…；haglund 亦自认"数据本身派生自 Liquipedia"）
+//     · 族 C `local`  = community（本地正则，不派生自任何外部源，但可信度最低）
+//   ⇒ 冲突时 LP 族 4+3=7 的权重 vs Valve 族 2+1.5+1=4.5 —— **看起来"两个来源印证"，
+//     实际是"一个族内部的转录与再分发"**。这是本项目**准确度的真实天花板**（LPDB API 被拒后无法再扩独立源）。
+//
+// ⚠️ **本阶段刻意不动 `SOURCE_WEIGHT` 与任何分级结果** —— 去重加权（让同族只记一票）会
+//    **改变已上线赛事的级别**，属行为变更，须先量化影响再决策（见 deliverables 的 P1-C 方案）。
+var SOURCE_FAMILY = {
+  liquipedia: 'lp',
+  curation: 'lp',      // 人工转录自 LP ⇒ 与 liquipedia 同族，不是独立票
+  haglund: 'lp',       // 第三方镜像，自认派生自 LP
+  steam: 'valve',
+  stratz: 'valve',
+  opendota: 'valve',
+  community: 'local',  // 本地正则兜底：不派生外部源，但权重最低
+};
+
+/** 来源 → 族名（未知来源归入 `other`，不猜） */
+function familyOf(source) {
+  return SOURCE_FAMILY[source] || 'other';
+}
+
+/**
+ * 统计一组候选的**族分布**（纯函数）。
+ * @param {Array<{source:string, weight?:number}>} entries 候选（与 consensusTier 的入参同形）
+ * @returns {{byFamily:Object, families:Array<string>, distinctFamilies:number, totalWeight:number, dominant:Object|null, maxFamilyShare:number}}
+ */
+function familiesOf(entries) {
+  var list = Array.isArray(entries) ? entries : [];
+  var byFamily = {};
+  var total = 0;
+  list.forEach(function (e) {
+    if (!e) return;
+    var f = familyOf(e.source);
+    var w = (e.weight != null) ? Number(e.weight) : weightOf(e.source);
+    if (!w || w <= 0) return;
+    byFamily[f] = (byFamily[f] || 0) + w;
+    total += w;
+  });
+  var families = Object.keys(byFamily);
+  var dominant = null;
+  families.forEach(function (f) {
+    if (!dominant || byFamily[f] > byFamily[dominant]) dominant = f;
+  });
+  return {
+    byFamily: byFamily,
+    families: families,
+    distinctFamilies: families.length,
+    totalWeight: total,
+    dominant: dominant ? { family: dominant, weight: byFamily[dominant] } : null,
+    // 最大族的权重占比 —— 越接近 1 越说明"判断其实只有单一来源族支撑"
+    maxFamilyShare: total > 0 ? (byFamily[dominant] / total) : 0,
+  };
+}
+
 // ===== 归一化 =====
 // 赛事名 / 队名归一：转小写，仅保留 [a-z 0-9 中文]，去掉一切分隔符与标点。
 // 例：'The International 2025' -> 'theinternational2025' -> 'international2025'
@@ -301,6 +362,9 @@ module.exports = {
   CONF_RANK: CONF_RANK,
   SOURCE_WEIGHT: SOURCE_WEIGHT,
   weightOf: weightOf,
+  SOURCE_FAMILY: SOURCE_FAMILY,
+  familyOf: familyOf,
+  familiesOf: familiesOf,
   voteName: voteName,
   voteTime: voteTime,
   consensusTier: consensusTier,
