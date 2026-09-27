@@ -1312,6 +1312,57 @@ check('names：★ 全库禁止再内联该规则（白名单外一律 FAIL）',
     assert(!(miCall < miEarly), '★ 敏感性：顺序调换后，判据必须变 false（证明它真在看顺序）');
   });
 
+  // ===== 2026-09-27（用户实测修复）：单场 series_type=2（明确 BO5）应优先于赛事级弱信号 =====
+  //  实测：LP 卡 `liq-teamyandex__natusvincere-…`（st=2、2:0、phase=live、games=0）本应 BO5，
+  //  但赛事 LP Format 段的 `metaFormatBo='BO3'`（S2）抢先 ⇒ 判 BO3（与用户"这场是 BO5"矛盾）。
+  //  判别实验（同字段只换 ctx）：ctx={} ⇒ BO5 ｜ {metaFormatBo:'BO3'} ⇒ **BO3**（修前）。
+  check('sources 的 BO 判定：series_type=2（BO5）必须优先于赛事级 Format 段', () => {
+    const src = require('../../utils/sources.js');
+    const base = { key: 'liq-test', seriesType: 2, games: [], scoreA: 2, scoreB: 0,
+      mapSlots: 0, declaredBo: null, stageKey: 'playoff', phase: 'live' };
+    const bo = (patch, ctx) => src.applyBo(Object.assign({}, base, patch), ctx).boType;
+    // ① ★ 本案：赛事级 BO3 不得压过单场 BO5 信号
+    assert(bo({}, {}) === 'BO5', '空 ctx 下 st=2 应判 BO5');
+    assert(bo({}, { metaFormatBo: 'BO3' }) === 'BO5', '★ 赛事级 metaFormatBo=BO3 不得压过 st=2（BO5）');
+    assert(bo({}, { boFormat: { playoff: 'BO3' } }) === 'BO5', '★ boFormat.playoff=BO3 亦不得压过 st=2');
+    // ② 回归：**st=1 完全不受影响**（实测 st=1 不可靠：1/2/3 局的系列都标 1 ⇒ 刻意不提前它）
+    assert(bo({ seriesType: 1, games: [{}, {}], phase: 'recent' }, { metaFormatBo: 'BO3' }) === 'BO3',
+      '回归：st=1 的 2:0 已结束仍应判 BO3');
+    // ③ ★ `consistent('BO5')` 校验**外部不可观测**（`finalize()` 的"局数越界抬升"会把 6 局合法升到 BO5），
+    //   ⇒ 改用**源码级守卫**断言提前分支确实带校验（静态可查，且能防后人删掉校验）
+    const fs2 = require('fs');
+    const path2 = require('path');
+    const ssrc = fs2.readFileSync(path2.join(__dirname, '..', '..', 'utils', 'sources.js'), 'utf8');
+    assert(ssrc.indexOf("if (st === 2 && consistent('BO5')) return finalize('BO5');") >= 0,
+      '★ 提前分支必须带 consistent(\'BO5\') 校验（防脏数据/局数越界）');
+    // ④ ★ 敏感性：仅把 st 由 2 改成 1 ⇒ 输出必须变（证明判据真在看 seriesType）
+    assert(bo({}, { metaFormatBo: 'BO3' }) === 'BO5' &&
+      bo({ seriesType: 1 }, { metaFormatBo: 'BO3' }) === 'BO3',
+      '★ 判据敏感性：st=2→1 后输出必须变化（否则是永真断言）');
+  });
+
+  // ===== 2026-09-27（用户实测修复）：详情页「比分终局归一」必须**同时**更新 phase 与 isLive =====
+  //  实测：`s1147599` 出现 `isLive === true` 且 `phase === 'recent'`（同卡字段矛盾）。
+  //  根因：该处注释声称「写回 s.phase ⇒ 分段 / WXML 徽标 / **isLive** 三处同源」，但实现**只写了 s.phase**。
+  //  ⇒ 这也是本项目**同一类 bug 的另一半**（L1100 曾记录"只改 isLive 一个字段 ⇒ 只修了一半"）。
+  //  ⇒ 用源码级守卫锁住"两个字段必须一起改"，防后人只改一个。
+  check('★ 源码守卫：比分终局归一必须同时改 phase 与 isLive（防半修回归）', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const src = fs.readFileSync(path.join(__dirname, '..', '..',
+      'subpackages', 'detail', 'league-detail', 'league-detail.js'), 'utf8');
+    const i = src.indexOf("s.phase = 'recent';");
+    assert(i > 0, "未找到 `s.phase = 'recent';`（是否被改名/删除？）");
+    // 取该赋值之后的窗口（★ 需够宽：归一分支内夹着较长注释，实测 400 字符不够）
+    const win = src.slice(i, i + 2000);
+    assert(win.indexOf('s.isLive = false;') >= 0,
+      '★ 归一 phase 后必须同步 `s.isLive = false;`（否则同卡 isLive=true + phase=recent 矛盾）');
+    // ★ 敏感性：窗口缩到 30 字符（不含 isLive 同步）⇒ 判据应为 false（证明它真在看这段代码）
+    const wrong = src.slice(i, i + 30);
+    assert(!(wrong.indexOf('s.isLive = false;') >= 0),
+      '★ 敏感性：窗口内无 isLive 同步时判据必须失效（证明是这段代码在发挥作用）');
+  });
+
   check('★ LP UA 合规：标识性 UA 单点化（禁伪装浏览器 UA / 禁占位联系方式）', () => {
     const fs = require('fs');
     const path = require('path');

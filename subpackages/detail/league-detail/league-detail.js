@@ -1413,7 +1413,15 @@ Page({
           //   对象由本次 buildSeriesFromSources 新建（非跨页共享缓存），原地改写安全。
           if (s.phase === 'live' && _decidedByScore(s, s.boType)) {
             s.phase = 'recent';
-            console.log('[league-detail] 比分达终局 → phase 归一为 recent：' +
+            // ★★ 2026-09-27（用户实测修复）：**必须同步 `isLive`** —— 上一条注释声称
+            //   「写回 s.phase ⇒ 分段 / WXML 徽标 / **isLive** 三处同源」，但实现只写了 `s.phase`
+            //   ⇒ 实测出现**同卡字段矛盾**：`isLive === true` 且 `phase === 'recent'`
+            //   （例：`s1147599`）⇒ 任何按 `isLive` 判断的逻辑会与按 `phase` 渲染的界面不一致。
+            //   ★ 这也是本项目**同一类 bug 的另一半**：L1100 处曾记录"09-23 的修复**只改了 isLive 一个字段**，
+            //     分段与徽标仍用原始 phase ⇒ 只修了一半" ⇒ 现在轮到"只改 phase 不改 isLive"。
+            //   ⇒ 两个字段在归一后必须**同时**更新（本页 LP 路径天然一致：其 `isLive` 由归一后的 phase 算出）。
+            s.isLive = false;
+            console.log('[league-detail] 比分达终局 → phase 归一为 recent（并同步 isLive=false）：' +
               (s.team1Name || s.teamA || '') + ' vs ' + (s.team2Name || s.teamB || ''));
           }
           if (s.phase === 'live') liveList.push(s);

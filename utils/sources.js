@@ -1763,6 +1763,17 @@ function resolveBoType(series, ctx) {
 
   // S1 每场声明（Liquipedia bestof）
   if (series && series.declaredBo && consistent(series.declaredBo)) return finalize(series.declaredBo);
+  // ★★ 2026-09-27（用户实测修复）：**单场 `series_type=2`（明确 BO5）应优先于赛事级弱信号（S2）**。
+  //   实测：LP 卡 `liq-teamyandex__natusvincere-…`（`st=2`、`2:0`、`phase=live`、`games=0`）本应 BO5，
+  //   但该赛事 LP Format 段的 `metaFormatBo='BO3'`（S2）**抢先** ⇒ 判 BO3
+  //   ⇒ 与用户"这场是 BO5"的反馈矛盾（也是"BO5 决赛 BO 判定错"的同一根因）。
+  //   判别实验（Node 直调 applyBo，同字段只换 ctx）：
+  //     ctx={} ⇒ **BO5** ｜ ctx={metaFormatBo:'BO3'} ⇒ **BO3** ｜ ctx={boFormat:{playoff:'BO3'}} ⇒ **BO3**
+  //   ⇒ 单场 `series_type` 比"赛事级 Format 段"更精确 ⇒ 提前到 S2 之前。
+  //   ★ 风险控制：① **仅提前 `st===2`（BO5）**——`st===1` **不可靠**（实测 1/2/3 局的系列都标 1）故不动；
+  //              ② 仍保留 `consistent('BO5')` 校验（防脏数据/局数越界）；
+  //              ③ 不改动任何其它分支 ⇒ 非 BO5 场景零影响。
+  if (st === 2 && consistent('BO5')) return finalize('BO5');
   // S2 赛制文本
   if (fmtBo && consistent(fmtBo)) return finalize(fmtBo);
   // S3 series_type 完整映射（3=BO2 为 2026-08-04 实证补入）
