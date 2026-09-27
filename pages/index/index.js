@@ -790,6 +790,17 @@ Page({
     });
     (live || []).forEach((m) => {
       if (!m || !m.league_id || m.league_id <= 0) return;
+      // ★★ 2026-09-27 修复「已结束的对局仍显示进行中 / 比分少算一局」（实测 LGD vs NAVI 真实 1:2 被显示成 live 1:1）：
+      //   OpenDota `/live` **在比赛结束后仍会残留该局** —— 全量实测 **28%（28/100）** 的条目
+      //   `deactivate_time ≠ 0`；本例该局残留 **≥2.7h**（`last_update_time` 已 93 分钟未变）。
+      //   而本函数让 `/live` **先入表**、`pushUnique` 按 `match_id` 去重 ⇒ 后到的 **pro 已结算版本被跳过**；
+      //   叠加 `_normalizeLiveMatch` 硬编码 `radiant_win: null` ⇒ 该局**永不计入胜场**
+      //   ⇒ 系列少算一局（1:2 → 1:1）⇒ 未达 BO 终局 ⇒ `sources.js` 强制 `isLive=true` ⇒ 卡片显示「进行中」。
+      //   ⇒ 判据用 `/live` 原生字段 **`deactivate_time`**（实测对照：已结束残留 = 非 0；真正进行中 = 0）。
+      //   ⚠️ 不能用 `game_time` 判（全量实测含 **-14** 等脏值）；也不宜用"最后活动时间阈值"
+      //     （本例 2.7h 未达既有 `isStaleLiveSeries` 的 3h 兜底）。
+      //   ⚠️ 已结束的局**不在此并入**，交给 pro 侧权威（含比分/胜负）——避免"未结算副本顶掉已结算数据"。
+      if (Number(m.deactivate_time) > 0) return;
       const norm = this._normalizeLiveMatch(m, now);
       // league_name 空值回填（修复 2）
       if (!norm.league_name) {
@@ -972,38 +983,49 @@ Page({
     // ★★ 2026-09-23：卡片级「同一对局」合并（说明见文件顶部的 _pairKeyOfCard/_preferSameMatchCard）。
     //   插在此处（所有来源都已入表之后）——**不改动任何来源各自的取数/入表逻辑**，只做一次收口，
     //   风险最小：两卡同时存在本就是异常态，合并只会让页面更正确。
-    const pairIndex = {};   // 键 → 已入表的卡（严格键/宽松键都指向它）
+    // ★★ 2026-09-27 修复「同一对队多次交手 ⇒ 重复卡」（实测：LGD vs NAVI 有 09-24 与 09-27 两场）：
+    //   原实现 `pairIndex[键] = 卡` 是**单卡**，且"超窗不合并"分支会把它**改写成最新卡**
+    //   ⇒ 后续本应就近配对的卡**比错了对象**（比到了另一天那场，差 68.6h > 12h）⇒ **漏合并** ⇒ 两张卡并存。
+    //   现改为：**每个键维护候选数组** + 用纯函数 `homeDedupe.nearestByStart` 取 **start 最接近**的一张比较。
+    const pairIndex = {};   // 键 → [候选卡, ...]（严格键/宽松键都指向同一批候选）
     const keptCards = [];   // 最终保留的卡（顺序稳定）
+    const PAIR_WINDOW_SEC = 12 * 3600;   // 12h 内才视为同一对局（防"同日两次交手"被误并）
+    const _idxAdd = (card, ks) => { ks.forEach((kk) => { (pairIndex[kk] = pairIndex[kk] || []).push(card); }); };
+    const _idxDel = (card) => {
+      Object.keys(pairIndex).forEach((kk) => {
+        const arr = pairIndex[kk];
+        const at2 = arr.indexOf(card);
+        if (at2 >= 0) arr.splice(at2, 1);
+      });
+    };
     Object.keys(byKey).forEach((k) => {
       const c = byKey[k];
       const keys = homeDedupe.pairKeysOfCard(c);
       if (!keys.length) { keptCards.push(c); return; }   // 队名缺失 → 原样保留
-      let hit = null;
-      for (let i = 0; i < keys.length; i++) { if (pairIndex[keys[i]]) { hit = pairIndex[keys[i]]; break; } }
-      if (!hit) {
-        keys.forEach((kk) => { pairIndex[kk] = c; });
+      // 候选：本卡任一键下已入表的卡（去重后交给纯函数按 start 就近挑）
+      const cands = [];
+      keys.forEach((kk) => {
+        (pairIndex[kk] || []).forEach((x) => { if (cands.indexOf(x) < 0) cands.push(x); });
+      });
+      const near = homeDedupe.nearestByStart(cands, c, PAIR_WINDOW_SEC);
+      if (!near) {                       // 无可配对（或无候选 / 超 12h 窗）⇒ 新卡入表并成为候选
+        _idxAdd(c, keys);
         keptCards.push(c);
         return;
       }
-      // 12h 内才视为同一对局（防"同日两次交手"被误并）
-      if (Math.abs((hit.start || 0) - (c.start || 0)) > 12 * 3600) {
-        keys.forEach((kk) => { pairIndex[kk] = c; });
-        keptCards.push(c);
-        return;
-      }
+      const hit = near.hit;
       const keep = homeDedupe.preferSameMatchCard(hit, c);
       const drop = (keep === hit) ? c : hit;
       if (keep === drop) { return; }
       // 保留 keep、丢弃 drop：把两个候选的所有键都重新指向 keep，并把 keptCards 里的 drop 换掉
       const at = keptCards.indexOf(drop);
       if (at >= 0) keptCards[at] = keep; else keptCards.push(keep);
-      keys.forEach((kk) => { pairIndex[kk] = keep; });
-      const dKeys = homeDedupe.pairKeysOfCard(drop);
-      dKeys.forEach((kk) => { pairIndex[kk] = keep; });
+      _idxDel(drop);
+      _idxAdd(keep, homeDedupe.pairKeysOfCard(keep));
       console.log('[index] 同一对局卡片合并：保留 ' + keep.status + '（' +
         ((keep.teamA && keep.teamA.name) || '?') + ' vs ' + ((keep.teamB && keep.teamB.name) || '?') +
         '），丢弃 ' + drop.status + '（key=' + drop.key + '，start 差 ' +
-        Math.abs((hit.start || 0) - (c.start || 0)) + 's，命中键=' + keys.join(' / ') + '）');
+        near.diff + 's，命中键=' + keys.join(' / ') + '）');
     });
     this._allMatches = keptCards;
     // ★★ 2026-09-26（P0-B）：**数据质量指标采集** —— 一行汇总**常开**，明细走 config.debug.verboseLog。

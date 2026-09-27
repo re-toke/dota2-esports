@@ -152,10 +152,46 @@ function _shortDate(key) {
   return Number(m[2]) + '-' + Number(m[3]);
 }
 
+/**
+ * ★★ 2026-09-27（修复「同一对队多次交手 ⇒ 重复卡」）：从候选卡里按 **start 就近** 选一张。
+ *
+ * ## 背景（实测根因）
+ * 首页「同一对局卡片合并」原实现用 `pairIndex[键] = 卡`（**单卡**），且"超窗不合并"分支会把它
+ * **改写成最新卡** ⇒ 后续本应就近配对的卡**比错了对象**：
+ * 实测 LGD vs NAVI 有 **09-24** 与 **09-27** 两场（同一对队、相隔 71.4h）；
+ * 处理 09-27 的 LP 卡时 `hit` 变成了 09-24 那张 ⇒ 差 68.6h > 12h ⇒ **误判为不同对局** ⇒ 漏合并 ⇒ **两张卡并存**。
+ *
+ * ## 规则
+ * - 在所有候选里取 `|candidate.start - target.start|` **最小**的那张；
+ * - 若最小差值 > `windowSec`（12h，防"同日两次交手"被误并）⇒ 返回 null（**不合并**）。
+ *
+ * @param {Array} candidates 已入表的候选卡
+ * @param {Object} target 待判定卡
+ * @param {number} windowSec 视为"同一对局"的最大 start 差（秒）
+ * @returns {{hit:Object, diff:number}|null}
+ */
+function _nearestByStart(candidates, target, windowSec) {
+  const cs = Array.isArray(candidates) ? candidates : [];
+  if (!target || !cs.length) return null;
+  const t = Number(target.start) || 0;
+  let hit = null; let diff = 0;
+  for (let i = 0; i < cs.length; i++) {
+    const x = cs[i];
+    if (!x) continue;
+    const d = Math.abs((Number(x.start) || 0) - t);
+    if (hit === null || d < diff) { hit = x; diff = d; }
+  }
+  if (!hit) return null;
+  const w = (typeof windowSec === 'number' && windowSec >= 0) ? windowSec : 12 * 3600;
+  if (diff > w) return null;
+  return { hit: hit, diff: diff };
+}
+
 module.exports = {
   pairKeysOfCard: _pairKeysOfCard,
   teamToken: _teamToken,
   preferSameMatchCard: _preferSameMatchCard,
   homePassGrade: _homePassGrade,
-  nearestDayWithMatches: _nearestDayWithMatches
+  nearestDayWithMatches: _nearestDayWithMatches,
+  nearestByStart: _nearestByStart
 };

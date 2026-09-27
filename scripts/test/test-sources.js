@@ -1177,6 +1177,44 @@ check('names：★ 全库禁止再内联该规则（白名单外一律 FAIL）',
     assert(fn(zeroed, 'd2') === null, '★ 判据敏感性：清零后应返回 null（否则是永真断言）');
   });
 
+  // ===== 2026-09-27：首页「同一对队多次交手 ⇒ 重复卡」就近配对（nearestByStart）=====
+  //  线上实测（LGD vs NAVI，三张卡同队名对键）：
+  //    s_s1147473          live  1:1  start=1790506044  ← 09-27 那场
+  //    s_s1146094          ended 2:1  start=1790249044  ← 09-24 那场（相隔 71.4h，正确不合并）
+  //    s_lplive_0_29841600 ended 0:0  start=1790496000  ← 09-27（与第一张仅差 10044s，**本应合并**）
+  //  根因：旧实现 `pairIndex[键] = 卡`（单卡）且"超窗"分支**改写索引** ⇒ 处理 LP 卡时 hit 变成
+  //        09-24 那张（差 247000s > 12h）⇒ 误判为不同对局 ⇒ 漏合并 ⇒ 两张卡并存。
+  check('homeDedupe.nearestByStart：同队多次交手时按 start 就近配对（修重复卡）', () => {
+    const home = require('../../utils/homeDedupe.js');
+    const fn = home.nearestByStart;
+    const W = 12 * 3600;
+    const A = { key: 's_s1147473', start: 1790506044 };   // 09-27
+    const B = { key: 's_s1146094', start: 1790249044 };   // 09-24
+    const LP = { key: 's_lplive_0_29841600', start: 1790496000 };  // 09-27（LP 来源）
+    // ① ★ 修复点：候选里同时有 09-24 与 09-27 ⇒ 必须挑 **09-27**（差 10044s），而不是 09-24（差 247000s）
+    const r1 = fn([A, B], LP, W);
+    assert(r1 && r1.hit === A, '★ 应就近挑中 09-27 那张（差 10044s），实际: ' +
+      JSON.stringify(r1 && { key: r1.hit && r1.hit.key, diff: r1.diff }));
+    assert(r1.diff === Math.abs(A.start - LP.start), 'diff 应为真实 start 差（10044s），实际 ' + r1.diff);
+    // ② 旧 bug 的可复现对照：若候选里**只剩** 09-24 那张 ⇒ 超 12h ⇒ 返回 null（= 旧实现的漏合并）
+    assert(fn([B], LP, W) === null, '★ 只看 09-24 那张时应判"非同一对局"（复现旧 bug 的漏合并路径）');
+    // ③ 超窗一律不合并（防"同日/隔日两次交手"被误并）
+    assert(fn([{ key: 'x', start: LP.start + 13 * 3600 }], LP, W) === null, '13h 差应超窗不合并');
+    assert(fn([{ key: 'y', start: LP.start + 11 * 3600 }], LP, W) !== null, '11h 差应在窗内可合并');
+    // ④ 边界
+    assert(fn([], LP, W) === null && fn(null, LP, W) === null, '无候选/非数组应返回 null');
+    assert(fn([A], null, W) === null, 'target 缺失应返回 null');
+    const noStart = fn([{ key: 'n', start: 0 }], { key: 'm', start: 0 }, W);
+    assert(noStart && noStart.diff === 0, 'start 缺失（0）时应视作差 0 而非抛错');
+    // ⑤ ★ 敏感性：窗口收窄到 1h ⇒ 原本可配对（2.79h）应变为 null（证明 window 真在起作用）
+    assert(fn([A], LP, W) !== null && fn([A], LP, 3600) === null,
+      '★ 判据敏感性：窗口 12h→1h 后 2.79h 的差应判为不可配对');
+    // ⑥ 纯函数：不得改写入参
+    const snap = JSON.stringify([A, B, LP]);
+    fn([A, B], LP, W);
+    assert(JSON.stringify([A, B, LP]) === snap, '不得改写入参');
+  });
+
   check('★ LP UA 合规：标识性 UA 单点化（禁伪装浏览器 UA / 禁占位联系方式）', () => {
     const fs = require('fs');
     const path = require('path');
