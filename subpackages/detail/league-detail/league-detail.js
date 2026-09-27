@@ -912,9 +912,60 @@ Page({
             if (isTBD(n1) || isTBD(n2)) return null;  // TBD 不参与合并
             return normalizeTeamNameForDedup(n1) + '__' + normalizeTeamNameForDedup(n2);
           }
+          // ★★ 2026-09-27（用户实测修复）：「**含 TBD 的占位卡**是否已被"双方已定的实际比赛"覆盖」。
+          //
+          // ## 背景（实测：PGL Wallachia S9 详情页）
+          // 同一场对局被拆成**两张卡并存**：
+          //   · `Natus Vincere vs Team Yandex`（OpenDota，双方已定，series_id=1147599）
+          //   · `Team Yandex vs TBD`（Liquipedia 占位，对手未更新；计划 20:00，与上者差 52min）
+          // 根因：下方 P0-D2 规则「**含 TBD 的对阵直接保留、不参与去重**」
+          //   —— 该规则**本身合理**（防 "TBD vs A" 与 "TBD vs B" 因 TBD 相同被误并），
+          //   但它在「已定一方**已被实际比赛覆盖**」的情形下漏了去重 ⇒ 重复卡。
+          //
+          // ## 判据（收紧，避免误并）
+          // 仅当**同时**满足才判定"已被覆盖"：
+          //   ① 该卡**恰有一方未定**（另一方已定）；双方都 TBD ⇒ 无共同方可锚定 ⇒ **不处理**；
+          //   ② 已定方与某张"双方已定"的对阵**任一方归一化后严格相等**（复用同一个 normalizeTeamNameForDedup ⇒ 口径一致）；
+          //   ③ 两者开赛时间差 **< 2h**（与下方既有 D2 时间窗同口径）。
+          // ⇒ 调用方据此**只丢弃占位卡**，**不做双向合并** ⇒ 不引入"TBD 互相误并"（原意图完整保留）。
+          //
+          // @param {object} m LP 排期条目（含 team1Name/team2Name/startTime）
+          // @param {Map<string,number>} keysMap 已定对阵键（`归一名A__归一名B`）→ 该系列首场开赛时间
+          function placeholderCoveredByReal(m, keysMap, timeMap) {
+            if (!m || !keysMap || typeof keysMap.forEach !== 'function') return false;
+            var tbd1 = isTBD(m.team1Name), tbd2 = isTBD(m.team2Name);
+            if (!tbd1 && !tbd2) return false;        // 非占位卡：交给原逻辑
+            if (tbd1 && tbd2) return false;          // 双方未定：无共同方锚定 ⇒ 保留（原意图）
+            var known = normalizeTeamNameForDedup(tbd1 ? m.team2Name : m.team1Name);
+            var mStart = m.startTime || 0;
+            if (!known || known.length < 3 || !mStart) return false;   // 无归一化名/无时间 ⇒ 不敢判定（保守保留）
+            var covered = false;
+            keysMap.forEach(function (t0, k) {
+              if (covered) return;
+              var parts = String(k).split('__');
+              if (parts.length !== 2) return;
+              if (parts[0] !== known && parts[1] !== known) return;    // 必须含共同方（严格相等）
+              // ★ 时间取"该对队多场时间"数组（同队多次交手 ⇒ 任一场接近即视为被覆盖）；
+              //   表缺失时退回主表值（`openDotaKeys` 的值，实测常为 0 故仅作兜底）
+              var arr = (timeMap && typeof timeMap.get === 'function') ? timeMap.get(k) : null;
+              var times = (arr && arr.length) ? arr : (t0 ? [t0] : []);
+              for (var _i = 0; _i < times.length; _i++) {
+                if (times[_i] && Math.abs(mStart - times[_i]) < 2 * 3600) { covered = true; break; }
+              }
+            });
+            return covered;
+          }
           // 构建 OpenDota 已有对阵的去重键（队名归一化：小写+去空格+去后缀）
           // 用于剔除 Liquipedia 中已被 OpenDota 返回的已结束对阵
           const openDotaKeys = new Map();   // key -> 该系列首场开赛时间（D2 时间窗去重用）
+          // ★★ 2026-09-27：**键 → 该对队的多场开赛时间数组**（供占位卡覆盖判定用）。
+          //   为什么是"数组"而不是单值：**同一对队在同一赛事会多次交手**（实测
+          //   `natusvincere__teamyandex` 既有 9-21 那场、也有今天 20:52 那场），
+          //   单值会被**后写入的场次覆盖** ⇒ 占位卡（今天 20:00）与"9-21 那场"差 5.8 天 ⇒ 判据失效。
+          //   ★ 这与首页 `pairIndex` 的"单值索引被覆盖"属同一类缺陷（见 MEMORY 相关条目）。
+          //   为什么另建而不改 `openDotaKeys` 的值：后者的值参与**既有 D2 时间窗去重**，
+          //   改动它会改变既有去重行为；本表只服务新增的占位卡判定，**零副作用**。
+          const openDotaTimeByKey = new Map();   // key -> [startTime, ...]
           const openDotaNames = [];  // ★ v3 优化项25：存储归一化名供模糊匹配
           // ★ v3 优化项33（2026-08-03）：OpenDota match_id 集合（P0b 硬关联去重）。
           // Liquipedia {{Match}} 顶层的 matchid1/matchid2 与 OpenDota match_id 直接对应，
@@ -954,6 +1005,16 @@ Page({
               if (k1) {
                 openDotaKeys.set(k1, _g0 ? (_g0.start_time || 0) : 0);
                 openDotaKeys.set(k1.split('__').reverse().join('__'), _g0 ? (_g0.start_time || 0) : 0);
+                // ★ 该对队的**多场**时间（同一对队可能多次交手 ⇒ 必须累计，不能覆盖）
+                //   时间兜底顺序：`games[0].start_time → lastTime → firstTime`（实测 start_time 常为 0）
+                const _tBest = (_g0 ? (_g0.start_time || 0) : 0) || (s.lastTime || 0) || (s.firstTime || 0);
+                if (_tBest > 0) {
+                  [k1, k1.split('__').reverse().join('__')].forEach(function (kk) {
+                    const arr = openDotaTimeByKey.get(kk);
+                    if (arr) { if (arr.indexOf(_tBest) < 0) arr.push(_tBest); }
+                    else openDotaTimeByKey.set(kk, [_tBest]);
+                  });
+                }
               }
               openDotaNames.push({
                 n1: normalizeTeamNameForDedup(_rn),
@@ -965,6 +1026,18 @@ Page({
           // 将 Liquipedia 赛程转换为 series 对象
           let liqSeries = liqGrouped
             .filter(function (m) {
+              // ★★ 2026-09-27（用户实测修复）：**占位卡（含 TBD）已被实际比赛覆盖 ⇒ 剔除**。
+              //   ⚠️ **必须放在下方 live/upcoming 早退之前**：那张重复卡的 phase 是 `upcoming`，
+              //   而下面的早退（v1.1 R1「LP live/upcoming 永不剔除」）会让它在到达队名去重段**之前就 return true**
+              //   ⇒ 首次实现把判定写在 `if (!k)` 处，**实测完全不生效**（重复卡仍在）。
+              //   ★ 只对「含 TBD」的条目生效 ⇒ 正常 live/upcoming 卡**完全不受影响**（原意图保留）；
+              //     且 `placeholderCoveredByReal` 内部还要求「仅一方未定 + 共同方严格相等 + 时间差<2h」。
+              if ((isTBD(m.team1Name) || isTBD(m.team2Name)) &&
+                  placeholderCoveredByReal(m, openDotaKeys, openDotaTimeByKey)) {
+                console.log('[league-detail] 占位卡（含 TBD）已被实际比赛覆盖 → 剔除：' +
+                  (m.team1Name || '?') + ' vs ' + (m.team2Name || '?'));
+                return false;
+              }
               // ★ 2026-08-04（v1.1 实施，审核 R1）：LP live/upcoming 永不剔除 —— 它是 OpenDota 进行中系列唯一的 live 状态来源。
               //   原实现（v3 优化项33）matchIds.every 全命中即剔，把「仅第一局被 OpenDota 收录」的 live BO3 剔掉 →
               //   OpenDota 单局已结算被误判 recent/BO1。

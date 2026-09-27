@@ -1286,6 +1286,32 @@ check('names：★ 全库禁止再内联该规则（白名单外一律 FAIL）',
       '★ 判据敏感性：仅队名不同 ⇒ 输出必须不同（否则是永真断言）');
   });
 
+  // ===== 2026-09-27（用户实测修复）：详情页「占位卡剔除」的**位置守卫** =====
+  //  实测教训：首版把判定写在 `if (!k)` 处 ⇒ 被前面的 `if (m.phase !== 'recent') return true;`
+  //  （v1.1 R1「LP live/upcoming 永不剔除」）早退挡住 ⇒ **完全不生效**（重复卡仍在）。
+  //  ⇒ 本守卫锁定"判定必须出现在该早退**之前**"这一顺序约束（顺序错了功能就没了，静态可查）。
+  check('★ 位置守卫：占位卡剔除判定必须在 live/upcoming 早退之前（否则静默失效）', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const src = fs.readFileSync(path.join(__dirname, '..', '..',
+      'subpackages', 'detail', 'league-detail', 'league-detail.js'), 'utf8');
+    const iCall = src.indexOf('placeholderCoveredByReal(m, openDotaKeys');
+    const iEarly = src.indexOf("if (m.phase !== 'recent') return true;");
+    assert(iCall > 0, '未找到占位卡剔除的调用点（是否被改名/删除？）');
+    assert(iEarly > 0, "未找到 live/upcoming 早退行（是否被改名/删除？）");
+    assert(iCall < iEarly,
+      '★ 占位卡剔除判定必须出现在 `if (m.phase !== \'recent\') return true;` **之前**' +
+      '（实测：写在之后会被早退挡住 ⇒ 静默失效，重复卡仍在）');
+    // ★ 敏感性证明（**真变异**，非永真断言）：把早退行**搬到调用点之前** ⇒ 判据必须变 false
+    const EARLY = "if (m.phase !== 'recent') return true;";
+    const mutated = src.replace(EARLY, '')
+      .replace('placeholderCoveredByReal(m, openDotaKeys', EARLY + '\n  placeholderCoveredByReal(m, openDotaKeys');
+    assert(mutated !== src, '★ 变异必须真的改到源码（否则是假验证）');
+    const miCall = mutated.indexOf('placeholderCoveredByReal(m, openDotaKeys');
+    const miEarly = mutated.indexOf(EARLY);
+    assert(!(miCall < miEarly), '★ 敏感性：顺序调换后，判据必须变 false（证明它真在看顺序）');
+  });
+
   check('★ LP UA 合规：标识性 UA 单点化（禁伪装浏览器 UA / 禁占位联系方式）', () => {
     const fs = require('fs');
     const path = require('path');
