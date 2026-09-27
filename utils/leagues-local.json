@@ -1,57 +1,42 @@
 {
-  "generatedAt": 1789394694,
+  "generatedAt": 1790499596,
   "source": "opendota",
   "note": "build-time leagues snapshot (active 90d + curated 60d), refresh via scripts/sync/fetch-leagues-snapshot.js",
   "stats": {
-    "total": 10205,
-    "kept": 17,
-    "windows": 17
+    "total": 10273,
+    "kept": 32,
+    "windows": 15
   },
   "leagues": [
     {
-      "leagueid": 20159,
-      "tier": "excluded",
-      "name": "WINLINE Star Series Season 4"
+      "leagueid": 14268,
+      "tier": "premium",
+      "name": "The International 2022"
     },
     {
-      "leagueid": 19885,
+      "leagueid": 19099,
       "tier": "professional",
-      "name": "Road to ENC 2026 Regional Qualifiers"
+      "name": "BLAST SLAM VI"
     },
     {
-      "leagueid": 19944,
+      "leagueid": 19101,
       "tier": "professional",
-      "name": "EPL Masters 2026 "
+      "name": "BLAST SLAM VII"
     },
     {
-      "leagueid": 19917,
+      "leagueid": 19102,
       "tier": "professional",
-      "name": "The Games of the Future 2026"
+      "name": "BLAST SLAM VIII"
     },
     {
-      "leagueid": 19890,
+      "leagueid": 20279,
       "tier": "professional",
-      "name": "The International 2026 - Regional Qualifier North America"
+      "name": "PGL Wallachia 2026 Season 9"
     },
     {
-      "leagueid": 19891,
+      "leagueid": 18359,
       "tier": "professional",
-      "name": "The International 2026 - Regional Qualifier South America"
-    },
-    {
-      "leagueid": 19892,
-      "tier": "professional",
-      "name": "The International 2026 - Regional Qualifier Europe"
-    },
-    {
-      "leagueid": 19893,
-      "tier": "professional",
-      "name": "The International 2026 - Regional Qualifier China"
-    },
-    {
-      "leagueid": 19894,
-      "tier": "professional",
-      "name": "The International 2026 - Regional Qualifier Southeast Asia"
+      "name": "Clavision DOTA2 Masters 2025: Snow-Ruyi"
     },
     {
       "leagueid": 19785,
@@ -59,9 +44,99 @@
       "name": "Esports World Cup 2026"
     },
     {
+      "leagueid": 17795,
+      "tier": "professional",
+      "name": "ESL One Raleigh 2025"
+    },
+    {
+      "leagueid": 18324,
+      "tier": "premium",
+      "name": "The International 2025"
+    },
+    {
+      "leagueid": 16740,
+      "tier": "professional",
+      "name": "Riyadh Masters 2024 at Esports World Cup Qualifiers"
+    },
+    {
+      "leagueid": 20208,
+      "tier": "professional",
+      "name": "BLAST SLAM IX"
+    },
+    {
+      "leagueid": 19917,
+      "tier": "professional",
+      "name": "The Games of the Future 2026"
+    },
+    {
+      "leagueid": 10810,
+      "tier": "premium",
+      "name": "MDL Disneyland® Paris Major"
+    },
+    {
+      "leagueid": 19944,
+      "tier": "professional",
+      "name": "EPL Masters 2026 "
+    },
+    {
+      "leagueid": 10482,
+      "tier": "premium",
+      "name": "The Chongqing Major"
+    },
+    {
+      "leagueid": 15728,
+      "tier": "premium",
+      "name": "The International 2023"
+    },
+    {
+      "leagueid": 20159,
+      "tier": "excluded",
+      "name": "WINLINE Star Series Season 4"
+    },
+    {
+      "leagueid": 20169,
+      "tier": "professional",
+      "name": "BLAST Slam VII China Qualifier"
+    },
+    {
+      "leagueid": 18375,
+      "tier": "professional",
+      "name": "Esports World Cup 2025"
+    },
+    {
+      "leagueid": 19066,
+      "tier": "professional",
+      "name": "肛宝联赛-老婆杯"
+    },
+    {
+      "leagueid": 15910,
+      "tier": "professional",
+      "name": "ESL One Kuala Lumpur powered by Intel"
+    },
+    {
       "leagueid": 19719,
       "tier": "premium",
       "name": "The International 2026"
+    },
+    {
+      "leagueid": 20176,
+      "tier": "professional",
+      "name": "BETBOOM Streamers Battle Dota 15"
+    },
+    {
+      "leagueid": 10296,
+      "tier": "premium",
+      "name": "The Kuala Lumpur Major"
+    },
+    {
+      "leagueid": 18111,
+      "tier": "professional",
+      "name": "DreamLeague Season 26"
+    },
+    {
+      "leagueid": 19885,
+      "tier": "professional",
+      "name": "Road to ENC 2026 Regional Qualifiers"
     },
     {
       "leagueid": 20009,
@@ -89,12 +164,18 @@
       "name": "RES Unchained - A Blast Dota Slam IX Qualifier EU"
     },
     {
-      "leagueid": 20169,
+      "leagueid": 15638,
       "tier": "professional",
-      "name": "BLAST Slam VII China Qualifier"
+      "name": "BetBoom Dacha "
     }
   ],
   "windows": {
+    "19066": {
+      "earliest": 1789737034,
+      "latest": 1789744526,
+      "lastEnd": 1789747962,
+      "count": 3
+    },
     "19719": {
       "earliest": 1786590206,
       "latest": 1787486918,
@@ -112,36 +193,6 @@
       "latest": 1782955139,
       "lastEnd": 1782957578,
       "count": 246
-    },
-    "19890": {
-      "earliest": 1782333177,
-      "latest": 1782522531,
-      "lastEnd": 1782524116,
-      "count": 13
-    },
-    "19891": {
-      "earliest": 1781628375,
-      "latest": 1781902332,
-      "lastEnd": 1781905832,
-      "count": 30
-    },
-    "19892": {
-      "earliest": 1782028936,
-      "latest": 1782667298,
-      "lastEnd": 1782671188,
-      "count": 63
-    },
-    "19893": {
-      "earliest": 1781582434,
-      "latest": 1781781307,
-      "lastEnd": 1781786883,
-      "count": 21
-    },
-    "19894": {
-      "earliest": 1781834897,
-      "latest": 1782214039,
-      "lastEnd": 1782218150,
-      "count": 44
     },
     "19917": {
       "earliest": 1785476004,
@@ -196,6 +247,18 @@
       "latest": 1788084589,
       "lastEnd": 1788087073,
       "count": 15
+    },
+    "20176": {
+      "earliest": 1789995625,
+      "latest": 1790456053,
+      "lastEnd": 1790458597,
+      "count": 54
+    },
+    "20279": {
+      "earliest": 1789801237,
+      "latest": 1790496122,
+      "lastEnd": 1790498413,
+      "count": 109
     }
   }
 }
