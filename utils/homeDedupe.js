@@ -187,11 +187,43 @@ function _nearestByStart(candidates, target, windowSec) {
   return { hit: hit, diff: diff };
 }
 
+/**
+ * ★★ 2026-09-27（修「同 key 两张一模一样卡」）：把"保留 keep / 丢弃 drop"落到结果表。
+ *
+ * ## 背景（实测根因，**是我自己改动里保留的错分支**）
+ * 页面原写法：
+ * ```js
+ * const at = keptCards.indexOf(drop);
+ * if (at >= 0) keptCards[at] = keep; else keptCards.push(keep);
+ * ```
+ * 当 `drop` 是**本轮新卡**（从未进过结果表）时 `at === -1` ⇒ 走 `push(keep)`；
+ * 而 **`keep` 必然已在结果表里**（它是"已入表"的那张）⇒ **同一对象被重复 push**
+ * ⇒ 结果表出现**两张 key 完全相同**的卡（实测：LGD vs NAVI 出现两张 `s_s1147473 ended 1:2`）。
+ *
+ * ## 规则（对应两种情形）
+ * - `drop` 在表内 ⇒ 用 `keep` **原地顶替**（位置不变，保持渲染顺序稳定）；
+ * - `drop` 不在表内 ⇒ **什么都不做**（`keep` 已在表中；push 会产生重复卡）。
+ *
+ * @param {Array} keptCards 结果表（**会被原地修改**，与页面既有语义一致）
+ * @param {Object} keep 保留的卡
+ * @param {Object} drop 丢弃的卡
+ * @returns {number} 表长变化量（0 或 -0；仅便于断言）
+ */
+function _applyKeepCard(keptCards, keep, drop) {
+  const arr = Array.isArray(keptCards) ? keptCards : null;
+  if (!arr || !keep) return 0;
+  const at = arr.indexOf(drop);
+  if (at >= 0) { arr[at] = keep; return 0; }
+  // ★ drop 不在表内 ⇒ keep 已在表中 ⇒ **不 push**（push 会产生同 key 重复卡）
+  return 0;
+}
+
 module.exports = {
   pairKeysOfCard: _pairKeysOfCard,
   teamToken: _teamToken,
   preferSameMatchCard: _preferSameMatchCard,
   homePassGrade: _homePassGrade,
   nearestDayWithMatches: _nearestDayWithMatches,
-  nearestByStart: _nearestByStart
+  nearestByStart: _nearestByStart,
+  applyKeepCard: _applyKeepCard
 };

@@ -1018,8 +1018,12 @@ Page({
       const drop = (keep === hit) ? c : hit;
       if (keep === drop) { return; }
       // 保留 keep、丢弃 drop：把两个候选的所有键都重新指向 keep，并把 keptCards 里的 drop 换掉
-      const at = keptCards.indexOf(drop);
-      if (at >= 0) keptCards[at] = keep; else keptCards.push(keep);
+      // 保留 keep、丢弃 drop：dropped 若在表内 ⇒ 原地顶替；**若不在表内则什么都不做**。
+      // ★★ 2026-09-27 修复「同 key 两张一模一样卡」：原写法 `else keptCards.push(keep)`
+      //   在 drop 是**本轮新卡**（从未入表）时会重复 push 已在表中的 keep
+      //   ⇒ 结果表出现两张 key 完全相同的卡（实测 LGD vs NAVI：两张 s_s1147473 ended 1:2）。
+      //   逻辑抽到纯函数 `homeDedupe.applyKeepCard`（可单测）。
+      homeDedupe.applyKeepCard(keptCards, keep, drop);
       _idxDel(drop);
       _idxAdd(keep, homeDedupe.pairKeysOfCard(keep));
       console.log('[index] 同一对局卡片合并：保留 ' + keep.status + '（' +

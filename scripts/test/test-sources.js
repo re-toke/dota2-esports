@@ -1215,6 +1215,47 @@ check('names：★ 全库禁止再内联该规则（白名单外一律 FAIL）',
     assert(JSON.stringify([A, B, LP]) === snap, '不得改写入参');
   });
 
+  // ===== 2026-09-27：首页「同 key 两张一模一样卡」的落表逻辑（applyKeepCard）=====
+  //  实测：修好"就近配对"后，`_allMatches` 仍出现**两张 key 完全相同**的卡
+  //  （两张 `s_s1147473 ended 1:2`）⇒ 根因是页面写法
+  //  `if (at>=0) keptCards[at]=keep; else keptCards.push(keep)`
+  //  在 drop 是**本轮新卡**（at=-1）时会**重复 push 已在表中的 keep**。
+  check('homeDedupe.applyKeepCard：合并落表不得产生"同 key 重复卡"', () => {
+    const home = require('../../utils/homeDedupe.js');
+    const fn = home.applyKeepCard;
+    const A = { key: 's_s1147473', status: 'ended', scoreA: 1, scoreB: 2 };
+    const LP = { key: 's_lplive_0_29841600', status: 'ended', scoreA: 0, scoreB: 0 };
+    // ① ★ 本例：keep=A（已在表内）、drop=LP（本轮新卡，从未入表）⇒ 表长必须**不变**
+    const t1 = [A];
+    fn(t1, A, LP);
+    assert(t1.length === 1, '★ drop 是新卡时应保持不变（旧写法会 push 成 2 张），实际 ' + t1.length);
+    assert(t1[0] === A, '★ 保留的应是 keep');
+    assert(t1.filter((c) => c.key === 's_s1147473').length === 1, '★★ 不得出现同 key 重复卡');
+    // ② drop 在表内 ⇒ 原地顶替（位置不变）
+    const t2 = [A, { key: 'other' }];
+    fn(t2, LP, A);
+    assert(t2.length === 2 && t2[0] === LP, 'drop 在表内时应原地顶替 keep（长度不变）');
+    // ③ 新卡胜出（keep 是 drop 之外的）且 drop 在表内 ⇒ 替换而非追加
+    const t3 = [{ key: 'x' }, A];
+    fn(t3, LP, A);
+    assert(t3.length === 2 && t3[1] === LP, '替换后长度不变、位置保留');
+    // ④ **不变量**：反复调用（幂等）后不得累积重复
+    const t4 = [A];
+    fn(t4, A, LP); fn(t4, A, LP); fn(t4, A, { key: 'z' });
+    assert(t4.length === 1, '★ 反复调用（幂等）后仍只有 1 张，实际 ' + t4.length);
+    // ⑤ 边界：空表/缺参不抛错，且不得凭空新增
+    const t5 = [];
+    fn(t5, A, LP);
+    assert(t5.length === 0, '空表 + drop 不在表内 ⇒ 仍为空（不得凭空 push）');
+    fn(null, A, LP); fn([A], null, LP);
+    assert(true, '缺参不抛错');
+    // ⑥ ★ 敏感性：模拟"旧写法"（无条件 push）⇒ 必须产生 2 张（证明本判据能抓住该 bug）
+    const buggy = [A].slice();
+    { const at = buggy.indexOf(LP); if (at >= 0) buggy[at] = A; else buggy.push(A); }
+    assert(buggy.length === 2 && buggy[0] === buggy[1],
+      '★ 敏感性：旧写法会产生 2 张同 key 卡（证明判据有效），实际 ' + buggy.length);
+  });
+
   check('★ LP UA 合规：标识性 UA 单点化（禁伪装浏览器 UA / 禁占位联系方式）', () => {
     const fs = require('fs');
     const path = require('path');
