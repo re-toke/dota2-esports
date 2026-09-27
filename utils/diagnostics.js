@@ -334,7 +334,11 @@ function buildRemoteHealth(row, nowSec) {
     head: head,
     oldestName: (v.oldest && v.oldest.name) || '',
     // 文案在**纯函数**里拼好：页面层零测试是最大盲区，能抽出来的逻辑就不要留在 WXML
-    text: _fmtAge(ageSec) + '前' + (overdue ? ' · ❌ 疑似停摆' : '') + (head ? '（' + head + '）' : '')
+    // ★ 2026-09-27（R2/R3 口径修正）：24h 判定**归属本条**（"调度是否还活着"），
+    //   而**不再**挂在「内置快照年龄」上（那是"包有多旧"，随发版必然变旧 ⇒ 结构性不可达）。
+    //   文案显式写出「24h 目标」，与页面上被撤销的那处保持可追溯。
+    text: _fmtAge(ageSec) + '前' + (overdue ? ' · ❌ 已超 24h 目标（疑似停摆）' : '') +
+      (head ? '（' + head + '）' : '')
   };
 }
 

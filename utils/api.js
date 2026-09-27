@@ -396,10 +396,20 @@ const ACTION_MAP = {
 // O-4（2026-08-15）：云成功路径 writeThrough 写穿本地缓存——断网/云熔断时回退直连
 // 能命中本地缓存兜底（否则云路径拿到的数据从不落盘，断网即空）。
 // 写穿 key 复用 ACTION_MAP 的 path/data/ttlKey 元数据，与 direct 写入侧逐字符一致。
-function writeThrough(path, data, ttlSec) {
-  if (!path || data == null) return;
-  const key = _v() + path + '|' + JSON.stringify(data || {});
-  cache.set(key, data, ttlSec);
+//
+// ★★ 2026-09-27 修复（**原实现使 O-4 在 EF 路径上实际失效**）：
+//   旧签名 `writeThrough(path, data, ttlSec)` 中 `data` 被用于**拼 key**（应为「请求参数」），
+//   而唯一调用方传的是 `raw`（**响应体**）⇒ key 实际为 `_v()+path+'|'+<整个响应 JSON>`：
+//     ① 与读侧（`fetchedAtOf`）及直连写入侧（`cachedFresh`，key 为 `_v()+path+'|{}'`）**永不匹配**
+//        ⇒ 云路径写的数据**查不到** ⇒ O-4 想要的"云成功→断网回退直连兜底"**没有生效**；
+//        （可观测症状：走 EF 时「更新于 X 前」文案恒为空，因为 `fetchedAtOf` peek 恒 miss）
+//     ② 每次响应都落一个"key 内含整个响应"的新条目 ⇒ **存储膨胀 + 无谓的 LRU 压力**。
+//   修复：**显式分离**「请求参数（用于 key）」与「响应（用于 value）」——
+//   调用方传 `m.data`（ACTION_MAP 中与 direct 侧一致的请求参数，无则 undefined → `{}`）。
+function writeThrough(path, reqData, respData, ttlSec) {
+  if (!path || respData == null) return;
+  const key = _v() + path + '|' + JSON.stringify(reqData || {});
+  cache.set(key, respData, ttlSec);
 }
 function tryCloudOrDirect(methodName, args, directFn, transform, force) {
   const direct = directFn;
@@ -409,9 +419,11 @@ function tryCloudOrDirect(methodName, args, directFn, transform, force) {
   // O-4：写穿必须用 cloud 原始响应（transform 前），与 direct 侧 cached 的缓存内容
   //   （原始数据，transform 在返回给调用方前才做）完全一致；若写穿 transform 后的数据，
   //   下次直连命中会双重转换导致数据损坏。失败静默，不影响主流程。
+  // ★★ 2026-09-27：必须同时传 `m.data`（**请求参数**）——旧实现把响应体当参数拼进 key，
+  //   导致写穿条目**永远读不到**（详见 writeThrough 注释）。`m.data` 与 direct 侧逐字符一致。
   if (m.path && m.ttlKey && config.cacheTTL[m.ttlKey]) {
     cloud.then((raw) => {
-      try { writeThrough(m.path, raw, config.cacheTTL[m.ttlKey]); } catch (e) { /* 静默 */ }
+      try { writeThrough(m.path, m.data, raw, config.cacheTTL[m.ttlKey]); } catch (e) { /* 静默 */ }
     }).catch(() => {});
   }
   const chain = transform ? cloud.then(transform) : cloud;
@@ -502,6 +514,52 @@ function invalidateLeagues() {
   const windowsKey = _v() + '/explorer?sql=' + encodeURIComponent(sqlFragments.LEAGUE_WINDOWS_SQL()) + '|{}';
   cache.remove(leaguesKey);
   cache.remove(windowsKey);
+}
+
+// ===== R9 三层首屏 · 第 ① 层：运行期缓存（**同步**读） =====
+//
+// 背景（2026-09-27 实测）：赛事页首屏此前只有两层 ——
+//   ①「build-time 烘焙快照」（同步，但它是**发版时**的产物，天~周级）
+//   ②「网络」（async，可能数秒~12s）
+//   缺了中间一层：**运行期缓存**（`cachedFresh` 写入的"上次真实取到的数据"，分钟~小时级）。
+//   后果：回访用户在首屏看到的是**发版那天**的列表 + 「本地数据 9月14日」这类刺眼提示
+//   （实测烘焙快照已 12.7 天），而设备存储里其实躺着新得多的真实数据。
+//
+// 为什么**必须**放在本文件（而不是页面层）：
+//   `pages/leagues/leagues.js` 的 onPullDownRefresh 注释（O-2）已记录过同类事故 ——
+//   「旧实现 `cache.remove('/leagues|{}')` **缺 _v() 版本前缀** + 手拼 SQL 缺 last_end，
+//    **均失效**」。即页面层手拼 key 会**静默 miss**（不报错、只是永远读不到）。
+//   ⇒ key 构造只允许在本文件内、与写入侧共用同一段代码。故与 `invalidateLeagues` 紧邻。
+//
+// ⚠️ 与 `getLeagues()` 的口径一致性：缓存里存的是 **过滤前**的原始数组，
+//   而 `getLeagues()` 会在出口套 `filterCollectableLeagues`。此处**必须同样过滤**，
+//   否则首屏（缓存）与随后（网络）的集合不一致 ⇒ 视觉跳变 + 可能短暂显示应被剔除的联赛。
+//
+// @returns {{leagues:Array, fetchedAt:number}|null}  无可用缓存 → null；fetchedAt 为 unix 毫秒
+function peekLeagues() {
+  try {
+    const key = _v() + '/leagues|{}';
+    const meta = cache.getStale(key, 0, config.cacheTTL.leagues);
+    if (meta.expired || !meta.value) return null;
+    const list = filterCollectableLeagues(meta.value);
+    if (!Array.isArray(list) || !list.length) return null;
+    return { leagues: list, fetchedAt: meta.fetchedAt || 0 };
+  } catch (e) {
+    return null;   // 同步读失败绝不影响首屏（保守返回 null，走下一层）
+  }
+}
+
+// 赛事时间窗口（explorer 聚合）——与 peekLeagues 同源；key 必须与写入侧一致。
+// 取不到不影响渲染：normalizeLite 已容忍 windows 为 undefined（回退混合窗口）。
+function peekLeagueWindows() {
+  try {
+    const key = _v() + '/explorer?sql=' + encodeURIComponent(sqlFragments.LEAGUE_WINDOWS_SQL()) + '|{}';
+    const meta = cache.getStale(key, 0, config.cacheTTL.leagueWindows);
+    if (meta.expired || !meta.value) return null;
+    return meta.value;
+  } catch (e) {
+    return null;
+  }
 }
 
 function getLeagueWindows() {
@@ -782,6 +840,12 @@ module.exports = {
   // O-15（2026-08-15）：导出版本前缀构造，供 cloudCache 复用（本地 key 与 api 缓存同语义失效）
   _v: _v,
   invalidateLeagues: invalidateLeagues,
+  // R9 三层首屏 第 ① 层：同步读运行期缓存（仅本文件可构造 key，见函数注释）
+  peekLeagues: peekLeagues,
+  peekLeagueWindows: peekLeagueWindows,
+  // O-4 写穿（云成功路径）：导出供测试与诊断复用 —— 其 key 构造曾出错导致**静默失效**，
+  // 现有回归守卫 `scripts/test/test-snapshot-layers.js` 直接断言它的可读性。
+  writeThrough: writeThrough,
   fetchedAtOf: fetchedAtOf,
   getLeagues: getLeagues,
   getProMatches: getProMatches,

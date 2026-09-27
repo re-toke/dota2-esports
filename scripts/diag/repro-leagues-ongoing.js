@@ -62,7 +62,8 @@ inst._leaguesSnapChecked = true;
 inst._leaguesSnap = null;
 inst.upcomingList = null;
 inst.allLeagues = [];
-inst._snapshotRendered = false;
+inst._preRendered = false;          // ★ 2026-09-27（R9）：原 _snapshotRendered 已统一为 _preRendered
+inst._firstPaintSource = '';
 
 const util = require(ROOT + '/utils/util.js');
 

@@ -49,6 +49,26 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: node scripts/sync/fetch-liquipedia-upcoming.js
 
+      # ★★ 2026-09-27（快照过期诊断/复核 · 缺口 A）：补齐**另两个** build-time 快照的定时刷新。
+      #
+      #   问题：有「鲜度要求」的自动产物共 3 个，此前**只有 upcoming** 接了 CI：
+      #     · upcoming-local      → 已接（见上一步）
+      #     · leagues-local       → **无接线** ⇒ 永远停在最后一次手工生成（实测 12.7 天）
+      #     · team-logo-local     → **无接线** ⇒ 实测 26 天未更新（140KB，且在包内）
+      #   两者脚本均**无需密钥、无副作用**（只 `fs.writeFileSync` 写各自产物）⇒ 与 upcoming 同形。
+      #
+      #   ⚠️ `continue-on-error: true` 是**刻意**的：
+      #     这两个脚本依赖 OpenDota；若其抖动/失败，**不能**让整个 job 失败 ——
+      #     否则会连带**阻断下面的 upcoming 快照回写**（把一个"补强"变成"新增单点故障"）。
+      #     失败不会静默：① 该 step 在运行页显示为 failed；② 新鲜度守卫（check-snapshot-freshness）会报警。
+      - name: Refresh leagues snapshot (补接线)
+        continue-on-error: true
+        run: node scripts/sync/fetch-leagues-snapshot.js
+
+      - name: Refresh team-logo snapshot (补接线)
+        continue-on-error: true
+        run: node scripts/sync/fetch-team-logos.js
+
       # ★ P0-B 下半 / P0-C（2026-09-26）：**管道指标 + 调度心跳**
       #   把「快照新鲜度 / 条目数 / 本次运行时间」写进 curation_meta（key=diag_report）。
       #   ① 客户端「我的」页读它 ⇒ 用户/开发者都能看到"数据多久没更新"（消费方来源不同，非同一处自证）
@@ -65,10 +85,13 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add utils/upcoming-local.json utils/upcoming-local-data.js
+          # ★ 2026-09-27：回写范围扩到**全部有鲜度要求的产物**（此前只有 upcoming ⇒ leagues 停更 12.7 天）
+          git add utils/upcoming-local.json utils/upcoming-local-data.js \
+                  utils/leagues-local.json  utils/leagues-local-data.js \
+                  utils/team-logo-map.json  utils/team-logo-local-data.js
           if git diff --quiet --cached; then
             echo "快照无变化，跳过提交"
           else
-            git commit -m "chore(snapshot): 定时刷新 upcoming-local（CI，$(date -u +%Y-%m-%dT%H:%MZ)）"
+            git commit -m "chore(snapshot): 定时刷新快照 upcoming/leagues/team-logo（CI，$(date -u +%Y-%m-%dT%H:%MZ)）"
             git push
           fi

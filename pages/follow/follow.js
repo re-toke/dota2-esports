@@ -109,13 +109,19 @@ Page({
     //   · 新鲜度：读本地快照 generatedAt，取**最旧**者（保守口径 —— 不被最新那个掩盖；
     //     实测两个快照刷新周期不同，差可达十余天）
     //   · 本机指标：首页融合后写入的最近一次快照（内存态；未访问首页/刚重启时为空 ⇒ 展示层须容忍）
+    // ★★ 2026-09-27（R2/R3 口径修正）：**撤销本处的 24h 达标判定**。
+    //   原因：本行量的是「**内置快照**（随版本发布烘焙）」，它天生随发版变旧 ⇒ 挂 24h 目标
+    //   在结构上**永远达不到** ⇒ 卡片永久红灯 ⇒ **告警疲劳，等于没有信号**。
+    //   ⇒ 24h 判定已移到「云端调度心跳」（"调度是否还活着"才有 24h 语义），
+    //     即 `diagnostics.buildRemoteHealth` 的 `overdue`。
+    //   ⚠️ 因此**不再**向 health 暴露 overTarget/targetHours —— 留着会诱使后人把告警加回来。
+    //   （`diagnostics.describeFreshness` 本身仍返回这两个字段：CI 的 diag-report 用它检查
+    //     **仓库里的**快照文件是否过期，那里语义正确。）
     const _fresh = diagnostics.describeFreshness();
     const _last = diagnostics.getLast();
     const _lm = _last && _last.metrics;
     const _health = {
       ageText: _fresh.ageText,
-      overTarget: _fresh.overTarget,
-      targetHours: Math.round(_fresh.targetSec / 3600),
       oldestName: _fresh.oldest ? _fresh.oldest.name : '',
       items: _fresh.items,
       hasMetrics: !!_lm,

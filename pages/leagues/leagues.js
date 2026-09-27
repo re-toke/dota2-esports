@@ -59,6 +59,16 @@ const _curatedEventCache = {};
 //   周级刷新节奏（fetch:upcoming SOP）。
 const SNAPSHOT_MAX_AGE_SEC = 7 * 86400;
 
+// ★ 2026-09-27（R9 硬门限）：快照**不可用**年龄（秒）。超过则**完全不用它渲染**（走骨架屏等网络）。
+//   与 SNAPSHOT_MAX_AGE_SEC 的分工（两个量，语义不同，勿混用）：
+//     · SNAPSHOT_MAX_AGE_SEC（7 天）= **降权/提示阈值**：超过则不当"主源"、并显示日期提示；
+//     · SNAPSHOT_UNUSABLE_AGE_SEC（30 天）= **可用性阈值**：超过则连"兜底渲染"都不做。
+//   为什么需要它：赛事列表的「进行中 / 即将到来」由快照 `windows` + curation 赛期**推导**，
+//   过旧快照给出的是**语义错误**（把早已开赛的标成"即将到来"），不只是"旧"。
+//   30 天取值依据：赛事列表按周/月变化（列表页注释自证"S 级赛事排期以周计"），
+//     超过一个月仍在使用，错误的概率已高于"骨架屏零信息"的代价。
+const SNAPSHOT_UNUSABLE_AGE_SEC = 30 * 86400;
+
 // 等级 -> TDesign Tag 主题/变体
 function tagThemeOf(grade) {
   if (grade === 'SSS' || grade === 'S') return { theme: 'danger', variant: 'light' };
@@ -513,13 +523,65 @@ Page({
     //   网络失败且快照已渲染 → 保留快照列表 + 顶部「实时刷新失败」提示（见 catch 分支），
     //   不再退回整页 error 骨架。快照未生成（require 失败）→ 行为与旧版完全一致。
     //   不占 storage 配额（复核否决 storage 方案：同步 IO jank + 6MB LRU 挤占）。
+    // ===== 首屏三层（2026-09-27 · R9）：① 运行期缓存 → ② build-time 烘焙快照 → ③ 骨架屏 =====
+    //
+    // 为什么补第 ① 层：此前只有「烘焙快照 → 网络」两层，而烘焙快照是**发版时**的产物（天~周级），
+    //   运行期缓存（`cachedFresh` / 云路径 writeThrough 写入）才是**上次真实取到的数据**（分钟~小时级）。
+    //   缺这一层的实测后果：回访用户首屏看到的是发版那天的列表 + 「本地数据 9月14日」（实测 12.7 天），
+    //   而设备存储里其实躺着新得多的真实数据。
+    // ★ 必须走 api 封装：本项目已因**页面层手拼缓存 key** 栽过（见 onPullDownRefresh 的 O-2 注释：
+    //   `cache.remove('/leagues|{}')` 缺 `_v()` 版本前缀 + 手拼 SQL 缺 last_end ⇒ **静默失效**）。
+    // ★ 与网络段同口径：`peekLeagues()` 内部已套 `filterCollectableLeagues`，避免首屏/网络集合不一致。
+    if (!(this.allLeagues && this.allLeagues.length)) {
+      const peeked = (typeof api.peekLeagues === 'function') ? api.peekLeagues() : null;
+      if (peeked && peeked.leagues && peeked.leagues.length) {
+        try {
+          const pWin = (typeof api.peekLeagueWindows === 'function') ? (api.peekLeagueWindows() || {}) : {};
+          this._leagueMap = {};
+          this.allLeagues = peeked.leagues
+            .map((l) => this.normalizeLite(l, pWin[l.leagueid]))
+            .filter((x) => x && x.rank >= 1);
+          if (this.allLeagues.length) {
+            this.allLeagues.forEach((x) => { this._leagueMap[x.leagueid] = x; });
+            this._preRendered = true;
+            this._firstPaintSource = 'cache';
+            _skipSkeleton = true;
+            this.updateGradeCounts();
+            this.applyAndSlice(true);
+            const at = peeked.fetchedAt || 0;
+            this.setData({
+              loading: false,
+              error: '',
+              updatedAt: at,
+              updatedLabel: util.formatAgo(at),     // ←「更新于 X 前」= **真·数据新鲜度**（层 ① 独有）
+              leaguesAsOfText: ''                   // ← 用的是真实数据，不该出现任何"数据来源"提示条
+            });
+            console.info('[leagues][perf] R9① 运行期缓存秒开：' + this.allLeagues.length +
+              ' 个联赛先上（缓存于 ' + util.formatAgo(at) + '）');
+          }
+        } catch (e) {
+          // 缓存渲染失败静默：继续走 ② 快照 → ③ 骨架屏，无半状态残留
+          console.info('[leagues][perf] R9① 缓存渲染跳过：', (e && e.message) || e);
+        }
+      }
+    }
+
     if (!this._leaguesSnapChecked) {
       this._leaguesSnapChecked = true;   // 只 require 一次（成功或失败均不重试）
       try { this._leaguesSnap = require('../../utils/leagues-local-data.js'); }
       catch (e) { this._leaguesSnap = null; }
     }
     const snap = this._leaguesSnap;
-    if (snap && Array.isArray(snap.leagues) && snap.leagues.length &&
+    // ★ 2026-09-27（R9 硬门限）：快照**过旧**（> SNAPSHOT_UNUSABLE_AGE_SEC）时**完全不用**。
+    //   为什么不能只加一句提示：赛事列表的「进行中 / 即将到来」是由快照的 `windows` + curation 赛期
+    //   **推导**出来的 ⇒ 过期快照产出的是**语义错误**（把早已开赛的标成"即将到来"），**不只是"旧"**。
+    //   此时宁可走骨架屏等网络：骨架屏是**零信息**，但不会给出**错的**信息。
+    const snapTooOld = !!(snap && this._snapshotIsTooOld && this._snapshotIsTooOld(snap.generatedAt));
+    if (snapTooOld) {
+      console.info('[leagues][perf] R9② 烘焙快照过旧（' + this._formatSnapshotDate(snap.generatedAt) +
+        '），跳过不使用 → 走骨架屏等网络');
+    }
+    if (!snapTooOld && snap && Array.isArray(snap.leagues) && snap.leagues.length &&
         !(this.allLeagues && this.allLeagues.length)) {
       try {
         this._leagueMap = {};
@@ -528,7 +590,11 @@ Page({
           .filter((x) => x && x.rank >= 1);
         this.allLeagues.forEach((x) => { this._leagueMap[x.leagueid] = x; });
         if (this.allLeagues.length) {
-          this._snapshotRendered = true;
+          // ★ 2026-09-27（R9）：统一首屏标志 —— 层①（运行期缓存）与层②（烘焙快照）都会置位。
+          //   为什么必须统一：失败分支原判据是 `_snapshotRendered`，若首屏来自**层①**则该判据为假
+          //   ⇒ 网络一失败就会退化成**整页 error**（丢掉已经渲染好的缓存列表）= 回归。
+          this._preRendered = true;
+          this._firstPaintSource = 'snapshot';
           _skipSkeleton = true;
           this.updateGradeCounts();
           this.applyAndSlice(true);
@@ -538,8 +604,11 @@ Page({
             // ★ 2026-09-16（问题3 修复）：快照未见旧时**不显示日期**。
             //   原实现无条件带日期 → 用户看到「本地数据 9月14日」以为数据陈旧（其实才 2 天）。
             //   与 v8.1 设计意图对齐（L1028：新快照不显示、过期(>7天)才提示日期）。
+            // ★★ 2026-09-27（R9 文案修正）：过旧时改为**诚实**表述 ——
+            //   旧文案「本地数据 X日 · **正在同步实时赛程**」会让人以为"马上会自动变新"，
+            //   但烘焙快照**只随版本发布更新**（不会自动变新）。改为明确说明来源与更新方式。
             leaguesAsOfText: this._snapshotIsStale(snap.generatedAt)
-              ? '本地数据 ' + this._formatSnapshotDate(snap.generatedAt) + ' · 正在同步实时赛程'
+              ? '内置快照 ' + this._formatSnapshotDate(snap.generatedAt) + ' · 随版本发布更新'
               : '正在同步实时赛程'
           });
           console.info('[leagues][perf] P2-2 快照秒开：' + this.allLeagues.length + ' 个联赛先上');
@@ -626,14 +695,21 @@ Page({
       })
       .catch(() => {
         console.info('[leagues][perf] loadLeagues 失败（leagues 主请求），总耗时 ' + (Date.now() - t0) + 'ms');
-        // ★ 2026-09-01（P2-2）：快照已渲染 → 保留快照列表 + 顶部「实时刷新失败」提示，
+        // ★ 2026-09-01（P2-2）：首屏已渲染 → 保留列表 + 顶部「实时刷新失败」提示，
         //   不退回整页 error 骨架（用户仍有可用数据可浏览，下拉/重试可再触发网络刷新）。
-        if (this._snapshotRendered && this.allLeagues && this.allLeagues.length) {
-          const _asOf = this._formatSnapshotDate((this._leaguesSnap && this._leaguesSnap.generatedAt) || 0);
+        // ★ 2026-09-27（R9）：判据由 `_snapshotRendered` 改为**统一标志** `_preRendered`
+        //   （首屏可能来自层①运行期缓存），文案按**来源**区分，避免把"本地缓存"误称"快照"。
+        if (this._preRendered && this.allLeagues && this.allLeagues.length) {
+          const _srcCache = this._firstPaintSource === 'cache';
+          const _asOf = _srcCache
+            ? util.formatAgo(this.data.updatedAt || 0)
+            : (this._formatSnapshotDate((this._leaguesSnap && this._leaguesSnap.generatedAt) || 0) || '本地');
           this.setData({
             loading: false,
             error: '',
-            leaguesAsOfText: '实时数据刷新失败，当前展示 ' + (_asOf || '本地') + '快照，可下拉重试'
+            leaguesAsOfText: _srcCache
+              ? '实时数据刷新失败，当前展示本地缓存（' + (_asOf || '时间未知') + '），可下拉重试'
+              : '实时数据刷新失败，当前展示 ' + _asOf + '快照，可下拉重试'
           });
           this._normalizeDone = true;
           cb && cb();
@@ -1144,6 +1220,13 @@ Page({
     const t = Number(genAt) || 0;
     if (!t) return true;                       // 无时间戳按过期处理
     return (util.nowSec() - t) > SNAPSHOT_MAX_AGE_SEC;
+  },
+  // ★ 2026-09-27（R9）：快照是否**过旧到不该使用**（> SNAPSHOT_UNUSABLE_AGE_SEC）。
+  //   与 `_snapshotIsStale` 的区别：那个只决定"是否显示日期提示"，这个决定"是否还能用"。
+  _snapshotIsTooOld(genAt) {
+    const t = Number(genAt) || 0;
+    if (!t) return true;                       // 无时间戳 ⇒ 不可用
+    return (util.nowSec() - t) > SNAPSHOT_UNUSABLE_AGE_SEC;
   },
   _formatSnapshotDate(genAt) {
     if (!genAt) return '';

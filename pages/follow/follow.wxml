@@ -43,9 +43,15 @@
   <view class="row-card" wx:if="{{health}}">
     <view class="row-main">
       <text class="row-title">数据健康</text>
-      <text class="row-sub">快照更新于 {{health.ageText}}前{{health.oldestName ? '（取最旧：' + health.oldestName + '）' : ''}}{{health.overTarget ? ' · 已超 ' + health.targetHours + 'h 目标' : ''}}</text>
+      <!-- ★★ 2026-09-27（R2/R3 口径修正）：本行是**内置快照**（随版本发布烘焙），
+           它量的是「这台设备上的包有多旧」，**不是**「数据多久没更新」——
+           而它**天生会随发版变旧**，故给它挂 24h 目标在结构上**永远达不到**
+           ⇒ 会永久显示「已超 24h 目标」⇒ 告警疲劳 ⇒ 等于没有信号。
+           ⇒ 现改为：① 明确标注来源与更新方式；② **撤销本行的 24h 判定**，
+             把 24h 判定移到下面「云端调度心跳」（那才是"调度是否还活着"，24h 才有意义）。 -->
+      <text class="row-sub">内置快照更新于 {{health.ageText}}前{{health.oldestName ? '（取最旧：' + health.oldestName + '）' : ''}} · 随版本发布更新</text>
       <!-- ★ 文案由纯函数 diagnostics.buildRemoteHealth 拼好（页面层零测试是最大盲区）；
-           三态：正常「X 前（commit）」/ 超时「· ❌ 疑似停摆」/ 无行「尚无记录（CI 未上报）」 -->
+           三态：正常「X 前（commit）」/ 超时「· ❌ 已超 24h 目标（疑似停摆）」/ 无行「尚无记录（CI 未上报）」 -->
       <text class="row-sub" wx:if="{{health.remote}}">云端调度心跳：{{health.remote.text}}</text>
       <text class="row-sub">{{health.metricHint}}</text>
     </view>

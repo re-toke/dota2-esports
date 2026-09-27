@@ -44,3 +44,27 @@ jobs:
             exit 1
           fi
         shell: bash
+
+  # ★★ 2026-09-27（快照过期诊断 · 缺口 B）—— build-time 快照**新鲜度守卫**
+  #
+  # 为什么独立成 job 且 `continue-on-error: true`（**刻意**）：
+  #   本 job 失败的原因**几乎总是"调度没跑"**（GH scheduled 实测延迟 ~5h、9 次里 3 次失败），
+  #   **不是代码回归**。若与 build job 混在一起，调度抖动会让「代码门禁」整条变红
+  #   ⇒ 团队对红灯麻木 ⇒ 反而失去信号价值。
+  #   ⇒ 独立 job：**可见**（运行页一目了然是哪一类问题）但**不阻塞**代码门禁。
+  #   详见 deliverables/快照过期问题-方案复核意见-2026-09-27.md 的 R4。
+  #
+  # 背景：leagues-local 曾停更 12.7 天、team-logo-local 曾停更 ≈26 天，而全部门禁仍全绿
+  #   ⇒ 典型的静默失效（只能等用户在界面上偶然看见）。本守卫让「过期」可见。
+  snapshot-freshness:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check build-time snapshot freshness
+        run: node scripts/ops/check-snapshot-freshness.js
