@@ -58,6 +58,22 @@
   line-height: 1;
 }
 
+/* ★★ 2026-09-27（P2-己 保守版）：空态引导（可点 → 跳到本周最近有 S/A 对局的一天）。
+   用 --text-3（非关键信息档）+ 下划线表达"可点"；
+   ★ 严格遵守亮色 v2.0 铁律：**零新增硬编码色**，只用语义变量。 */
+.empty-jump {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2) var(--space-3) var(--space-3);
+}
+.ej-text {
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+  text-decoration: underline;
+  text-align: center;
+}
+
 /* ★★ 2026-09-27（P0-新增）：关注流取数失败提示（可点重试）。
    用 --text-3（非关键信息档）+ 下划线表达"可点"；
    ★ 严格遵守亮色 v2.0 铁律：**零新增硬编码色**，只用语义变量。 */

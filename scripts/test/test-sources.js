@@ -1125,6 +1125,58 @@ check('names：★ 全库禁止再内联该规则（白名单外一律 FAIL）',
     assert(home.homePassGrade(null) === false, 'null 不应抛错');
   });
 
+  // ===== 2026-09-27（P2-己 保守版）：首页空态引导的目标日选择 =====
+  //  背景：`_renderWeek()` 默认**恒选"今天"且不判有无比赛** ⇒ 今天 0 场时首屏空态，
+  //  而本周其实还有比赛 ⇒ 用户以为"首页没加载出来"。本函数选出"该引导去哪一天"。
+  check('homeDedupe.nearestDayWithMatches：空态引导目标日选择（不误导 + 纯函数）', () => {
+    const home = require('../../utils/homeDedupe.js');
+    const fn = home.nearestDayWithMatches;
+    const wk = [
+      { key: 'd0', label: '9/22', count: 0 },
+      { key: 'd1', label: '9/23', count: 3 },
+      { key: 'd2', label: '9/24', count: 0 },   // ← 选中它（今天无比赛）
+      { key: 'd3', label: '9/25', count: 2 },
+      { key: 'd4', label: '9/26', count: 0 }
+    ];
+    // ① 优先**未来**最近
+    const a = fn(wk, 'd2');
+    assert(a && a.key === 'd3', '应选未来最近的一天（d3），实际: ' + JSON.stringify(a));
+    assert(a.label === '9/25' && a.count === 2, 'label/count 应随所选的日');
+    // ② 未来没有 ⇒ 退**过去**最近
+    const b = fn(wk, 'd4');
+    assert(b && b.key === 'd3', '末尾无未来时回退过去最近（d3），实际: ' + JSON.stringify(b));
+    // ③ weekElsewhere 不含当前日（当前日 count=0，故应等于 3+2=5）
+    assert(a.weekElsewhere === 5, 'weekElsewhere 应排除当前日（期望 5），实际: ' + a.weekElsewhere);
+    // ③' ★ shortDate：E2E 实测发现 `label` 只有星期几（"去看 二"语义不清）⇒ 必须给出 'M-D'
+    const wkReal = [
+      { key: '2026-09-21', label: '一', count: 0 },
+      { key: '2026-09-22', label: '二', count: 6 }
+    ];
+    const sr = fn(wkReal, '2026-09-21');
+    assert(sr && sr.shortDate === '9-22', "shortDate 应为 '9-22'，实际: " + JSON.stringify(sr && sr.shortDate));
+    assert(fn([{ key: 'bad-key', count: 0 }, { key: 'x', count: 1 }], 'bad-key').shortDate === '',
+      'key 非法时 shortDate 应为空串（由调用方回退 label）');
+    const c = fn(wk, 'd1');    // 当前日 count=3 ⇒ 其它日合计 2
+    assert(c.weekElsewhere === 2, 'weekElsewhere 必须排除当前日（期望 2），实际: ' + c.weekElsewhere);
+    // ④ ★ 全周无比赛 ⇒ null（**不得**引导用户去一个同样空的日期 ⇒ 不误导）
+    assert(fn([{ key: 'x', count: 0 }, { key: 'y', count: 0 }], 'x') === null,
+      '全周无比赛必须返回 null（否则会误导用户跳到空日期）');
+    // ⑤ count 为字符串（setData 常见）也要正确判定
+    const s = fn([{ key: 'a', label: 'A', count: '0' }, { key: 'b', label: 'B', count: '2' }], 'a');
+    assert(s && s.key === 'b' && s.count === 2, 'count 为字符串时应按数字处理，实际: ' + JSON.stringify(s));
+    // ⑥ 边界：非数组 / 空 / 当前 key 不在表内 ⇒ 不抛错
+    assert(fn(null, 'a') === null && fn([], 'a') === null, '非数组/空数组应返回 null 且不抛错');
+    const notFound = fn(wk, 'zzz');
+    assert(notFound && notFound.key === 'd1', '当前 key 不在表内时应退化为"取最靠前有比赛的日"');
+    // ⑦ 纯函数：不得改写入参
+    const snapshot = JSON.stringify(wk);
+    fn(wk, 'd2');
+    assert(JSON.stringify(wk) === snapshot, '不得改写入参（本模块约定纯计算）');
+    // ⑧ ★ 可证伪性：把"有比赛的日"全清零 ⇒ 结果必须由 d3 变为 null（证明判据随数据变）
+    const zeroed = wk.map((d) => Object.assign({}, d, { count: 0 }));
+    assert(fn(zeroed, 'd2') === null, '★ 判据敏感性：清零后应返回 null（否则是永真断言）');
+  });
+
   check('★ LP UA 合规：标识性 UA 单点化（禁伪装浏览器 UA / 禁占位联系方式）', () => {
     const fs = require('fs');
     const path = require('path');

@@ -64,6 +64,16 @@
       bind:filter="onMatchFilter"
       bind:cardtap="onMatchCardTap"
     />
+
+    <!-- ★★ 2026-09-27（P2-己 保守版）：**空态引导**。
+         背景：默认恒选"今天"且**不判断今天有没有比赛** ⇒ 今天 0 场时首屏就是空态，
+         而本周其实还有比赛（实测全周 23 张 / _allMatches=53）⇒ 用户会以为"首页没加载出来"。
+         保守做法（用户拍板）：**不自动切日期**（用户点的是今天，被切走会困惑），
+         只给出"本周还有 N 场 → 去看 X"的可点引导。
+         ⚠️ 仅在「无对局 且 筛选=全部 且 本周别处有比赛」时有值（见 emptyJump 计算处注释）。 -->
+    <view wx:if="{{emptyJump && !matchLoading}}" class="empty-jump" bindtap="onEmptyJump" hover-class="tap-scale">
+      <text class="ej-text">{{emptyJump.text}}</text>
+    </view>
   </view>
 
   <!-- 首页「我的关注」横向卡片流（spec C.2.1，从 leagues 迁入）：已关注战队的下一场赛事 + 实时倒计时 -->

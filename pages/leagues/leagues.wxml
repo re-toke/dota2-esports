@@ -203,6 +203,15 @@
       </view>
     </view>
 
+    <!-- ★★ 2026-09-27（分页可见化）：把「还有多少」说清楚。
+         动机：`hasMore` 是**触底确认**式（需再点一下才加载），用户容易误以为"就这些了"；
+         「一次性加载不全」的体感多半来自**不知道还有更多**，而非"每页太少"。
+         ⚠️ 本行不改任何数据/排序/载荷 —— 默认「全部」tab 已做 ongoing→upcoming→ended
+         三段式置顶（applyAndSlice），首屏前排本就是用户最关心的赛事。 -->
+    <view class="count-bar anim-fade" wx:if="{{filteredTotal > 0}}">
+      <text class="cb-text">共 {{filteredTotal}} 个赛事{{hasMore ? ' · 已显示 ' + list.length : ''}}</text>
+    </view>
+
     <!-- 2026-08-07（v1.4）：底部提示条四态——IDLE 待加载 / ARMED 已就绪 / LOADING 加载中 / 隐藏 -->
     <!-- IDLE 态：默认展示，提示「继续滑动或点击加载」+ 金色向下箭头 -->
     <view class="loadmore-bar anim-fade" wx:if="{{hasMore && !armedMore && !loadingMore}}" bindtap="onLoadMore" hover-class="tap-scale">

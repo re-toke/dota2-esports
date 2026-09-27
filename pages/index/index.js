@@ -126,7 +126,10 @@ Page({
     matchLoading: false,
     matchCounts: { live: 0, upcoming: 0, ended: 0 },
     matchDegraded: false,   // 数据源降级提示（OpenDota 全挂且无缓存）
-    matchEmptyText: '该日暂无对局，看看其他日期吧'   // P1-2：筛选空态文案（动态）
+    matchEmptyText: '该日暂无对局，看看其他日期吧',   // P1-2：筛选空态文案（动态）
+    // ★ 2026-09-27（P2-己 保守版）：空态引导（「本周还有 N 场 S/A 对局 → 去看 9-28」）。
+    //   null = 不显示。只在"该日无对局 且 筛选=全部 且 本周别处有比赛"时才有值。
+    emptyJump: null
   },
 
   onLoad() {
@@ -446,12 +449,25 @@ Page({
 
   // 周日历点选：切日期 → 重渲染比赛流（数据已在本地，无需请求）
   onDaySelect(e) {
-    const key = e.detail.key;
+    this._selectDayKey(e.detail.key);
+  },
+
+  // ★ 2026-09-27（P2-己 保守版）：**切换选中日的唯一入口** —— 周日历点选与空态引导共用，
+  //   避免"两处各写一份"导致口径漂移（本项目已有先例：同名不同义的量必须拆开/或收敛到单点）。
+  _selectDayKey(key) {
     if (!key || key === this.data.selectedDateKey) return;
     const todayKey = this._dateKeyOf(util.nowSec());
     this._selectedIsToday = (key === todayKey);
     this.setData({ selectedDateKey: key });
     this._renderMatchFlow();
+  },
+
+  // ★ 2026-09-27（P2-己 保守版）：空态引导点击 → 跳到"本周最近的有 S/A 对局的一天"。
+  //   刻意**不自动跳**（用户点的是今天/某日，被自动切走会困惑）⇒ 只做**可点引导**。
+  onEmptyJump() {
+    const j = this.data.emptyJump;
+    if (!j || !j.key) return;
+    this._selectDayKey(j.key);
   },
 
   // 跨周切换：±1 周 → 重建日历（比赛数据本地复用）
@@ -1328,6 +1344,31 @@ Page({
       emptyText = '该日暂无已结束的比赛';
     }
 
+    // ★★ 2026-09-27（P2-己 保守版）：**空态引导**。
+    //   背景：`_renderWeek()` 默认**恒选"今天"且不判断今天有没有比赛**
+    //   （pages/index/index.js 的 `days.some(d => d.key === todayKey) ? todayKey : days[0].key`）
+    //   ⇒ **今天 0 场时首屏就是空态**，而本周其实还有比赛（实测全周 23 张 / _allMatches=53）
+    //   ⇒ 用户会以为"首页没加载出来"。这与性能无关，是**口径/引导**问题。
+    //   保守做法（用户拍板）：**不改"按日 + 只 S/A"的产品模型、不自动切日期**
+    //   （用户点的是今天，被自动切走会困惑），只在空态里给**明确的量 + 一键跳转**。
+    //   ⚠️ 仅 `filter === 'all'` 时给跳转：其它筛选下的空态原因是"筛选没命中"，
+    //     而周日历角标计的是全部状态 ⇒ 跳过去可能是同样空的结果。
+    //   纯逻辑在 utils/homeDedupe.nearestDayWithMatches（可单测）。
+    let emptyJump = null;
+    if (!list.length && filter === 'all') {
+      const t = homeDedupe.nearestDayWithMatches(this.data.weekDays, selected);
+      if (t && t.weekElsewhere > 0) {
+        emptyJump = {
+          key: t.key,
+          label: t.label,
+          count: t.count,
+          // ★ 文案用 `shortDate`（'9-22'）而非 `label`（只是星期几）——
+          //   E2E 实测发现「去看 二」语义不清，且星期几跨周会重复。
+          text: '本周还有 ' + t.weekElsewhere + ' 场 S/A 对局 → 去看 ' + (t.shortDate || t.label)
+        };
+      }
+    }
+
     // 比分闪光：与上一次渲染对比（轮询刷新后 score 变化的卡 → flash 置位，400ms 后清除）
     const prev = {};
     (this.data.matchCards || []).forEach((c) => { prev[c.key] = c; });
@@ -1372,7 +1413,8 @@ Page({
     this.setData({
       matchCards: list,
       matchCounts: counts,
-      matchEmptyText: emptyText
+      matchEmptyText: emptyText,
+      emptyJump: emptyJump      // ★ 2026-09-27（P2-己 保守版）：空态引导（无则为 null）
     });
 
     // 周日历角标重算（count 变化 → setData weekDays）

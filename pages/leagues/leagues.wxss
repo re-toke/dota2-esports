@@ -152,6 +152,21 @@
 .star-btn { padding: var(--space-1) 0 var(--space-1) var(--space-2); min-width: 88rpx; min-height: 88rpx; display: inline-flex; align-items: center; justify-content: flex-start; box-sizing: border-box; }
 
 /* ===== 2026-08-07（v1.3/v1.4）：底部提示条——暖灰渐变融入列表、金色箭头点缀 ===== */
+/* ★★ 2026-09-27（分页可见化）：列表底部「共 N 个赛事 · 已显示 M」。
+   为什么需要：`hasMore` 是触底确认式，用户易误以为"就这些了"。
+   ★ 只用语义变量（--text-3 / --fs-caption / --space-*），**零新增硬编码色**（亮色 v2.0 铁律）。 */
+.count-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: var(--space-3-5) auto var(--space-1-5);
+}
+.cb-text {
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+  letter-spacing: 0.5rpx;
+}
+
 .loadmore-bar {
   display: flex;
   align-items: center;

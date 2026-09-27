@@ -266,6 +266,9 @@ Page({
     error: '',
     page: 0,
     pageSize: config.pageSize,
+    // ★ 2026-09-27（分页可见化）：当前筛选下的**总数**，供底部「共 N 个赛事 · 已显示 M」。
+    //   注意：这是**页面内 data**（不是 config 全局量）⇒ 可单独调整，不影响其它 5 个引用页。
+    filteredTotal: 0,
     hasMore: false,
     loadingMore: false,    // 2026-08-07（v1.3）：下一页加载态，驱动底部提示条三态切换
     armedMore: false,      // 2026-08-07（v1.4）：触底确认态（ARMED）——提示条高亮，点击才真正加载
@@ -1806,7 +1809,11 @@ Page({
     // 2026-08-07（v1.3）：重置 loadingMore——切 tab/筛选后，挂起的 appendPageSafe setTimeout
     // 回调会在检查 `if (!this.data.loadingMore) return;` 时自动跳过，避免用旧 page 切出两页。
     // v1.4：同时重置 armedMore——切 tab/筛选后 ARMED 确认态不再有意义。
-    this.setData({ list: slice, archived: [], page: page, hasMore: active.length > slice.length, loadingMore: false, armedMore: false });
+    // ★ 2026-09-27（分页可见化）：新增 `filteredTotal` = **当前筛选下的总数**，供底部
+    //   显示「共 N 个赛事 · 已显示 M」。为什么需要：`hasMore` 是**触底确认**式（需再点一下才加载），
+    //   用户容易误以为"就这些了" ⇒ 「加载不全」的体感多半来自**不知道还有更多**，
+    //   而不是"每页太少"（见 deliverables/加载性能-三项待拍板项意见-2026-09-27.md §2）。
+    this.setData({ list: slice, archived: [], page: page, filteredTotal: active.length, hasMore: active.length > slice.length, loadingMore: false, armedMore: false });
     this._armedScrollTop = 0;
     this._armedMinScroll = 0;
     this.enhanceListMetadata();

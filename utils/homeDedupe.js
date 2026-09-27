@@ -98,9 +98,64 @@ function _homePassGrade(c) {
 }
 
 
+/**
+ * ★★ 2026-09-27（P2-己 保守版）：首页空态引导 —— 选「最近的有比赛的其它日」。
+ *
+ * ## 为什么需要
+ * `_renderWeek()` 的默认选中是**今天**，且**不判断今天有没有比赛**
+ * ⇒ **今天 0 场时首屏就是空态**，而本周其实还有比赛（实测全周 23 张 / `_allMatches=53`）
+ * ⇒ 用户会以为"首页没加载出来"。这与性能无关，是**口径/引导**问题。
+ *
+ * ## 规则
+ * - 排除**当前日**与 `count <= 0` 的日子；
+ * - 优先取**向后（未来）最近**的一天；没有则取**向前最近**的一天；
+ *   （为什么优先向后：看首页多关心"接下来有什么"）
+ * - 同时给出 `weekElsewhere` = 除当前日外本周的比赛数合计（供文案「本周还有 N 场」）。
+ *
+ * @param {Array} weekDays [{key,label,dateNum,count,isToday}]
+ * @param {string} currentKey 当前选中日
+ * @returns {{key:string,label:string,shortDate:string,count:number,weekElsewhere:number}|null}
+ */
+function _nearestDayWithMatches(weekDays, currentKey) {
+  const days = Array.isArray(weekDays) ? weekDays : [];
+  const cnt = (d) => (d && Number(d.count) > 0) ? Number(d.count) : 0;
+  let weekElsewhere = 0;
+  days.forEach(function (d) { if (d && d.key !== currentKey) weekElsewhere += cnt(d); });
+
+  const idx = days.findIndex(function (d) { return d && d.key === currentKey; });
+  const others = [];
+  days.forEach(function (d, i) {
+    if (!d || !d.key || d.key === currentKey || cnt(d) <= 0) return;
+    others.push({ i: i, d: d });
+  });
+  if (!others.length) return null;
+
+  const after = others.filter(function (o) { return o.i > idx; });
+  const before = others.filter(function (o) { return o.i < idx; });
+  const pick = after.length ? after[0] : before[before.length - 1];
+  return {
+    key: pick.d.key,
+    label: pick.d.label || '',
+    // ★ shortDate：由 key（'YYYY-MM-DD'）导出的 'M-D'。
+    //   为什么需要：`label` 只是**星期几**（一/二/…），直接拼成「去看 二」语义不清（E2E 实测发现）；
+    //   且星期几**跨周会重复** ⇒ 用日期更明确。
+    shortDate: _shortDate(pick.d.key),
+    count: cnt(pick.d),
+    weekElsewhere: weekElsewhere
+  };
+}
+
+/** 'YYYY-MM-DD' → 'M-D'（非法输入返回 ''，由调用方回退 label） */
+function _shortDate(key) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(key || ''));
+  if (!m) return '';
+  return Number(m[2]) + '-' + Number(m[3]);
+}
+
 module.exports = {
   pairKeysOfCard: _pairKeysOfCard,
   teamToken: _teamToken,
   preferSameMatchCard: _preferSameMatchCard,
-  homePassGrade: _homePassGrade
+  homePassGrade: _homePassGrade,
+  nearestDayWithMatches: _nearestDayWithMatches
 };
