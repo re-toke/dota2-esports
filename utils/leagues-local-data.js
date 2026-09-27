@@ -7,7 +7,7 @@
 // 刷新：npm run fetch:leagues
 
 module.exports = {
-  "generatedAt": 1790499596,
+  "generatedAt": 1790535317,
   "source": "opendota",
   "note": "build-time leagues snapshot (active 90d + curated 60d), refresh via scripts/sync/fetch-leagues-snapshot.js",
   "stats": {
@@ -37,14 +37,14 @@ module.exports = {
       "name": "BLAST SLAM VIII"
     },
     {
-      "leagueid": 20279,
-      "tier": "professional",
-      "name": "PGL Wallachia 2026 Season 9"
-    },
-    {
       "leagueid": 18359,
       "tier": "professional",
       "name": "Clavision DOTA2 Masters 2025: Snow-Ruyi"
+    },
+    {
+      "leagueid": 20279,
+      "tier": "professional",
+      "name": "PGL Wallachia 2026 Season 9"
     },
     {
       "leagueid": 19785,
@@ -258,15 +258,15 @@ module.exports = {
     },
     "20176": {
       "earliest": 1789995625,
-      "latest": 1790456053,
-      "lastEnd": 1790458597,
-      "count": 54
+      "latest": 1790532284,
+      "lastEnd": 1790534265,
+      "count": 61
     },
     "20279": {
       "earliest": 1789801237,
-      "latest": 1790496122,
-      "lastEnd": 1790498413,
-      "count": 109
+      "latest": 1790521184,
+      "lastEnd": 1790522808,
+      "count": 114
     }
   }
 };

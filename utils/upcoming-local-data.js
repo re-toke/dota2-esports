@@ -6,22 +6,10 @@
 // 数据来源：utils/upcoming-local.json（由本脚本生成）
 
 module.exports = {
-  "generatedAt": 1790499595,
+  "generatedAt": 1790535315,
   "source": "liquipedia",
   "note": "build-time snapshot (Upcoming+Ongoing, Tier1-3), refresh via scripts/sync/fetch-liquipedia-upcoming.js",
   "events": [
-    {
-      "id": -1973943,
-      "name": "PGL Wallachia Season 9",
-      "grade": "A",
-      "rank": 2,
-      "label": "A级",
-      "tier": 2,
-      "start": 1789776000,
-      "end": 1790524799,
-      "date": "Sep 19–27, 2026",
-      "source": "liquipedia"
-    },
     {
       "id": -1700026,
       "name": "BetBoom Streamers Battle 15",
