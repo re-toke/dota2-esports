@@ -575,4 +575,81 @@ async function runAll() {
   process.exit(failed === 0 ? 0 : 1);
 }
 
+section('\n--- P2-A curation 查表记忆化：逐位等价（防「优化把行为改掉」）---');
+// 背景（2026-09-27 P2-A 实测）：首页 43 张卡里，`leagueDisplayName` + `getMatchTierForHome`
+//   合计占 `_cardFromSeries` 约 90%（实测每次查表 ~0.9ms），根因是 `eventFor` 内部
+//   ① 每次调用都 `Object.keys(EVENT_INDEX)` 重建键数组 ② 宽松匹配是 O(事件键数) 线性扫描。
+//   已加：键数组缓存 + 名称匹配结果记忆化（键含 game）。本组守卫锁住"等价"。
+//
+// ★ 记忆化最危险的三个失效面，各一条对照：
+//   ① 冷/热不一致（缓存了错的）② 跨 game **串味** ③ 把**时间相关**的 leagueId 判届也缓存了。
+const sigOf = (v) => (v ? JSON.stringify({ c: v.canonical, l: v.leagueId, g: v.game, t: v.tier }) : 'null');
+const PROBE_NAMES = [
+  'PGL Wallachia Season 9', 'EPL Masters 2026', 'The International 2026',
+  'Esports World Cup 2026', 'DreamLeague Season 30', 'BLAST SLAM IX',
+  'ESL', 'ESL One', 'TI2026', 'TI2026 NA Qualifier',   // 宽松匹配边界样本（正/反向 + 子串误配防线）
+  '不存在的赛事 XYZ 2099', ''                            // 未命中 / 空串
+];
+
+check('记忆化：冷启动 vs 热命中 结果逐位一致（含 canonical/leagueId/tier）', function () {
+  const cold = PROBE_NAMES.map((n) => sigOf(curationRaw.curatedEventFor(n)));
+  const warm = PROBE_NAMES.map((n) => sigOf(curationRaw.curatedEventFor(n)));   // 第二次必然命中缓存
+  for (let i = 0; i < PROBE_NAMES.length; i++) {
+    assert(cold[i] === warm[i], '「' + PROBE_NAMES[i] + '」冷=' + cold[i] + ' 热=' + warm[i]);
+  }
+});
+
+check('记忆化：同一输入重复 N 次结果恒定（幂等）', function () {
+  const first = sigOf(curationRaw.curatedEventFor('PGL Wallachia Season 9'));
+  for (let i = 0; i < 20; i++) {
+    assert(sigOf(curationRaw.curatedEventFor('PGL Wallachia Season 9')) === first, '第 ' + i + ' 次不一致');
+  }
+});
+
+check('记忆化：不同 game 不串味（缓存键**必须含 game**）', function () {
+  // ★ 必须用**合成 lookups**：真实 curation 里的条目大多未声明 `game`，`validGame` 不过滤
+  //   ⇒ 对这类条目 dota2/cs2 结果天然相同，拿它当探针会写出**近永真断言**
+  //   （证伪验证时实测抓到这个：漏掉 game 键也照样"通过"）。
+  //   合成一个**声明了 game 且会被过滤**的条目，才能真正检验缓存键。
+  //   顺带锁住另一条易错边界：**精确命中时 game 不匹配 ⇒ 返回 null 且不再走宽松扫描**。
+  const synth = curationRaw.buildLookups(
+    [{ canonical: 'Epsilon Cup 2099', game: 'cs2' }], {});
+  const dota = sigOf(synth.eventFor('Epsilon Cup 2099', { game: 'dota2' }));
+  const cs2 = sigOf(synth.eventFor('Epsilon Cup 2099', { game: 'cs2' }));
+  assert(dota === 'null', 'game 不匹配时精确命中应立即返回 null（不得继续宽松扫描），实际=' + dota);
+  assert(cs2 !== 'null', 'game 匹配时应命中条目，实际=' + cs2);
+  // 顺序反转再验一次（无论谁先入缓存，都不得互相污染）
+  const synth2 = curationRaw.buildLookups(
+    [{ canonical: 'Epsilon Cup 2099', game: 'cs2' }], {});
+  const cs2First = sigOf(synth2.eventFor('Epsilon Cup 2099', { game: 'cs2' }));
+  const dotaAfter = sigOf(synth2.eventFor('Epsilon Cup 2099', { game: 'dota2' }));
+  assert(cs2First === cs2, 'cs2 结果应与前一个实例一致');
+  assert(dotaAfter === 'null', 'cs2 先入缓存后，dota2 仍须为 null（否则缓存键漏了 game）');
+  // 真实数据侧的常规一致性（非探针，仅防回归）
+  const n = 'PGL Wallachia Season 9';
+  curationRaw.curatedEventFor(n, { game: 'dota2' });
+  const cs2Warm = sigOf(curationRaw.curatedEventFor(n, { game: 'cs2' }));
+  const cs2Cold = sigOf(curationRaw.buildLookups(curationRaw.CURATED_EVENTS, curationRaw.CURATED_TEAMS)
+    .eventFor(n, { game: 'cs2' }));
+  assert(cs2Warm === cs2Cold, 'cs2 串味：热=' + cs2Warm + ' 冷=' + cs2Cold);
+});
+
+check('★ leagueId 判届路径**未被缓存**（它依赖 now，缓存会导致跨窗取到旧届）', function () {
+  // 找一个「一 ID 多届」的 leagueId
+  const byLid = {};
+  (curationRaw.CURATED_EVENTS || []).forEach((e) => {
+    if (e && e.leagueId != null) (byLid[e.leagueId] = byLid[e.leagueId] || []).push(e);
+  });
+  let multi = null;
+  Object.keys(byLid).forEach((k) => { if (multi === null && byLid[k].length >= 2) multi = Number(k); });
+  assert(multi !== null, 'curation 中应存在至少一个「一 ID 多届」的 leagueId（本断言自身的前提）');
+  // 同一实例、同一 leagueId、**不同 now** ⇒ 必须能取到不同届
+  const lk = curationRaw.buildLookups(curationRaw.CURATED_EVENTS, curationRaw.CURATED_TEAMS);
+  const early = lk.eventFor('', { leagueId: multi, now: 1 });              // 极早 → 回退首届
+  const late = lk.eventFor('', { leagueId: multi, now: 4102444800 });      // 极晚 → 回退末届
+  assert(early && late, 'leagueId ' + multi + ' 应能命中共 2 届');
+  assert(sigOf(early) !== sigOf(late),
+    '不同 now 取到同一届 ⇒ leagueId 判届路径被错误缓存了（leagueId ' + multi + '）');
+});
+
 runAll();

@@ -992,6 +992,89 @@ function buildLookups(events, teams) {
     NAME_INDEX[consensus.normName(t.name)] = Number(id);
     (t.aliases || []).forEach((a) => { NAME_INDEX[consensus.normName(a)] = Number(id); });
   });
+  // ★ 2026-09-27（P2-A 实测优化）：`Object.keys(EVENT_INDEX)` 原先**每次 eventFor 调用**都重建
+  //   一遍（含全部 canonical + aliases 的字符串数组），而 **EVENT_INDEX 在构建完成后永不变化**
+  //   （全仓仅本函数 963/964 两行写入，且都在构建期）⇒ 键数组可安全缓存一次。
+  //
+  //   实测（模拟器，首页 43 张卡）：查表单项占 `_cardFromSeries` 的 ~90%，每次约 0.9ms；
+  //   重复的键数组分配是其中主要成本。纯分配消除，**不改变任何匹配语义**。
+  //
+  //   ★ 缓存放在**闭包内**：curation 远端重载时 `remoteCuration` 会重新调用 `buildLookups`
+  //     ⇒ 新闭包 = 新缓存，天然失效，不会出现"curation 更新了但键数组还是旧的"。
+  let _eventKeysCache = null;
+  const eventKeys = () => {
+    if (_eventKeysCache === null) _eventKeysCache = Object.keys(EVENT_INDEX);
+    return _eventKeysCache;
+  };
+
+  // ★ 2026-09-27（P2-A 实测优化）：**名称匹配结果记忆化**。
+  //   为什么可缓存：本段只依赖 (归一名, game)，**与时间无关** —— 与 `pinLookup` 正相反
+  //     （后者按 `leagueIdWindow` 判届、依赖 now，故**刻意不缓存**，否则跨窗后会取到旧届）。
+  //   为什么需要：宽松匹配是 **O(事件键数)** 的线性扫描（每个键最多 2 次 indexOf），
+  //     而首页同一联赛会产生多张卡 ⇒ 同一名字被反复扫描。
+  //     实测（模拟器，43 卡）：`leagueDisplayName` + `getMatchTierForHome` 合计占
+  //     `_cardFromSeries` 的约 90% —— 这才是 P2-A 的热点（**不是**方案点名的
+  //     groupSeries / patchNullSeriesId / BO 判定，那三项实测合计仅 1~4ms）。
+  //   ★ 必须**逐位等价**，两条易错边界：
+  //     ① 精确命中时原实现是 `return validGame(EVENT_INDEX[k])` —— **即使 validGame 返回 null
+  //        也直接返回**（不再走宽松扫描）；本实现用 `if (EVENT_INDEX[k]) { out = okGame(...) }` 保持该语义。
+  //     ② 宽松扫描里的 game 过滤发生在**扫描内部**（跳过不匹配的条目、继续往后找）
+  //        ⇒ 缓存键**必须含 game**，否则会把"因 game 不匹配而继续扫描才得到的结果"错配给另一 game。
+  //   ★ 作用域 = 闭包：curation 远端重载时 `remoteCuration` 会重跑 `buildLookups`
+  //     ⇒ 新闭包 = 新缓存，天然失效（不会出现"curation 更新了但命中结果还是旧的"）。
+  let _nameScanCache = null;
+  let _nameScanCount = 0;
+  function nameMatch(k, game) {
+    const ck = game ? (k + '\u0000' + game) : k;
+    if (_nameScanCache === null) _nameScanCache = {};
+    if (Object.prototype.hasOwnProperty.call(_nameScanCache, ck)) return _nameScanCache[ck];
+    const okGame = (entry) => {
+      if (!entry) return null;
+      if (game && entry.game && entry.game !== game) return null;
+      return entry;
+    };
+    let out = null;
+    if (EVENT_INDEX[k]) {
+      out = okGame(EVENT_INDEX[k]);        // ★ 精确命中即终止（等价于原 `return validGame(...)`）
+    } else {
+      const ks = eventKeys();
+      for (let i = 0; i < ks.length && !out; i++) {
+        const ek = ks[i];
+        if (ek.length < 5) continue; // 短键跳过，避免误匹配
+        // 正向：归一名包含事件键（处理 OpenDota 名称多后缀，如 "ESL One Birmingham 2024" 含 "ESL One Birmingham"）
+        const idx = k.indexOf(ek);
+        if (idx >= 0) {
+          const before = idx > 0 ? k.charAt(idx - 1) : '';
+          const okBefore = !before || !/[a-z0-9]/.test(before);
+          const remainder = k.slice(idx + ek.length);
+          // 正向边界放宽：ek 之后除「词边界」外，还允许纯数字 / "dota2?" / "s<季>" 后缀，
+          // 以兼容 OpenDota 在规范名后追加年份/赛季/「Dota 2」的写法
+          // （如 "Esports World Cup 2026 Dota 2" → esportsworldcup2026dota2 仍能命中 curation 别名）。
+          // 这样真实 S/A 赛事即便被 OpenDota 标为 excluded，也能经 curation 兜底收录，避免漏收。
+          const okAfter = !remainder || !/[a-z0-9]/.test(remainder[0])
+            || /^\d+$/.test(remainder) || /^dota2?$/.test(remainder) || /^s\d+$/.test(remainder);
+          if (okBefore && okAfter) out = okGame(EVENT_INDEX[ek]);
+        }
+        // 反向：事件键包含归一名（处理 OpenDota 名称少后缀，如 "ESL" 匹配 "ESL One"）
+        if (!out) {
+          const idx2 = ek.indexOf(k);
+          if (idx2 >= 0) {
+            const before = idx2 > 0 ? ek.charAt(idx2 - 1) : '';
+            const after = ek.charAt(idx2 + k.length);
+            const okBefore = !before || !/[a-z0-9]/.test(before);
+            const okAfter = !after || !/[a-z0-9]/.test(after);
+            if (okBefore && okAfter) out = okGame(EVENT_INDEX[ek]);
+          }
+        }
+      }
+    }
+    // 容量护栏：名称种类实践中仅数十，但防会话内无界增长（真触发则整体清空重建）
+    if (_nameScanCount > 800) { _nameScanCache = {}; _nameScanCount = 0; }
+    _nameScanCache[ck] = out;
+    _nameScanCount++;
+    return out;
+  }
+
   function eventFor(name, ctx) {
     // ★ 2026-08-11 BUG 修复：leagueId 显式 pin 匹配提到 name 判空之前。
     //   关注页 follow.js 跳转详情页只传 leagueId 不传 name → 原实现 `if (!name) return null`
@@ -1015,47 +1098,10 @@ function buildLookups(events, teams) {
       if (pinned) return validGame(pinned);
     }
     if (!name) return null;
-    // 2. 名称匹配（精确 + 模糊）
+    // 2. 名称匹配（精确 + 宽松）——**结果记忆化**（实现与理由见上方 nameMatch 注释）
     const k = consensus.normName(name);
     if (!k) return null;
-    if (EVENT_INDEX[k]) return validGame(EVENT_INDEX[k]);
-    // 宽松匹配：归一名包含事件键或反之，但必须满足边界检查（非字母数字）
-    // 避免子串误匹配：如 "TI2026 NA Qualifier" 误匹配到 "TI2026" 主赛事
-    const ks = Object.keys(EVENT_INDEX);
-    for (let i = 0; i < ks.length; i++) {
-      const ek = ks[i];
-      if (ek.length < 5) continue; // 短键跳过，避免误匹配
-      // 正向：归一名包含事件键（处理 OpenDota 名称多后缀，如 "ESL One Birmingham 2024" 含 "ESL One Birmingham"）
-      const idx = k.indexOf(ek);
-      if (idx >= 0) {
-        const before = idx > 0 ? k.charAt(idx - 1) : '';
-        const okBefore = !before || !/[a-z0-9]/.test(before);
-        const remainder = k.slice(idx + ek.length);
-        // 正向边界放宽：ek 之后除「词边界」外，还允许纯数字 / "dota2?" / "s<季>" 后缀，
-        // 以兼容 OpenDota 在规范名后追加年份/赛季/「Dota 2」的写法
-        // （如 "Esports World Cup 2026 Dota 2" → esportsworldcup2026dota2 仍能命中 curation 别名）。
-        // 这样真实 S/A 赛事即便被 OpenDota 标为 excluded，也能经 curation 兜底收录，避免漏收。
-        const okAfter = !remainder || !/[a-z0-9]/.test(remainder[0])
-          || /^\d+$/.test(remainder) || /^dota2?$/.test(remainder) || /^s\d+$/.test(remainder);
-        if (okBefore && okAfter) {
-          const v = validGame(EVENT_INDEX[ek]);
-          if (v) return v;
-        }
-      }
-      // 反向：事件键包含归一名（处理 OpenDota 名称少后缀，如 "ESL" 匹配 "ESL One"）
-      const idx2 = ek.indexOf(k);
-      if (idx2 >= 0) {
-        const before = idx2 > 0 ? ek.charAt(idx2 - 1) : '';
-        const after = ek.charAt(idx2 + k.length);
-        const okBefore = !before || !/[a-z0-9]/.test(before);
-        const okAfter = !after || !/[a-z0-9]/.test(after);
-        if (okBefore && okAfter) {
-          const v = validGame(EVENT_INDEX[ek]);
-          if (v) return v;
-        }
-      }
-    }
-    return null;
+    return nameMatch(k, ctx && ctx.game);
   }
   function teamFor(nameOrId) {
     if (nameOrId == null) return null;
