@@ -1032,6 +1032,22 @@ Page({
                 m.phase = 'recent';
                 console.log('[league-detail] 比分达终局（LP）→ phase 归一为 recent');
               }
+              // ★★ 2026-09-27（用户实测修复）：「**对阵未定（TBD）的排期条目不得视为 live**」。
+              //   实测现象：详情页一张「进行中」卡 —— `Team Yandex vs TBD`、0:0、**无任何小场数据**，
+              //   却显示「● LIVE · 已进行 2h 19m」（后者由"计划开赛时间"估算，见下方 liqElapsedSec）。
+              //   根因：本页构造 liq- 系列时**直接透传** `m.phase`（见下方 `phase: m.phase`），
+              //   而上一条闸门只归一「比分已达终局」，**对 0:0 完全不生效** ⇒ 漏网。
+              //   ⇒ 判据见 `sources.normalizeLpLivePhase` 注释：**只取"TBD ⇒ 不可能正在打"这一条**
+              //     （刻意的窄判据，避免"零数据"误伤 OpenDota 收录滞后的真-live）。
+              //   效果：归一为 upcoming 后 ① 不再渲染 `● LIVE`；② 下方 `liqElapsedSec` 自动归 0
+              //     ⇒ 「已进行 X」一并消失（一处修好两个可见错误）。
+              if (m.phase === 'live') {
+                const _np = sources.normalizeLpLivePhase(m.phase, m.team1Name, m.team2Name);
+                if (_np !== m.phase) {
+                  m.phase = _np;
+                  console.log('[league-detail] 对阵未定（TBD）→ phase 归一为 ' + _np);
+                }
+              }
               // ★ v3 优化项22：从 Liquipedia 提取比分（TeamOpponent|score=N）
               var liqScoreA = m.score1 || 0;
               var liqScoreB = m.score2 || 0;

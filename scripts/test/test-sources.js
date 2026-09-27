@@ -1256,6 +1256,36 @@ check('names：★ 全库禁止再内联该规则（白名单外一律 FAIL）',
       '★ 敏感性：旧写法会产生 2 张同 key 卡（证明判据有效），实际 ' + buggy.length);
   });
 
+  // ===== 2026-09-27（用户实测修复）：LP 排期条目 phase 归一 —— 对阵未定不得视为 live =====
+  //  实测：详情页一张「进行中」卡 = `Team Yandex vs TBD`、0:0、无任何小场，却显示「● LIVE · 已进行 2h19m」。
+  //  根因：详情页直接透传 LP 条目的 `m.phase='live'`，而其唯一归一闸门只处理「比分已达终局」⇒ 对 0:0 无效。
+  check('sources.normalizeLpLivePhase：对阵未定(TBD)不得判 live，且**不得误伤真-live**', () => {
+    const src = require('../../utils/sources.js');
+    const f = src.normalizeLpLivePhase;
+    assert(typeof f === 'function', 'normalizeLpLivePhase 必须导出');
+    // ① ★ 本案：TBD 对手 + live ⇒ 归一为 upcoming（消除「● LIVE」与「已进行 X」）
+    assert(f('live', 'Team Yandex', 'TBD') === 'upcoming', 'TBD 对手应归一为 upcoming');
+    // ② ★★ 关键：真队名 + live ⇒ **必须保持 live**（不得误伤正在打的比赛）
+    assert(f('live', 'LGD Gaming', 'Natus Vincere') === 'live', '★ 真队名不得被归一（防误伤真-live）');
+    assert(f('live', 'Team Liquid', 'Team Spirit') === 'live', '★ 真队名（第二例）不得被归一');
+    // ③ TBD 变体全覆盖（与 league-detail 的 TBD_RE 同口径）
+    ['TBD', 'tbd', 'Tba', '待定', '待公布', 'unknown', '', '   ', 'To Be Determined']
+      .forEach((n) => {
+        assert(f('live', 'Team Yandex', n) === 'upcoming', 'TBD 变体「' + n + '」应归一为 upcoming');
+        assert(f('live', n, 'Team Yandex') === 'upcoming', 'TBD 变体（A 侧）「' + n + '」应归一为 upcoming');
+      });
+    // ④ 仅对 live 生效：其它 phase 一律原样（防副作用）
+    assert(f('upcoming', 'A', 'TBD') === 'upcoming', 'upcoming 应原样返回');
+    assert(f('recent', 'A', 'TBD') === 'recent', 'recent 应原样返回（不改历史场次）');
+    assert(f(undefined, 'A', 'TBD') === undefined, 'undefined 应原样返回');
+    // ⑤ 纯函数：不改入参（无入参可改，此处断言不抛错）
+    assert(f('live', null, null) === 'upcoming', 'null 队名应视为未定');
+    // ⑥ ★ 敏感性：把 TBD 换成真名 ⇒ 结果必须由 upcoming 变回 live（证明判据真的看队名）
+    assert(f('live', 'Team Yandex', 'TBD') === 'upcoming' &&
+      f('live', 'Team Yandex', 'Team Falcons') === 'live',
+      '★ 判据敏感性：仅队名不同 ⇒ 输出必须不同（否则是永真断言）');
+  });
+
   check('★ LP UA 合规：标识性 UA 单点化（禁伪装浏览器 UA / 禁占位联系方式）', () => {
     const fs = require('fs');
     const path = require('path');

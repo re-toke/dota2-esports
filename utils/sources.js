@@ -2891,8 +2891,46 @@ function buildLpLiveSeries(lpMatches, now) {
   });
 }
 
+// ★★ 2026-09-27（用户实测修复）：LP 排期条目的 phase 归一 —— 「**对阵未定**」不得视为 live。
+//
+// ## 背景（实测现象）
+// 赛事详情页出现一张「进行中」卡：`Team Yandex vs TBD`、比分 0:0、**无任何小场数据**，
+// 却显示 `● LIVE · 已进行 2h 19m`（`elapsedText` 由"计划开赛时间"估算：见 league-detail 的 `liqElapsedSec`）。
+//
+// ## 根因
+// LP 排期条目自带 `phase='live'`（计划时间已过），而详情页在构造 `liq-` 系列时**直接透传** `m.phase`
+// （`phase: m.phase` / `isLive: (m.phase === 'live') && ...`）；
+// 该页**唯一的"归一"闸门只处理「比分已达终局」**（`_decidedByScore`）⇒ **对 0:0 完全不生效** ⇒ 漏网。
+//
+// ## 判据（**刻意只取"绝对安全"的一条**）
+// **对阵任一方未定（TBD / TBA / 待定 / 待公布 / unknown / 空）⇒ 该场不可能正在打** ⇒ 归一为 `upcoming`。
+//   ★ **为什么不用更宽的判据**（如"零小场 / 零比分"）：OpenDota 对**刚开始**的比赛**收录滞后**
+//     （`games` 可能暂空）⇒ 用"零数据"会**误伤真-live**（页面会显示"即将开始"而比赛正在打）。
+//   ★ **为什么 TBD 这一条安全**：真在进行的比赛**双方队名必然已定** ⇒ 不会误伤。
+//   ⇒ 本函数**只做 TBD 这一条**：宁可漏归一，不可误伤。
+//
+// ## 效果（一处修好两个可见错误）
+// 归一为 `upcoming` 后：① 详情页 WXML 走 `upcoming` 分支 ⇒ **不再渲染 `● LIVE`**；
+// ② `league-detail` 的 `liqElapsedSec = m.phase === 'live' ? ... : 0` ⇒ 自动归 0 ⇒ **不再显示「已进行 X」**。
+//
+// ⚠️ 口径：TBD 正则与 `subpackages/detail/league-detail/league-detail.js` 的 `TBD_RE` **同口径**，
+//    如需修改请**两处同改**（本项目已有 3 处 TBD 正则，属已知的历史分散点）。
+//
+// @param {string} phase 原始 phase（'live' | 'upcoming' | 'recent'）
+// @param {string} team1Name A 方队名
+// @param {string} team2Name B 方队名
+// @returns {string} 归一后的 phase（非 live 一律原样返回）
+function normalizeLpLivePhase(phase, team1Name, team2Name) {
+  if (phase !== 'live') return phase;
+  const TBD_RE = /^(tbd|tba|待定|待公布|unknown|to\s+be\s+(determined|announced))$/i;
+  const isTbd = function (n) { const s = String(n || '').trim(); return !s || TBD_RE.test(s); };
+  if (isTbd(team1Name) || isTbd(team2Name)) return 'upcoming';
+  return phase;
+}
+
 module.exports = {
   SOURCE_LABEL: SOURCE_LABEL,
+  normalizeLpLivePhase: normalizeLpLivePhase,
   groupLiquipediaMatches: groupLiquipediaMatches,
   buildLpUpcomingSeries: buildLpUpcomingSeries,
   buildLpLiveSeries: buildLpLiveSeries,
