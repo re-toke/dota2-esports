@@ -207,6 +207,71 @@ assert('leagues 包装与 JSON 的 leagues 数一致',
   (wLg.leagues || []).length === (jLg.leagues || []).length,
   'wrapper=' + (wLg.leagues || []).length + ' json=' + (jLg.leagues || []).length);
 
+console.log('\n--- ⑥ ★ 云端心跳三态：buildRemoteHealth（「无行」≠「连不上」）---');
+// 背景（2026-09-26 一次真实误判）：改造前「CI 从未上报」与「Supabase 连不上」在界面上**完全同形**，
+//   排查时误以为代码有 Bug、白跑一轮往返。本组守卫的核心就是**锁住这个区分**。
+const NOW = 1790363346;   // 固定基准时刻（测试不得依赖当前时间）
+const H = 3600;
+
+// ① 无行 ⇒ missing（语义 =「查询成功但没有该行」= CI 从未上报 ⇒ **必须可见**）
+const rMissing = diag.buildRemoteHealth(null, NOW);
+assert('★ 无行 ⇒ state=missing（不可与"连不上"混同）', rMissing.state === 'missing',
+  '实际=' + rMissing.state);
+assert('★ 无行 ⇒ 文案含「尚无记录」+「未上报」',
+  rMissing.text.indexOf('尚无记录') >= 0 && rMissing.text.indexOf('未上报') >= 0, rMissing.text);
+assert('无行 ⇒ 不带 overdue/年龄（不伪造可信数字）',
+  rMissing.overdue === undefined && rMissing.ageSec === undefined);
+
+// ② 正常行
+const rOk = diag.buildRemoteHealth(
+  { key: 'diag_report', value: { at: NOW - 3 * H, head: '0923022', oldest: { name: '联赛快照' } } }, NOW);
+assert('正常行 ⇒ state=ok', rOk.state === 'ok', '实际=' + rOk.state);
+assert('正常行 ⇒ 年龄 3 小时', rOk.ageText === '3 小时', '实际=' + rOk.ageText);
+assert('正常行 ⇒ 文案含「前」+ commit', rOk.text.indexOf('前') > 0 && rOk.text.indexOf('0923022') > 0, rOk.text);
+assert('正常行 ⇒ 不标停摆', rOk.overdue === false && rOk.text.indexOf('停摆') < 0, rOk.text);
+assert('正常行 ⇒ oldestName 透传', rOk.oldestName === '联赛快照');
+
+// ③ 超阈值 ⇒ overdue
+const rOld = diag.buildRemoteHealth({ value: { at: NOW - (diag.REMOTE_HEARTBEAT_OVERDUE_SEC + H) } }, NOW);
+assert('★ 超阈值 ⇒ overdue=true 且文案含「疑似停摆」',
+  rOld.overdue === true && rOld.text.indexOf('疑似停摆') >= 0, rOld.text);
+// 边界：恰好等于阈值**不算**超（用 > 而非 >=，与 computePipelineMetrics.overTarget 同口径）
+const rEdge = diag.buildRemoteHealth({ value: { at: NOW - diag.REMOTE_HEARTBEAT_OVERDUE_SEC } }, NOW);
+assert('边界：恰好 24h ⇒ 不算停摆（口径与 overTarget 一致，用 >）', rEdge.overdue === false,
+  'overdue=' + rEdge.overdue);
+
+// ④ 行在但内容不成形 ⇒ invalid（**不可**误报成 missing）
+const rInv1 = diag.buildRemoteHealth({ key: 'diag_report' }, NOW);
+assert('★ 行在但无 value ⇒ state=invalid（不得误报"未上报"）',
+  rInv1.state === 'invalid' && rInv1.text.indexOf('未上报') < 0, rInv1.state + ' / ' + rInv1.text);
+const rInv2 = diag.buildRemoteHealth({ value: { head: 'abc' } }, NOW);
+assert('★ 行在但缺 at ⇒ state=invalid', rInv2.state === 'invalid', '实际=' + rInv2.state);
+assert('invalid 也不伪造年龄', rInv2.ageSec === undefined);
+
+// ⑤ 时钟回拨保护（at 在未来）——不出现负年龄
+const rFuture = diag.buildRemoteHealth({ value: { at: NOW + 5 * H } }, NOW);
+assert('时钟回拨（at 在未来）⇒ 年龄夹到 0，不出现负数', rFuture.ageSec === 0, 'ageSec=' + rFuture.ageSec);
+
+// ⑥ ★★ 源码级守卫：网络失败分支**必须保持静默**
+//    本组最关键的一条 —— 若有人在 catch 里补上"CI 未上报"，就会把"连不上"归因成"CI 没跑"（指错方向）。
+const fsrc = fs.readFileSync(path.join(ROOT, 'pages/follow/follow.js'), 'utf8');
+// ★ 必须用 lastIndexOf：用 indexOf 只检查**第一处**，往 catch 里再补一处照样"通过"。
+//   实测（对源码做变异再跑同一判据）：indexOf 写法是**近永真断言**，已修正为 lastIndexOf。
+const idxSetLast = fsrc.lastIndexOf("'health.remote'");
+const idxCatch = fsrc.indexOf('.catch(', fsrc.indexOf("sb.rest('curation_meta'"));
+assert('★ follow.js：最后一处 health.remote 也在 .catch 之前（catch 内必须静默）',
+  idxSetLast >= 0 && idxCatch > 0 && idxSetLast < idxCatch,
+  'last setData idx=' + idxSetLast + ' catch idx=' + idxCatch);
+assert('★ follow.js：health.remote 只出现 1 处（防在 catch 里又补一处）',
+  fsrc.split("'health.remote'").length - 1 === 1,
+  '出现次数=' + (fsrc.split("'health.remote'").length - 1));
+assert('★ follow.js：心跳落地走纯函数（不得在页面层重新拼装三态）',
+  fsrc.indexOf('diagnostics.buildRemoteHealth(') >= 0);
+// WXML 同理：文案必须来自纯函数；模板里再拼一次的话页面层无测试，拼错没人拦
+const wsrc = fs.readFileSync(path.join(ROOT, 'pages/follow/follow.wxml'), 'utf8');
+assert('★ follow.wxml：心跳文案直接取 .text（不在模板内拼）',
+  wsrc.indexOf('health.remote.text') >= 0 && wsrc.indexOf('health.remote.ageText') < 0);
+
 console.log('\n=== 结果 ===');
 console.log('通过: ' + pass + '  失败: ' + fail);
 if (fail) { console.log('存在失败 ❌'); process.exit(1); }

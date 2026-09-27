@@ -44,7 +44,9 @@
     <view class="row-main">
       <text class="row-title">数据健康</text>
       <text class="row-sub">快照更新于 {{health.ageText}}前{{health.oldestName ? '（取最旧：' + health.oldestName + '）' : ''}}{{health.overTarget ? ' · 已超 ' + health.targetHours + 'h 目标' : ''}}</text>
-      <text class="row-sub" wx:if="{{health.remote}}">云端调度心跳：{{health.remote.ageText}}前{{health.remote.overdue ? ' · ❌ 疑似停摆' : ''}}{{health.remote.head ? '（' + health.remote.head + '）' : ''}}</text>
+      <!-- ★ 文案由纯函数 diagnostics.buildRemoteHealth 拼好（页面层零测试是最大盲区）；
+           三态：正常「X 前（commit）」/ 超时「· ❌ 疑似停摆」/ 无行「尚无记录（CI 未上报）」 -->
+      <text class="row-sub" wx:if="{{health.remote}}">云端调度心跳：{{health.remote.text}}</text>
       <text class="row-sub">{{health.metricHint}}</text>
     </view>
   </view>

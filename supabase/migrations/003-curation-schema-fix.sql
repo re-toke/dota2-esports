@@ -43,7 +43,10 @@ CREATE INDEX IF NOT EXISTS ix_curation_events_status
 
 -- 5) curation_teams：team_id 已是 bigint UNIQUE（001-init 已建），无需改动
 -- 6) curation_meta：确认有 key 列
---    （001-init 建的是 (key text PRIMARY KEY, data jsonb)，此处仅确保存在）
+--    ★ 结构以 001-init 为准：(key text PRIMARY KEY, value jsonb NOT NULL, updated_at timestamptz)。
+--      ⚠️ 本行注释原文写的是 "data jsonb" —— **是错的**，已在 2026-09-26 修正：
+--         jsonb 列名是 **value 不是 data**（`scripts/ops/backfill-curation.js:24` 记有"实测踩过"）。
+--      该错误注释曾把人误导到"列名不匹配 ⇒ CI 写不进去"的假设上，故必须改掉。
 ALTER TABLE public.curation_meta
   ADD COLUMN IF NOT EXISTS key text;
 

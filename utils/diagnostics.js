@@ -60,6 +60,16 @@ var SLO = {
   }
 };
 
+/**
+ * 云端心跳"疑似停摆"阈值。
+ * ★ 依据**实测**而非名义 cron：`sync-upcoming` 名义 `0 3,15 * * *` UTC，实际落点 ≈08:2xZ / ≈18:5xZ
+ *   （GH scheduled 一致延迟 ≈5h）。故实际间隔约 10~12h ⇒ 取 **24h = 约 2 倍余量**：
+ *   单次被丢弃（实测 9 次里 3 次失败）不报警，**连续两次没跑**才判定停摆。
+ * ★ 与 `SLO.snapshotAgeSec.target`（同为 24h）**语义不同**：那个衡量"快照有多旧"，
+ *   这个衡量"调度还活着吗"，只是数值巧合 —— 故独立成常量，不要互相引用。
+ */
+var REMOTE_HEARTBEAT_OVERDUE_SEC = 24 * 3600;
+
 function _rate(n, d) {
   return d > 0 ? (n / d) : null;
 }
@@ -282,6 +292,52 @@ function describeFreshness(nowSec) {
   return computePipelineMetrics(snaps, nowSec);
 }
 
+/**
+ * **云端心跳展示对象**（纯函数：输入 curation_meta 单行 → 输出可直接渲染的对象）。
+ *
+ * ★★ 2026-09-26 为什么加这个函数（一次真实误判换来的）：
+ *   改造前只有「有行 → 显示年龄」和「任何异常 → 什么都不显示」两种结果，
+ *   于是「**CI 从未上报**」与「**Supabase 连不上**」在界面上**完全同形**。
+ *   排查时为此多花了一轮往返 —— 一个以「让静默失败可见」为目的的功能，
+ *   **它自己的缺失却是静默的**，这是设计缺口，不是小瑕疵。
+ *
+ * 三态必须分开（每态语义不同，混同会把归因指错方向）：
+ *   · `state:'missing'`  —— 查询**成功**但没有该行 ⇒ **CI 从未上报**（可诊断事实，必须显示）
+ *   · `state:'invalid'`  —— 行在但内容不成形（脏数据）⇒ 与 missing 区分，避免误报"CI 没上报"
+ *   · `state:'ok' / 'overdue'` —— 正常；overdue = 心跳超过 REMOTE_HEARTBEAT_OVERDUE_SEC
+ *   ⚠️ **网络失败不归本函数管**：调用方在 catch 里**保持静默**（不可写成"CI 未上报"）。
+ *
+ * @param {Object|null|undefined} row PostgREST 返回的单行 `{key, value}`；无行为 null
+ * @param {number} [nowSec]
+ * @returns {{state:string, text:string, ageSec?:number, ageText?:string, overdue?:boolean, head?:string, oldestName?:string}}
+ */
+function buildRemoteHealth(row, nowSec) {
+  if (!row) {
+    return { state: 'missing', text: '尚无记录（CI 未上报）' };
+  }
+  var v = row.value;
+  var at = Number(v && v.at);
+  if (!v || !at) {
+    // 行存在但内容不成形：**不能**当成 missing —— 否则会把"脏数据"误报成"CI 没上报"
+    return { state: 'invalid', text: '记录内容异常（缺 at 字段）' };
+  }
+  var now = nowSec || Math.floor(Date.now() / 1000);
+  // 时钟回拨/偏差时 at 可能大于 now ⇒ 夹到 0，避免出现"-3 分钟前"
+  var ageSec = Math.max(0, now - at);
+  var overdue = ageSec > REMOTE_HEARTBEAT_OVERDUE_SEC;
+  var head = v.head ? String(v.head) : '';
+  return {
+    state: overdue ? 'overdue' : 'ok',
+    ageSec: ageSec,
+    ageText: _fmtAge(ageSec),
+    overdue: overdue,
+    head: head,
+    oldestName: (v.oldest && v.oldest.name) || '',
+    // 文案在**纯函数**里拼好：页面层零测试是最大盲区，能抽出来的逻辑就不要留在 WXML
+    text: _fmtAge(ageSec) + '前' + (overdue ? ' · ❌ 疑似停摆' : '') + (head ? '（' + head + '）' : '')
+  };
+}
+
 module.exports = {
   SLO: SLO,
   computeCardMetrics: computeCardMetrics,
@@ -292,5 +348,7 @@ module.exports = {
   recordLast: recordLast,
   getLast: getLast,
   computePipelineMetrics: computePipelineMetrics,
-  describeFreshness: describeFreshness
+  describeFreshness: describeFreshness,
+  buildRemoteHealth: buildRemoteHealth,
+  REMOTE_HEARTBEAT_OVERDUE_SEC: REMOTE_HEARTBEAT_OVERDUE_SEC
 };

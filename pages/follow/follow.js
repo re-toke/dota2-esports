@@ -162,20 +162,18 @@ Page({
       if (!sb.enabled()) return;
       sb.rest('curation_meta', { select: 'key,value', eq: { key: 'diag_report' }, limit: 1 })
         .then((rows) => {
-          const v = rows && rows[0] && rows[0].value;
-          if (!v || !v.at) return;
-          const ageSec = Math.floor(Date.now() / 1000) - Number(v.at);
-          // 心跳周期 = sync-upcoming 的 12h × 2（留一倍余量）⇒ 超 24h 视为停摆
-          const overdue = ageSec > 24 * 3600;
+          // ★★ 2026-09-26：查询**成功**时，无论有没有行都要落地展示态 ——
+          //   无行 ⇒ 「尚无记录（CI 未上报）」。
+          //   为什么必须显示：改造前它与「Supabase 连不上」（下方 catch 分支，保持静默）
+          //   在界面上**完全同形**，导致排查时误以为代码有 Bug、白跑一轮。
+          //   一个以「让静默失败可见」为目的的功能，**它自己的缺失不能也是静默的**。
+          //   三态语义（missing / invalid / ok|overdue）与文案均在**纯函数**里（可单测）。
           this.setData({
-            'health.remote': {
-              ageText: diagnostics.formatAge(ageSec),
-              overdue: overdue,
-              head: v.head || '',
-              oldestName: v.oldest ? v.oldest.name : ''
-            }
+            'health.remote': diagnostics.buildRemoteHealth(rows && rows[0], Math.floor(Date.now() / 1000))
           });
         })
+        // ⚠️ 云端不可达 ⇒ **保持静默**：绝不可在此写 "CI 未上报" —— 那是把归因指错方向。
+        //    （保守：宁可不显示，也不给错误结论。差别由上面的 missing 态负责表达。）
         .catch(() => { /* 云端不可达时静默：本地新鲜度仍可展示 */ });
     } catch (e) { /* 同上 */ }
   },
