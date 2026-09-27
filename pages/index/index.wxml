@@ -101,6 +101,15 @@
     </scroll-view>
 
     <empty-state wx:else type="nostart" title="暂无近期赛事" desc="关注的战队近期没有赛程，继续关注更多战队吧" />
+
+    <!-- ★★ 2026-09-27（P0-新增）：关注流取数失败**可见化**。
+         原实现把「请求失败」当「没有比赛」（`.catch(() => ms: [])`）⇒ 失败的关注战队
+         **静默消失**（无卡片、无提示），且 followLoading:false 会掩盖它 ——
+         用户只看到"关注了却少几张"。现失败会计数并给出**可点重试**入口。
+         文案由纯函数 utils/followBatch.failureHint 拼好（页面层零测试是最大盲区）。 -->
+    <view wx:if="{{followHint}}" class="ff-fail" bindtap="retryFollowCards" hover-class="tap-scale">
+      <text class="ff-fail-text">{{followHint}}</text>
+    </view>
   </view>
 
   <!-- 未关注态引导卡（spec C.AC-C1） -->

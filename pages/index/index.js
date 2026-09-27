@@ -15,6 +15,7 @@ const names = require('../../utils/names.js');
 const homeDedupe = require('../../utils/homeDedupe.js');
 const diagnostics = require('../../utils/diagnostics.js');
 const seriesStatus = require('../../utils/seriesStatus.js');   // ★ P0-A：终局判据单一纯实现
+const followBatch = require('../../utils/followBatch.js');   // ★ 2026-09-27：关注流三态/合并/编组纯逻辑
 const config = require('../../utils/config.js');   // ★ P0-B：诊断明细开关（config.debug.verboseLog）
 // v5.1（2026-09-01）：首页「对局级 upcoming」源 —— Liquipedia/Steam/haglund 排期（云代理，30min 缓存）
 const liquipedia = require('../../utils/liquipedia.js');
@@ -111,6 +112,11 @@ Page({
     hasFollow: false,
     hasFollowMatches: false,
     followCards: [],
+    // ★★ 2026-09-27（P0-新增）：关注流**取数失败可见化**。
+    //   原实现把失败当"没有比赛"（`.catch(() => ms: [])`）⇒ 失败的关注战队静默消失、
+    //   且 followLoading:false 掩盖它。现失败会计数并提示（文案由纯函数 utils/followBatch 拼）。
+    followFailedCount: 0,
+    followHint: '',
     nowSec: 0,
     // ===== 批次2：周日历 + 全量比赛流 =====
     weekDays: [],           // 7 天：[{key, label, dateNum, count, isToday}]
@@ -216,50 +222,118 @@ Page({
 
     if (!teams.length) {
       // 合并：原 hasFollow + followCards + hasFollowMatches + followLoading 多次 setData 为单次
-      this.setData({ hasFollow: false, followCards: [], hasFollowMatches: false, followLoading: false });
+      this.setData({ hasFollow: false, followCards: [], hasFollowMatches: false, followLoading: false, followFailedCount: 0, followHint: '' });
       return;
     }
     // 合并：原 hasFollow + followLoading 两次 setData 为单次
-    this.setData({ hasFollow: true, followLoading: true });
+    this.setData({ hasFollow: true, followLoading: true, followFailedCount: 0, followHint: '' });
     const now = util.nowSec();
+    this._followNow = now;
+    this._followRetried = false;     // ★ 每轮 load 允许自动重试一次
     const limited = teams.slice(0, FOLLOW_CAP);
     // ★ 2026-09-01（P0-2）：关注流请求降载 —— 原 Promise.all(15 并发) 冷启动一次打满
     //   OpenDota 限流窗口（15 × getTeamMatches）。改为分批：首屏先拉前
     //   FOLLOW_FIRST_BATCH=5（横向卡首屏仅可见 2-3 张），剩余按批补拉。
-    //   分批实现：先拉第一批（首屏可见），再串行补拉其余（每批 5 个），
-    //   全部完成后统一 _followRows + _kickMatchFlow（保持原有增量合并语义）。
     const FOLLOW_FIRST_BATCH = 5;
     const FOLLOW_BATCH_SIZE = 5;
+    // ★★ 2026-09-27（P0-新增）：尾批次并发度 **1 → 2**。
+    //   原实现严格串行（每批 5 个，等前一批全回才发下一批）⇒ 实测第二批要到 **+18s** 才到，
+    //   用户感受就是"关注卡最后几张等很久 / 干脆不到"。允许 **2 批在飞**（=10 并发）
+    //   可把尾巴从 ~n×RTT 降到 ~n/2×RTT；10 并发仍远低于 OpenDota 60/min 窗口（api 层还有 rateLimit 排队）。
+    const FOLLOW_TAIL_CONCURRENCY = 2;
+    // ★★ 2026-09-27（P0-新增）：**三态取数** —— 失败不再伪装成"没有比赛"。
+    //   原实现 `.catch(() => ({ t, ms: [] }))` 把**失败**与**确实没有比赛**合并 ⇒
+    //   失败的关注战队**无卡片、无提示**地消失，而 `followLoading:false` 还会掩盖它。
+    //   实测：注入 15 个关注战队，首页只出 6~10 张且**两次运行不一致**。
+    //   纯逻辑（判定/合并/编组/文案）见 `utils/followBatch.js`（可单测）。
     const fetchBatch = (batchTeams) => Promise.all(batchTeams.map((t) =>
       api.getTeamMatches(String(t.id))
-        .then((ms) => ({ t: t, ms: ms || [] }))
-        .catch(() => ({ t: t, ms: [] }))
+        .then((ms) => ({ t: t, ms: ms || [], ok: true }))
+        .catch(() => ({ t: t, ms: [], ok: false }))
     ));
     const allRows = [];
+    const publish = (rows) => {
+      this._renderFollowCards(rows, now);
+      this._followRows = rows.slice();
+      this._kickMatchFlow();
+      const n = followBatch.failedOf(rows).length;
+      this.setData({ followFailedCount: n, followHint: followBatch.failureHint(n) });
+      return n;
+    };
+
     const firstBatch = limited.slice(0, FOLLOW_FIRST_BATCH);
     fetchBatch(firstBatch).then((rows) => {
       allRows.push.apply(allRows, rows);
-      this._renderFollowCards(allRows, now);
-      this._followRows = allRows.slice();
-      this._kickMatchFlow();
-      // 剩余关注分批补拉（每批 5 个，串行——避免并发打满限流窗口）
+      publish(allRows);
+      // 剩余关注按批补拉：**2 批在飞**（原严格串行 ⇒ 尾批次实测 +18s 才到）
       const rest = limited.slice(FOLLOW_FIRST_BATCH);
+      const groups = followBatch.groupByConcurrency(
+        followBatch.chunkBySize(rest, FOLLOW_BATCH_SIZE), FOLLOW_TAIL_CONCURRENCY);
       let chain = Promise.resolve();
-      for (let bi = 0; bi < rest.length; bi += FOLLOW_BATCH_SIZE) {
-        const batch = rest.slice(bi, bi + FOLLOW_BATCH_SIZE);
-        chain = chain.then(() => fetchBatch(batch)).then((r2) => {
-          allRows.push.apply(allRows, r2);
-          this._renderFollowCards(allRows, now);
-          this._followRows = allRows.slice();
-          this._kickMatchFlow();
+      groups.forEach((group) => {
+        chain = chain.then(() => Promise.all(group.map(fetchBatch))).then((done) => {
+          done.forEach((g) => allRows.push.apply(allRows, g));
+          publish(allRows);
         });
-      }
-      return chain;
+      });
+      // 全部主批次结束后，对失败的自动重试一次（不抢首屏的限流窗口）
+      return chain.then(() => this._retryFollowFailedOnce(now));
     }).catch(() => {
       // 首批失败：降级（至少渲染已成功的批次）
       this.setData({ followLoading: false });
-      if (allRows.length) this._renderFollowCards(allRows, now);
+      if (allRows.length) publish(allRows);
     });
+  },
+
+  // ★★ 2026-09-27（P0-新增）：关注流**失败自动重试一次**。
+  //   为什么：失败曾与"没有比赛"合并处理 ⇒ 静默消失。现失败可见（计数+提示），
+  //   并在此自动补一次（1.2s 后，避开限流窗口），仍失败则留给用户点击重试。
+  //   每轮 load 只自动重试一次（`_followRetried`），避免与限流互相打。
+  _retryFollowFailedOnce(now) {
+    const failed = followBatch.failedOf(this._followRows);
+    if (!failed.length || this._followRetried) return Promise.resolve();
+    this._followRetried = true;
+    console.info('[index] 关注流取数失败 ' + failed.length + ' 个 → 1.2s 后自动重试一次');
+    return new Promise((r) => setTimeout(r, 1200))
+      .then(() => Promise.all(failed.map((r) => api.getTeamMatches(String(r.t.id))
+        .then((ms) => ({ t: r.t, ms: ms || [], ok: true }))
+        .catch(() => ({ t: r.t, ms: [], ok: false })))))
+      .then((again) => {
+        const merged = followBatch.mergeRetried(this._followRows, again);
+        const n = followBatch.failedOf(merged).length;
+        console.info('[index] 关注流重试完成：仍失败 ' + n + ' 个');
+        this._renderFollowCards(merged, now || this._followNow || util.nowSec());
+        this._followRows = merged.slice();
+        this._kickMatchFlow();
+        this.setData({ followFailedCount: n, followHint: followBatch.failureHint(n) });
+      })
+      .catch(() => { /* 重试本身失败 → 保持原状态（计数已可见，用户可再点） */ });
+  },
+
+  /** 用户点「点此重试」：只重拉失败的关注战队（与自动重试共用同一套合并逻辑） */
+  retryFollowCards() {
+    if (this._followRetrying) return;
+    const failed = followBatch.failedOf(this._followRows);
+    if (!failed.length) { this.setData({ followFailedCount: 0, followHint: '' }); return; }
+    this._followRetrying = true;
+    this._followRetried = false;      // 手动重试后允许再自动重试一次
+    this.setData({ followHint: '正在重试…' });
+    Promise.all(failed.map((r) => api.getTeamMatches(String(r.t.id))
+      .then((ms) => ({ t: r.t, ms: ms || [], ok: true }))
+      .catch(() => ({ t: r.t, ms: [], ok: false }))))
+      .then((again) => {
+        const merged = followBatch.mergeRetried(this._followRows, again);
+        const n = followBatch.failedOf(merged).length;
+        this._renderFollowCards(merged, util.nowSec());
+        this._followRows = merged.slice();
+        this._kickMatchFlow();
+        this.setData({ followFailedCount: n, followHint: followBatch.failureHint(n) });
+      })
+      .catch(() => {
+        const n = followBatch.failedOf(this._followRows).length;
+        this.setData({ followFailedCount: n, followHint: followBatch.failureHint(n) });
+      })
+      .then(() => { this._followRetrying = false; });
   },
 
   // ★ P0-2（2026-09-01）：关注卡渲染（原 loadFollowCards 内联逻辑抽为独立方法，

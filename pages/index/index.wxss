@@ -57,6 +57,18 @@
   color: var(--text-3);
   line-height: 1;
 }
+
+/* ★★ 2026-09-27（P0-新增）：关注流取数失败提示（可点重试）。
+   用 --text-3（非关键信息档）+ 下划线表达"可点"；
+   ★ 严格遵守亮色 v2.0 铁律：**零新增硬编码色**，只用语义变量。 */
+.ff-fail {
+  padding: var(--space-1) var(--space-1) var(--space-0-5);
+}
+.ff-fail-text {
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+  text-decoration: underline;
+}
 .ff-scroll {
   width: 100%;
   white-space: nowrap;
