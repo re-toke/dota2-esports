@@ -1816,7 +1816,11 @@ function resolveBoType(series, ctx) {
   }
   // S4 同日自证（无 series_type 或 st 不可用；无 S2 权威；同日粒度）+ 段内 3 局证据升 BO3
   if (!s2Auth && sameDayDraw && totalGames === 2 && maxScore === 2 && consistent('BO2')) return finalize('BO2');
-  const ev = c.stages[stageKey];
+  // ★ 2026-09-27：`ctx.stages` 加**缺省保护** —— 上方 `const c = ctx || {...}` 只处理 **falsy**，
+  //   而调用方传"**非空但不完整**"的 ctx（如 `{}`）时 `c.stages` 为 `undefined`
+  //   ⇒ 此处 `c.stages[stageKey]` 抛 `TypeError: Cannot read properties of undefined`。
+  //   （实测复现：`applyBo(series, {})` ⇒ ERR；传 `undefined` 反而正常 ⇒ 典型"只防 falsy 不防半填充"。）
+  const ev = (c.stages || {})[stageKey];
   if (ev && ev.maxPlayed >= 3 && totalGames === 2 && maxScore === 2 && consistent('BO3')) return finalize('BO3');
   // S5 局数+比分约束（仅 RECENT 已结算；live/upcoming 无局数不进入，防比分反推误判）
   if (phase === 'recent' && (played > 0 || maxScore > 0)) {

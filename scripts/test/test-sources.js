@@ -1363,6 +1363,29 @@ check('names：★ 全库禁止再内联该规则（白名单外一律 FAIL）',
       '★ 敏感性：窗口内无 isLive 同步时判据必须失效（证明是这段代码在发挥作用）');
   });
 
+  // ===== 2026-09-27（收口）：`resolveBoType` 对"**非空但不完整**"的 ctx 不得抛异常 =====
+  //  原写法 `const c = ctx || { stages: {}, defaultBo: 'BO1' }` **只防 falsy**：
+  //  传 `{}` 时 `c.stages` 为 undefined ⇒ `c.stages[stageKey]` 抛 TypeError（实测复现）。
+  //  ★ 传 `undefined` 反而正常 ⇒ 典型"只防 falsy 不防半填充"。
+  check('★ sources.applyBo：ctx 为"非空但不完整"（如 {}）时不得抛异常', () => {
+    const src2 = require('../../utils/sources.js');
+    // 需走到 S4 之后那一行才触发 ⇒ 构造"不带 st、无 spec、无权威"的系列
+    const s = { key: 'k', seriesType: null, games: [{}, {}], scoreA: 1, scoreB: 1,
+      phase: 'recent', stageKey: 'playoff', mapSlots: 0 };
+    const cases = [
+      ['ctx = undefined', undefined],
+      ['ctx = null', null],
+      ['★ ctx = {}（非空但不完整 ⇒ 原实现抛 TypeError）', {}],
+      ['ctx = { stages: {} }', { stages: {} }],
+      ['ctx = { stages: { playoff: { maxPlayed: 3 } } }', { stages: { playoff: { maxPlayed: 3 } } }]
+    ];
+    cases.forEach(function (pair) {
+      let ok = true; let err = '';
+      try { src2.applyBo(Object.assign({}, s), pair[1]); } catch (e) { ok = false; err = e.message; }
+      assert(ok, '★ ' + pair[0] + ' 不应抛异常，实际：' + err);
+    });
+  });
+
   check('★ LP UA 合规：标识性 UA 单点化（禁伪装浏览器 UA / 禁占位联系方式）', () => {
     const fs = require('fs');
     const path = require('path');
