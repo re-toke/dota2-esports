@@ -114,11 +114,25 @@ ALTER TABLE public.keep_alive ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "anon_insert_keep_alive" ON public.keep_alive
   FOR INSERT TO anon WITH CHECK (true);
 
--- ---------- 4. 定时任务（v1.1 修正：pg_cron 扩展在部分免费项目不可用）----------
+-- ---------- 4. 定时任务（v1.1 修正；★ 2026-09-28 更正**错因**）----------
 --
--- 原方案用 pg_cron 做缓存/日志清理。实测报错：
+-- 原方案用 pg_cron 做缓存/日志清理。当时的报错是：
 --   ERROR 0A000: extension "cron" is not available
--- 替代方案（全部不依赖 pg_cron）：
+-- ★★ 2026-09-28 更正：**这不是"扩展不可用"，而是名字写错。**
+--   原 SQL 写的是 `CREATE EXTENSION IF NOT EXISTS cron;`
+--   但**扩展名叫 `pg_cron`**，`cron` 只是它安装后创建的 **schema 名**。
+--   判据：PG 的报错会把**你请求的名字**放进引号里（此处引号内是 `cron`）
+--     ⇒ 属"请求名不存在"，而非"pg_cron 不可用"。
+--   实测（2026-09-28）：`pg_available_extensions` 里**有 `pg_cron`**，
+--     只是 `installed_version` 为空（= 可用但**未启用**）。
+--   ⇒ **正确启用**：Dashboard → Database → Extensions 打开 pg_cron（推荐，会自动配好 schema），
+--     或 `create extension if not exists pg_cron;`（**注意是 pg_cron，不是 cron**）。
+--   ⚠️ 结论修正带来的影响：`005-pg-cron-backup-trigger.sql`（互补触发）**本来是可行的** ——
+--     它没生效只是因为 pg_cron 从未被启用，并非能力缺失。
+--   ⚠️ 教训保留（仍成立）：**SQL 里别默认扩展已启用** —— 免费版/各区域默认启用的扩展集合不同，
+--     `CREATE EXTENSION` 应显式写、或走 Dashboard 开关，并在失败时**先核对扩展名**再下"不可用"结论。
+--
+-- 替代方案（在当时"以为不可用"的前提下选的；**现已可回归 pg_cron**，下列方案保留作降级路径）：
 --   ① 清理任务：改为「读取时惰性跳过 + 每周手动跑一次清理 SQL」（见下方 CLEANUP.sql 注释）
 --   ② refresh-wx-token 定时预热：在 cron-job.org 加第 2 个 Job（每小时 GET 一次 EF），
 --      复用已有账号，零新增依赖

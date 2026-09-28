@@ -34,7 +34,13 @@
 --     更简单的是直接在工作流页面用 workflow_dispatch 调试。
 -- ============================================================
 
--- pg_cron / pg_net / Vault 均由 Supabase 提供（免费/Pro/Team 默认启用）。
+-- pg_cron / pg_net / Vault 均由 Supabase 提供，但 ⚠️ **默认不一定已启用** —— 必须先手动开启，
+-- 否则本迁移的 DO 块会走"安全 no-op"分支、**静默什么都不建**（2026-09-28 实测踩到）。
+-- ★ 启用方式：Dashboard → Database → Extensions 打开 `pg_cron` 与 `pg_net`（推荐，会自动配好 schema），
+--   或 `create extension if not exists pg_cron;` + `create extension if not exists pg_net;`。
+--   ⚠️ **扩展名是 `pg_cron`，不是 `cron`**（`cron` 只是它创建的 schema 名）——
+--     写成 `create extension cron` 会报 `0A000: extension "cron" is not available`，
+--     极易被误判成"该扩展不可用"（此误判曾在 `001-init.sql` 里存活 24 天，见该文件 §4 注释）。
 -- ★ 逐层守护，且**不使用 `RETURN`**（PL/pgSQL 的 DO 块语义与函数不同，此处不依赖它），
 --   保证在"PG 可跑但组件缺失/未配 secret"的任何组合下都**只提示、不报错**。
 DO $$
