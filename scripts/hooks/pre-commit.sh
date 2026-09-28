@@ -62,9 +62,19 @@ npm test || {
 #   `subpackages/detail/league-detail/league-detail.js` ❌ ⇒ 改这些文件**不触发任何强门禁**；
 #   而 CI 当时也只跑 `npm test`（2 个脚本）⇒ 近乎无护栏
 #   （09-27 改 league-detail 时，是靠同一提交里的 `utils/sources.js` **侥幸触发**的）。
-#   现改为「**utils/ · pages/ · subpackages/ 下任意 .js**」⇒ 覆盖全部门禁相关面。
+#
+#   ★★ 判定原则（**触发面 = 守卫的扫描面**，而不是"感觉属于页面层"）：
+#     `test-sources` 里那两个**全库扫描型守卫**（"禁内联归一化" L1036、"LP UA 合规" L1469）
+#     构造的是**目录列表**（裸 token），逐条核出的 `.js` 视角并集 =
+#     **`utils` | `pages` | `subpackages` | `scripts` | `components`**
+#     （`supabase/` 下 0 个 `.js`、`cloudfunctions/` 已不存在 ⇒ 均无需纳入）。
+#     ⇒ 改动**其中任一个**都可能**新增**这两个守卫要拦的违规，故都应触发 `test:all`。
+#     ⚠️ 反例（**刻意不纳入**）：仓库根 `app.js`、`custom-tab-bar/`、`.github/` 均**不在**任何守卫的扫描面内
+#     ⇒ 纳入 = 白跑 37s。`.github/` 的守卫在 `test-lp-fetch-guard` 里，而它已进 `npm test`（每次必跑）。
+#     ★ 教训：先前我用 `grep -rn "scripts/"` 判定"scripts 无守卫" ⇒ **匹配不到裸 token `'scripts'`**
+#       ⇒ 得出错误结论。**目录列表型判据必须看列表本身，不能用路径字面量去猜。**
 #   ⚠️ 副作用（已知并接受）：触发面变宽后，本地提交会多花 `test:all` 的 ≈37s。
-DATA_LAYER_TOUCHED=$(echo "$STAGED_JS" | grep -E '(^|/)(utils|pages|subpackages)/.*\.js$' || true)
+DATA_LAYER_TOUCHED=$(echo "$STAGED_JS" | grep -E '(^|/)(utils|pages|subpackages|scripts|components)/.*\.js$' || true)
 if [ -n "$DATA_LAYER_TOUCHED" ]; then
   echo "[pre-commit] 检测到 data layer / 页面层变更，运行完整测试套件（test:all）..."
   npm run test:all || {
