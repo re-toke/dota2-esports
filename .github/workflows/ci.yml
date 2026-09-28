@@ -34,6 +34,19 @@ jobs:
       - name: Test
         run: npm test
 
+      # ★ 2026-09-28 新增 — **完整测试套件**（`test:all`：17 测试脚本 + 2 守卫）。
+      #
+      #   动机（实测发现的门禁缺口）：此前 CI 只跑 `npm test`（2 个脚本），而 `test:all`
+      #   仅挂在 pre-commit 的**路径过滤**分支上 —— 原正则只覆盖 4 个 utils 文件 + `pages/`，
+      #   **`subpackages/**` 与其它 utils 一律不触发** ⇒ 改 `league-detail.js`、`utils/names.js` 等
+      #   **可不触发任何强门禁**（最大守卫套件 `test-sources` 也就从未在 CI 里跑过）。
+      #
+      #   可行性依据（**已实测**，非推测）：`test:all` 全 19 项**真实网络调用合计 0 处**
+      #   （含 URL 的只是夹具字符串；唯一有网络调用的 `test-scheduled-full.js` **不在** `test:all` 内），
+      #   全链本地 **≈37s** ⇒ 加进 CI 成本可忽略，且不引入网络不稳定性。
+      - name: Full test suite (test:all)
+        run: npm run test:all
+
       # G4 — 确保 curation-shared.js 与 curation.js 同步（防止改了 curation 忘了 sync）
       - name: Verify curation map is up to date
         run: |

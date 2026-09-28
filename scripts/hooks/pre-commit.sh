@@ -57,7 +57,14 @@ npm test || {
 #   原因（审计 P0-1）：页面层改动此前不触发 test:all，而 test:all 又是唯一会跑
 #   页面契约守卫（check-card-contract）的入口 → 首页字段契约错误（c.tier 读不到）
 #   一路无阻进入生产。页面层与数据层同样需要强门禁。
-DATA_LAYER_TOUCHED=$(echo "$STAGED_JS" | grep -E '(utils/(sources|consensus|curation|api)\.js|^pages/.*\.js|/pages/.*\.js)$' || true)
+# ★★ 2026-09-28 扩展（**实测驱动的修正**）：原正则只列了 **4 个 utils 文件**，且**漏掉整个 `subpackages/`**。
+#   用原正则逐条实测：`utils/names.js`·`tiers.js`·`cache.js`·`homeDedupe.js` ❌、
+#   `subpackages/detail/league-detail/league-detail.js` ❌ ⇒ 改这些文件**不触发任何强门禁**；
+#   而 CI 当时也只跑 `npm test`（2 个脚本）⇒ 近乎无护栏
+#   （09-27 改 league-detail 时，是靠同一提交里的 `utils/sources.js` **侥幸触发**的）。
+#   现改为「**utils/ · pages/ · subpackages/ 下任意 .js**」⇒ 覆盖全部门禁相关面。
+#   ⚠️ 副作用（已知并接受）：触发面变宽后，本地提交会多花 `test:all` 的 ≈37s。
+DATA_LAYER_TOUCHED=$(echo "$STAGED_JS" | grep -E '(^|/)(utils|pages|subpackages)/.*\.js$' || true)
 if [ -n "$DATA_LAYER_TOUCHED" ]; then
   echo "[pre-commit] 检测到 data layer / 页面层变更，运行完整测试套件（test:all）..."
   npm run test:all || {
