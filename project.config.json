@@ -8,6 +8,14 @@
       },
       {
         "type": "file",
+        "value": "/package-lock.json"
+      },
+      {
+        "type": "file",
+        "value": "/preview-1.1.0.png"
+      },
+      {
+        "type": "file",
         "value": "/utils/team-logo-map.json"
       },
       {
