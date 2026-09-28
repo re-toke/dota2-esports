@@ -1386,6 +1386,79 @@ check('names：★ 全库禁止再内联该规则（白名单外一律 FAIL）',
     });
   });
 
+  // ===== 2026-09-28：`boDataIncomplete` —— 「源侧声明多局却只有 1 局数据」的**标注**标记 =====
+  //  背景（2026-09-27 实测定位）：`series_type=1` + 仅 1 局 + 已结束
+  //    ⇒ `consistent('BO3')` 的**终局约束**（已结束 BO3 必须 maxScore===2）否决 BO3
+  //    ⇒ 落 S5 的 `played===1 && maxScore===1 ⇒ BO1` ⇒ 用户看到「单局制」。
+  //  处置（用户拍板）：**只标注、不改判** —— 改判 BO3 会让卡片"已结束→进行中"跳变。
+  check('★ sources.applyBo：boDataIncomplete —— 正向命中 + 五类反向误伤 + 判定链零影响', () => {
+    const fs = require('fs');
+    const path2 = require('path');
+    const src = require('../../utils/sources.js');
+    // 基准 = 实测命中样本同构（20279 `s1144747` / 19719 `s1132773`：st=1、1 局、已结束、1:0）
+    const base = {
+      key: 'k', seriesType: 1, phase: 'recent', scoreA: 1, scoreB: 0,
+      games: [{ match_id: 1, radiant_win: true }], stageKey: 'od0'
+    };
+    const run = (patch) => src.applyBo(Object.assign({}, base, patch), { stages: {} });
+
+    // ① 正向：st=1 + 1 局 + 已结束 ⇒ 既有行为判 BO1，且**必须**被标注
+    const r1 = run({});
+    assert(r1.boType === 'BO1', '① 前置：该构造应判 BO1（实测样本同构），实际 ' + r1.boType);
+    assert(r1.boDataIncomplete === true, '★ ① st=1 + 仅 1 局 + 已结束 ⇒ 必须标 boDataIncomplete');
+
+    // ② 正向：st=2（源侧声明 BO5）同理 —— 1 局已结束时同样会落回 BO1
+    const r2 = run({ seriesType: 2 });
+    assert(r2.boType === 'BO1' && r2.boDataIncomplete === true,
+      '★ ② st=2 + 仅 1 局 + 已结束 ⇒ 也必须标注（实际 ' + r2.boType + '/' + r2.boDataIncomplete + '）');
+
+    // ③ 反向（最关键）：st=0 = 源侧**显式**声明 BO1 ⇒ 真单局，绝不标注。
+    //    ★ 依据：19699 的 104 个 BO1 中 87.5% 带 `series_type=0` ⇒ 若误标，会污染整批真实单局。
+    const r3 = run({ seriesType: 0 });
+    assert(r3.boType === 'BO1' && r3.boDataIncomplete === false,
+      '★ ③ st=0（显式 BO1）不得标注（实际 ' + r3.boDataIncomplete + '）');
+
+    // ④ 反向：st=null（无源侧声明 ⇒ 无从判断"声明多局"）
+    const r4 = run({ seriesType: null });
+    assert(r4.boDataIncomplete === false, '★ ④ st=null 不得标注（实际 ' + r4.boDataIncomplete + '）');
+
+    // ⑤ 反向：局数 ≥ 2（数据齐全）
+    const r5 = run({ seriesType: 2, scoreA: 1, scoreB: 1,
+      games: [{ radiant_win: true }, { radiant_win: false }] });
+    assert(r5.boDataIncomplete === false, '★ ⑤ 局数≥2 不得标注（实际 ' + r5.boDataIncomplete + '）');
+
+    // ⑥ 反向：未结束（live 的 BO3 1:0 是正常进行中，不是数据缺陷）
+    const r6 = run({ seriesType: 1, phase: 'live', scoreA: 0, scoreB: 0,
+      games: [{ match_id: 1 }] });
+    assert(r6.boDataIncomplete === false, '★ ⑥ 未结束（live）不得标注（实际 ' + r6.boDataIncomplete + '）');
+
+    // ⑦ 不变量：加标记**不得**改变任何既有字段（判定链零影响）
+    const normal = { key: 'k2', seriesType: 1, phase: 'recent', scoreA: 2, scoreB: 1,
+      games: [{ radiant_win: true }, { radiant_win: false }, { radiant_win: true }], stageKey: 'od3' };
+    const a = src.applyBo(Object.assign({}, normal), { stages: {} });
+    const b = src.applyBo(Object.assign({}, normal), { stages: {} });
+    ['boType', 'boLabel', 'boTagCls', 'isMulti', 'isDraw', 'radiantWin', 'direWin'].forEach((f) => {
+      assert(a[f] === b[f], '⑦ 重复调用字段必须稳定：' + f);
+    });
+    assert(a.boType === 'BO3' && a.boDataIncomplete === false,
+      '★ ⑦ 正常 BO3 既不应改判也不应标注（实际 ' + a.boType + '/' + a.boDataIncomplete + '）');
+
+    // ⑧ ★ 契约守卫（源码级）：`boDataIncomplete` **不得出现在 `resolveBoType` 函数体内**
+    //    —— 该标记的契约是「只标注、不改判」；一旦被判据读用，就变成"改了行为"。
+    const raw = fs.readFileSync(path2.resolve(__dirname, '..', '..', 'utils', 'sources.js'), 'utf8')
+      .replace(/\r\n/g, '\n');   // ★ 本仓 CRLF：多行/长区段锚点前必须归一为 LF
+    const iFn = raw.indexOf('function resolveBoType(');
+    const iApply = raw.indexOf('function applyBo(', iFn);
+    const iAbsorb = raw.indexOf('function absorbSettledGames(', iApply);
+    assert(iFn > -1 && iApply > iFn && iAbsorb > iApply,
+      '⑧ 前置：应能在源码中定位 resolveBoType → applyBo → absorbSettledGames 三段');
+    assert(raw.slice(iFn, iApply).indexOf('boDataIncomplete') === -1,
+      '★ ⑧ 契约守卫：boDataIncomplete 不得出现在 resolveBoType 函数体内（否则「只标注」被破坏）');
+    // 且必须**确实**在 applyBo 里被赋值（防字段名拼错 ⇒ 永久 false 而测试全绿）
+    assert(/series\.boDataIncomplete\s*=/.test(raw.slice(iApply, iAbsorb)),
+      '★ ⑧ 契约守卫：applyBo 必须真的给 series.boDataIncomplete 赋值（防拼错字段名 ⇒ 静默永假）');
+  });
+
   check('★ LP UA 合规：标识性 UA 单点化（禁伪装浏览器 UA / 禁占位联系方式）', () => {
     const fs = require('fs');
     const path = require('path');

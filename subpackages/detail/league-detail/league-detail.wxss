@@ -351,6 +351,21 @@
   align-items: baseline;
   gap: var(--space-1);
 }
+/* ★ 2026-09-28：BO「数据不全」标注（boDataIncomplete）—— 只提示、不改判。
+   配色复用既有「数据可信度」语义（--dota-gold-strong 文字 + --amber-bright 同源 alpha 底，
+   与 .quality-medium 一套），**不新增硬编码色 token**；
+   半透明金色底属项目已声明的「主题无关装饰色」（见 app.wxss token 注释），亮/暗底表现一致。 */
+.series-data-gap {
+  align-self: center;
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.5rpx;
+  color: var(--dota-gold-strong);
+  background: rgba(255, 207, 92, 0.12);
+  padding: 2rpx 12rpx;
+  border-radius: var(--radius-pill, 999rpx);
+  white-space: nowrap;
+}
 .series-bo-tag {
   font-size: var(--fs-micro);
   padding: var(--space-0-5) 14rpx;

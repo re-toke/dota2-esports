@@ -1851,12 +1851,30 @@ function applyBo(series, ctx) {
   //   三重限定严谨：① bo==='BO2'（只有 BO2 可能平局）；② 比分相等；
   //   ③ 已结算（防 live/upcoming 临时 1-1 被误判——系列未结束不是真平局）。
   //   isFinished 与 resolveBoType L1175 定义保持一致。
+  //   ★ 2026-09-28：以下四行由 `if (series.games)` 块内**原样上移**（纯 hoist —— 同一组表达式、
+  //     无副作用，`settledCountOf`/`pendingCountOf` 自带 falsy 守卫）⇒ isDraw 分支行为不变；
+  //     上移动机：让下面的 `boDataIncomplete` 复用**同一份** `_isFinished` 口径，避免两处判据漂移。
+  const _settled = settledCountOf(series);
+  const _pending = pendingCountOf(series);
+  const _phase = series.phase || 'recent';
+  const _isFinished = _phase === 'recent' && _pending === 0 &&
+    (_settled > 0 || ((series.scoreA || 0) + (series.scoreB || 0)) > 0);
+  // ★★ 2026-09-28：`boDataIncomplete` —— 「**源侧声明多局，却只有 1 局数据**」的**标注**标记。
+  //   场景（2026-09-27 实测定位）：`series_type=1`（源侧声明 BO3）+ 仅 1 局 + 已结束
+  //     ⇒ `consistent('BO3')` 的**终局约束**（已结束 BO3 必须 maxScore===2）将其否决
+  //     ⇒ 落到 S5 的 `played===1 && maxScore===1 ⇒ BO1` ⇒ 用户看到「单局制」。
+  //   同阶段对照证明这是**离群值**（20279 od0 45/46 多局、19719 od0 44/44 多局）
+  //     ⇒ 大概率是**源侧只落了 1 局数据**，而非真单局。
+  //   ★ 处置原则：**只标注、不改判**。改判 BO3 会让卡片从"已结束"翻成"进行中"
+  //     （须靠 isStaleLiveSeries 的 >3h 兜底再压回）⇒ 引入状态跳变，风险 > 收益。
+  //   ★ 纯增量：不参与 resolveBoType，也不读写任何既有字段 ⇒ 对判定链**零影响**。
+  //   ★ 覆盖 `st===2` 同理（源侧声明 BO5 但只有 1 局时同样会落到 BO1）。
+  //   ★ `_gLen === 1` 取字面语义「仅 1 局数据」：games 缺失/为空时**不标**（那种情形
+  //     LP-only 系列居多，`seriesType` 通常为 null，本就不该被本标记认领）。
+  const _st = (series.seriesType != null) ? series.seriesType : null;
+  const _gLen = (series.games && series.games.length) || 0;
+  series.boDataIncomplete = (_st === 1 || _st === 2) && _gLen === 1 && bo === 'BO1' && _isFinished;
   if (series.games) {
-    const _settled = settledCountOf(series);
-    const _pending = pendingCountOf(series);
-    const _phase = series.phase || 'recent';
-    const _isFinished = _phase === 'recent' && _pending === 0 &&
-      (_settled > 0 || ((series.scoreA || 0) + (series.scoreB || 0)) > 0);
     series.isDraw = (bo === 'BO2' && _isFinished && (series.scoreA || 0) === (series.scoreB || 0));
     // bo 变化导致胜负方须同步重算
     if (!series.isDraw) {

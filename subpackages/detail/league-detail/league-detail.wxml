@@ -224,6 +224,11 @@
           <view class="series-bo-group">
             <text class="series-bo-tag {{s.boTagCls}}">{{s.boType}}</text>
             <text class="series-bo-label">{{s.boLabel}}</text>
+            <!-- ★ 2026-09-28：BO 数据不全标注（`sources.applyBo` 的 boDataIncomplete）。
+                 场景：源侧声明多局（series_type=1/2）却只有 1 局数据、且系列已结束
+                 ⇒ 判定链因「已结束 BO3 必须 2 胜」的终局约束被否决而落回 BO1。
+                 ★ 只标注、不改判（改判会让卡片"已结束→进行中"跳变）⇒ 提示用户此处待补。 -->
+            <text wx:if="{{s.boDataIncomplete}}" class="series-data-gap">赛程待补</text>
           </view>
           <text wx:if="{{s.phase === 'live'}}" class="series-live-tag">● LIVE</text>
           <!-- ★ v3 优化项⑬：LIVE 系列进度（仅 OpenDota 有 games 数据时显示） -->
