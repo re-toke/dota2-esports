@@ -84,11 +84,59 @@ function failureHint(n) {
   return c + ' 个关注战队取数失败，点此重试';
 }
 
+/**
+ * 从「按关注列表下标存放的**稀疏数组**」取出已到达项。
+ *
+ * ★★ 关键不变量（2026-09-28 渐进渲染配套）：`arrived` 的**下标 = 该战队在关注列表中的位置**，
+ *   因此"按下标升序取出"⇒ **输出顺序恒为关注列表序**，**不会**出现"按到达先后追加"造成的
+ *   顺序抖动（用户可感知）。这与本文件 `mergeRetried` 注释强调的"保持原顺序"是同一诉求。
+ * @param {Array} arrived 稀疏数组（未到达的位置为 undefined/null）
+ * @returns {Array} 已到达项，**按下标升序**（即关注列表序）
+ */
+function arrivedRows(arrived) {
+  const src = Array.isArray(arrived) ? arrived : [];
+  const out = [];
+  for (let i = 0; i < src.length; i++) {
+    if (src[i]) out.push(src[i]);
+  }
+  return out;
+}
+
+/**
+ * 渐进渲染的**节流判据**（纯函数 ⇒ 可单测）。
+ *
+ * 为什么必须节流：每次 publish 都要 `_renderFollowCards` 全量重建卡 + 同步跑一次
+ * `_applyMatchSources`（**实测 20~42ms**）⇒ 无节流"逐张渲染"会引入 +N×30ms 的**纯增量成本**，
+ * 与"更快"的目标相冲。故只放行：**首次** / **本次新增 ≥ minGrow** / **距上次 > maxGapMs** / `force`。
+ * ★ `force` 用于"每波结束"与"全部结束"兜底 ⇒ 保证最终态一定落地（不会因节流丢卡片）。
+ *
+ * @param {{count:number, at:number}} state 已渲染状态（count=上次渲染的条数，at=上次渲染时刻 ms）
+ * @param {number} count 当前"已到达"条数
+ * @param {number} nowMs 当前时刻
+ * @param {{force?:boolean, minGrow?:number, maxGapMs?:number}} [opts]
+ * @returns {boolean} 是否应当渲染
+ */
+function shouldRender(state, count, nowMs, opts) {
+  const st = state || {};
+  const o = opts || {};
+  const rendered = Number(st.count) || 0;
+  const at = Number(st.at) || 0;
+  const n = Number(count) || 0;
+  if (o.force) return true;
+  if (n <= rendered) return false;                 // 没新增 ⇒ 不渲染（避免重复全量重建）
+  if (rendered === 0) return true;                 // 首卡必渲 —— 这正是本方案要抢的那 ~1.4s
+  const minGrow = Number(o.minGrow) > 0 ? Number(o.minGrow) : 3;
+  const maxGapMs = Number(o.maxGapMs) > 0 ? Number(o.maxGapMs) : 400;
+  return (n - rendered) >= minGrow || (nowMs - at) > maxGapMs;
+}
+
 module.exports = {
   failedOf: failedOf,
   okOf: okOf,
   mergeRetried: mergeRetried,
   groupByConcurrency: groupByConcurrency,
   chunkBySize: chunkBySize,
-  failureHint: failureHint
+  failureHint: failureHint,
+  arrivedRows: arrivedRows,
+  shouldRender: shouldRender
 };

@@ -262,15 +262,12 @@ Page({
     //     ⇒ 无节流逐张渲染会带来 +80~160ms 纯增量成本 ⇒ 仅放行「首个 / 新增≥3 / 距上次 >400ms」，
     //     并在每批结束与全部结束时 `force` 兜底，保证最终态一定落地。
     const arrived = new Array(limited.length);   // 稀疏数组：下标 = limited 中的位置 ⇒ 天然列表序
-    const arrivedRows = () => arrived.filter(Boolean);
+    const arrivedRows = () => followBatch.arrivedRows(arrived);   // ★ 纯函数（见 utils/followBatch.js）
     const renderState = { count: 0, at: 0 };
     const publish = (rows, force) => {
       const nowMs = Date.now();
-      const grow = rows.length - renderState.count;
-      if (!force) {
-        if (grow <= 0) return renderState.count;
-        if (!(renderState.count === 0 || grow >= 3 || nowMs - renderState.at > 400)) return renderState.count;
-      }
+      // ★ 节流判据也抽到纯函数（可单测）：首次必渲 / 新增≥3 / 距上次>400ms / force
+      if (!followBatch.shouldRender(renderState, rows.length, nowMs, { force: !!force })) return renderState.count;
       renderState.count = rows.length;
       renderState.at = nowMs;
       this._renderFollowCards(rows, now);

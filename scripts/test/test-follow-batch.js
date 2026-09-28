@@ -138,6 +138,56 @@ console.log('\n--- ⑥ 守卫可证伪性（用"变异实现"证明判据随行�
     buggyChunk([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]).length === 1);
 }
 
+// ============================================================================
+// ★★ 2026-09-28 新增：渐进渲染的两个不变量（**输出恒按列表序** + **节流**）
+//   背景：`Promise.all(首批)` 会等"最慢那条"才渲染（实测首卡 2.5~2.8s，而最快那条 ~1.1s 就到了）
+//   ⇒ 改为"到达即渲染"后，**必须**守住顺序（否则用户可感知的卡片顺序会抖动）。
+// ============================================================================
+{
+  // ---- ① arrivedRows：输出**恒按关注列表序**（与"到达先后"无关）----
+  const arrived = new Array(6);
+  // 模拟真实情形：第 5 个先到、第 0 个后到（实测首批内返回时刻相差 1.4~1.5s）
+  arrived[5] = R(1055); arrived[2] = R(1022); arrived[0] = R(1000);
+  const rowsOut = fb.arrivedRows(arrived);
+  const ids = rowsOut.map((r) => r.t.id).join(',');
+  assert('渐进① 输出恒按**关注列表序**（不是到达序）', ids === '1000,1022,1055', '实际 ' + ids);
+  assert('渐进① 稀疏空洞被跳过（只输出已到达项）', rowsOut.length === 3, '实际 ' + rowsOut.length);
+
+  // 属性测试：随机稀疏填充 ⇒ 输出下标必须**严格递增**（等价于"保持列表序"）
+  let orderViolations = 0;
+  for (let t = 0; t < 200; t++) {
+    const n = 15, a = new Array(n);
+    for (let i = 0; i < n; i++) if (Math.random() < 0.5) a[i] = R(2000 + i);
+    const out = fb.arrivedRows(a);
+    for (let i = 1; i < out.length; i++) if (out[i].t.id <= out[i - 1].t.id) orderViolations++;
+  }
+  assert('渐进① 属性测试 ×200：输出下标严格递增、零违例', orderViolations === 0, '违例 ' + orderViolations);
+
+  // 变异证伪：把输出改成"逆序" ⇒ 顺序不变量必须判 false
+  const revIds = fb.arrivedRows(arrived).reverse().map((r) => r.t.id).join(',');
+  assert('变异E 确实改到了行为', revIds !== ids, 'revIds=' + revIds);
+  assert('★ 变异E：逆序输出 ⇒ 顺序不变量判 false（守卫非永真）', revIds !== '1000,1022,1055', '反例 ' + revIds);
+
+  // ---- ② shouldRender：节流（首次必渲 / 新增≥3 / 间隔>400ms / force）----
+  assert('渐进② 首次（已渲染 0 张）必渲 ⇒ true', fb.shouldRender({ count: 0, at: 0 }, 1, 1000) === true);
+  assert('渐进② 无新增（count 未变）⇒ false', fb.shouldRender({ count: 5, at: 1000 }, 5, 1100) === false);
+  assert('★ 渐进② 仅新增 1 张且间隔短 ⇒ **false**（防"逐张渲染"的纯增量成本）',
+    fb.shouldRender({ count: 5, at: 1000 }, 6, 1100) === false);
+  assert('渐进② 新增 ≥3 ⇒ true', fb.shouldRender({ count: 5, at: 1000 }, 8, 1100) === true);
+  assert('渐进② 距上次 >400ms（即使只 +1）⇒ true', fb.shouldRender({ count: 5, at: 1000 }, 6, 1500) === true);
+  assert('渐进② force ⇒ 恒 true（每波/全部结束兜底）',
+    fb.shouldRender({ count: 5, at: 1000 }, 5, 1000, { force: true }) === true);
+
+  // 变异证伪：把 minGrow 破坏成"新增≥1 就渲" ⇒ 上面那条最关键的反向断言必须失效
+  const buggyShould = (st, count, nowMs, o) => ((o && o.force) ? true
+    : (count <= (st.count || 0) ? false
+      : (st.count === 0 ? true : ((count - st.count) >= 1 || (nowMs - (st.at || 0)) > 400))));
+  assert('变异F 确实改到了行为（grow=1 时由 false 变 true）',
+    fb.shouldRender({ count: 5, at: 1000 }, 6, 1100) === false && buggyShould({ count: 5, at: 1000 }, 6, 1100) === true);
+  assert('★ 变异F：minGrow 被破坏 ⇒ 反向断言失效（证明该守卫非永真）',
+    buggyShould({ count: 5, at: 1000 }, 6, 1100) === true);
+}
+
 console.log('\n=== 结果 ===');
 console.log('通过: ' + pass + '  失败: ' + fail);
 if (fail) { console.log('存在失败 ❌'); process.exit(1); }
