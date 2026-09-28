@@ -249,13 +249,30 @@ Page({
     //   失败的关注战队**无卡片、无提示**地消失，而 `followLoading:false` 还会掩盖它。
     //   实测：注入 15 个关注战队，首页只出 6~10 张且**两次运行不一致**。
     //   纯逻辑（判定/合并/编组/文案）见 `utils/followBatch.js`（可单测）。
-    const fetchBatch = (batchTeams) => Promise.all(batchTeams.map((t) =>
-      api.getTeamMatches(String(t.id))
-        .then((ms) => ({ t: t, ms: ms || [], ok: true }))
-        .catch(() => ({ t: t, ms: [], ok: false }))
-    ));
-    const allRows = [];
-    const publish = (rows) => {
+    // ★★ 2026-09-28（P0-新增 · 渐进渲染）：**到达即渲染**，但**输出恒按关注列表顺序**。
+    //   实测依据（逐请求插桩；详见 `deliverables/首批渐进渲染-方案复核意见-2026-09-28.md` 附录）：
+    //     · 首批 5 个请求在 ~20ms 内**同时发出**，但**返回时刻相差 1.4~1.5s**（最快 ~1.1s、最慢 ~2.5~2.8s）；
+    //     · 原实现 `Promise.all` ⇒ **等最慢那条**才渲染 ⇒ 首卡 2.5~2.8s（实测 render 与最慢 request 只差 7~9ms）；
+    //     · 实测「在飞峰值 = 10」= 小程序网络并发上限 ⇒ **减波不可行**（现状 5+10 已在 2 波下限）
+    //       ⇒ **唯一可优化量就是批内离散度** ⇒ 到达即渲染可把首卡降到 ~1.1~1.4s。
+    //   ★ 顺序稳定性：`arrived` **按 limited 下标存放**，输出用 `arrived.filter(Boolean)`
+    //     ⇒ **恒为关注列表序**，不会出现"按到达序追加"造成的顺序抖动 —— 与 `utils/followBatch.js`
+    //     `mergeRetried` 注释强调的「保持原顺序可避免关注卡顺序抖动（用户可感知）」一致。
+    //   ★ 节流（必须）：每次 publish 都要**全量重建卡** + 同步跑一次 `_applyMatchSources`（实测 20~42ms）
+    //     ⇒ 无节流逐张渲染会带来 +80~160ms 纯增量成本 ⇒ 仅放行「首个 / 新增≥3 / 距上次 >400ms」，
+    //     并在每批结束与全部结束时 `force` 兜底，保证最终态一定落地。
+    const arrived = new Array(limited.length);   // 稀疏数组：下标 = limited 中的位置 ⇒ 天然列表序
+    const arrivedRows = () => arrived.filter(Boolean);
+    const renderState = { count: 0, at: 0 };
+    const publish = (rows, force) => {
+      const nowMs = Date.now();
+      const grow = rows.length - renderState.count;
+      if (!force) {
+        if (grow <= 0) return renderState.count;
+        if (!(renderState.count === 0 || grow >= 3 || nowMs - renderState.at > 400)) return renderState.count;
+      }
+      renderState.count = rows.length;
+      renderState.at = nowMs;
       this._renderFollowCards(rows, now);
       this._followRows = rows.slice();
       this._kickMatchFlow();
@@ -263,28 +280,40 @@ Page({
       this.setData({ followFailedCount: n, followHint: followBatch.failureHint(n) });
       return n;
     };
+    // 按**下标**取一批：每条 settle 即写入 arrived 并**尝试**渲染（节流决定是否真渲）。
+    // ★ `ok:false` 同样写入 —— 失败必须可见、可重试（三态语义不变）。
+    const fetchAt = (idxs) => Promise.all(idxs.map((idx) =>
+      api.getTeamMatches(String(limited[idx].id))
+        .then((ms) => ({ t: limited[idx], ms: ms || [], ok: true }))
+        .catch(() => ({ t: limited[idx], ms: [], ok: false }))
+        .then((row) => { arrived[idx] = row; publish(arrivedRows()); return row; })
+    ));
 
-    const firstBatch = limited.slice(0, FOLLOW_FIRST_BATCH);
-    fetchBatch(firstBatch).then((rows) => {
-      allRows.push.apply(allRows, rows);
-      publish(allRows);
+    const firstCount = Math.min(FOLLOW_FIRST_BATCH, limited.length);
+    const firstIdxs = [];
+    for (let i = 0; i < firstCount; i++) firstIdxs.push(i);
+    fetchAt(firstIdxs).then(() => {
+      publish(arrivedRows(), true);          // 首批收尾兜底：即使节流把中间几次挡掉，也保证首批落地
       // 剩余关注按批补拉：**2 批在飞**（原严格串行 ⇒ 尾批次实测 +18s 才到）
-      const rest = limited.slice(FOLLOW_FIRST_BATCH);
+      const restIdxs = [];
+      for (let i = firstCount; i < limited.length; i++) restIdxs.push(i);
       const groups = followBatch.groupByConcurrency(
-        followBatch.chunkBySize(rest, FOLLOW_BATCH_SIZE), FOLLOW_TAIL_CONCURRENCY);
+        followBatch.chunkBySize(restIdxs, FOLLOW_BATCH_SIZE), FOLLOW_TAIL_CONCURRENCY);
       let chain = Promise.resolve();
       groups.forEach((group) => {
-        chain = chain.then(() => Promise.all(group.map(fetchBatch))).then((done) => {
-          done.forEach((g) => allRows.push.apply(allRows, g));
-          publish(allRows);
-        });
+        chain = chain.then(() => Promise.all(group.map(fetchAt)))
+          .then(() => publish(arrivedRows(), true));   // 每波结束兜底一次（保留原"按批落地"语义）
       });
       // 全部主批次结束后，对失败的自动重试一次（不抢首屏的限流窗口）
-      return chain.then(() => this._retryFollowFailedOnce(now));
+      return chain.then(() => {
+        publish(arrivedRows(), true);
+        return this._retryFollowFailedOnce(now);
+      });
     }).catch(() => {
       // 首批失败：降级（至少渲染已成功的批次）
       this.setData({ followLoading: false });
-      if (allRows.length) publish(allRows);
+      const rowsNow = arrivedRows();            // ★ 渐进渲染后：已到达项即"已成功的批次"
+      if (rowsNow.length) publish(rowsNow, true);
     });
   },
 
