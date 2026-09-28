@@ -69,16 +69,66 @@ function gradeOf(t) {
   return { grade: 'B', rank: 1, label: 'B级' };
 }
 
-function fetchParse() {
+// ★★ 2026-09-28（A′）：LP「限流/挑战页」的识别 + 退避重试 + **按失败类型分流**。
+//
+//   线上实例（用户提供 CI 日志）：
+//     `FAILED: not json: <!DOCTYPE HTML><title>Rate Limited - Liquipedia</title>…`
+//   LP 的 API ToU：**通用 ≤1 req/2s；`action=parse` ≤1 req/30s**；超限会触发
+//   「automated **temporary IP bans**（可过 CAPTCHA 自解，**反复触发可能转永久**）」。
+//   ★ 我方**合规**：本脚本每次只发 **1** 个 parse 请求、2 次/天；兄弟脚本 `sync-liquipedia-cache.js`
+//     亦有 `RATE_LIMIT_MS=2200` 节流 ⇒ **不是自己请求过快**。
+//   ★ 真因：**GitHub 托管 runner 的 IP 是共用池**，被他人对 LP 的滥用/风控波及 ⇒ 外部、瞬时可自愈。
+//
+//   ★★ 处置原则 = **按失败类型分流**（原实现把三类性质完全不同的失败混进同一个 exit(1)）：
+//     · **被拦截页（Rate Limited / CAPTCHA）** → 退避重试；**仍被拦 ⇒ 警告 + exit 0**
+//       （不写库、保留旧快照）。理由：被拦时**不产生错误数据**，只是"不更新"；"不更新"由
+//       **心跳不前进**（客户端「我的」页可见）+ 鲜度守卫体现 ⇒ 不必再用"失败邮件"重复告知，
+//       否则就是**告警疲劳**（本项目已多次踩：24h 快照判定 ⇒ 永久红灯 ⇒ 疲劳）。
+//     · **上游 0 条** → 仍 **exit(1)**（见下方 EMPTY-UPSTREAM GUARD：可能解析失效/结构变化，必须人看）。
+//     · **写库失败 / 无法识别的响应** → 仍 **exit(1)**（我方或下游故障）。
+//   ★ 为什么**不是**"无脑重试"：唯一数据点（09:27Z 被限 → 09:44Z 恢复）⇒ 被拦窗口 ∈ (0, 17min)，
+//     **若 >60s 则 30s/60s 重试会全败** ⇒ 重试只降概率，**不解决"发失败邮件"这个真痛点**。
+//   ★ 为什么**无法从根上规避**（均已实测否定，勿再试）：
+//     `action=parse` 绕不开 —— Portal 页 wikitext 仅 2.2KB，赛事行由 `{{TournamentsList}}` **服务端展开**；
+//     LP **已禁用** `action=ask`（`Unrecognized value for parameter "action": ask`）；
+//     改走 `Tier N Tournaments/<年>` 分档页要 **3~4 个** parse（同为最严端点）⇒ 更差。
+const RATE_LIMITED_RE = /Rate\s*Limited/i;
+// 只把「被拦截」特征页当可降级对象：LP ToU 明写两种 —— Rate Limited 页 + CAPTCHA 解封 ⇒ 证据只取这两种。
+// 其它 HTML（如代理 502 页）**不**降级 ⇒ 仍走 exit(1)，避免把未知故障静默掉。
+const BLOCK_PAGE_RE = /Rate\s*Limited|CAPTCHA/i;
+const LP_RETRY_DELAYS_MS = [30 * 1000, 60 * 1000];   // 2 次重试：+30s、+60s（共约 90s）
+
+function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+class LpRateLimitedError extends Error {
+  constructor(message, status) {
+    super(message); this.name = 'LpRateLimitedError'; this.status = status;
+  }
+}
+
+// 纯函数（可离线单测）：只依赖入参判断 LP 响应属于哪一类
+function classifyLpBody(status, body) {
+  const str = String(body == null ? '' : body);
+  const t = str.trim();
+  if (t.startsWith('{')) return { kind: 'json', status: status };
+  if (BLOCK_PAGE_RE.test(str)) return { kind: 'blocked', status: status };
+  if (/^<!DOCTYPE|<html[\s>]/i.test(t)) return { kind: 'html', status: status };
+  return { kind: 'unknown', status: status };
+}
+
+// 单次请求：**只负责取回原始正文 + 状态码**（不在解析处顺手 reject —— 交给上层分类）
+function fetchParseOnce() {
   return new Promise((resolve, reject) => {
     const req = https.get(API, { headers: { 'User-Agent': UA, 'Accept': 'application/json', 'Accept-Encoding': 'gzip' } }, (res) => {
       const chunks = [];
       res.on('data', (c) => chunks.push(c));
       res.on('end', () => {
         const buf = Buffer.concat(chunks);
-        const str = res.headers['content-encoding'] === 'gzip' ? zlib.gunzipSync(buf).toString('utf8') : buf.toString('utf8');
-        if (!str.trim().startsWith('{')) return reject(new Error('not json: ' + str.slice(0, 120)));
-        resolve(JSON.parse(str).parse.text['*']);
+        let str = '';
+        try {
+          str = res.headers['content-encoding'] === 'gzip' ? zlib.gunzipSync(buf).toString('utf8') : buf.toString('utf8');
+        } catch (e) { return reject(new Error('gzip 解压失败: ' + e.message)); }
+        resolve({ status: res.statusCode, body: str });
       });
     });
     req.on('error', reject);
@@ -86,8 +136,50 @@ function fetchParse() {
   });
 }
 
+// 分类 + **仅对「被拦截」退避重试**。delays/fetchOnce/sleepFn 可注入 ⇒ 可离线单测（不发网络、不真等）
+async function fetchParseWithRetry(opts) {
+  const o = opts || {};
+  const delays = o.delays || LP_RETRY_DELAYS_MS;
+  const once = o.fetchOnce || fetchParseOnce;
+  const wait = o.sleepFn || sleep;
+  for (let attempt = 0; ; attempt++) {
+    const r = await once();
+    const cls = classifyLpBody(r.status, r.body);
+    if (cls.kind === 'json') return JSON.parse(r.body).parse.text['*'];
+    if (cls.kind === 'blocked' && attempt < delays.length) {
+      console.warn('[upcoming] ⏸ LP 被拦（HTTP ' + r.status + '），' + (delays[attempt] / 1000)
+        + 's 后重试（第 ' + (attempt + 1) + '/' + delays.length + ' 次）…');
+      await wait(delays[attempt]);
+      continue;
+    }
+    if (cls.kind === 'blocked') {
+      const which = RATE_LIMITED_RE.test(r.body) ? 'Rate Limited' : 'CAPTCHA/挑战页';
+      throw new LpRateLimitedError('LP 拦截未解除（' + which + '，HTTP ' + r.status
+        + '，已重试 ' + delays.length + ' 次）', r.status);
+    }
+    if (cls.kind === 'html') {
+      throw new Error('LP 返回 HTML（非 JSON、且非限流页，HTTP ' + r.status + '）: ' + r.body.slice(0, 120));
+    }
+    throw new Error('LP 响应无法识别（HTTP ' + r.status + '）: ' + r.body.slice(0, 120));
+  }
+}
+
 async function main() {
-  const html = await fetchParse();
+  let html;
+  try {
+    html = await fetchParseWithRetry();
+  } catch (e) {
+    if (e && e.name === 'LpRateLimitedError') {
+      // ★★ A′ 分流：外部拦截 ⇒ 降级为**警告 + exit 0**（不写库、保留旧快照）。
+      //   依据见文件上方长注释：被拦时不产生错误数据（只是"不更新"），而"不更新"已由
+      //   心跳不前进（客户端可见）+ 鲜度守卫体现 ⇒ 无需再用"失败邮件"重复告知。
+      console.warn('[upcoming] ⚠ 本次跳过（不写库、不改快照）：' + e.message);
+      console.warn('[upcoming]   这是 LP 侧的外部拦截（GitHub 共用 runner IP 被波及），非我方故障；');
+      console.warn('[upcoming]   快照保持上一次成功内容 ⇒「不更新」由心跳 + 鲜度守卫体现，故不判失败（避免告警疲劳）。');
+      return;
+    }
+    throw e;   // 其它错误（超时/解压失败/非限流的 HTML）仍按失败处理
+  }
 
   // ★ 2026-08-31 P1：双段抓取（Upcoming + Ongoing），对齐云函数 fetchLiquipediaUpcoming 行为。
   //   此前只读 Upcoming 段：Liquipedia 把开赛赛事移入 Ongoing 段后，本地快照漏采进行中赛事
@@ -310,4 +402,17 @@ async function main() {
   } catch (e) { /* curation 检查失败不影响主流程 */ }
 }
 
-main().catch((e) => { console.error('FAILED:', e.message); process.exit(1); });
+// ★ 2026-09-28：只在**被直接执行**时跑主流程 —— 被 require 时仅导出可测单元（不触发网络/写产物）。
+if (require.main === module) {
+  main().catch((e) => { console.error('FAILED:', e.message); process.exit(1); });
+}
+
+// 供 scripts/test/test-lp-fetch-guard.js 单测（纯函数 + 可注入重试）
+module.exports = {
+  classifyLpBody: classifyLpBody,
+  fetchParseWithRetry: fetchParseWithRetry,
+  RATE_LIMITED_RE: RATE_LIMITED_RE,
+  BLOCK_PAGE_RE: BLOCK_PAGE_RE,
+  LP_RETRY_DELAYS_MS: LP_RETRY_DELAYS_MS,
+  LpRateLimitedError: LpRateLimitedError
+};

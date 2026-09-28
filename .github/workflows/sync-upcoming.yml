@@ -38,28 +38,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        id: checkout
 
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Run upcoming sync (snapshot + Supabase)
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-        run: node scripts/sync/fetch-liquipedia-upcoming.js
-
+      # ★★ 2026-09-28（A′ 配套）：**把两个「补接线」刷新步前置到 LP 抓取之前**。
+      #   原顺序把它们排在 LP 步之后 ⇒ 2026-09-28 那次 LP 被限流失败时，这两步被**连带 skipped**，
+      #   已能刷新的产物一个都没落地（"补强"实际被 LP 的抖动绑架）。
+      #   这两步分别只依赖 **OpenDota** / **Steam CDN**，与 LP 毫无依赖关系 ⇒ 没有理由排在 LP 后面。
+      #
       # ★★ 2026-09-27（快照过期诊断/复核 · 缺口 A）：补齐**另两个** build-time 快照的定时刷新。
       #
       #   问题：有「鲜度要求」的自动产物共 3 个，此前**只有 upcoming** 接了 CI：
-      #     · upcoming-local      → 已接（见上一步）
+      #     · upcoming-local      → 已接（见下）
       #     · leagues-local       → **无接线** ⇒ 永远停在最后一次手工生成（实测 12.7 天）
       #     · team-logo-local     → **无接线** ⇒ 实测 26 天未更新（140KB，且在包内）
       #   两者脚本均**无需密钥、无副作用**（只 `fs.writeFileSync` 写各自产物）⇒ 与 upcoming 同形。
       #
       #   ⚠️ `continue-on-error: true` 是**刻意**的：
       #     这两个脚本依赖 OpenDota；若其抖动/失败，**不能**让整个 job 失败 ——
-      #     否则会连带**阻断下面的 upcoming 快照回写**（把一个"补强"变成"新增单点故障"）。
+      #     否则会连带**阻断随后的 upcoming 快照回写**（把一个"补强"变成"新增单点故障"）。
       #     失败不会静默：① 该 step 在运行页显示为 failed；② 新鲜度守卫（check-snapshot-freshness）会报警。
       - name: Refresh leagues snapshot (补接线)
         continue-on-error: true
@@ -68,6 +68,12 @@ jobs:
       - name: Refresh team-logo snapshot (补接线)
         continue-on-error: true
         run: node scripts/sync/fetch-team-logos.js
+
+      - name: Run upcoming sync (snapshot + Supabase)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node scripts/sync/fetch-liquipedia-upcoming.js
 
       # ★ P0-B 下半 / P0-C（2026-09-26）：**管道指标 + 调度心跳**
       #   把「快照新鲜度 / 条目数 / 本次运行时间」写进 curation_meta（key=diag_report）。
@@ -81,7 +87,12 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: node scripts/ops/diag-report.js --apply
 
+      # ★★ 2026-09-28（A′ 配套）：加 `if: always()` —— LP 步失败时**也要**把已刷新的**其它**产物提交回仓库。
+      #   原行为：LP 一红 ⇒ 本步 skipped ⇒ 上面两步已刷新的 leagues/team-logo 全部丢弃（补强变摆设）。
+      #   双重守卫：① `steps.checkout.outcome == 'success'`（否则工作区为空，`git add` 会二次报错、掩盖真因）；
+      #            ② 保留原有「暂存区无差异则跳过」兜底 ⇒ 空跑不会产生空提交。
       - name: Commit refreshed snapshot artifacts
+        if: always() && steps.checkout.outcome == 'success'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
