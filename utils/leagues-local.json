@@ -1,52 +1,17 @@
 {
-  "generatedAt": 1790629564,
+  "generatedAt": 1790674336,
   "source": "opendota",
   "note": "build-time leagues snapshot (active 90d + curated 60d), refresh via scripts/sync/fetch-leagues-snapshot.js",
   "stats": {
-    "total": 10278,
+    "total": 10281,
     "kept": 32,
     "windows": 15
   },
   "leagues": [
     {
-      "leagueid": 14268,
-      "tier": "premium",
-      "name": "The International 2022"
-    },
-    {
-      "leagueid": 10810,
-      "tier": "premium",
-      "name": "MDL Disneyland® Paris Major"
-    },
-    {
-      "leagueid": 10482,
-      "tier": "premium",
-      "name": "The Chongqing Major"
-    },
-    {
       "leagueid": 15728,
       "tier": "premium",
       "name": "The International 2023"
-    },
-    {
-      "leagueid": 15910,
-      "tier": "professional",
-      "name": "ESL One Kuala Lumpur powered by Intel"
-    },
-    {
-      "leagueid": 16740,
-      "tier": "professional",
-      "name": "Riyadh Masters 2024 at Esports World Cup Qualifiers"
-    },
-    {
-      "leagueid": 17795,
-      "tier": "professional",
-      "name": "ESL One Raleigh 2025"
-    },
-    {
-      "leagueid": 18324,
-      "tier": "premium",
-      "name": "The International 2025"
     },
     {
       "leagueid": 18359,
@@ -59,16 +24,6 @@
       "name": "Esports World Cup 2025"
     },
     {
-      "leagueid": 19066,
-      "tier": "professional",
-      "name": "肛宝联赛-老婆杯"
-    },
-    {
-      "leagueid": 19099,
-      "tier": "professional",
-      "name": "BLAST SLAM VI"
-    },
-    {
       "leagueid": 19101,
       "tier": "professional",
       "name": "BLAST SLAM VII"
@@ -79,24 +34,14 @@
       "name": "BLAST SLAM VIII"
     },
     {
-      "leagueid": 19719,
-      "tier": "premium",
-      "name": "The International 2026"
-    },
-    {
       "leagueid": 19785,
       "tier": "professional",
       "name": "Esports World Cup 2026"
     },
     {
-      "leagueid": 19917,
+      "leagueid": 17795,
       "tier": "professional",
-      "name": "The Games of the Future 2026"
-    },
-    {
-      "leagueid": 19944,
-      "tier": "professional",
-      "name": "EPL Masters 2026 "
+      "name": "ESL One Raleigh 2025"
     },
     {
       "leagueid": 20142,
@@ -119,6 +64,26 @@
       "name": "RES Unchained - A Blast Dota Slam IX Qualifier EU"
     },
     {
+      "leagueid": 20176,
+      "tier": "professional",
+      "name": "BETBOOM Streamers Battle Dota 15"
+    },
+    {
+      "leagueid": 20208,
+      "tier": "professional",
+      "name": "BLAST SLAM IX"
+    },
+    {
+      "leagueid": 14268,
+      "tier": "premium",
+      "name": "The International 2022"
+    },
+    {
+      "leagueid": 10810,
+      "tier": "premium",
+      "name": "MDL Disneyland® Paris Major"
+    },
+    {
       "leagueid": 20159,
       "tier": "excluded",
       "name": "WINLINE Star Series Season 4"
@@ -129,14 +94,49 @@
       "name": "BLAST Slam VII China Qualifier"
     },
     {
-      "leagueid": 20176,
-      "tier": "professional",
-      "name": "BETBOOM Streamers Battle Dota 15"
+      "leagueid": 10482,
+      "tier": "premium",
+      "name": "The Chongqing Major"
     },
     {
-      "leagueid": 20208,
+      "leagueid": 19944,
       "tier": "professional",
-      "name": "BLAST SLAM IX"
+      "name": "EPL Masters 2026 "
+    },
+    {
+      "leagueid": 19066,
+      "tier": "professional",
+      "name": "肛宝联赛-老婆杯"
+    },
+    {
+      "leagueid": 19719,
+      "tier": "premium",
+      "name": "The International 2026"
+    },
+    {
+      "leagueid": 15910,
+      "tier": "professional",
+      "name": "ESL One Kuala Lumpur powered by Intel"
+    },
+    {
+      "leagueid": 16740,
+      "tier": "professional",
+      "name": "Riyadh Masters 2024 at Esports World Cup Qualifiers"
+    },
+    {
+      "leagueid": 19917,
+      "tier": "professional",
+      "name": "The Games of the Future 2026"
+    },
+    {
+      "leagueid": 18324,
+      "tier": "premium",
+      "name": "The International 2025"
+    },
+    {
+      "leagueid": 19099,
+      "tier": "professional",
+      "name": "BLAST SLAM VI"
     },
     {
       "leagueid": 20279,
@@ -189,10 +189,10 @@
       "count": 157
     },
     "19885": {
-      "earliest": 1782777937,
+      "earliest": 1782864225,
       "latest": 1782955139,
       "lastEnd": 1782957578,
-      "count": 161
+      "count": 70
     },
     "19917": {
       "earliest": 1785476004,

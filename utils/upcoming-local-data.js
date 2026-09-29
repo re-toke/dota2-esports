@@ -6,7 +6,7 @@
 // 数据来源：utils/upcoming-local.json（由本脚本生成）
 
 module.exports = {
-  "generatedAt": 1790629740,
+  "generatedAt": 1790674520,
   "source": "liquipedia",
   "note": "build-time snapshot (Upcoming+Ongoing, Tier1-3), refresh via scripts/sync/fetch-liquipedia-upcoming.js",
   "events": [
@@ -47,6 +47,54 @@ module.exports = {
       "source": "liquipedia"
     },
     {
+      "id": -1319588,
+      "name": "DreamLeague Season 30: South America Open Qualifier 1",
+      "grade": "S",
+      "rank": 3,
+      "label": "S级",
+      "tier": 1,
+      "start": 1791504000,
+      "end": 1791647999,
+      "date": "Oct 09–10, 2026",
+      "source": "liquipedia"
+    },
+    {
+      "id": -1860589,
+      "name": "DreamLeague Season 30: Western Europe Open Qualifier 1",
+      "grade": "S",
+      "rank": 3,
+      "label": "S级",
+      "tier": 1,
+      "start": 1791504000,
+      "end": 1791647999,
+      "date": "Oct 09–10, 2026",
+      "source": "liquipedia"
+    },
+    {
+      "id": -1122939,
+      "name": "DreamLeague Season 30: Eastern Europe Open Qualifier 1",
+      "grade": "S",
+      "rank": 3,
+      "label": "S级",
+      "tier": 1,
+      "start": 1791504000,
+      "end": 1791647999,
+      "date": "Oct 09–10, 2026",
+      "source": "liquipedia"
+    },
+    {
+      "id": -1878797,
+      "name": "DreamLeague Season 30: Southeast Asia Open Qualifier 1",
+      "grade": "S",
+      "rank": 3,
+      "label": "S级",
+      "tier": 1,
+      "start": 1791504000,
+      "end": 1791647999,
+      "date": "Oct 09–10, 2026",
+      "source": "liquipedia"
+    },
+    {
       "id": -1250009,
       "name": "Sber Tournament 2026",
       "grade": "B",
@@ -59,6 +107,54 @@ module.exports = {
       "source": "liquipedia"
     },
     {
+      "id": -1319589,
+      "name": "DreamLeague Season 30: South America Open Qualifier 2",
+      "grade": "S",
+      "rank": 3,
+      "label": "S级",
+      "tier": 1,
+      "start": 1791676800,
+      "end": 1791820799,
+      "date": "Oct 11–12, 2026",
+      "source": "liquipedia"
+    },
+    {
+      "id": -1860588,
+      "name": "DreamLeague Season 30: Western Europe Open Qualifier 2",
+      "grade": "S",
+      "rank": 3,
+      "label": "S级",
+      "tier": 1,
+      "start": 1791676800,
+      "end": 1791820799,
+      "date": "Oct 11–12, 2026",
+      "source": "liquipedia"
+    },
+    {
+      "id": -1122938,
+      "name": "DreamLeague Season 30: Eastern Europe Open Qualifier 2",
+      "grade": "S",
+      "rank": 3,
+      "label": "S级",
+      "tier": 1,
+      "start": 1791676800,
+      "end": 1791820799,
+      "date": "Oct 11–12, 2026",
+      "source": "liquipedia"
+    },
+    {
+      "id": -1878796,
+      "name": "DreamLeague Season 30: Southeast Asia Open Qualifier 2",
+      "grade": "S",
+      "rank": 3,
+      "label": "S级",
+      "tier": 1,
+      "start": 1791676800,
+      "end": 1791820799,
+      "date": "Oct 11–12, 2026",
+      "source": "liquipedia"
+    },
+    {
       "id": -1404220,
       "name": "BLAST SLAM IX China Open Qualifier 1",
       "grade": "S",
@@ -68,6 +164,54 @@ module.exports = {
       "start": 1791849600,
       "end": 1791907199,
       "date": "Oct 13, 2026",
+      "source": "liquipedia"
+    },
+    {
+      "id": -1193333,
+      "name": "DreamLeague Season 30: South America Closed Qualifier",
+      "grade": "S",
+      "rank": 3,
+      "label": "S级",
+      "tier": 1,
+      "start": 1791849600,
+      "end": 1792252799,
+      "date": "Oct 13–17, 2026",
+      "source": "liquipedia"
+    },
+    {
+      "id": -1992252,
+      "name": "DreamLeague Season 30: Western Europe Closed Qualifier",
+      "grade": "S",
+      "rank": 3,
+      "label": "S级",
+      "tier": 1,
+      "start": 1791849600,
+      "end": 1792252799,
+      "date": "Oct 13–17, 2026",
+      "source": "liquipedia"
+    },
+    {
+      "id": -1173302,
+      "name": "DreamLeague Season 30: Eastern Europe Closed Qualifier",
+      "grade": "S",
+      "rank": 3,
+      "label": "S级",
+      "tier": 1,
+      "start": 1791849600,
+      "end": 1792252799,
+      "date": "Oct 13–17, 2026",
+      "source": "liquipedia"
+    },
+    {
+      "id": -1441380,
+      "name": "DreamLeague Season 30: Southeast Asia Closed Qualifier",
+      "grade": "S",
+      "rank": 3,
+      "label": "S级",
+      "tier": 1,
+      "start": 1791849600,
+      "end": 1792252799,
+      "date": "Oct 13–17, 2026",
       "source": "liquipedia"
     },
     {
