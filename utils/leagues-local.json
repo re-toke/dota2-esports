@@ -1,11 +1,11 @@
 {
-  "generatedAt": 1790674336,
+  "generatedAt": 1790711374,
   "source": "opendota",
   "note": "build-time leagues snapshot (active 90d + curated 60d), refresh via scripts/sync/fetch-leagues-snapshot.js",
   "stats": {
     "total": 10281,
     "kept": 32,
-    "windows": 15
+    "windows": 16
   },
   "leagues": [
     {
@@ -19,11 +19,6 @@
       "name": "Clavision DOTA2 Masters 2025: Snow-Ruyi"
     },
     {
-      "leagueid": 18375,
-      "tier": "professional",
-      "name": "Esports World Cup 2025"
-    },
-    {
       "leagueid": 19101,
       "tier": "professional",
       "name": "BLAST SLAM VII"
@@ -34,14 +29,49 @@
       "name": "BLAST SLAM VIII"
     },
     {
-      "leagueid": 19785,
+      "leagueid": 20159,
+      "tier": "excluded",
+      "name": "WINLINE Star Series Season 4"
+    },
+    {
+      "leagueid": 20169,
       "tier": "professional",
-      "name": "Esports World Cup 2026"
+      "name": "BLAST Slam VII China Qualifier"
+    },
+    {
+      "leagueid": 20208,
+      "tier": "professional",
+      "name": "BLAST SLAM IX"
     },
     {
       "leagueid": 17795,
       "tier": "professional",
       "name": "ESL One Raleigh 2025"
+    },
+    {
+      "leagueid": 14268,
+      "tier": "premium",
+      "name": "The International 2022"
+    },
+    {
+      "leagueid": 18375,
+      "tier": "professional",
+      "name": "Esports World Cup 2025"
+    },
+    {
+      "leagueid": 19785,
+      "tier": "professional",
+      "name": "Esports World Cup 2026"
+    },
+    {
+      "leagueid": 10810,
+      "tier": "premium",
+      "name": "MDL Disneyland® Paris Major"
+    },
+    {
+      "leagueid": 10482,
+      "tier": "premium",
+      "name": "The Chongqing Major"
     },
     {
       "leagueid": 20142,
@@ -67,36 +97,6 @@
       "leagueid": 20176,
       "tier": "professional",
       "name": "BETBOOM Streamers Battle Dota 15"
-    },
-    {
-      "leagueid": 20208,
-      "tier": "professional",
-      "name": "BLAST SLAM IX"
-    },
-    {
-      "leagueid": 14268,
-      "tier": "premium",
-      "name": "The International 2022"
-    },
-    {
-      "leagueid": 10810,
-      "tier": "premium",
-      "name": "MDL Disneyland® Paris Major"
-    },
-    {
-      "leagueid": 20159,
-      "tier": "excluded",
-      "name": "WINLINE Star Series Season 4"
-    },
-    {
-      "leagueid": 20169,
-      "tier": "professional",
-      "name": "BLAST Slam VII China Qualifier"
-    },
-    {
-      "leagueid": 10482,
-      "tier": "premium",
-      "name": "The Chongqing Major"
     },
     {
       "leagueid": 19944,
@@ -175,6 +175,12 @@
       "latest": 1789744526,
       "lastEnd": 1789747962,
       "count": 3
+    },
+    "19102": {
+      "earliest": 1790675759,
+      "latest": 1790705332,
+      "lastEnd": 1790707199,
+      "count": 15
     },
     "19719": {
       "earliest": 1786590206,
