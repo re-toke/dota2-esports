@@ -7,7 +7,7 @@
 // 刷新：npm run fetch:leagues
 
 module.exports = {
-  "generatedAt": 1790760239,
+  "generatedAt": 1790797936,
   "source": "opendota",
   "note": "build-time leagues snapshot (active 90d + curated 60d), refresh via scripts/sync/fetch-leagues-snapshot.js",
   "stats": {
@@ -22,14 +22,14 @@ module.exports = {
       "name": "BLAST SLAM VIII"
     },
     {
-      "leagueid": 18359,
-      "tier": "professional",
-      "name": "Clavision DOTA2 Masters 2025: Snow-Ruyi"
-    },
-    {
       "leagueid": 20159,
       "tier": "excluded",
       "name": "WINLINE Star Series Season 4"
+    },
+    {
+      "leagueid": 18359,
+      "tier": "professional",
+      "name": "Clavision DOTA2 Masters 2025: Snow-Ruyi"
     },
     {
       "leagueid": 15728,
@@ -181,9 +181,9 @@ module.exports = {
     },
     "19102": {
       "earliest": 1790675759,
-      "latest": 1790709040,
-      "lastEnd": 1790711258,
-      "count": 16
+      "latest": 1790791891,
+      "lastEnd": 1790795857,
+      "count": 30
     },
     "19719": {
       "earliest": 1786590206,
