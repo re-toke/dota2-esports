@@ -7,19 +7,19 @@
 // 刷新：npm run fetch:leagues
 
 module.exports = {
-  "generatedAt": 1790711374,
+  "generatedAt": 1790760239,
   "source": "opendota",
   "note": "build-time leagues snapshot (active 90d + curated 60d), refresh via scripts/sync/fetch-leagues-snapshot.js",
   "stats": {
-    "total": 10281,
-    "kept": 32,
-    "windows": 16
+    "total": 10297,
+    "kept": 31,
+    "windows": 15
   },
   "leagues": [
     {
-      "leagueid": 15728,
-      "tier": "premium",
-      "name": "The International 2023"
+      "leagueid": 19102,
+      "tier": "professional",
+      "name": "BLAST SLAM VIII"
     },
     {
       "leagueid": 18359,
@@ -27,19 +27,14 @@ module.exports = {
       "name": "Clavision DOTA2 Masters 2025: Snow-Ruyi"
     },
     {
-      "leagueid": 19101,
-      "tier": "professional",
-      "name": "BLAST SLAM VII"
-    },
-    {
-      "leagueid": 19102,
-      "tier": "professional",
-      "name": "BLAST SLAM VIII"
-    },
-    {
       "leagueid": 20159,
       "tier": "excluded",
       "name": "WINLINE Star Series Season 4"
+    },
+    {
+      "leagueid": 15728,
+      "tier": "premium",
+      "name": "The International 2023"
     },
     {
       "leagueid": 20169,
@@ -50,6 +45,11 @@ module.exports = {
       "leagueid": 20208,
       "tier": "professional",
       "name": "BLAST SLAM IX"
+    },
+    {
+      "leagueid": 19101,
+      "tier": "professional",
+      "name": "BLAST SLAM VII"
     },
     {
       "leagueid": 17795,
@@ -162,11 +162,6 @@ module.exports = {
       "name": "DreamLeague Season 26"
     },
     {
-      "leagueid": 19885,
-      "tier": "professional",
-      "name": "Road to ENC 2026 Regional Qualifiers"
-    },
-    {
       "leagueid": 20009,
       "tier": "professional",
       "name": "1win Essence II"
@@ -186,9 +181,9 @@ module.exports = {
     },
     "19102": {
       "earliest": 1790675759,
-      "latest": 1790705332,
-      "lastEnd": 1790707199,
-      "count": 15
+      "latest": 1790709040,
+      "lastEnd": 1790711258,
+      "count": 16
     },
     "19719": {
       "earliest": 1786590206,
@@ -201,12 +196,6 @@ module.exports = {
       "latest": 1784483341,
       "lastEnd": 1784485548,
       "count": 157
-    },
-    "19885": {
-      "earliest": 1782864225,
-      "latest": 1782955139,
-      "lastEnd": 1782957578,
-      "count": 70
     },
     "19917": {
       "earliest": 1785476004,
