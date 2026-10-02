@@ -7,20 +7,15 @@
 // 刷新：npm run fetch:leagues
 
 module.exports = {
-  "generatedAt": 1790885425,
+  "generatedAt": 1790933213,
   "source": "opendota",
   "note": "build-time leagues snapshot (active 90d + curated 60d), refresh via scripts/sync/fetch-leagues-snapshot.js",
   "stats": {
-    "total": 10306,
+    "total": 10310,
     "kept": 31,
     "windows": 15
   },
   "leagues": [
-    {
-      "leagueid": 20279,
-      "tier": "professional",
-      "name": "PGL Wallachia 2026 Season 9"
-    },
     {
       "leagueid": 10296,
       "tier": "premium",
@@ -77,11 +72,6 @@ module.exports = {
       "name": "Esports World Cup 2025"
     },
     {
-      "leagueid": 19066,
-      "tier": "professional",
-      "name": "肛宝联赛-老婆杯"
-    },
-    {
       "leagueid": 19099,
       "tier": "professional",
       "name": "BLAST SLAM VI"
@@ -122,14 +112,14 @@ module.exports = {
       "name": "1win Essence II"
     },
     {
-      "leagueid": 20142,
+      "leagueid": 20169,
       "tier": "professional",
-      "name": "RES Unchained - A Blast Dota Slam VIII Qualifier EU"
+      "name": "BLAST Slam VII China Qualifier"
     },
     {
-      "leagueid": 20143,
+      "leagueid": 20176,
       "tier": "professional",
-      "name": "RES Unchained - A Blast Dota Slam VIII Qualifier SEA"
+      "name": "BETBOOM Streamers Battle Dota 15"
     },
     {
       "leagueid": 20144,
@@ -147,19 +137,29 @@ module.exports = {
       "name": "WINLINE Star Series Season 4"
     },
     {
-      "leagueid": 20169,
-      "tier": "professional",
-      "name": "BLAST Slam VII China Qualifier"
-    },
-    {
-      "leagueid": 20176,
-      "tier": "professional",
-      "name": "BETBOOM Streamers Battle Dota 15"
-    },
-    {
       "leagueid": 20208,
       "tier": "professional",
       "name": "BLAST SLAM IX"
+    },
+    {
+      "leagueid": 19066,
+      "tier": "professional",
+      "name": "肛宝联赛-老婆杯"
+    },
+    {
+      "leagueid": 20142,
+      "tier": "professional",
+      "name": "RES Unchained - A Blast Dota Slam VIII Qualifier EU"
+    },
+    {
+      "leagueid": 20143,
+      "tier": "professional",
+      "name": "RES Unchained - A Blast Dota Slam VIII Qualifier SEA"
+    },
+    {
+      "leagueid": 20279,
+      "tier": "professional",
+      "name": "PGL Wallachia 2026 Season 9"
     },
     {
       "leagueid": 10482,

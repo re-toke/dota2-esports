@@ -6,7 +6,7 @@
 // 数据来源：utils/upcoming-local.json（由本脚本生成）
 
 module.exports = {
-  "generatedAt": 1790885600,
+  "generatedAt": 1790933378,
   "source": "liquipedia",
   "note": "build-time snapshot (Upcoming+Ongoing, Tier1-3), refresh via scripts/sync/fetch-liquipedia-upcoming.js",
   "events": [
@@ -44,6 +44,18 @@ module.exports = {
       "start": 1790640000,
       "end": 1791734399,
       "date": "Sep 29 – Oct 11, 2026",
+      "source": "liquipedia"
+    },
+    {
+      "id": -1911857,
+      "name": "PARI Universe: Closed Qualifier",
+      "grade": "S",
+      "rank": 3,
+      "label": "S级",
+      "tier": 1,
+      "start": 1791158400,
+      "end": 1791475199,
+      "date": "Oct 05–08, 2026",
       "source": "liquipedia"
     },
     {
@@ -236,6 +248,18 @@ module.exports = {
       "start": 1792022400,
       "end": 1792166399,
       "date": "Oct 15–16, 2026",
+      "source": "liquipedia"
+    },
+    {
+      "id": -1573805,
+      "name": "PARI Universe",
+      "grade": "S",
+      "rank": 3,
+      "label": "S级",
+      "tier": 1,
+      "start": 1792627200,
+      "end": 1793548799,
+      "date": "Oct 22 – Nov 01, 2026",
       "source": "liquipedia"
     },
     {
