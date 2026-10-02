@@ -1,12 +1,12 @@
 {
-  "generatedAt": 1790933213,
+  "generatedAt": 1790970441,
   "source": "opendota",
   "note": "build-time team logo snapshot (active leagues + top rated), refresh via scripts/sync/fetch-team-logos.js",
   "stats": {
     "leaguesCrawled": 24,
     "activeTeamIds": 326,
-    "byIdCount": 551,
-    "byNameCount": 561
+    "byIdCount": 587,
+    "byNameCount": 599
   },
   "byId": {
     "3": {
@@ -973,6 +973,10 @@
       "name": "Ωmega Gaming",
       "logo": "https://cdn.steamusercontent.com/ugc/1458555594796362184/AB542C336682A319783E2EF6AB24F9ACE0779F0D/"
     },
+    "6867546": {
+      "name": "Demolition Boys",
+      "logo": "https://cdn.steamusercontent.com/ugc/920331113103898352/09E8B9E6F0BFFFFAD0A97CD61DB6B6C1C20EFAC3/"
+    },
     "6876721": {
       "name": "Hans Pro Gaming",
       "logo": "https://cdn.steamusercontent.com/ugc/781853033311013173/34F2620CE5151465690DE7C106B6EF69F02A4757/"
@@ -1005,13 +1009,29 @@
       "name": "Pejuang Dota Badung",
       "logo": "https://cdn.steamusercontent.com/ugc/990136273741176420/D0459811843F8E55E73732623C3564812AB5C226/"
     },
+    "6930513": {
+      "name": "SexyAsFuck",
+      "logo": "https://cdn.steamusercontent.com/ugc/974376024287984103/58FD46A4C433631107F3020A0B3CC3DB9738D8BD/"
+    },
     "6951036": {
       "name": "Cignal Ultra Warriors",
       "logo": "https://cdn.steamusercontent.com/ugc/1649964989855561528/65E8E2799787201DB9BB4DE498EFC7888E31F2C8/"
     },
+    "6952364": {
+      "name": "Goblin Legs",
+      "logo": "https://cdn.steamusercontent.com/ugc/911323913848297754/7862FCDB3AC14C164F06684635DF61C75F5A23D2/"
+    },
     "6953026": {
       "name": "Butterfly Effec",
       "logo": "https://cdn.steamusercontent.com/ugc/996892020312353198/93338DD0C5CA0C1D24C2EA89464FD239EFAD3AEC/"
+    },
+    "6953151": {
+      "name": "ggngg",
+      "logo": "https://cdn.steamusercontent.com/ugc/974375368219777269/8DE61AD6337AF273A5A4F8FD09E945C816E7408C/"
+    },
+    "6953335": {
+      "name": "Vega Academy",
+      "logo": "https://cdn.steamusercontent.com/ugc/911323913847931930/059F6C3A08E88545DEB78C2E16C1E9B41D7FB034/"
     },
     "6953913": {
       "name": "FlyToMoon",
@@ -1064,6 +1084,14 @@
     "7359917": {
       "name": "Lowkey",
       "logo": "https://cdn.steamusercontent.com/ugc/780750599790860449/55E39216A68ADCFC25930DE5D27AA8C542C0AB2F/"
+    },
+    "7390454": {
+      "name": "The Oversight",
+      "logo": "https://cdn.steamusercontent.com/ugc/2054242960854114119/CB44D64E16DFD662E5862394A07CE83047AE24AC/"
+    },
+    "7391077": {
+      "name": "Thunder Awaken",
+      "logo": "https://cdn.steamusercontent.com/ugc/2295213908349975977/C88F0F701B1B451F4275464AEC073DF0C4288FBA/"
     },
     "7404529": {
       "name": "Reality Rift",
@@ -1124,6 +1152,10 @@
     "7641673": {
       "name": "Aggressive Mode.",
       "logo": "https://cdn.steamusercontent.com/ugc/793133917198581287/2372880E304EFDBEFE73D101E54C0A34D9AA8612/"
+    },
+    "7653080": {
+      "name": "Yangon Galacticos",
+      "logo": "https://cdn.steamusercontent.com/ugc/2473119197018002013/9F54FB2ED4476EA67C55994F5FB7CDAC3B882809/"
     },
     "7653600": {
       "name": "Aggressive Mode",
@@ -1229,6 +1261,10 @@
       "name": "Escape Velocity",
       "logo": "https://cdn.steamusercontent.com/ugc/1482200421119183052/E2A77696D5B5F77238212747B0940810A9751858/"
     },
+    "8097689": {
+      "name": "EZKATKA",
+      "logo": "https://cdn.steamusercontent.com/ugc/1487830656542207062/86C263EBC729678F33CD308921B2274CE3028F41/"
+    },
     "8112124": {
       "name": "Brame",
       "logo": "https://cdn.steamusercontent.com/ugc/1535122449444925400/4FF8F5867A8D86DF5700A8BDAD237A457B52E97B/"
@@ -1240,6 +1276,10 @@
     "8131438": {
       "name": "4AM",
       "logo": "https://cdn.steamusercontent.com/ugc/1634200726535406834/8226A44B6C690601A9DEF8CBDA98EF857E9CF658/"
+    },
+    "8131728": {
+      "name": "Ukumari",
+      "logo": "https://cdn.steamusercontent.com/ugc/2005821149636251119/8AA0FD65758980E29B762EF7124456B95650118D/"
     },
     "8132093": {
       "name": "01 Esports",
@@ -1301,6 +1341,10 @@
       "name": "BINUS University",
       "logo": "https://cdn.steamusercontent.com/ugc/1663483160481733023/362363116FD98B41F54EE099D64203BA6A1A573A/"
     },
+    "8254145": {
+      "name": "Execration",
+      "logo": "https://cdn.steamusercontent.com/ugc/2490004871924581269/9132E5E0903B2A368A00780415D69766292F5893/"
+    },
     "8254400": {
       "name": "beastcoast",
       "logo": "https://cdn.steamusercontent.com/ugc/2008072595679478968/A080A63C70A5DEA039FBC1AE798EE2570E194606/"
@@ -1353,6 +1397,10 @@
       "name": "Wayfarers",
       "logo": "https://cdn.steamusercontent.com/ugc/1844811606349277848/9115EF5523F852C1EDA27BF1194658188AA197FA/"
     },
+    "8335298": {
+      "name": "Randoms Esports",
+      "logo": "https://cdn.steamusercontent.com/ugc/2416817187172584251/5E7AA2C4896A6EB1212B673B731DD9838ECCFB27/"
+    },
     "8351318": {
       "name": "férias com ex",
       "logo": "https://cdn.steamusercontent.com/ugc/1758065850922672770/D397D32D9F6271921174EAE74DA98760E1A07BFA/"
@@ -1360,6 +1408,10 @@
     "8360138": {
       "name": "Neon Esports",
       "logo": "https://cdn.steamusercontent.com/ugc/1905612771137210708/67688ED3000B1B2140DCDD96275E114F3F9F3BC7/"
+    },
+    "8367062": {
+      "name": "Pacific ",
+      "logo": "https://cdn.steamusercontent.com/ugc/2421319307290243710/2D572643B2BDCCFDA346E9AB51833351BF8CE35E/"
     },
     "8375259": {
       "name": "Infinity",
@@ -1369,6 +1421,10 @@
       "name": "Motivate. Viper Gaming",
       "logo": "https://cdn.steamusercontent.com/ugc/1697276876114058177/C93540F44666B466DD577679B40A6C689BE874F8/"
     },
+    "8376696": {
+      "name": "One Move",
+      "logo": "https://cdn.steamusercontent.com/ugc/2429222166861438379/2016A60B73B29A620CFA81A830603361CBB388AD/"
+    },
     "8384158": {
       "name": "Into The Breach",
       "logo": "https://cdn.steamusercontent.com/ugc/1795223008077512746/B283A962A0FFF8636A3DC829C3F93BA4C9FEE214/"
@@ -1376,6 +1432,10 @@
     "8406333": {
       "name": "kastuDon",
       "logo": "https://cdn.steamusercontent.com/ugc/1815491317552191607/F961671C1BE095A579C9C917BECCFD53EFD497DC/"
+    },
+    "8406842": {
+      "name": "GRIN Esports",
+      "logo": "https://cdn.steamusercontent.com/ugc/2001317420616485713/858FEE24286C9D1CDC77AF3D5F3BDAADEB89D2F9/"
     },
     "8428953": {
       "name": "Sinister 5",
@@ -1425,6 +1485,10 @@
       "name": "Team WANKA",
       "logo": "https://cdn.steamusercontent.com/ugc/1926996054456055976/4EBBE607134216E7F16DC7E111D16095AD1B5548/"
     },
+    "8590538": {
+      "name": "Mad Queens Esports",
+      "logo": "https://cdn.steamusercontent.com/ugc/1821138407262581214/2473111D6CED1B3429F7565EEC44D7A5E16ED628/"
+    },
     "8597391": {
       "name": "Luna Galaxy",
       "logo": "https://cdn.steamusercontent.com/ugc/2038491084577608095/CA67ADB750E3B98E8544FB0CC1D2FF1C9EC27A77/"
@@ -1461,6 +1525,10 @@
       "name": "«444» Squad",
       "logo": "https://cdn.steamusercontent.com/ugc/2483261555751237752/8444746CA8F12036A07FB6A2237C3F0A45A14D42/"
     },
+    "8638540": {
+      "name": "Blackpukers",
+      "logo": "https://cdn.steamusercontent.com/ugc/1887597844446270477/6E387B14978698302B904FEB2FC24F45D8CE99B1/"
+    },
     "8638867": {
       "name": "Easy Gaming",
       "logo": "https://cdn.steamusercontent.com/ugc/1833543457070431639/775F05FC8F1C0E14E1E6DBAB2CBF192165A413E2/"
@@ -1472,6 +1540,10 @@
     "8680612": {
       "name": "noMERCY",
       "logo": "https://cdn.steamusercontent.com/ugc/2072263299220300385/701C7260941442D8CA1765012CBEE385EC2E23A7/"
+    },
+    "8685986": {
+      "name": "ТАНК",
+      "logo": "https://cdn.steamusercontent.com/ugc/1848168397345520023/8AD4F1B3BAFEF1120B737CA49509C2858C85B647/"
     },
     "8721219": {
       "name": "Darkside",
@@ -1497,9 +1569,17 @@
       "name": "pangolier s javelinom",
       "logo": "https://cdn.steamusercontent.com/ugc/1852678988747798218/13734C5F707C49CF2880386C3B044D8754667C91/"
     },
+    "8737621": {
+      "name": "Lava Esports ",
+      "logo": "https://cdn.steamusercontent.com/ugc/2020458443820677798/6DBE7E16C897F641DC4BA91F1F04D784905F72B5/"
+    },
     "8741331": {
       "name": "Atomic Esports",
       "logo": "https://cdn.steamusercontent.com/ugc/1854933517826836824/47F54E3D687725343A8B56CB6785A0156E3F1423/"
+    },
+    "8741404": {
+      "name": "Equisde somos chavos",
+      "logo": "https://cdn.steamusercontent.com/ugc/1827910574771249710/7D8F9013F3C25ADD92CD6ABFAEFA44319DC73089/"
     },
     "8747056": {
       "name": "Virtus.pro2",
@@ -1513,6 +1593,10 @@
       "name": "tam_sme",
       "logo": "https://cdn.steamusercontent.com/ugc/1830165414580693025/0490CB1A1C9A39BE4735653CDA9DF8270BE26CB8/"
     },
+    "8769201": {
+      "name": "HAVU",
+      "logo": "https://cdn.steamusercontent.com/ugc/1833543457080341173/97E231A7DB51D0CA99DD8D8668835FBA8FE7B09C/"
+    },
     "8789578": {
       "name": "vezzra",
       "logo": "https://cdn.steamusercontent.com/ugc/2042986495990339051/AD05C5372484A344F81EF3351636B3841D46B38E/"
@@ -1521,9 +1605,17 @@
       "name": "Anime Enjoyers",
       "logo": "https://cdn.steamusercontent.com/ugc/1779504675340866269/9B84E5C6529F42243451665477F33B96C1F475F5/"
     },
+    "8820521": {
+      "name": "NoMatthew",
+      "logo": "https://cdn.steamusercontent.com/ugc/2438208701509068489/350B89E8E9FB98BF8027B3FCDE4637AA2A15064D/"
+    },
     "8835624": {
       "name": "Team Sangre",
       "logo": "https://cdn.steamusercontent.com/ugc/14219176089841400535/F1E15FF4CC95FFB792428F07BE7F48B1843A3821/"
+    },
+    "8838314": {
+      "name": "Matreshka",
+      "logo": "https://cdn.steamusercontent.com/ugc/2289581108031278201/DE2ED21F4DEEB8C3E302C5A0AF9CAF8CC84E8BA8/"
     },
     "8856078": {
       "name": "Balrogs Academy™",
@@ -1545,9 +1637,17 @@
       "name": "PSG.Quest",
       "logo": "https://cdn.steamusercontent.com/ugc/2481004682513190539/324F8847AD21944686DED20FB3E2C0DEA4154AE7/"
     },
+    "8911139": {
+      "name": "Manta Esports",
+      "logo": "https://cdn.steamusercontent.com/ugc/2478749260055361941/F4D1D80AB29862CA0C957DFAD1456CBE98483F27/"
+    },
     "8927141": {
       "name": "tatladderclan",
       "logo": "https://cdn.steamusercontent.com/ugc/2457349000339157388/C4F54B5F7603A9B99B4637B981E187FDA1541E32/"
+    },
+    "8927162": {
+      "name": "YNOT FAN CLUB",
+      "logo": "https://cdn.steamusercontent.com/ugc/1978798064098818022/F251312057A2ADE7AA3655A08917372BC5537544/"
     },
     "8936210": {
       "name": "Outsiders From CN",
@@ -1560,6 +1660,10 @@
     "8936568": {
       "name": "МГАФК",
       "logo": "https://cdn.steamusercontent.com/ugc/2031736116034979471/1A61C034BCF52896F2AA0421D033716923CA6880/"
+    },
+    "8944230": {
+      "name": "Yangon Galacticos",
+      "logo": "https://cdn.steamusercontent.com/ugc/2473119197018013407/9F54FB2ED4476EA67C55994F5FB7CDAC3B882809/"
     },
     "8944302": {
       "name": "Myth Avenue Gaming",
@@ -1605,6 +1709,10 @@
       "name": "TpaBoMaH",
       "logo": "https://cdn.steamusercontent.com/ugc/40063924290200515/BD0C76D0F4029CAA32E2F43A04BF6A5F68135820/"
     },
+    "9005019": {
+      "name": "IHC",
+      "logo": "https://cdn.steamusercontent.com/ugc/2514771532510530932/AA92D7C7649DD3366A31E0E1F772356805B73442/"
+    },
     "9005165": {
       "name": "Star Foxes",
       "logo": "https://cdn.steamusercontent.com/ugc/2027220095511607538/A6FA8DDA68296D4ED65754301F2C0AEC812321F7/"
@@ -1613,9 +1721,21 @@
       "name": "NAVI Junior",
       "logo": "https://cdn.steamusercontent.com/ugc/2909225722380320/5C6EFC9004093ED29E9B48242DE79418BDDBFE30/"
     },
+    "9018664": {
+      "name": "Team Bright",
+      "logo": "https://cdn.steamusercontent.com/ugc/2008081064641074125/98465178D23A5C307E6AA8CE298B17CEBB16B979/"
+    },
     "9018710": {
       "name": "Holy Grail",
       "logo": "https://cdn.steamusercontent.com/ugc/2036233631759545038/183C2584681DBC309834BCE5561EA04CDDFFC736/"
+    },
+    "9025359": {
+      "name": "The Covenant",
+      "logo": "https://cdn.steamusercontent.com/ugc/2187121345783071266/E1E6B530D0C644B81A08CE51ED03A9BB5698D1C0/"
+    },
+    "9032897": {
+      "name": "Wing Ripper",
+      "logo": "https://cdn.steamusercontent.com/ugc/2200631506770437455/E5C9DBEA9D2EECC4F3F98DE49AC1D6D8EE533B88/"
     },
     "9054352": {
       "name": "Fortnite",
@@ -1625,9 +1745,25 @@
       "name": "The last dark",
       "logo": "https://cdn.steamusercontent.com/ugc/2037359531667015102/14D1DA388EDDCD83477977801CA13A77A40373BE/"
     },
+    "9081007": {
+      "name": "Sibe Team",
+      "logo": "https://cdn.steamusercontent.com/ugc/2523781268249407312/759C9DF3828E60B672A56F55580D64804FDEE70A/"
+    },
+    "9081369": {
+      "name": "Infamous Gaming",
+      "logo": "https://cdn.steamusercontent.com/ugc/2032858469296144304/EDF6030FFA1952797EE94712BB781280D5034932/"
+    },
+    "9098294": {
+      "name": "Carstensz Esports",
+      "logo": "https://cdn.steamusercontent.com/ugc/18170046277262960383/ECC4AAB63228E40A72F5A25D4D8A2F1A9E8622F9/"
+    },
     "9103873": {
       "name": "Infamous Astra",
       "logo": "https://cdn.steamusercontent.com/ugc/2032858469296116678/EDF6030FFA1952797EE94712BB781280D5034932/"
+    },
+    "9103961": {
+      "name": "VENOM",
+      "logo": "https://cdn.steamusercontent.com/ugc/11923313307929733/0B5CD347C0A23AA9E88CFDD7BFFEF57C70E192A1/"
     },
     "9131584": {
       "name": "BB Team",
@@ -1640,6 +1776,10 @@
     "9148266": {
       "name": "AcatSuki",
       "logo": "https://cdn.steamusercontent.com/ugc/2053131008994362284/5E9C97210030F1BE6E890A2B813DD18411C1A12A/"
+    },
+    "9151400": {
+      "name": "Сухарики",
+      "logo": "https://cdn.steamusercontent.com/ugc/10928551746629767525/A4B0A76B770C24560E13DC4F57DA26B256E59920/"
     },
     "9175127": {
       "name": "Generation of Miracles",
@@ -1656,6 +1796,10 @@
     "9187132": {
       "name": "MAG.ID",
       "logo": "https://cdn.steamusercontent.com/ugc/2213016405732835572/D7955018FA3AC7FBB78621C5C6D5AD33B9EF673B/"
+    },
+    "9201631": {
+      "name": "Kiseki no Sedai",
+      "logo": "https://cdn.steamusercontent.com/ugc/2086912445726996855/2C1B87D625EF7F8C7CF0D9CE05E0E9A331E775A7/"
     },
     "9201870": {
       "name": "ROR",
@@ -2591,7 +2735,7 @@
       "logo": "https://cdn.steamusercontent.com/ugc/2506900380361558769/01D7A1FC1156B0550B4EF9EA2A3A2AF84D9BF884/"
     },
     "execration": {
-      "logo": "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/team_logos/2581813.png"
+      "logo": "https://cdn.steamusercontent.com/ugc/2490004871924581269/9132E5E0903B2A368A00780415D69766292F5893/"
     },
     "eeriness": {
       "logo": "https://cdn.steamusercontent.com/ugc/404556234640411761/4758656C1505E4B00FFACA5DF3C027F0D7D2AD5B/"
@@ -2735,7 +2879,7 @@
       "logo": "https://cdn.steamusercontent.com/ugc/170412021737626541/FBC216786BB78D03C74E3576F8AB672CC65128E7/"
     },
     "thunderawaken": {
-      "logo": "https://cdn.steamusercontent.com/ugc/170412655661567888/FEF408443C2CA8AB1953CFA3E530AB9D5EE7ADB7/"
+      "logo": "https://cdn.steamusercontent.com/ugc/2295213908349975977/C88F0F701B1B451F4275464AEC073DF0C4288FBA/"
     },
     "parientegaming": {
       "logo": "https://cdn.steamusercontent.com/ugc/88223956350603792/FCC2C8AE4B3696CC949AD5E71C887C06B6411AAE/"
@@ -2807,7 +2951,7 @@
       "logo": "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/team_logos/5059375.png"
     },
     "infamous": {
-      "logo": "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/team_logos/5065748.png"
+      "logo": "https://cdn.steamusercontent.com/ugc/2032858469296144304/EDF6030FFA1952797EE94712BB781280D5034932/"
     },
     "teamserenity": {
       "logo": "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/team_logos/5066616.png"
@@ -3001,6 +3145,9 @@
     "mega": {
       "logo": "https://cdn.steamusercontent.com/ugc/1458555594796362184/AB542C336682A319783E2EF6AB24F9ACE0779F0D/"
     },
+    "demolitionboys": {
+      "logo": "https://cdn.steamusercontent.com/ugc/920331113103898352/09E8B9E6F0BFFFFAD0A97CD61DB6B6C1C20EFAC3/"
+    },
     "hansprogaming": {
       "logo": "https://cdn.steamusercontent.com/ugc/781853033311013173/34F2620CE5151465690DE7C106B6EF69F02A4757/"
     },
@@ -3025,11 +3172,23 @@
     "pejuangdotabadung": {
       "logo": "https://cdn.steamusercontent.com/ugc/990136273741176420/D0459811843F8E55E73732623C3564812AB5C226/"
     },
+    "sexyasfuck": {
+      "logo": "https://cdn.steamusercontent.com/ugc/974376024287984103/58FD46A4C433631107F3020A0B3CC3DB9738D8BD/"
+    },
     "cignalultrawarriors": {
       "logo": "https://cdn.steamusercontent.com/ugc/1649964989855561528/65E8E2799787201DB9BB4DE498EFC7888E31F2C8/"
     },
+    "goblinlegs": {
+      "logo": "https://cdn.steamusercontent.com/ugc/911323913848297754/7862FCDB3AC14C164F06684635DF61C75F5A23D2/"
+    },
     "butterflyeffec": {
       "logo": "https://cdn.steamusercontent.com/ugc/996892020312353198/93338DD0C5CA0C1D24C2EA89464FD239EFAD3AEC/"
+    },
+    "ggngg": {
+      "logo": "https://cdn.steamusercontent.com/ugc/974375368219777269/8DE61AD6337AF273A5A4F8FD09E945C816E7408C/"
+    },
+    "vegaacademy": {
+      "logo": "https://cdn.steamusercontent.com/ugc/911323913847931930/059F6C3A08E88545DEB78C2E16C1E9B41D7FB034/"
     },
     "flytomoon": {
       "logo": "https://cdn.steamusercontent.com/ugc/916953413384701477/58A15D27D05A5051190589BBED3CDD362AFC3C86/"
@@ -3066,6 +3225,9 @@
     },
     "lowkey": {
       "logo": "https://cdn.steamusercontent.com/ugc/780750599790860449/55E39216A68ADCFC25930DE5D27AA8C542C0AB2F/"
+    },
+    "theoversight": {
+      "logo": "https://cdn.steamusercontent.com/ugc/2054242960854114119/CB44D64E16DFD662E5862394A07CE83047AE24AC/"
     },
     "realityrift": {
       "logo": "https://cdn.steamusercontent.com/ugc/1022822776634092251/D6D106057358BC1992E78DEC8421AEC34C472C4E/"
@@ -3111,6 +3273,9 @@
     },
     "aggressivemode": {
       "logo": "https://cdn.steamusercontent.com/ugc/793133917198581287/2372880E304EFDBEFE73D101E54C0A34D9AA8612/"
+    },
+    "yangongalacticos": {
+      "logo": "https://cdn.steamusercontent.com/ugc/2473119197018002013/9F54FB2ED4476EA67C55994F5FB7CDAC3B882809/"
     },
     "cyberlegacy": {
       "logo": "https://cdn.steamusercontent.com/ugc/1634201755650370035/913F61C7C49EC6330168C986C5F1B0D5D2873361/"
@@ -3205,6 +3370,9 @@
     "escapevelocity": {
       "logo": "https://cdn.steamusercontent.com/ugc/1482200421119183052/E2A77696D5B5F77238212747B0940810A9751858/"
     },
+    "ezkatka": {
+      "logo": "https://cdn.steamusercontent.com/ugc/1487830656542207062/86C263EBC729678F33CD308921B2274CE3028F41/"
+    },
     "brame": {
       "logo": "https://cdn.steamusercontent.com/ugc/1535122449444925400/4FF8F5867A8D86DF5700A8BDAD237A457B52E97B/"
     },
@@ -3213,6 +3381,9 @@
     },
     "4am": {
       "logo": "https://cdn.steamusercontent.com/ugc/1634200726535406834/8226A44B6C690601A9DEF8CBDA98EF857E9CF658/"
+    },
+    "ukumari": {
+      "logo": "https://cdn.steamusercontent.com/ugc/2005821149636251119/8AA0FD65758980E29B762EF7124456B95650118D/"
     },
     "01esports": {
       "logo": "https://cdn.steamusercontent.com/ugc/1539625527765315928/563F5BCDBD36AC91DB60BB2A5C017CFB0020B042/"
@@ -3301,6 +3472,12 @@
     "wayfarers": {
       "logo": "https://cdn.steamusercontent.com/ugc/1844811606349277848/9115EF5523F852C1EDA27BF1194658188AA197FA/"
     },
+    "randomsesports": {
+      "logo": "https://cdn.steamusercontent.com/ugc/2416817187172584251/5E7AA2C4896A6EB1212B673B731DD9838ECCFB27/"
+    },
+    "randoms": {
+      "logo": "https://cdn.steamusercontent.com/ugc/2416817187172584251/5E7AA2C4896A6EB1212B673B731DD9838ECCFB27/"
+    },
     "friascomex": {
       "logo": "https://cdn.steamusercontent.com/ugc/1758065850922672770/D397D32D9F6271921174EAE74DA98760E1A07BFA/"
     },
@@ -3319,11 +3496,20 @@
     "motivateviper": {
       "logo": "https://cdn.steamusercontent.com/ugc/1697276876114058177/C93540F44666B466DD577679B40A6C689BE874F8/"
     },
+    "onemove": {
+      "logo": "https://cdn.steamusercontent.com/ugc/2429222166861438379/2016A60B73B29A620CFA81A830603361CBB388AD/"
+    },
     "intothebreach": {
       "logo": "https://cdn.steamusercontent.com/ugc/1795223008077512746/B283A962A0FFF8636A3DC829C3F93BA4C9FEE214/"
     },
     "kastudon": {
       "logo": "https://cdn.steamusercontent.com/ugc/1815491317552191607/F961671C1BE095A579C9C917BECCFD53EFD497DC/"
+    },
+    "grinesports": {
+      "logo": "https://cdn.steamusercontent.com/ugc/2001317420616485713/858FEE24286C9D1CDC77AF3D5F3BDAADEB89D2F9/"
+    },
+    "grin": {
+      "logo": "https://cdn.steamusercontent.com/ugc/2001317420616485713/858FEE24286C9D1CDC77AF3D5F3BDAADEB89D2F9/"
     },
     "sinister5": {
       "logo": "https://cdn.steamusercontent.com/ugc/1758072603532456160/1F5DEE24522DB96F9CCA4F5D9BFCAFF5F47BB658/"
@@ -3358,6 +3544,12 @@
     "teamwanka": {
       "logo": "https://cdn.steamusercontent.com/ugc/1926996054456055976/4EBBE607134216E7F16DC7E111D16095AD1B5548/"
     },
+    "madqueensesports": {
+      "logo": "https://cdn.steamusercontent.com/ugc/1821138407262581214/2473111D6CED1B3429F7565EEC44D7A5E16ED628/"
+    },
+    "madqueens": {
+      "logo": "https://cdn.steamusercontent.com/ugc/1821138407262581214/2473111D6CED1B3429F7565EEC44D7A5E16ED628/"
+    },
     "lunagalaxy": {
       "logo": "https://cdn.steamusercontent.com/ugc/2038491084577608095/CA67ADB750E3B98E8544FB0CC1D2FF1C9EC27A77/"
     },
@@ -3384,6 +3576,9 @@
     },
     "444squad": {
       "logo": "https://cdn.steamusercontent.com/ugc/2483261555751237752/8444746CA8F12036A07FB6A2237C3F0A45A14D42/"
+    },
+    "blackpukers": {
+      "logo": "https://cdn.steamusercontent.com/ugc/1887597844446270477/6E387B14978698302B904FEB2FC24F45D8CE99B1/"
     },
     "easygaming": {
       "logo": "https://cdn.steamusercontent.com/ugc/1833543457070431639/775F05FC8F1C0E14E1E6DBAB2CBF192165A413E2/"
@@ -3412,11 +3607,20 @@
     "pangoliersjavelinom": {
       "logo": "https://cdn.steamusercontent.com/ugc/1852678988747798218/13734C5F707C49CF2880386C3B044D8754667C91/"
     },
+    "lavaesports": {
+      "logo": "https://cdn.steamusercontent.com/ugc/2020458443820677798/6DBE7E16C897F641DC4BA91F1F04D784905F72B5/"
+    },
+    "lava": {
+      "logo": "https://cdn.steamusercontent.com/ugc/2020458443820677798/6DBE7E16C897F641DC4BA91F1F04D784905F72B5/"
+    },
     "atomicesports": {
       "logo": "https://cdn.steamusercontent.com/ugc/1854933517826836824/47F54E3D687725343A8B56CB6785A0156E3F1423/"
     },
     "atomic": {
       "logo": "https://cdn.steamusercontent.com/ugc/1854933517826836824/47F54E3D687725343A8B56CB6785A0156E3F1423/"
+    },
+    "equisdesomoschavos": {
+      "logo": "https://cdn.steamusercontent.com/ugc/1827910574771249710/7D8F9013F3C25ADD92CD6ABFAEFA44319DC73089/"
     },
     "virtuspro2": {
       "logo": "https://cdn.steamusercontent.com/ugc/1872947708319301759/087EF97925087F92561983C34475ACBB68A60AE4/"
@@ -3427,14 +3631,23 @@
     "tamsme": {
       "logo": "https://cdn.steamusercontent.com/ugc/1830165414580693025/0490CB1A1C9A39BE4735653CDA9DF8270BE26CB8/"
     },
+    "havu": {
+      "logo": "https://cdn.steamusercontent.com/ugc/1833543457080341173/97E231A7DB51D0CA99DD8D8668835FBA8FE7B09C/"
+    },
     "vezzra": {
       "logo": "https://cdn.steamusercontent.com/ugc/2042986495990339051/AD05C5372484A344F81EF3351636B3841D46B38E/"
     },
     "animeenjoyers": {
       "logo": "https://cdn.steamusercontent.com/ugc/1779504675340866269/9B84E5C6529F42243451665477F33B96C1F475F5/"
     },
+    "nomatthew": {
+      "logo": "https://cdn.steamusercontent.com/ugc/2438208701509068489/350B89E8E9FB98BF8027B3FCDE4637AA2A15064D/"
+    },
     "teamsangre": {
       "logo": "https://cdn.steamusercontent.com/ugc/14219176089841400535/F1E15FF4CC95FFB792428F07BE7F48B1843A3821/"
+    },
+    "matreshka": {
+      "logo": "https://cdn.steamusercontent.com/ugc/2289581108031278201/DE2ED21F4DEEB8C3E302C5A0AF9CAF8CC84E8BA8/"
     },
     "balrogsacademy": {
       "logo": "https://cdn.steamusercontent.com/ugc/2020475078797052490/F6FEC85DF2E0E90E8E82CEA182D078E0B7C97554/"
@@ -3454,8 +3667,20 @@
     "psgquest": {
       "logo": "https://cdn.steamusercontent.com/ugc/2481004682513190539/324F8847AD21944686DED20FB3E2C0DEA4154AE7/"
     },
+    "mantaesports": {
+      "logo": "https://cdn.steamusercontent.com/ugc/2478749260055361941/F4D1D80AB29862CA0C957DFAD1456CBE98483F27/"
+    },
+    "manta": {
+      "logo": "https://cdn.steamusercontent.com/ugc/2478749260055361941/F4D1D80AB29862CA0C957DFAD1456CBE98483F27/"
+    },
     "tatladderclan": {
       "logo": "https://cdn.steamusercontent.com/ugc/2457349000339157388/C4F54B5F7603A9B99B4637B981E187FDA1541E32/"
+    },
+    "ynotfanclub": {
+      "logo": "https://cdn.steamusercontent.com/ugc/1978798064098818022/F251312057A2ADE7AA3655A08917372BC5537544/"
+    },
+    "ynotfan": {
+      "logo": "https://cdn.steamusercontent.com/ugc/1978798064098818022/F251312057A2ADE7AA3655A08917372BC5537544/"
     },
     "outsidersfromcn": {
       "logo": "https://cdn.steamusercontent.com/ugc/2028342277680788691/B504CC3B01CFEB0201FF7B7CE96F50F61196CE29/"
@@ -3496,11 +3721,23 @@
     "tpabomah": {
       "logo": "https://cdn.steamusercontent.com/ugc/40063924290200515/BD0C76D0F4029CAA32E2F43A04BF6A5F68135820/"
     },
+    "ihc": {
+      "logo": "https://cdn.steamusercontent.com/ugc/2514771532510530932/AA92D7C7649DD3366A31E0E1F772356805B73442/"
+    },
     "navijunior": {
       "logo": "https://cdn.steamusercontent.com/ugc/2909225722380320/5C6EFC9004093ED29E9B48242DE79418BDDBFE30/"
     },
+    "teambright": {
+      "logo": "https://cdn.steamusercontent.com/ugc/2008081064641074125/98465178D23A5C307E6AA8CE298B17CEBB16B979/"
+    },
     "holygrail": {
       "logo": "https://cdn.steamusercontent.com/ugc/2036233631759545038/183C2584681DBC309834BCE5561EA04CDDFFC736/"
+    },
+    "thecovenant": {
+      "logo": "https://cdn.steamusercontent.com/ugc/2187121345783071266/E1E6B530D0C644B81A08CE51ED03A9BB5698D1C0/"
+    },
+    "wingripper": {
+      "logo": "https://cdn.steamusercontent.com/ugc/2200631506770437455/E5C9DBEA9D2EECC4F3F98DE49AC1D6D8EE533B88/"
     },
     "fortnite": {
       "logo": "https://cdn.steamusercontent.com/ugc/16326258531762154557/88D6A1CB366D006460F6FF183FA8230F26E5C456/"
@@ -3508,8 +3745,26 @@
     "thelastdark": {
       "logo": "https://cdn.steamusercontent.com/ugc/2037359531667015102/14D1DA388EDDCD83477977801CA13A77A40373BE/"
     },
+    "sibeteam": {
+      "logo": "https://cdn.steamusercontent.com/ugc/2523781268249407312/759C9DF3828E60B672A56F55580D64804FDEE70A/"
+    },
+    "sibe": {
+      "logo": "https://cdn.steamusercontent.com/ugc/2523781268249407312/759C9DF3828E60B672A56F55580D64804FDEE70A/"
+    },
+    "infamousgaming": {
+      "logo": "https://cdn.steamusercontent.com/ugc/2032858469296144304/EDF6030FFA1952797EE94712BB781280D5034932/"
+    },
+    "carstenszesports": {
+      "logo": "https://cdn.steamusercontent.com/ugc/18170046277262960383/ECC4AAB63228E40A72F5A25D4D8A2F1A9E8622F9/"
+    },
+    "carstensz": {
+      "logo": "https://cdn.steamusercontent.com/ugc/18170046277262960383/ECC4AAB63228E40A72F5A25D4D8A2F1A9E8622F9/"
+    },
     "infamousastra": {
       "logo": "https://cdn.steamusercontent.com/ugc/2032858469296116678/EDF6030FFA1952797EE94712BB781280D5034932/"
+    },
+    "venom": {
+      "logo": "https://cdn.steamusercontent.com/ugc/11923313307929733/0B5CD347C0A23AA9E88CFDD7BFFEF57C70E192A1/"
     },
     "bbteam": {
       "logo": "https://cdn.steamusercontent.com/ugc/9393895253468454856/41CF4EBEB359259E56E03AECEF6A7606CF0A076F/"
@@ -3534,6 +3789,9 @@
     },
     "magid": {
       "logo": "https://cdn.steamusercontent.com/ugc/2213016405732835572/D7955018FA3AC7FBB78621C5C6D5AD33B9EF673B/"
+    },
+    "kisekinosedai": {
+      "logo": "https://cdn.steamusercontent.com/ugc/2086912445726996855/2C1B87D625EF7F8C7CF0D9CE05E0E9A331E775A7/"
     },
     "ror": {
       "logo": "https://cdn.steamusercontent.com/ugc/2076779599437195979/F472FC7B699006A25B505F6AAC6B12CBF1B73DCF/"

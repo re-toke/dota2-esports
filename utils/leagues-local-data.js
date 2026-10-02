@@ -7,7 +7,7 @@
 // 刷新：npm run fetch:leagues
 
 module.exports = {
-  "generatedAt": 1790933213,
+  "generatedAt": 1790970441,
   "source": "opendota",
   "note": "build-time leagues snapshot (active 90d + curated 60d), refresh via scripts/sync/fetch-leagues-snapshot.js",
   "stats": {
@@ -112,16 +112,6 @@ module.exports = {
       "name": "1win Essence II"
     },
     {
-      "leagueid": 20169,
-      "tier": "professional",
-      "name": "BLAST Slam VII China Qualifier"
-    },
-    {
-      "leagueid": 20176,
-      "tier": "professional",
-      "name": "BETBOOM Streamers Battle Dota 15"
-    },
-    {
       "leagueid": 20144,
       "tier": "professional",
       "name": "RES Unchained - A Blast Dota Slam IX Qualifier SEA"
@@ -140,6 +130,16 @@ module.exports = {
       "leagueid": 20208,
       "tier": "professional",
       "name": "BLAST SLAM IX"
+    },
+    {
+      "leagueid": 20169,
+      "tier": "professional",
+      "name": "BLAST Slam VII China Qualifier"
+    },
+    {
+      "leagueid": 20176,
+      "tier": "professional",
+      "name": "BETBOOM Streamers Battle Dota 15"
     },
     {
       "leagueid": 19066,
@@ -181,9 +181,9 @@ module.exports = {
     },
     "19102": {
       "earliest": 1790675759,
-      "latest": 1790876911,
-      "lastEnd": 1790880745,
-      "count": 39
+      "latest": 1790964043,
+      "lastEnd": 1790967003,
+      "count": 48
     },
     "19719": {
       "earliest": 1786590206,
