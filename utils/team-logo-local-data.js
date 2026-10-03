@@ -7,14 +7,14 @@
 // 刷新：npm run fetch:logos
 
 module.exports = {
-  "generatedAt": 1790970441,
+  "generatedAt": 1791017722,
   "source": "opendota",
   "note": "build-time team logo snapshot (active leagues + top rated), refresh via scripts/sync/fetch-team-logos.js",
   "stats": {
     "leaguesCrawled": 24,
     "activeTeamIds": 326,
-    "byIdCount": 587,
-    "byNameCount": 599
+    "byIdCount": 588,
+    "byNameCount": 600
   },
   "byId": {
     "3": {
@@ -1824,6 +1824,10 @@ module.exports = {
     "9229377": {
       "name": "DemiGods",
       "logo": "https://cdn.steamusercontent.com/ugc/2109432346272393261/5D02E4493B1E9373C84054C315FA87BCB54A0C66/"
+    },
+    "9230076": {
+      "name": "Stryi Park",
+      "logo": "https://cdn.steamusercontent.com/ugc/2106054788490105801/D88EB5D3A70AF2AF0AA9B0AA3288B2AF87CF0258/"
     },
     "9247260": {
       "name": "YodiBrodi Nexus Future",
@@ -3812,6 +3816,9 @@ module.exports = {
     },
     "demigods": {
       "logo": "https://cdn.steamusercontent.com/ugc/2109432346272393261/5D02E4493B1E9373C84054C315FA87BCB54A0C66/"
+    },
+    "stryipark": {
+      "logo": "https://cdn.steamusercontent.com/ugc/2106054788490105801/D88EB5D3A70AF2AF0AA9B0AA3288B2AF87CF0258/"
     },
     "yodibrodinexusfuture": {
       "logo": "https://cdn.steamusercontent.com/ugc/2217520643255336308/6E456F96913CB97E109B7676E931994A786BDDFD/"
