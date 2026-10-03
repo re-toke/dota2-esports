@@ -7,7 +7,7 @@
 // 刷新：npm run fetch:leagues
 
 module.exports = {
-  "generatedAt": 1791017721,
+  "generatedAt": 1791052447,
   "source": "opendota",
   "note": "build-time leagues snapshot (active 90d + curated 60d), refresh via scripts/sync/fetch-leagues-snapshot.js",
   "stats": {
@@ -17,14 +17,29 @@ module.exports = {
   },
   "leagues": [
     {
-      "leagueid": 10810,
-      "tier": "premium",
-      "name": "MDL Disneyland® Paris Major"
+      "leagueid": 16740,
+      "tier": "professional",
+      "name": "Riyadh Masters 2024 at Esports World Cup Qualifiers"
+    },
+    {
+      "leagueid": 18359,
+      "tier": "professional",
+      "name": "Clavision DOTA2 Masters 2025: Snow-Ruyi"
+    },
+    {
+      "leagueid": 19099,
+      "tier": "professional",
+      "name": "BLAST SLAM VI"
     },
     {
       "leagueid": 14268,
       "tier": "premium",
       "name": "The International 2022"
+    },
+    {
+      "leagueid": 19066,
+      "tier": "professional",
+      "name": "肛宝联赛-老婆杯"
     },
     {
       "leagueid": 15728,
@@ -37,19 +52,19 @@ module.exports = {
       "name": "ESL One Kuala Lumpur powered by Intel"
     },
     {
-      "leagueid": 16740,
+      "leagueid": 20169,
       "tier": "professional",
-      "name": "Riyadh Masters 2024 at Esports World Cup Qualifiers"
+      "name": "BLAST Slam VII China Qualifier"
     },
     {
-      "leagueid": 17795,
+      "leagueid": 20176,
       "tier": "professional",
-      "name": "ESL One Raleigh 2025"
+      "name": "BETBOOM Streamers Battle Dota 15"
     },
     {
-      "leagueid": 18111,
-      "tier": "professional",
-      "name": "DreamLeague Season 26"
+      "leagueid": 10810,
+      "tier": "premium",
+      "name": "MDL Disneyland® Paris Major"
     },
     {
       "leagueid": 18324,
@@ -62,39 +77,9 @@ module.exports = {
       "name": "Esports World Cup 2025"
     },
     {
-      "leagueid": 19099,
-      "tier": "professional",
-      "name": "BLAST SLAM VI"
-    },
-    {
-      "leagueid": 19101,
-      "tier": "professional",
-      "name": "BLAST SLAM VII"
-    },
-    {
-      "leagueid": 19102,
-      "tier": "professional",
-      "name": "BLAST SLAM VIII"
-    },
-    {
       "leagueid": 19719,
       "tier": "premium",
       "name": "The International 2026"
-    },
-    {
-      "leagueid": 19944,
-      "tier": "professional",
-      "name": "EPL Masters 2026 "
-    },
-    {
-      "leagueid": 19917,
-      "tier": "professional",
-      "name": "The Games of the Future 2026"
-    },
-    {
-      "leagueid": 20144,
-      "tier": "professional",
-      "name": "RES Unchained - A Blast Dota Slam IX Qualifier SEA"
     },
     {
       "leagueid": 20145,
@@ -107,19 +92,14 @@ module.exports = {
       "name": "WINLINE Star Series Season 4"
     },
     {
-      "leagueid": 20208,
+      "leagueid": 19101,
       "tier": "professional",
-      "name": "BLAST SLAM IX"
+      "name": "BLAST SLAM VII"
     },
     {
-      "leagueid": 10296,
-      "tier": "premium",
-      "name": "The Kuala Lumpur Major"
-    },
-    {
-      "leagueid": 18359,
+      "leagueid": 19102,
       "tier": "professional",
-      "name": "Clavision DOTA2 Masters 2025: Snow-Ruyi"
+      "name": "BLAST SLAM VIII"
     },
     {
       "leagueid": 19785,
@@ -127,24 +107,24 @@ module.exports = {
       "name": "Esports World Cup 2026"
     },
     {
+      "leagueid": 19917,
+      "tier": "professional",
+      "name": "The Games of the Future 2026"
+    },
+    {
+      "leagueid": 19944,
+      "tier": "professional",
+      "name": "EPL Masters 2026 "
+    },
+    {
+      "leagueid": 18111,
+      "tier": "professional",
+      "name": "DreamLeague Season 26"
+    },
+    {
       "leagueid": 20009,
       "tier": "professional",
       "name": "1win Essence II"
-    },
-    {
-      "leagueid": 20169,
-      "tier": "professional",
-      "name": "BLAST Slam VII China Qualifier"
-    },
-    {
-      "leagueid": 20176,
-      "tier": "professional",
-      "name": "BETBOOM Streamers Battle Dota 15"
-    },
-    {
-      "leagueid": 19066,
-      "tier": "professional",
-      "name": "肛宝联赛-老婆杯"
     },
     {
       "leagueid": 20142,
@@ -157,9 +137,29 @@ module.exports = {
       "name": "RES Unchained - A Blast Dota Slam VIII Qualifier SEA"
     },
     {
+      "leagueid": 10296,
+      "tier": "premium",
+      "name": "The Kuala Lumpur Major"
+    },
+    {
+      "leagueid": 20144,
+      "tier": "professional",
+      "name": "RES Unchained - A Blast Dota Slam IX Qualifier SEA"
+    },
+    {
+      "leagueid": 17795,
+      "tier": "professional",
+      "name": "ESL One Raleigh 2025"
+    },
+    {
       "leagueid": 20279,
       "tier": "professional",
       "name": "PGL Wallachia 2026 Season 9"
+    },
+    {
+      "leagueid": 20208,
+      "tier": "professional",
+      "name": "BLAST SLAM IX"
     },
     {
       "leagueid": 10482,
@@ -181,9 +181,9 @@ module.exports = {
     },
     "19102": {
       "earliest": 1790675759,
-      "latest": 1790968893,
-      "lastEnd": 1790971242,
-      "count": 49
+      "latest": 1791048121,
+      "lastEnd": 1791049821,
+      "count": 58
     },
     "19719": {
       "earliest": 1786590206,
@@ -253,9 +253,9 @@ module.exports = {
     },
     "20176": {
       "earliest": 1789995625,
-      "latest": 1790542276,
-      "lastEnd": 1790547503,
-      "count": 64
+      "latest": 1791044233,
+      "lastEnd": 1791047347,
+      "count": 68
     },
     "20279": {
       "earliest": 1789801237,
