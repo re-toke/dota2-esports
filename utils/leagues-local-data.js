@@ -7,15 +7,25 @@
 // 刷新：npm run fetch:leagues
 
 module.exports = {
-  "generatedAt": 1791052447,
+  "generatedAt": 1791105946,
   "source": "opendota",
   "note": "build-time leagues snapshot (active 90d + curated 60d), refresh via scripts/sync/fetch-leagues-snapshot.js",
   "stats": {
-    "total": 10316,
+    "total": 10319,
     "kept": 31,
     "windows": 15
   },
   "leagues": [
+    {
+      "leagueid": 19066,
+      "tier": "professional",
+      "name": "肛宝联赛-老婆杯"
+    },
+    {
+      "leagueid": 14268,
+      "tier": "premium",
+      "name": "The International 2022"
+    },
     {
       "leagueid": 16740,
       "tier": "professional",
@@ -30,16 +40,6 @@ module.exports = {
       "leagueid": 19099,
       "tier": "professional",
       "name": "BLAST SLAM VI"
-    },
-    {
-      "leagueid": 14268,
-      "tier": "premium",
-      "name": "The International 2022"
-    },
-    {
-      "leagueid": 19066,
-      "tier": "professional",
-      "name": "肛宝联赛-老婆杯"
     },
     {
       "leagueid": 15728,
@@ -152,14 +152,14 @@ module.exports = {
       "name": "ESL One Raleigh 2025"
     },
     {
-      "leagueid": 20279,
-      "tier": "professional",
-      "name": "PGL Wallachia 2026 Season 9"
-    },
-    {
       "leagueid": 20208,
       "tier": "professional",
       "name": "BLAST SLAM IX"
+    },
+    {
+      "leagueid": 20279,
+      "tier": "professional",
+      "name": "PGL Wallachia 2026 Season 9"
     },
     {
       "leagueid": 10482,
@@ -181,9 +181,9 @@ module.exports = {
     },
     "19102": {
       "earliest": 1790675759,
-      "latest": 1791048121,
-      "lastEnd": 1791049821,
-      "count": 58
+      "latest": 1791053919,
+      "lastEnd": 1791056684,
+      "count": 60
     },
     "19719": {
       "earliest": 1786590206,
@@ -253,9 +253,9 @@ module.exports = {
     },
     "20176": {
       "earliest": 1789995625,
-      "latest": 1791044233,
-      "lastEnd": 1791047347,
-      "count": 68
+      "latest": 1791056722,
+      "lastEnd": 1791059939,
+      "count": 70
     },
     "20279": {
       "earliest": 1789801237,
