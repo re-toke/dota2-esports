@@ -7,19 +7,24 @@
 // 刷新：npm run fetch:leagues
 
 module.exports = {
-  "generatedAt": 1791138743,
+  "generatedAt": 1791194772,
   "source": "opendota",
   "note": "build-time leagues snapshot (active 90d + curated 60d), refresh via scripts/sync/fetch-leagues-snapshot.js",
   "stats": {
-    "total": 10319,
-    "kept": 31,
-    "windows": 15
+    "total": 10323,
+    "kept": 32,
+    "windows": 16
   },
   "leagues": [
     {
       "leagueid": 19066,
       "tier": "professional",
       "name": "肛宝联赛-老婆杯"
+    },
+    {
+      "leagueid": 20393,
+      "tier": "professional",
+      "name": "PARI Universe by FISSURE Closed Qualifiers "
     },
     {
       "leagueid": 14268,
@@ -262,6 +267,12 @@ module.exports = {
       "latest": 1790521184,
       "lastEnd": 1790522808,
       "count": 114
+    },
+    "20393": {
+      "earliest": 1791187532,
+      "latest": 1791187532,
+      "lastEnd": 1791189869,
+      "count": 1
     }
   }
 };
