@@ -6,7 +6,7 @@
 // 数据来源：utils/upcoming-local.json（由本脚本生成）
 
 module.exports = {
-  "generatedAt": 1791237255,
+  "generatedAt": 1791280403,
   "source": "liquipedia",
   "note": "build-time snapshot (Upcoming+Ongoing, Tier1-3), refresh via scripts/sync/fetch-liquipedia-upcoming.js",
   "events": [
@@ -356,6 +356,18 @@ module.exports = {
       "start": 1805500800,
       "end": 1806249599,
       "date": "Mar 20–28, 2027",
+      "source": "liquipedia"
+    },
+    {
+      "id": -1490573,
+      "name": "ESL One Europe 2027",
+      "grade": "S",
+      "rank": 3,
+      "label": "S级",
+      "tier": 1,
+      "start": 1806796800,
+      "end": 1807459199,
+      "date": "Apr 04–11, 2027",
       "source": "liquipedia"
     }
   ]
