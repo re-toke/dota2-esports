@@ -7,7 +7,7 @@
 // 刷新：npm run fetch:leagues
 
 module.exports = {
-  "generatedAt": 1791366983,
+  "generatedAt": 1791404767,
   "source": "opendota",
   "note": "build-time leagues snapshot (active 90d + curated 60d), refresh via scripts/sync/fetch-leagues-snapshot.js",
   "stats": {
@@ -157,14 +157,14 @@ module.exports = {
       "name": "ESL One Raleigh 2025"
     },
     {
-      "leagueid": 20208,
-      "tier": "professional",
-      "name": "BLAST SLAM IX"
-    },
-    {
       "leagueid": 20279,
       "tier": "professional",
       "name": "PGL Wallachia 2026 Season 9"
+    },
+    {
+      "leagueid": 20208,
+      "tier": "professional",
+      "name": "BLAST SLAM IX"
     },
     {
       "leagueid": 10482,
@@ -270,9 +270,9 @@ module.exports = {
     },
     "20393": {
       "earliest": 1791187532,
-      "latest": 1791312740,
-      "lastEnd": 1791315245,
-      "count": 19
+      "latest": 1791396126,
+      "lastEnd": 1791398730,
+      "count": 26
     }
   }
 };
