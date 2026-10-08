@@ -6,22 +6,10 @@
 // 数据来源：utils/upcoming-local.json（由本脚本生成）
 
 module.exports = {
-  "generatedAt": 1791454299,
+  "generatedAt": 1791491683,
   "source": "liquipedia",
   "note": "build-time snapshot (Upcoming+Ongoing, Tier1-3), refresh via scripts/sync/fetch-liquipedia-upcoming.js",
   "events": [
-    {
-      "id": -1463658,
-      "name": "EPL World Series: Southeast Asia Season 18",
-      "grade": "B",
-      "rank": 1,
-      "label": "B级",
-      "tier": 3,
-      "start": 1790294400,
-      "end": 1791475199,
-      "date": "Sep 25 – Oct 08, 2026",
-      "source": "liquipedia"
-    },
     {
       "id": -1632240,
       "name": "BLAST SLAM VIII",
@@ -32,18 +20,6 @@ module.exports = {
       "start": 1790640000,
       "end": 1791734399,
       "date": "Sep 29 – Oct 11, 2026",
-      "source": "liquipedia"
-    },
-    {
-      "id": -1911857,
-      "name": "PARI Universe: Closed Qualifier",
-      "grade": "S",
-      "rank": 3,
-      "label": "S级",
-      "tier": 1,
-      "start": 1791158400,
-      "end": 1791475199,
-      "date": "Oct 05–08, 2026",
       "source": "liquipedia"
     },
     {
