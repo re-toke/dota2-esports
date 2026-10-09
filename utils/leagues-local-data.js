@@ -7,19 +7,24 @@
 // 刷新：npm run fetch:leagues
 
 module.exports = {
-  "generatedAt": 1791491517,
+  "generatedAt": 1791540621,
   "source": "opendota",
   "note": "build-time leagues snapshot (active 90d + curated 60d), refresh via scripts/sync/fetch-leagues-snapshot.js",
   "stats": {
-    "total": 10338,
-    "kept": 32,
-    "windows": 16
+    "total": 10342,
+    "kept": 33,
+    "windows": 17
   },
   "leagues": [
     {
       "leagueid": 19066,
       "tier": "professional",
       "name": "肛宝联赛-老婆杯"
+    },
+    {
+      "leagueid": 20359,
+      "tier": "professional",
+      "name": "DreamLeague Season 30 Qualifiers"
     },
     {
       "leagueid": 20393,
@@ -186,9 +191,9 @@ module.exports = {
     },
     "19102": {
       "earliest": 1790675759,
-      "latest": 1791483761,
-      "lastEnd": 1791486874,
-      "count": 67
+      "latest": 1791488886,
+      "lastEnd": 1791492697,
+      "count": 68
     },
     "19719": {
       "earliest": 1786590206,
@@ -197,10 +202,10 @@ module.exports = {
       "count": 147
     },
     "19785": {
-      "earliest": 1783674001,
+      "earliest": 1783760415,
       "latest": 1784483341,
       "lastEnd": 1784485548,
-      "count": 85
+      "count": 61
     },
     "19917": {
       "earliest": 1785476004,
@@ -268,11 +273,17 @@ module.exports = {
       "lastEnd": 1790522808,
       "count": 114
     },
+    "20359": {
+      "earliest": 1791533047,
+      "latest": 1791536343,
+      "lastEnd": 1791538249,
+      "count": 5
+    },
     "20393": {
       "earliest": 1791187532,
-      "latest": 1791485101,
-      "lastEnd": 1791487311,
-      "count": 33
+      "latest": 1791489252,
+      "lastEnd": 1791490855,
+      "count": 34
     }
   }
 };
