@@ -541,7 +541,28 @@ Page({
   //   - 15 卡 Promise.all 完成（复用缓存或发起新拉取合并 upcoming）
   //   - LIVE 轮询 tick（刷新比分）
   //   - onShow 重拉条件命中
-  _kickMatchFlow() {
+  _kickMatchFlow(opts) {
+    // ★★ 2026-10-10（首页优化 ②·**合并渲染窗口**）：
+    //   上面注释列的 4 类触发点会在短时间内**连打**本方法 —— 关注流分批到达（`publish → _kickMatchFlow`）、
+    //   ⑥段到达、`_refreshStaleLp`、LIVE 轮询 ⇒ 每次都**全量重跑管线 + 重渲 + setData** ⇒
+    //   真机日志可见多轮中间态（`[diag][cards] 总11 → 总76`、S/A 过滤 `32 → 10 张`）⇒ 观感"一批批冒出来"。
+    //   ⇒ 加 **400ms「前缘 + 尾随」合并窗口**：
+    //     · 前缘**立即执行**（首次进入/真正的刷新不被延迟）；
+    //     · 窗口内的重复调用只登记**一次**尾随；尾随在窗口结束后必跑 ⇒ **最终态一定落地**（不会漏更新）。
+    //   ⚠️ 所有调用点的语义都是"数据到了 → 刷新视图" ⇒ 允许合并到下一次 ✅
+    //   ⚠️ 尾随调用带 `_trailing` 标记**绕过窗口判断**，避免被自己的窗口再次吞掉（否则永远不跑）。
+    const _now = Date.now();
+    const _COALESCE_MS = 400;
+    if (!(opts && opts._trailing) && this._flowAt && (_now - this._flowAt) < _COALESCE_MS) {
+      if (!this._flowTimer) {
+        this._flowTimer = setTimeout(() => {
+          this._flowTimer = null;
+          this._kickMatchFlow({ _trailing: true });
+        }, _COALESCE_MS + 20);
+      }
+      return;
+    }
+    this._flowAt = _now;
     const nowMs = Date.now();
     const PRO_FRESH_MS = 60 * 1000;
     const LIVE_FRESH_MS = 60 * 1000;
@@ -575,7 +596,25 @@ Page({
     //   由 _refreshStaleLp 后台 force 重拉转新。
     const proP = api.getProMatches().catch(() => null);
     const liveP = api.getLiveMatches().catch(() => null);
-    const lpP = this._fetchLpUpcoming().catch(() => []);
+    // ★★ 2026-10-10（首页优化 ①·**⑥段延迟发起**）：
+    //   原实现 `lpP` 与 pro/live **同时**发起 ⇒ ⑥段内部最多 5 个候选赛事 × 每赛事 2 次尝试
+    //   （EF 失败/未命中 → haglund 兜底）≈ **10 个请求**，会**抢占首屏的并发配额**
+    //   （小程序平台并发上限**实测 = 10**）⇒ 首屏被拖慢、卡片分多批冒出
+    //   （真机日志证据：`[diag][cards] 总11 → 总76`，S/A 过滤后 `32 → 10 张`）。
+    //   ⇒ 改为**首屏（pro/live）settle 之后再发起**，把并发让给首屏；⑥段随后补齐。
+    //   ⚠️ 安全性：本方法**原本就允许"LP 未就绪时先渲染"**（见下方 `lpReady || []` 与
+    //      LP 回调独立渲染）⇒ 这里只是把"未就绪窗口"从"网络抖动"变成"确定的首屏时长"，
+    //      无新竞态（epoch 守卫与原有两条渲染路径都不变）。
+    //   ⚠️ 兜底：若首屏分支因异常没跑，5s 后强制发起，保证 ⑥段**不会永久不跑**。
+    let lpStarted = false;
+    const startLp = () => {
+      if (lpStarted) return;
+      lpStarted = true;
+      resolveLp(this._fetchLpUpcoming().catch(() => []));
+    };
+    let resolveLp = null;
+    const lpP = new Promise((res) => { resolveLp = res; });
+    setTimeout(() => { if (myEpoch === this._epoch) startLp(); }, 5000);
     let lpReady = null;                  // 本 epoch LP 就绪缓存（pro/live 渲染时带上，省一次二次渲染）
     lpP.then((lpUp) => {
       if (myEpoch !== this._epoch) return;
@@ -605,6 +644,7 @@ Page({
       // LP 已就绪则此渲染直接带上（lpReady）；未就绪则稍后由 LP 回调独立渲染
       this._applyMatchSources(pro, live, this._followRows || [], lpReady || []);
       this.setData({ matchLoading: false, matchDegraded: !!degraded });
+      startLp();   // ★ 优化①：首屏已渲染 ⇒ 现在才发起 ⑥段（不抢首屏并发）
     }).catch(() => {
       if (myEpoch !== this._epoch) return;
       // F10 超时/失败降级。★ S1 补漏：原实现此分支不处理 lpP——超时场景 LP 数据
@@ -614,6 +654,7 @@ Page({
           lpReady || this._lastLpUp || []);
       }
       this.setData({ matchLoading: false, matchDegraded: !this._allMatches });
+      startLp();   // ★ 优化①：首屏失败/超时也要发起 ⑥段（否则 ⑥段永不跑）
     });
   },
 
