@@ -235,6 +235,32 @@ const textOf = async (r) => { try { return await r.clone().text(); } catch (e) {
   globalThis.fetch = saved;
 }
 
+// ── ⑩ v4 新增：EF **白名单式**短缓存（只缓 bundle 的 getLeagueDetailBundle；其它一律不缓）──
+{
+  const b1 = JSON.stringify({ action: 'getLeagueDetailBundle', params: { leagueId: 19102, name: 'X' } });
+  const H = { 'Content-Type': 'application/json' };
+  calls.length = 0;
+  const r1 = await handle(req('/sb/functions/v1/bundle-aggregator', { method: 'POST', body: b1, headers: H }), ENV);
+  const n1 = calls.length;
+  const r2 = await handle(req('/sb/functions/v1/bundle-aggregator', { method: 'POST', body: b1, headers: H }), ENV);
+  ok('★ v4 白名单 EF：首次 MISS', r1.headers.get('X-Proxy-Cache') === 'MISS', String(r1.headers.get('X-Proxy-Cache')));
+  ok('★ v4 白名单 EF：二次 HIT 且不再打上游',
+    r2.headers.get('X-Proxy-Cache') === 'HIT' && calls.length === n1, r2.headers.get('X-Proxy-Cache') + ' / calls=' + calls.length + '（首次 ' + n1 + '）');
+  // ★ 反向断言：**未登记**的 (EF, action) 一律不缓存（防"误缓写类/鉴权类 EF"）
+  const b2 = JSON.stringify({ action: 'getProMatches', params: {} });
+  calls.length = 0;
+  await handle(req('/sb/functions/v1/opendota-proxy', { method: 'POST', body: b2, headers: H }), ENV);
+  const m1 = calls.length;
+  await handle(req('/sb/functions/v1/opendota-proxy', { method: 'POST', body: b2, headers: H }), ENV);
+  ok('★ v4 反向：未登记 action **不得**被缓存（两次都打上游）',
+    m1 === 1 && calls.length === 2, '首次 ' + m1 + ' / 两次后 ' + calls.length);
+  // ★ 反向断言：不同 params 不得互相命中（缓存键含 params）
+  const b3 = JSON.stringify({ action: 'getLeagueDetailBundle', params: { leagueId: 20208, name: 'Y' } });
+  calls.length = 0;
+  const r3 = await handle(req('/sb/functions/v1/bundle-aggregator', { method: 'POST', body: b3, headers: H }), ENV);
+  ok('★ v4 不同参数不互相命中（键含 params）', r3.headers.get('X-Proxy-Cache') === 'MISS' && calls.length === 1, String(r3.headers.get('X-Proxy-Cache')));
+}
+
 console.log('\n=== 结果 ===');
 console.log('通过: ' + pass + '  失败: ' + fail);
 if (fail) { console.log('存在失败 ❌'); process.exit(1); }

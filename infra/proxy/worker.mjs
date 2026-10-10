@@ -53,6 +53,17 @@ const EF_ALLOW = new Set([
 //   —— 客户端对 `/live` 是 **30s 轮询**（直播态）⇒ 这里给 20s（宁可多打一次上游，也不让用户看到旧比分）
 const TTL = { proMatches: 60e3, live: 20e3, leagues: 30 * 60e3, 'default': 120e3 };
 
+// ★★ 2026-10-10（详情页"慢"的修法）：**EF 路径的白名单式短缓存**（只缓只读、低频变化的 action）
+//   背景（实测）：`bundle-aggregator/getLeagueDetailBundle` 单次 **3.8s**（云端含 OD 现抓 + explorer），
+//   而真机详情页 `od+lp 并行段 4645ms`、首次可见 ~2.8s / 全量 ~4.7s。
+//   ⇒ 对白名单内的 (EF, action) 缓存 60s ⇒ **同一赛事的重复访问 / 多用户共享**都能直接命中。
+//   ⚠️ **只对白名单生效（默认不缓）** ⇒ 不会误缓写类/鉴权类 EF（如 `wechat-auth`/`subscribe-send`）。
+//   ⚠️ TTL 取 60s 的依据：bundle 是"赛事详情里变化很慢的部分"（对阵/参赛队/排名），
+//      比分另有 `/live` 与 `getLeagueMatches` 路径 ⇒ 60s 陈旧度安全。
+const EF_CACHE_MS = {
+  'bundle-aggregator|getLeagueDetailBundle': 60e3
+};
+
 const UPSTREAM_TIMEOUT_MS = 12000;
 const RETRY_ON = (status) => status >= 500;
 
@@ -182,11 +193,33 @@ async function handle(request, env) {
     let m = /^\/sb\/functions\/v1\/([A-Za-z0-9_-]+)\/?$/.exec(path);
     if (m) {
       if (!EF_ALLOW.has(m[1])) return json({ error: 'ef not allowed', name: m[1] }, 404);
+      const rawBody = method === 'POST' ? await request.text() : '{}';
+      // ★★（详情页"慢"的修法）白名单式 EF 短缓存：只对 EF_CACHE_MS 里登记的 (EF, action) 生效
+      let efAction = '';
+      try { efAction = (JSON.parse(rawBody || '{}') || {}).action || ''; } catch (e) { efAction = ''; }
+      const efTtl = EF_CACHE_MS[m[1] + '|' + efAction];
+      let efKey = null;
+      if (efTtl) {
+        let efParams = '';
+        try { efParams = JSON.stringify((JSON.parse(rawBody || '{}') || {}).params || {}); } catch (e) { efParams = ''; }
+        efKey = 'ef|' + m[1] + '|' + efAction + '|' + efParams;
+        const hit = _cache.get(efKey);
+        if (hit && hit.exp > Date.now()) {
+          console.log('[proxy] EF ' + m[1] + '/' + efAction + ' → 缓存命中');
+          return textResponse(hit.body, hit.status, 'application/json', null, 'HIT');
+        }
+      }
       const r = await fetchUpstream('https://' + ref + '.supabase.co/functions/v1/' + m[1], {
         method: 'POST',
         headers: Object.assign({ 'Content-Type': 'application/json' }, sbHeaders),
-        body: method === 'POST' ? await request.text() : '{}'
-      }, 'EF ' + m[1]);
+        body: rawBody
+      }, 'EF ' + m[1] + (efAction ? '/' + efAction : ''));
+      if (efKey && r.ok) {
+        // 只缓存成功响应；读一次 body 再回放（避免把 Response 消费掉）
+        const body = await r.text();
+        _cache.set(efKey, { exp: Date.now() + efTtl, body: body, status: r.status, ct: 'application/json', cr: null });
+        return textResponse(body, r.status, 'application/json', null, 'MISS');
+      }
       return forward(r);
     }
 
