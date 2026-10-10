@@ -7,6 +7,10 @@
         "type": "folder"
       },
       {
+        "type": "folder",
+        "value": "/infra"
+      },
+      {
         "type": "file",
         "value": "/package-lock.json"
       },

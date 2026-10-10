@@ -1,0 +1,14 @@
+# infra/proxy/wrangler.toml —— Cloudflare Workers 部署配置
+# 部署：wrangler secret put SB_ANON_KEY  然后  wrangler deploy
+name = "dota2-data-proxy"
+main = "worker.mjs"
+compatibility_date = "2026-10-01"
+
+# 非敏感配置；密钥（SB_ANON_KEY）用 `wrangler secret put` 写入，**不要**写在这里
+[vars]
+SUPABASE_REF = "gkticzdaicpdtxheyxsd"
+
+# 可选：绑定自定义域名（需先在 CF 里把域名接入）
+# routes = [
+#   { pattern = "proxy.example.com", custom_domain = true }
+# ]

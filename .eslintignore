@@ -3,3 +3,9 @@ miniprogram_npm/
 mockup/
 .trae/
 .git/
+
+# infra/ 是**部署到 Cloudflare 的边缘代码**（Workers / Pages Functions），入口必须是 ESM
+# （`export default` / `export const onRequest`），而本项目 .eslintrc.json 是
+# `sourceType: "script"`（小程序侧 CommonJS）⇒ 语法模型不同，不应套用本项目规则。
+# 该目录的正确性由 `infra/proxy/test.mjs`（24 断言）与 CF 运行时保证。
+infra/
