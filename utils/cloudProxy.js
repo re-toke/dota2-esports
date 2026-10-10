@@ -52,7 +52,17 @@ var ACTION_TIMEOUT_MS = {
 };
 
 function timeoutFor(action) {
-  return (ACTION_TIMEOUT_MS[action] != null) ? ACTION_TIMEOUT_MS[action] : ACTION_TIMEOUT_MS._default;
+  // ★★ 2026-10-10（实测驱动的修复）：**统一抬到 20s 下限**。
+  //   依据（开发者工具隔离测量，真实 wx.request 并发 6 个）：
+  //     `/healthz`（纯本地 JSON、不碰任何上游）**也要 10885ms**，其余 18~23s；
+  //     而**同一台中转用 node 打只要 0.8~4s**（全部 200）⇒ 慢在「小程序 → 中转」这条路径，
+  //     不是中转、也不是 Supabase/OpenDota。
+  //   ⇒ 原 `_default: 8000` / 实时类 `12000` 会把**全部** EF 调用判成超时
+  //     （这就是「赛事详情页 对局/队伍/排名 全空」的直接原因：日志 15 × request:fail timeout）。
+  //   ⚠️ 代价（已知并接受）：真正失败时用户多等约 8~12s；当前失败态本就是"页面空 + 可下拉重试"。
+  //   ⚠️ 后续应**用真机复测**：若真机没有这 ~10s 基线，可再回调（本改动对快路径无副作用）。
+  var FLOOR = 20000;
+  return Math.max((ACTION_TIMEOUT_MS[action] != null) ? ACTION_TIMEOUT_MS[action] : ACTION_TIMEOUT_MS._default, FLOOR);
 }
 
 // ===== M2.4（2026-09-09）：Supabase 数据代理路由 =====
