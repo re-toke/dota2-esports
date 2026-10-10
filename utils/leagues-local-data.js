@@ -7,7 +7,7 @@
 // 刷新：npm run fetch:leagues
 
 module.exports = {
-  "generatedAt": 1791624700,
+  "generatedAt": 1791659334,
   "source": "opendota",
   "note": "build-time leagues snapshot (active 90d + curated 60d), refresh via scripts/sync/fetch-leagues-snapshot.js",
   "stats": {
@@ -191,9 +191,9 @@ module.exports = {
     },
     "19102": {
       "earliest": 1790675759,
-      "latest": 1791574542,
-      "lastEnd": 1791577660,
-      "count": 76
+      "latest": 1791644900,
+      "lastEnd": 1791647504,
+      "count": 80
     },
     "19719": {
       "earliest": 1786590206,
@@ -275,9 +275,9 @@ module.exports = {
     },
     "20359": {
       "earliest": 1791533047,
-      "latest": 1791620812,
-      "lastEnd": 1791621549,
-      "count": 49
+      "latest": 1791649239,
+      "lastEnd": 1791652725,
+      "count": 55
     },
     "20393": {
       "earliest": 1791187532,

@@ -1,5 +1,5 @@
 {
-  "generatedAt": 1791624869,
+  "generatedAt": 1791659492,
   "source": "liquipedia",
   "note": "build-time snapshot (Upcoming+Ongoing, Tier1-3), refresh via scripts/sync/fetch-liquipedia-upcoming.js",
   "events": [
@@ -13,66 +13,6 @@
       "start": 1790640000,
       "end": 1791734399,
       "date": "Sep 29 – Oct 11, 2026",
-      "source": "liquipedia"
-    },
-    {
-      "id": -1636746,
-      "name": "DreamLeague Season 30: China Open Qualifier 1",
-      "grade": "S",
-      "rank": 3,
-      "label": "S级",
-      "tier": 1,
-      "start": 1791504000,
-      "end": 1791647999,
-      "date": "Oct 09–10, 2026",
-      "source": "liquipedia"
-    },
-    {
-      "id": -1319588,
-      "name": "DreamLeague Season 30: South America Open Qualifier 1",
-      "grade": "S",
-      "rank": 3,
-      "label": "S级",
-      "tier": 1,
-      "start": 1791504000,
-      "end": 1791647999,
-      "date": "Oct 09–10, 2026",
-      "source": "liquipedia"
-    },
-    {
-      "id": -1860589,
-      "name": "DreamLeague Season 30: Western Europe Open Qualifier 1",
-      "grade": "S",
-      "rank": 3,
-      "label": "S级",
-      "tier": 1,
-      "start": 1791504000,
-      "end": 1791647999,
-      "date": "Oct 09–10, 2026",
-      "source": "liquipedia"
-    },
-    {
-      "id": -1122939,
-      "name": "DreamLeague Season 30: Eastern Europe Open Qualifier 1",
-      "grade": "S",
-      "rank": 3,
-      "label": "S级",
-      "tier": 1,
-      "start": 1791504000,
-      "end": 1791647999,
-      "date": "Oct 09–10, 2026",
-      "source": "liquipedia"
-    },
-    {
-      "id": -1878797,
-      "name": "DreamLeague Season 30: Southeast Asia Open Qualifier 1",
-      "grade": "S",
-      "rank": 3,
-      "label": "S级",
-      "tier": 1,
-      "start": 1791504000,
-      "end": 1791647999,
-      "date": "Oct 09–10, 2026",
       "source": "liquipedia"
     },
     {
@@ -325,6 +265,18 @@
       "start": 1796169600,
       "end": 1797177599,
       "date": "Dec 02–13, 2026",
+      "source": "liquipedia"
+    },
+    {
+      "id": -1531688,
+      "name": "IESF World Esports Championship 2026",
+      "grade": "A",
+      "rank": 2,
+      "label": "A级",
+      "tier": 2,
+      "start": 1797292800,
+      "end": 1797782399,
+      "date": "Dec 15–20, 2026",
       "source": "liquipedia"
     },
     {
