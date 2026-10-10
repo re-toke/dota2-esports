@@ -37,13 +37,12 @@ function isAvailable() {
 var ACTION_TIMEOUT_MS = {
   _default: 8000,
   // 云端需现场抓 Liquipedia wikitext（2-4s）或 Steam 签名转发的实时 action
-  liquipediaScheduledMatches: 12000,
   steamLeagueScheduled: 12000,
-  liquipediaLeagueMeta: 12000,
-  liquipediaTeamLogo: 12000,
   liquipediaFetchRawWikitext: 12000,
   // P0-C1（2026-09-01）：haglund 云代理 —— 云端现场拉 Cloudflare Workers（1-3s），归实时类 12s
   haglundUpcoming: 12000,
+  // ★★ 2026-10-10（死代码清理）：已删除 3 条**无调用点**的条目 —— `liquipediaScheduledMatches` /
+  //   `liquipediaLeagueMeta` / `liquipediaTeamLogo`（对应的 wrapper 同批删除，详见 proxy 段注释）。
   // P0-3③（2026-09-01）：详情页聚合 bundle —— 云端含 OD 现抓 + explorer。
   // ★ 2026-09-01（详情页 13s 修复）：12s → 8s。云函数端 OD 子任务已改短超时单次尝试
   //   （最坏 6s 快速失败），bundle 整体 8s 内必回；超时回退旧链（getLeagueMatches direct
@@ -264,28 +263,19 @@ proxy.haglundUpcomingProxy = function (force) {
   return call('haglundUpcoming', {}, force ? { force: true } : null);
 };
 
-// Liquipedia 赛事元数据代理（A+B 双源）：客户端走云函数（Node.js 可设 UA），
-// 规避 wx.request 禁设 User-Agent 的限制。云函数 aggregation 的 liquipediaLeagueMeta
-// action 抓取 + 纯解析，返回与 liquipedia.getLeagueMetadata 同形状的 metadata。
-// 调用方（liquipedia.getLeagueMetadata）已对 wx.cloud + 熔断器做前置守卫，此处仅封装 action。
-proxy.liquipediaProxy = function (pageName) {
-  return call('liquipediaLeagueMeta', { pageName: pageName });
-};
+// ★★ 2026-10-10（死代码清理）：本段原有 3 个**已无人调用**的云函数 wrapper ——
+//   `liquipediaProxy`（liquipediaLeagueMeta）/ `liquipediaScheduledProxy`（liquipediaScheduledMatches）/
+//   `liquipediaTeamLogoProxy`（liquipediaTeamLogo）—— **已删除**。
+//   删除依据（都是"看调用点"得出的，不是靠感觉）：
+//     · 三个函数在 `utils/ pages/ subpackages/ components/` 内**零调用点**
+//       （`liquipedia.js:416` 只剩一句历史注释；另两个零命中）；
+//     · `scripts/test`、`scripts/ops` 的守卫**均未引用**它们；
+//     · `EDGE_ACTIONS` 里**本来就未登记**这三个 action。
+//   历史：它们原是"云开发云函数"的兜底，客户端在 **2026-09-19 就移除了调用**，改走
+//     「EF 取 raw wikitext（`liquipediaFetchRawWikitext`）+ 客户端 `LiquiParse` 本地解析」这条
+//     **仍然健在**的路径（见下方 `liquipediaFetchRawWikitextProxy`）。
+//   ⚠️ 删的是 wrapper 与对应超时条目；**没有**动任何在用的路径。
 
-// Liquipedia 赛程数据云代理：调云函数 action=liquipediaScheduledMatches，
-// 云端抓取 wikitext + parseScheduledMatches 解析，返回 [{ team1Name, team2Name, startTime, boType, finished, phase }]。
-// 与 liquipediaProxy 同样规避 wx.request 禁设 User-Agent 的限制。
-proxy.liquipediaScheduledProxy = function (pageName, force) {
-  // force=true → 透传云函数顶层 force（跳过云函数缓存现抓，云函数内部有 30s 最小间隔节流）
-  return call('liquipediaScheduledMatches', { pageName: pageName }, force ? { force: true } : null);
-};
-
-// §8.3 Liquipedia 战队 Logo 云代理（2026-07-29）：OpenDota 无 logo 的兜底源。
-// 调云函数 action=liquipediaTeamLogo，云端两步获取（wikitext → imageinfo API）。
-// 返回 { logo: url, source: 'liquipedia' } 或 reject（由调用方 catch 降级）。
-proxy.liquipediaTeamLogoProxy = function (teamName) {
-  return call('liquipediaTeamLogo', { teamName: teamName });
-};
 // ★★ 2026-09-22（云开发退役 · 决策 (b) 接受降级）：原 `liquipediaFetchRawWikitextCloud`
 //   （云函数现抓 LP —— 云函数是**唯一能现抓 LP 的出口**，Supabase 出口被 LP 429 拦）**已移除**。
 //   影响评估（有据）：其唯一实质消费者是战队名册，而 sources.js:632-637 自述
