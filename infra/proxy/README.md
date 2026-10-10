@@ -23,16 +23,21 @@
 | `/od/api/<path>?<query>` | `https://api.opendota.com/api/<path>?<query>` |
 | `/lp?<query>` | `https://liquipedia.net/dota2/api.php?<query>`（可选；客户端 LP 直连本来就通） |
 
-## ★ 三个关键设计
+## ★ 关键设计（v2，2026-10-10 优化）
 
 1. **服务端注入 Supabase key**：客户端当前那把 `anonKey` 是错的（`utils/config.js:226`）。
    本代理用 `env.SB_ANON_KEY` **覆盖**客户端传来的 `apikey`/`Authorization`
    ⇒ **客户端的错 key 直接变得无害**（连通性恢复后也不会再 401）。
-2. **`/leagues` 轻量裁剪**：只丢 `tier === 'excluded'` 的条目（**响应形状不变**，客户端 `filterCollectableLeagues`
-   本来也会过滤）⇒ 再叠加 CF 自动 gzip ⇒ 避开 12s 超时。
-   ⚠️ 刻意**不复制** EF 侧更复杂的裁剪，避免口径漂移。
-3. **最小权限**：只放行 `/functions/v1/`、`/rest/v1/`、`/api/` 前缀；方法仅 GET/POST/OPTIONS
-   ⇒ 不会变成开放代理/跳板。
+2. **EF 名白名单**（9 个）：只放行客户端真正会调的 EF（出处 `utils/cloudProxy.js` 的 EDGE_ACTIONS）
+   ⇒ 中转不会被当作跳板。**改动白名单前先核对代码**（漏一个会让对应功能静默失效，测试里有不变量守卫）。
+3. **上游超时 12s + 1 次重试**（仅 5xx / 网络异常；4xx 立即返回，不做无谓重试）。
+4. **GET 短路缓存**（模块级内存，isolate 内有效）：多用户复用 ⇒ 省 Supabase/OpenDota 配额。
+   ★ **TTL 必须 ≤ 客户端轮询间隔**（`/live` 取 20s < 客户端 30s 轮询），否则会把实时比分缓存成旧数据。
+5. **`/healthz?deep=1` 逐段自检**：分别探测「中转→Supabase」与「中转→OpenDota」，一点开就知道哪段断了。
+6. **`/od/api/leagues` 轻量裁剪**：只丢 `tier === 'excluded'`（**响应形状不变**，客户端本来也会过滤）；
+   刻意**不复制** EF 侧更复杂的裁剪，避免口径漂移。
+7. **最小权限**：仅 GET/POST/OPTIONS + 路径白名单；`/sb/rest/v1/*` 仅 GET。
+8. **耗时/状态码日志 + 结构化错误**（CF 控制台可查）。
 
 ## 部署方式 A：Cloudflare Workers（推荐，最快）
 
@@ -67,10 +72,16 @@ wrangler deploy
 ```
 
 **然后做可达性 + 配置自检**（**这一步决定方案成不成立**）：
-> 浏览器打开 `https://<你的域名>/healthz`
-> - ✅ `{"ok":true,"hasKey":true,...}` ⇒ 域名通 + key 已就位 ⇒ **可以进下一步（改客户端）**
+> ① 浏览器打开 `https://<你的域名>/healthz`
+> - ✅ `{"ok":true,"hasKey":true,...}` ⇒ 域名通 + key 已就位
 > - ⚠️ `hasKey:false` ⇒ key 没读到 ⇒ 回 Dashboard 确认 Secret 名称**恰好**是 `SB_ANON_KEY`，再 `wrangler deploy`
 > - ❌ 连接重置 / 证书错 / 超时 ⇒ **域名不可达** ⇒ 换域名或换宿主（备选 Vercel / Netlify / Deno Deploy）
+>
+> ② 再打开 `https://<你的域名>/healthz?deep=1`（**v2 新增，逐段自检**）
+> - ✅ 期望：`deep.supabase.reachable=true` **且** `deep.opendota.reachable=true`
+>   ⇒ **中转能连上后端** ⇒ 可以进下一步（改客户端）
+> - ⚠️ `supabase.reachable=false` ⇒ 中转连不上 Supabase（载体出口问题）⇒ 换载体/查 Supabase 状态
+> - ⚠️ `opendota.reachable=false` ⇒ 兜底通道不可用（主路径仍可能正常）
 
 **`wrangler.toml` 内容**（若仓库里没有，可自建）：
 ```toml

@@ -2,7 +2,7 @@
 //   做法：mock 全局 fetch（拦截上游请求），把 worker 的 handle() 当成纯函数调用，
 //   逐条断言：① 路由命中 ② **服务端确实覆盖了客户端的错 key** ③ /leagues 裁剪 ④ 最小权限/健康检查
 // 运行：node infra/proxy/test.mjs
-import { handle, } from './worker.mjs';
+import { handle, EF_ALLOW, TTL } from './worker.mjs';
 
 let pass = 0, fail = 0;
 const ok = (name, cond, detail) => {
@@ -126,11 +126,79 @@ const textOf = async (r) => { try { return await r.clone().text(); } catch (e) {
 {
   const saved = globalThis.fetch;
   globalThis.fetch = async () => { throw new Error('ECONNRESET'); };
-  const r = await handle(req('/od/api/proMatches'), ENV);
+  // ⚠️ 必须用**未被前面测试缓存过的 URL**（v2 加了短路缓存 ⇒ 复用同一 URL 会命中缓存、绕过上游）
+  const r = await handle(req('/od/api/proMatches?case=upstreamfail'), ENV);
   const b = JSON.parse(await textOf(r));
   ok('上游失败 → 502 且带 detail（真机可据此排查）', r.status === 502 && String(b.detail).indexOf('ECONNRESET') >= 0, JSON.stringify(b));
   ok('失败信息不含任何凭据', JSON.stringify(b).indexOf(REAL_KEY) < 0);
   globalThis.fetch = saved;
+}
+
+// ── ⑦ v2 优化项：EF 白名单 / 超时重试 / 短路缓存 / deep 自检 ──────────────────
+{
+  // EF 白名单：名单内放行
+  calls.length = 0;
+  await handle(req('/sb/functions/v1/opendota-proxy', { method: 'POST', body: '{}', headers: { 'Content-Type': 'application/json' } }), ENV);
+  ok('v2 EF 白名单：允许名单内的 opendota-proxy', calls.length === 1, String(calls.length));
+
+  // EF 白名单：名单外拒绝，且**不打上游**
+  calls.length = 0;
+  const rDeny = await handle(req('/sb/functions/v1/evil-func', { method: 'POST', body: '{}' }), ENV);
+  ok('★ v2 EF 白名单：拒绝未登记函数（404 且零上游请求）',
+    rDeny.status === 404 && calls.length === 0, rDeny.status + ' / calls=' + calls.length);
+
+  // 5xx ⇒ 重试一次（共 2 次上游调用），最终原样透传 503
+  const saved = globalThis.fetch;
+  let n5 = 0;
+  globalThis.fetch = async () => { n5++; return new Response('boom', { status: 503, headers: { 'Content-Type': 'text/plain' } }); };
+  const r5xx = await handle(req('/od/api/proMatches?case=5xx'), ENV);
+  ok('★ v2 上游 5xx ⇒ 重试一次（上游被调用 2 次）', n5 === 2, String(n5));
+  ok('v2 重试后仍 5xx ⇒ 原样透传 503', r5xx.status === 503, String(r5xx.status));
+
+  // 网络异常 ⇒ 也重试一次，最终 502 + detail
+  let nErr = 0;
+  globalThis.fetch = async () => { nErr++; throw new Error('ECONNRESET'); };
+  const rErr = await handle(req('/od/api/proMatches?case=neterr'), ENV);
+  const bErr = JSON.parse(await textOf(rErr));
+  ok('★ v2 网络异常也重试一次（共 2 次）', nErr === 2, String(nErr));
+  ok('v2 两次都失败 ⇒ 502 且带 detail', rErr.status === 502 && String(bErr.detail).indexOf('ECONNRESET') >= 0, JSON.stringify(bErr));
+  globalThis.fetch = saved;
+
+  // 短路缓存：同一 URL 二次请求应为 HIT 且不再打上游
+  calls.length = 0;
+  const u = '/od/api/heroStats?case=cache';
+  const a1 = await handle(req(u), ENV);
+  const n1 = calls.length;
+  const a2 = await handle(req(u), ENV);
+  ok('★ v2 短路缓存：首次 MISS', a1.headers.get('X-Proxy-Cache') === 'MISS', String(a1.headers.get('X-Proxy-Cache')));
+  ok('★ v2 短路缓存：二次 HIT 且不再打上游',
+    a2.headers.get('X-Proxy-Cache') === 'HIT' && calls.length === n1,
+    a2.headers.get('X-Proxy-Cache') + ' / calls=' + calls.length + '（首次 ' + n1 + '）');
+
+  // /healthz?deep=1 逐段自检
+  const rd = await handle(req('/healthz?deep=1'), ENV);
+  const bd = JSON.parse(await textOf(rd));
+  ok('★ v2 /healthz?deep=1 逐段报告 supabase 与 opendota',
+    !!(bd.deep && bd.deep.supabase && bd.deep.opendota), JSON.stringify(bd.deep));
+  ok('v2 deep：supabase 判为可达', bd.deep.supabase.reachable === true, JSON.stringify(bd.deep.supabase));
+  ok('v2 deep：opendota 判为可达', bd.deep.opendota.reachable === true, JSON.stringify(bd.deep.opendota));
+  ok('v2 deep 响应不含凭据', JSON.stringify(bd).indexOf(REAL_KEY) < 0);
+}
+
+// ── ⑧ 不变量守卫（把"设计约束"写成断言，防后人改坏） ─────────────────────────
+{
+  // ★ 约束：代理缓存时长必须 ≤ 客户端对该接口的轮询间隔，否则会把"实时"数据缓存成过期数据。
+  //   客户端对 `/live` 是 30s 轮询（直播态）⇒ TTL 必须 < 30s。
+  const CLIENT_LIVE_POLL_MS = 30000;
+  ok('★ 不变量：/live 的代理缓存 TTL 必须 < 客户端 30s 轮询间隔',
+    TTL.live < CLIENT_LIVE_POLL_MS, 'TTL.live=' + TTL.live + 'ms');
+  ok('★ 不变量：所有 TTL 必须为正且有限',
+    Object.keys(TTL).every((k) => Number.isFinite(TTL[k]) && TTL[k] > 0), JSON.stringify(TTL));
+  // EF 白名单必须覆盖客户端真实会调的 9 个（名单漂移会让功能静默失效）
+  const REQUIRED_EF = ['opendota-proxy', 'liquipedia-proxy', 'steam-proxy', 'stratz-proxy', 'haglund-proxy',
+    'bundle-aggregator', 'wechat-auth', 'subscribe-send', 'follow-profile'];
+  const missing = REQUIRED_EF.filter((n) => !EF_ALLOW.has(n));
+  ok('★ 不变量：EF 白名单覆盖客户端会调的全部 9 个 EF', missing.length === 0, '缺: ' + missing.join(','));
 }
 
 console.log('\n=== 结果 ===');

@@ -1,45 +1,64 @@
-// infra/proxy/worker.js
+// infra/proxy/worker.mjs
 // ─────────────────────────────────────────────────────────────────────────────
-// 「数据中转最小反代」· Cloudflare Worker 版（**无服务器**，无需自己买服务器）
+// 「数据中转最小反代」· Cloudflare Worker / Pages Functions 版（**无服务器**）
 //
-// ## 为什么需要它（一句话）
-// 国内网络对 `*.supabase.co` 做了 **SNI 阻断**（DNS 正常但 TLS 握手被 RST），
-// 且 `api.opendota.com` 被 **DNS 劫持 + 自签证书** ⇒ 客户端两条路都取不到数据。
-// 而 CF 边缘实测在国内可达（`pages.dev` 301 ✓ / `haglund.dev` 302 ✓）⇒
-// **把后端藏在一个国内可达的自有域名后面**，由本 Worker 转发。
+// ## 前提（用户 2026-10-10 决定：**不换后端**）
+// **继续用 Supabase 作为后端**，只把它藏在一个国内可达的域名后面 ⇒ 本中转**不改后端架构**，
+// 只是给客户端换一个"能连上的入口"。
 //
-// ## 路由设计（对齐客户端现有的 4 处 URL 拼接，**客户端只改 2 个常量**）
-//   /healthz                      → 健康检查（浏览器直接打开即可测「这个域名通不通」）
-//   /sb/functions/v1/<name>       → https://<ref>.supabase.co/functions/v1/<name>   （Edge Function）
+// ## 为什么需要它
+// 国内网络对 `*.supabase.co` 做 **SNI 阻断**（DNS 正常但 TLS 握手被 RST），
+// 且 `api.opendota.com` 被 **DNS 劫持 + 自签证书** ⇒ 客户端两条路都取不到数据；
+// 而 CF 边缘实测在国内可达（`haglund.dev` 302 ✓）⇒ 用自有域名做入口。
+//
+// ## 路由（对齐客户端现有 4 处 URL 拼接 ⇒ **客户端只改 2 个常量**）
+//   /healthz[?deep=1]             → 健康检查（`deep=1` 逐段探测上游，一点开就知道哪段断了）
+//   /sb/functions/v1/<name>       → https://<ref>.supabase.co/functions/v1/<name>    （EF）
 //   /sb/rest/v1/<table>?<query>   → https://<ref>.supabase.co/rest/v1/<table>?<query>（PostgREST 只读）
 //   /od/api/<path>?<query>        → https://api.opendota.com/api/<path>?<query>
-//   /lp?<query>                   → https://liquipedia.net/dota2/api.php?<query>（可选，客户端 LP 直连本来就通）
+//   /lp?<query>                   → https://liquipedia.net/dota2/api.php?<query>（可选）
 //
-// ## ★ 关键设计点
-// 1. **服务端注入 Supabase key**：客户端当前那把 anonKey 是错的（`config.js:226`），
-//    这里用 `env.SB_ANON_KEY` **覆盖**客户端传来的 `apikey`/`Authorization`
-//    ⇒ **客户端的错 key 直接变得无害**（连通性恢复后也不会再 401）。
-// 2. **`/od/api/leagues` 轻量裁剪**：只丢掉 `tier === 'excluded'` 的条目（**保持响应形状不变**，
-//    客户端 `filterCollectableLeagues` 本来也会过滤它们）⇒ 原始 1001KB 可显著变小；
-//    再叠加 CF 的自动 gzip ⇒ 避开 12s 超时。
-//    ⚠️ 刻意**不复制** EF 侧那套更复杂的裁剪，避免与服务端口径漂移（gzip 已足够）。
-// 3. **最小权限**：只放行 `/functions/v1/`、`/rest/v1/`、`/api/` 前缀，方法仅 GET/POST/OPTIONS
-//    ⇒ 不成为开放代理（防被当成跳板）。
-// 4. **凭据安全**：key 只存在于 CF 的环境变量/Secret，**不写进代码、不打印**。
-//
-// ## 部署（两种任选，见 README.md）
-//   A) Cloudflare Workers：`wrangler deploy`
-//   B) Cloudflare Pages（functions 目录）：把 `functions/[[path]].js` 一起上传
+// ## ★ v2 优化点（2026-10-10）
+// 1. **服务端注入 Supabase key**：用 `env.SB_ANON_KEY` **覆盖**客户端的 `apikey`/`Authorization`
+//    ⇒ 客户端那把错 anonKey 变得无害（连通性恢复后也不会再 401）。
+// 2. **EF 名白名单**：只放行客户端真正会调的 9 个 EF（回 `utils/cloudProxy.js` 核准过）
+//    ⇒ 中转不会被当作跳板去调任意函数。
+// 3. **上游超时 + 1 次重试**：单条慢上游不会把整页拖死；仅 5xx / 网络异常重试（4xx 立即返回，不做无谓重试）。
+// 4. **GET 短路缓存**：多用户复用同一份上游响应 ⇒ 省 Supabase/OpenDota 配额、响应更快。
+//    （模块级内存缓存，isolate 生命周期内有效；要持久化可换 KV —— 见 README）
+// 5. **`/healthz?deep=1` 逐段自检**：分别探测"中转→Supabase"与"中转→OpenDota"，真机排查不用再猜。
+// 6. **`/od/api/leagues` 轻量裁剪**：只丢 `tier === 'excluded'`（**形状不变**，客户端本来也会过滤）；
+//    刻意**不复制** EF 侧更复杂的裁剪，避免与服务端口径漂移。
+// 7. **最小权限**：仅 GET/POST/OPTIONS + 路径白名单；`/sb/rest/v1/*` 仅 GET。
+// 8. **耗时/状态码日志**：CF 控制台可查（便于定位真机问题）。
+// 9. 凭据只存在 CF Secret（`env.SB_ANON_KEY`），**不写进代码、不打印**。
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DEFAULT_SUPABASE_REF = 'gkticzdaicpdtxheyxsd';
 
+// 客户端真正会调的 EF —— 不在名单内一律 404（名单由 `utils/cloudProxy.js` 的 EDGE_ACTIONS 核准）
+const EF_ALLOW = new Set([
+  'opendota-proxy', 'liquipedia-proxy', 'steam-proxy', 'stratz-proxy', 'haglund-proxy', 'bundle-aggregator',
+  'wechat-auth', 'subscribe-send', 'follow-profile'
+]);
+
+// GET 短路缓存时长（ms）
+// ★ 约束：**必须 ≤ 客户端对该接口的轮询间隔**，否则会把"实时"数据缓存成过期数据
+//   —— 客户端对 `/live` 是 **30s 轮询**（直播态）⇒ 这里给 20s（宁可多打一次上游，也不让用户看到旧比分）
+const TTL = { proMatches: 60e3, live: 20e3, leagues: 30 * 60e3, 'default': 120e3 };
+
+const UPSTREAM_TIMEOUT_MS = 12000;
+const RETRY_ON = (status) => status >= 500;
+
 const CORS = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': '*',            // 只读代理、不带凭据 ⇒ 放开便于浏览器自测
   'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type,Authorization,apikey,Prefer,Range',
   'Access-Control-Expose-Headers': 'Content-Range'
 };
+
+// 模块级短路缓存（isolate 内有效）
+const _cache = new Map();          // key -> { exp, body, status, ct, cr }
 
 function json(body, status, extra) {
   return new Response(JSON.stringify(body), {
@@ -48,14 +67,55 @@ function json(body, status, extra) {
   });
 }
 
-/** 只保留必要的请求头转发（丢掉 hop-by-hop 与客户端身份相关头） */
 function passHeaders(src, keep) {
   const out = {};
-  (keep || []).forEach((k) => {
-    const v = src.get(k);
-    if (v) out[k] = v;
-  });
+  (keep || []).forEach((k) => { const v = src.get(k); if (v) out[k] = v; });
   return out;
+}
+
+/** 带超时 + 1 次重试的上游请求（仅 5xx/网络异常重试） */
+async function fetchUpstream(url, init, label) {
+  let lastErr = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), UPSTREAM_TIMEOUT_MS);
+    const t0 = Date.now();
+    try {
+      const r = await fetch(url, Object.assign({}, init, { signal: ac.signal }));
+      clearTimeout(timer);
+      const ms = Date.now() - t0;
+      if (attempt === 0 && RETRY_ON(r.status)) {
+        console.log('[proxy] ' + label + ' → ' + r.status + ' ' + ms + 'ms（5xx，重试一次）');
+        try { r.body && r.body.cancel && await r.body.cancel(); } catch (e) { /* ignore */ }
+        continue;
+      }
+      console.log('[proxy] ' + label + ' → ' + r.status + ' ' + ms + 'ms' + (attempt ? '（重试后）' : ''));
+      return r;
+    } catch (e) {
+      clearTimeout(timer);
+      lastErr = e;
+      const why = (e && e.name === 'AbortError') ? 'TIMEOUT' : ((e && e.message) || String(e));
+      console.log('[proxy] ' + label + ' → 异常 ' + why + (attempt ? '（重试后仍失败）' : '（将重试）'));
+    }
+  }
+  throw lastErr || new Error('upstream failed');
+}
+
+/** 透传上游响应（保留状态码 + 关键头；叠加 CORS） */
+function forward(r) {
+  const headers = new Headers(CORS);
+  const ct = r.headers.get('content-type');
+  if (ct) headers.set('Content-Type', ct);
+  const cr = r.headers.get('content-range');
+  if (cr) headers.set('Content-Range', cr);
+  return new Response(r.body, { status: r.status, headers: headers });
+}
+
+function textResponse(body, status, ct, cr, cacheState) {
+  const h = Object.assign({}, CORS, { 'Content-Type': ct || 'application/json' });
+  if (cr) h['Content-Range'] = cr;
+  if (cacheState) h['X-Proxy-Cache'] = cacheState;
+  return new Response(body, { status: status, headers: new Headers(h) });
 }
 
 async function handle(request, env) {
@@ -64,35 +124,49 @@ async function handle(request, env) {
   const method = request.method.toUpperCase();
 
   if (method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
-
-  // ★ 方法闸门必须在所有路由之前（否则 `DELETE /healthz` 也会被健康检查放行 —— 本地测试抓到过）
+  // ★ 方法闸门必须在所有路由之前（否则 `DELETE /healthz` 会被健康检查放行 —— 本地测试抓到过）
   if (method !== 'GET' && method !== 'POST') return json({ error: 'method not allowed' }, 405);
-
-  // ── 健康检查：浏览器打开 `https://<你的域名>/healthz` 即可判定「域名通不通」──
-  if (path === '/healthz') {
-    return json({
-      ok: true,
-      ts: new Date().toISOString(),
-      hasKey: !!(env && env.SB_ANON_KEY),
-      ref: (env && env.SUPABASE_REF) || DEFAULT_SUPABASE_REF
-    });
-  }
 
   const ref = (env && env.SUPABASE_REF) || DEFAULT_SUPABASE_REF;
   const sbKey = env && env.SB_ANON_KEY;
+  const sbHeaders = sbKey ? { Authorization: 'Bearer ' + sbKey, apikey: sbKey } : {};
+
+  // ── 健康检查 ──────────────────────────────────────────────────────────────
+  if (path === '/healthz') {
+    const base = {
+      ok: true, ts: new Date().toISOString(),
+      hasKey: !!sbKey, ref: ref,
+      routes: ['/sb/functions/v1/*', '/sb/rest/v1/*', '/od/api/*', '/lp']
+    };
+    if (url.searchParams.get('deep') !== '1') return json(base);
+
+    const out = Object.assign({}, base, { deep: {} });
+    // ① 中转 → Supabase（EF 可达性：401/404 也算"网络通"）
+    try {
+      const r = await fetchUpstream('https://' + ref + '.supabase.co/functions/v1/opendota-proxy',
+        { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, sbHeaders), body: '{"action":"getProMatches","params":{}}' },
+        'deep/supabase');
+      out.deep.supabase = { reachable: true, status: r.status };
+    } catch (e) { out.deep.supabase = { reachable: false, error: String((e && e.message) || e) }; }
+    // ② 中转 → OpenDota
+    try {
+      const r = await fetchUpstream('https://api.opendota.com/api/proMatches', { method: 'GET' }, 'deep/opendota');
+      out.deep.opendota = { reachable: true, status: r.status };
+    } catch (e) { out.deep.opendota = { reachable: false, error: String((e && e.message) || e) }; }
+    out.ok = !!(out.deep.supabase.reachable || out.deep.opendota.reachable);
+    return json(out);
+  }
 
   try {
     // ─────────────── ① Supabase Edge Function：/sb/functions/v1/<name> ───────────────
     let m = /^\/sb\/functions\/v1\/([A-Za-z0-9_-]+)\/?$/.exec(path);
     if (m) {
-      const target = 'https://' + ref + '.supabase.co/functions/v1/' + m[1];
-      const headers = { 'Content-Type': 'application/json' };
-      if (sbKey) { headers['Authorization'] = 'Bearer ' + sbKey; headers['apikey'] = sbKey; }
-      const r = await fetch(target, {
+      if (!EF_ALLOW.has(m[1])) return json({ error: 'ef not allowed', name: m[1] }, 404);
+      const r = await fetchUpstream('https://' + ref + '.supabase.co/functions/v1/' + m[1], {
         method: 'POST',
-        headers: headers,
+        headers: Object.assign({ 'Content-Type': 'application/json' }, sbHeaders),
         body: method === 'POST' ? await request.text() : '{}'
-      });
+      }, 'EF ' + m[1]);
       return forward(r);
     }
 
@@ -100,46 +174,67 @@ async function handle(request, env) {
     m = /^\/sb\/rest\/v1\/([A-Za-z0-9_]+)\/?$/.exec(path);
     if (m) {
       if (method !== 'GET') return json({ error: 'rest is read-only here' }, 405);
-      const target = 'https://' + ref + '.supabase.co/rest/v1/' + m[1] + (url.search || '');
-      // 只转发只读头；**Range 必须保留**（客户端用 Range 分页，见 remoteCuration.js）
-      const headers = passHeaders(request.headers, ['Range', 'Prefer']);
-      if (sbKey) { headers['Authorization'] = 'Bearer ' + sbKey; headers['apikey'] = sbKey; }
-      const r = await fetch(target, { method: 'GET', headers: headers });
-      return forward(r);
+      const ck = 'rest|' + path + (url.search || '');
+      const hit = _cache.get(ck);
+      if (hit && hit.exp > Date.now()) {
+        console.log('[proxy] REST ' + m[1] + ' → 缓存命中');
+        return textResponse(hit.body, hit.status, hit.ct, hit.cr, 'HIT');
+      }
+      const headers = passHeaders(request.headers, ['Range', 'Prefer']);   // ★ Range 必须保留（客户端分页依赖）
+      Object.assign(headers, sbHeaders);
+      const r = await fetchUpstream('https://' + ref + '.supabase.co/rest/v1/' + m[1] + (url.search || ''),
+        { method: 'GET', headers: headers }, 'REST ' + m[1]);
+      const body = await r.text();
+      const ct = r.headers.get('content-type') || 'application/json';
+      const cr = r.headers.get('content-range');
+      if (r.ok) _cache.set(ck, { exp: Date.now() + TTL['default'], body: body, status: r.status, ct: ct, cr: cr });
+      return textResponse(body, r.status, ct, cr, 'MISS');
     }
 
     // ─────────────── ③ OpenDota：/od/api/<path> ───────────────
     if (path.indexOf('/od/api/') === 0) {
       const rest = path.slice('/od/api/'.length);
-      // 最小权限：只放行只读接口，禁止任意路径
       if (!/^[A-Za-z0-9_\/.-]+$/.test(rest)) return json({ error: 'bad path' }, 400);
-      const target = 'https://api.opendota.com/api/' + rest + (url.search || '');
-      const r = await fetch(target, { method: 'GET', headers: { 'Accept-Encoding': 'gzip' } });
 
-      // `/leagues` 轻量裁剪：丢 tier=excluded（形状不变，客户端本来也会过滤）
+      const ck = 'od|' + rest + (url.search || '');
+      const ttl = TTL[rest] || TTL['default'];
+      const hit = _cache.get(ck);
+      if (hit && hit.exp > Date.now()) {
+        console.log('[proxy] OD ' + rest + ' → 缓存命中');
+        return textResponse(hit.body, hit.status, 'application/json', null, 'HIT');
+      }
+      const r = await fetchUpstream('https://api.opendota.com/api/' + rest + (url.search || ''),
+        { method: 'GET', headers: { 'Accept-Encoding': 'gzip' } }, 'OD ' + rest);
+
+      // `/leagues` 轻量裁剪：丢 tier=excluded（形状不变）
       if (rest === 'leagues' && r.ok) {
         let data = null;
         try { data = await r.json(); } catch (e) { data = null; }
         if (Array.isArray(data)) {
           const kept = data.filter((x) => !x || x.tier !== 'excluded');
-          return json({ kept: kept.length, dropped: data.length - kept.length, data: kept }, 200);
+          const body = JSON.stringify({ kept: kept.length, dropped: data.length - kept.length, data: kept });
+          _cache.set(ck, { exp: Date.now() + ttl, body: body, status: 200, ct: 'application/json', cr: null });
+          return textResponse(body, 200, 'application/json', null, 'MISS');
         }
         return forward(r);   // 非数组（异常响应）⇒ 原样透传，别自作主张
       }
-      return forward(r);
+
+      const body = await r.text();
+      const ct = r.headers.get('content-type') || 'application/json';
+      if (r.ok) _cache.set(ck, { exp: Date.now() + ttl, body: body, status: r.status, ct: ct, cr: null });
+      return textResponse(body, r.status, ct, null, 'MISS');
     }
 
     // ─────────────── ④ Liquipedia（可选）：/lp?<query> ───────────────
     if (path === '/lp' || path === '/lp/') {
-      // ⚠️ LP ToU 要求描述性 UA 且 `action=parse` ≤1 req/30s；此处仅作兜底，不改变客户端既有节流
-      const target = 'https://liquipedia.net/dota2/api.php' + (url.search || '');
-      const r = await fetch(target, {
+      // ⚠️ LP ToU 要求描述性 UA；此处仅作兜底，不改变客户端既有节流（`action=parse` ≤1 req/30s）
+      const r = await fetchUpstream('https://liquipedia.net/dota2/api.php' + (url.search || ''), {
         method: 'GET',
         headers: {
           'User-Agent': (env && env.LP_UA) || 'Dota2EsportsMiniProgram/1.0 (contact: see mini program privacy page)',
           'Accept-Encoding': 'gzip'
         }
-      });
+      }, 'LP');
       return forward(r);
     }
 
@@ -150,19 +245,9 @@ async function handle(request, env) {
   }
 }
 
-/** 透传上游响应（保留状态码与关键头；叠加 CORS） */
-function forward(r) {
-  const headers = new Headers(CORS);
-  const ct = r.headers.get('content-type');
-  if (ct) headers.set('Content-Type', ct);
-  const cr = r.headers.get('content-range');   // PostgREST 分页要用
-  if (cr) headers.set('Content-Range', cr);
-  return new Response(r.body, { status: r.status, headers: headers });
-}
-
 export default {
   fetch(request, env) { return handle(request, env); }
 };
 
 // 供 Pages Functions / 本地测试复用
-export { handle };
+export { handle, EF_ALLOW, TTL };
