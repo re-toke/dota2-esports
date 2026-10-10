@@ -136,7 +136,7 @@ async function handle(request, env) {
     const base = {
       ok: true, ts: new Date().toISOString(),
       hasKey: !!sbKey, ref: ref,
-      routes: ['/sb/functions/v1/*', '/sb/rest/v1/*', '/od/api/*', '/lp']
+      routes: ['/sb/functions/v1/*', '/sb/rest/v1/*', '/od/api/*']
     };
     if (url.searchParams.get('deep') !== '1') return json(base);
 
@@ -225,18 +225,12 @@ async function handle(request, env) {
       return textResponse(body, r.status, ct, null, 'MISS');
     }
 
-    // ─────────────── ④ Liquipedia（可选）：/lp?<query> ───────────────
-    if (path === '/lp' || path === '/lp/') {
-      // ⚠️ LP ToU 要求描述性 UA；此处仅作兜底，不改变客户端既有节流（`action=parse` ≤1 req/30s）
-      const r = await fetchUpstream('https://liquipedia.net/dota2/api.php' + (url.search || ''), {
-        method: 'GET',
-        headers: {
-          'User-Agent': (env && env.LP_UA) || 'Dota2EsportsMiniProgram/1.0 (contact: see mini program privacy page)',
-          'Accept-Encoding': 'gzip'
-        }
-      }, 'LP');
-      return forward(r);
-    }
+    // ─────────────── ④ Liquipedia：**刻意不代理**（2026-10-10）
+    //   理由两条：
+    //   ① 实测 `liquipedia.net` 在国内**直连可达** ⇒ 客户端无需绕中转；
+    //   ② 本项目有「**标识性 UA 必须单点化**」的守卫（`scripts/test/test-sources.js`）——
+    //      UA 的单一来源是 `utils/lp-ua.js`。在这里再写一份 UA 字面量会形成**第二定义**，
+    //      将来必然漂移 ⇒ **不给自己挖坑，直接不提供 /lp 路由**。
 
     return json({ error: 'not found', path: path }, 404);
   } catch (e) {

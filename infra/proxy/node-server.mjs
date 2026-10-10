@@ -26,7 +26,6 @@ const HOST = process.env.HOST || '127.0.0.1';          // ★ 默认只听本机
 const ENV = {
   SB_ANON_KEY: process.env.SB_ANON_KEY || '',
   SUPABASE_REF: process.env.SUPABASE_REF || undefined,
-  LP_UA: process.env.LP_UA || undefined
 };
 
 function readBody(req) {

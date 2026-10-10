@@ -28,7 +28,7 @@
 | `/sb/functions/v1/<name>` | `https://<ref>.supabase.co/functions/v1/<name>` |
 | `/sb/rest/v1/<table>?<query>` | `https://<ref>.supabase.co/rest/v1/<table>?<query>`（仅 GET） |
 | `/od/api/<path>?<query>` | `https://api.opendota.com/api/<path>?<query>` |
-| `/lp?<query>` | `https://liquipedia.net/dota2/api.php?<query>`（可选；客户端 LP 直连本来就通） |
+| ~~`/lp?<query>`~~ | **刻意不提供**（2026-10-10）：① `liquipedia.net` 国内**直连可达**，无需中转；② 本项目有「**标识性 UA 单点化**」守卫（单一来源 `utils/lp-ua.js`），在此写 UA 会形成**第二定义** ⇒ 不给自己挖坑 |
 
 ## ★ 关键设计（v2，2026-10-10 优化）
 

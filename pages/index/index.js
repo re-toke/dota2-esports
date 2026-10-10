@@ -700,7 +700,14 @@ Page({
     //   startTime/boType…），mergeLiquipediaGroup 与 buildLpUpcomingSeries 只是透传该空值，
     //   _cardFromSeries 最终兜底成「职业赛事」。而本函数明确知道每条 match 来自哪个赛事
     //   （ev.name/ev.leagueId 就是查询入参）→ 在此按来源回填，下游即可拿到真实赛事名。
-    return Promise.all(events.map((ev) =>
+    // ★★ 2026-10-10（零成本优化②）：⑥段**并发上限 5 → 3**（只限并发，**不动候选上限 5**）。
+    //   依据（实测）：小程序平台**并发上限 = 10**，而 ⑥段 5 个候选赛事 × 每个 2 次尝试
+    //   （EF 先失败 → 再走 haglund 兜底）≈ **10 个请求** ⇒ 首屏阶段直接把配额顶满，
+    //   与关注流首批(5)/主流程互相排队 ⇒ 卡片"一个个陆续冒出"（用户实测观感）。
+    //   限到 3 后仍能覆盖全部 5 个候选，只是不再独占配额 ⇒ 首屏更快拿到配额。
+    //   ★ 复用 `utils/followBatch` 的纯函数（已有单测），不在这里再写一份分片逻辑。
+    const LP_FETCH_CONCURRENCY = 3;
+    const lpFetchOne = (ev) =>
       liquipedia.getScheduledMatches(ev.name, { leagueId: ev.leagueId, force: force })
         .then((res) => {
           const ms = (res && res.matches) ? res.matches : [];
@@ -711,10 +718,17 @@ Page({
             leagueId: ev.leagueId || 0
           }));
         })
-        .catch(() => [])
-    )).then((lists) => {
+        .catch(() => []);
+    // 按 chunk 串行、chunk 内并行 ⇒ 峰值并发 = LP_FETCH_CONCURRENCY，且**保持候选原顺序**
+    const lpLists = [];
+    let lpChain = Promise.resolve();
+    followBatch.chunkBySize(events, LP_FETCH_CONCURRENCY).forEach((chunk) => {
+      lpChain = lpChain.then(() => Promise.all(chunk.map(lpFetchOne)))
+        .then((got) => { got.forEach((g) => lpLists.push(g)); });
+    });
+    return lpChain.then(() => {
       const all = [];
-      lists.forEach((ms) => { if (ms && ms.length) all.push.apply(all, ms); });
+      lpLists.forEach((ms) => { if (ms && ms.length) all.push.apply(all, ms); });
       // ★ 2026-09-19 修复「首页永久空白」：**空结果也必须带 _stale 标记**。
       //   原实现 `if (!all.length) return []` 提前返回 → 下方 L580 的 out._stale 永远
       //   执行不到 → 调用方（见上方 440-441 行）拿到的空数组无 _stale →
