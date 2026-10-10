@@ -76,7 +76,45 @@
 
 ---
 
-## 路径 A · Cloudflare Worker（推荐，约 15 分钟）
+## 路径 C · **免费 PaaS 子域（零成本，优先试这个）**
+
+> 如果你**不想花任何钱** ⇒ 走这条。不需要域名、不需要备案、不需要服务器。
+> 我们只是**换一个免费载体**（CF 的 `pages.dev`/`workers.dev` 实测不可达，但**别的 PaaS 主域都可达**）。
+
+**实测依据（2026-10-10）**：
+| 服务 | 主域国内可达 | 结论 |
+|---|---|---|
+| **`deno.dev`** | ✅ 307 | ★ **首选**（免费额度 10 万请求/天；**原生支持本项目的 `worker.mjs`**，无需改代码） |
+| **`netlify.app`** | ✅ 301 | 备选（有 **Netlify Drop**，拖文件夹即部署，连 Git 都不用） |
+| `render.com` / `fly.io` | ✅ 200 | 备选 |
+| `pages.dev` / `workers.dev`（CF） | ❌ 不通 / 不稳 | 不要用这两个 |
+| `duckdns.org` | ❌ ECONNRESET | 已被滥用进名单，别用 |
+
+### 推荐做法：Deno Deploy（约 10 分钟，零成本）
+
+`infra/proxy/worker.mjs` **本身就是 Deno 兼容的**（`export default { fetch }` + Web 标准 API），**不用改代码**。
+
+1. 打开 <https://dash.deno.com>（用 GitHub 账号登录，免费）；
+2. **New Project → Deploy from CLI** 或直接 **Playground**：
+   - 最简单：**Playground** 里粘贴 `worker.mjs` 的内容 → 部署 → 得到一个 `https://<名字>.deno.dev`；
+3. 在项目 **Settings → Environment Variables** 加：
+   - `SB_ANON_KEY` = 你的 Supabase anon key（会当 Secret 存储）
+   - `SUPABASE_REF` = `gkticzdaicpdtxheyxsd`
+4. 部署后自检（**这一步决定成不成**）：
+   | 打开 | 期望 |
+   |---|---|
+   | `https://<名字>.deno.dev/healthz` | `{"ok":true,"hasKey":true,...}` |
+   | `https://<名字>.deno.dev/healthz?deep=1` | `deep.supabase.reachable=true` **且** `deep.opendota.reachable=true` |
+5. **把域名发我** ⇒ 我从这边实测国内可达性 ⇒ 通了就改客户端（仍是那 6 处，其中 2 处常量）
+
+> ⚠️ 免费子域**无法备案** —— 但你的现状已证明**微信后台接受未备案的境外域名**（`liquipedia.net`/`api.opendota.com` 都在你的白名单里且小程序在跑）⇒ **可以直接加白名单试**。
+
+### 若 Deno/netlify 子域也被阻断
+
+按 §5 退到**零后端**路线（客户端直连已实测可达的 `dota.haglund.dev` ✓ / `liquipedia.net` ✓ / `api.steampowered.com` ✓ + curation 烘焙）。
+
+
+## 路径 A · Cloudflare Worker（约 15 分钟）
 
 ### A1. 准备域名（10 分钟，一次性）
 - 在哪买都行：**腾讯云 / 阿里云**（微信支付、实名方便）或 **Cloudflare Registrar**（要信用卡）。
