@@ -221,9 +221,19 @@ module.exports = {
   supabase: {
     // ★ 灰度开关：true=微信能力走 Supabase（2026-09-09 联调开启）；false=全走云开发（回滚用）
     enabled: true,
-    url: 'https://gkticzdaicpdtxheyxsd.supabase.co',
+    // ★★ 2026-10-10（真机「数据无法更新」修复）：`*.supabase.co` 在国内被 **SNI 阻断**
+    //   （DNS 正常解析、TLS 握手被 RST ⇒ 换 IP/DoH/hosts 全无效）⇒ 客户端改走**中转**。
+    //   中转部署在境外边缘（出口在境外 ⇒ 能连上 Supabase），域名国内可达（已实测 TLS OK + 业务接口 200）。
+    //   中转代码与部署/自检：`infra/proxy/`（`worker.mjs` + `DEPLOY.md`）。
+    //   ⚠️ **与 `utils/api.js` 的 `BASE` 是成对改动**（同一台中转的不同路径前缀）。
+    //   ★ 回滚：把本行改回 'https://gkticzdaicpdtxheyxsd.supabase.co'（并把 anonKey 填回真值）。
+    url: 'https://tough-ferret-3579.re-toke.deno.net/sb',
     // anon key（公开密钥，RLS 保护；service_role 绝不出现在客户端）
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdrdGljemRhaWNwZHR4aGV5eHNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0OTI4NTIsImV4cCI6MjEwNDA2ODg1Mn0.ZzdBSKZskLI-GO-Tz3BsviNg_qNL8OhC1WV9jTJkAe8',
+    // ★ 2026-10-10：**客户端不再持有真实 key** —— 中转会在**服务端注入**（见 infra/proxy/worker.mjs），
+    //   顺带消除"客户端 key 写错/过期"这一整类故障（此前正是错的：`eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdrdGljemRhaWNwZHR4aGV5eHNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0OTI4NTIsImV4cCI6MjEwNDA2ODg1Mn0.ZzdBSKZskLI-GO-Tz3BsviNg_qNL8OhC1WV9jTJkAe8`）。
+    //   ⚠️ **必须是「非空占位」**：`supabaseClient.enabled()` 的判据含 anonKey，
+    //      置成空串会让「Supabase 已启用」变 false ⇒ **EF 路径根本不会被调用**。
+    anonKey: 'via-proxy',
     // Edge Function 名（部署在 supabase/functions/ 下）
     functions: {
       auth: 'wechat-auth',

@@ -26,7 +26,12 @@ try { _dataVersion = (require('./curation-shared').dataVersion || '0'); } catch 
 // 兼容测试环境无 curation-shared 的情况
 function _v() { return _dataVersion + ':'; }
 
-const BASE = 'https://api.opendota.com/api';
+// ★★ 2026-10-10（真机「历史对局失败」修复）：`api.opendota.com` **被 DNS 劫持**
+//   （解析到 103.73.220.77 + 自签证书 ⇒ 真机报 `ERR_CERT_AUTHORITY_INVALID`）⇒ 直连也已不可用
+//   ⇒ 改走**中转**（同一个中转域名的 `/od/api` 前缀；中转侧会转发到 api.opendota.com）。
+//   ⚠️ **与 `utils/config.js` 的 `supabase.url` 是成对改动**（同一台中转）。
+//   ★ 回滚：改回 'https://api.opendota.com/api' 即可（一个常量）。
+const BASE = 'https://tough-ferret-3579.re-toke.deno.net/od/api';
 
 // 赛事等级映射（OpenDota 的 tier 字符串枚举）
 const TIER_RANK = {
