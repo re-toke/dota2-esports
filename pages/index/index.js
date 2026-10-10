@@ -280,7 +280,7 @@ Page({
     // 按**下标**取一批：每条 settle 即写入 arrived 并**尝试**渲染（节流决定是否真渲）。
     // ★ `ok:false` 同样写入 —— 失败必须可见、可重试（三态语义不变）。
     const fetchAt = (idxs) => Promise.all(idxs.map((idx) =>
-      api.getTeamMatches(String(limited[idx].id))
+      api.getTeamMatches(String(limited[idx].id), { recent: api.RECENT_TEAM_MATCHES })
         .then((ms) => ({ t: limited[idx], ms: ms || [], ok: true }))
         .catch(() => ({ t: limited[idx], ms: [], ok: false }))
         .then((row) => { arrived[idx] = row; publish(arrivedRows()); return row; })
@@ -324,7 +324,7 @@ Page({
     this._followRetried = true;
     console.info('[index] 关注流取数失败 ' + failed.length + ' 个 → 1.2s 后自动重试一次');
     return new Promise((r) => setTimeout(r, 1200))
-      .then(() => Promise.all(failed.map((r) => api.getTeamMatches(String(r.t.id))
+      .then(() => Promise.all(failed.map((r) => api.getTeamMatches(String(r.t.id), { recent: api.RECENT_TEAM_MATCHES })
         .then((ms) => ({ t: r.t, ms: ms || [], ok: true }))
         .catch(() => ({ t: r.t, ms: [], ok: false })))))
       .then((again) => {
@@ -347,7 +347,7 @@ Page({
     this._followRetrying = true;
     this._followRetried = false;      // 手动重试后允许再自动重试一次
     this.setData({ followHint: '正在重试…' });
-    Promise.all(failed.map((r) => api.getTeamMatches(String(r.t.id))
+    Promise.all(failed.map((r) => api.getTeamMatches(String(r.t.id), { recent: api.RECENT_TEAM_MATCHES })
       .then((ms) => ({ t: r.t, ms: ms || [], ok: true }))
       .catch(() => ({ t: r.t, ms: [], ok: false }))))
       .then((again) => {

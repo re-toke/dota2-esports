@@ -1056,7 +1056,7 @@ Page({
       return;
     }
     wx.showLoading({ title: '聚合战队赛事...', mask: true });
-    Promise.all(draft.map((id) => api.getTeamMatches(id).catch(() => [])))
+    Promise.all(draft.map((id) => api.getTeamMatches(id, { recent: api.RECENT_TEAM_MATCHES }).catch(() => [])))
       .then((lists) => {
         const map = {};
         lists.forEach((ms) => (ms || []).forEach((m) => {

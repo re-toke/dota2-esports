@@ -157,7 +157,7 @@ function validateResponse(path, data) {
       path === '/heroStats' || path === '/items' || path === '/proMatches' || path === '/live' ||
       /^\/heroes\/\d+\/matchups$/.test(path) ||
       /^\/scenarios\/itemTimings/.test(path) ||
-      /^\/teams\/\d+\/matches$/.test(path) || /^\/teams\/\d+\/players$/.test(path) ||
+      /^\/teams\/\d+\/matches(\?|$)/.test(path) || /^\/teams\/\d+\/players$/.test(path) ||
       /^\/leagues\/\d+\/matches$/.test(path) || /^\/players\/\d+\/matches$/.test(path)) {
     return Array.isArray(data);
   }
@@ -675,7 +675,27 @@ function getTeamPlayers(teamId) {
     function () { return cachedFresh('/teams/' + teamId + '/players', null, 20 * 60, config.cacheTTL.teamPlayers); });
 }
 
-function getTeamMatches(teamId) {
+// 「只要近期」的默认条数（关注流 / 赛事页用）—— **单一来源**，避免各处写魔法数字。
+// 依据（实测）：全量 `/teams/<id>/matches` 为 480KB / 21~37s；裁到 ~50 条约 24KB / 2~3s。
+const RECENT_TEAM_MATCHES = 50;
+
+function getTeamMatches(teamId, opts) {
+  // ★★ 2026-10-10（问题A 修法①·客户端接线）：**只声明"要近期"的调用走按需裁剪路径**。
+  //   背景：`/teams/<id>/matches` 实测 **480KB / 21~37s**，远超本接口的 12s 口径 ⇒ 必超时
+  //   （开发者工具实测：关注流 5 个战队**全部**取数失败 = 同一根因）。
+  //   做法：path 带 `?recent=N` ⇒ 中转侧裁剪到最近 N 场（见 `infra/proxy/worker.mjs` 的 trimOf）。
+  //   ★ 三个关键取舍（都已在 `问题A-EF主通道超时-复核意见` 记录）：
+  //     ① **绕过 EF**：EF 不做裁剪（仍返回 480KB）⇒ 只在被裁剪的直连（=中转）路径上取；
+  //     ② **不用 `cachedFreshIncremental`**：那套的增量合并是按"全量列表"语义设计的，
+  //        与裁剪后的列表混用会算错游标 ⇒ 这里用普通 `cached`（10~30min）；
+  //     ③ **path 带 query ⇒ 缓存 key 与全量版天然隔离**（不会用裁剪结果污染
+  //        `team-detail`/`h2h` 依赖的全量缓存）—— 已确认 `fetchedAtOf('teamMatches')` 只被
+  //        `team-detail` 使用、且走的是不带 query 的 path ⇒ 互不影响。
+  //   ⚠️ **不要**给 `team-detail`（要 `totalMatches` 全量 + 分页）/ `h2h`（要历史交锋）传 recent。
+  const recent = (opts && Number(opts.recent) > 0) ? Math.min(Number(opts.recent), 500) : 0;
+  if (recent) {
+    return cached('/teams/' + teamId + '/matches?recent=' + recent, null, config.cacheTTL.teamMatches);
+  }
   return tryCloudOrDirect('getTeamMatches', [teamId],
     function () {
       return cachedFreshIncremental('/teams/' + teamId + '/matches', 'team', teamId, 10 * 60, config.cacheTTL.teamMatches);
@@ -863,6 +883,7 @@ module.exports = {
   getTeam: getTeam,
   getTeamPlayers: getTeamPlayers,
   getTeamMatches: getTeamMatches,
+  RECENT_TEAM_MATCHES: RECENT_TEAM_MATCHES,
   getTopTeams: getTopTeams,
   getHeroes: getHeroes,
   getHeroStats: getHeroStats,
