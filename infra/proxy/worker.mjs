@@ -59,7 +59,7 @@ const RETRY_ON = (status) => status >= 500;
 const CORS = {
   'Access-Control-Allow-Origin': '*',            // 只读代理、不带凭据 ⇒ 放开便于浏览器自测
   'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type,Authorization,apikey,Prefer,Range',
+  'Access-Control-Allow-Headers': 'Content-Type,Authorization,apikey,Prefer,Range,X-Trim',
   'Access-Control-Expose-Headers': 'Content-Range'
 };
 
@@ -77,6 +77,20 @@ function passHeaders(src, keep) {
   const out = {};
   (keep || []).forEach((k) => { const v = src.get(k); if (v) out[k] = v; });
   return out;
+}
+
+/**
+ * 「按需裁剪」条数：`?recent=N` 或请求头 `X-Trim: N`，两者取其一（**默认 0 = 不裁**）。
+ * ★ 设计取舍：**默认不裁 ⇒ 零回归**。只有显式声明"只要近期"的调用才裁
+ *   （由 `infra/proxy/DEPLOY.md` 与问题A复核意见记录：team-detail/h2h 需要全量，不能裁）。
+ * 上限 500，避免被传巨大值当"绕过"。
+ */
+function trimOf(request, url) {
+  let raw = url.searchParams.get('recent');
+  if (!raw) { try { raw = request.headers.get('X-Trim'); } catch (e) { raw = null; } }
+  const n = parseInt(raw, 10);
+  if (!isFinite(n) || n <= 0) return 0;
+  return Math.min(n, 500);
 }
 
 /** 带超时 + 1 次重试的上游请求（仅 5xx/网络异常重试） */
@@ -202,7 +216,7 @@ async function handle(request, env) {
       const rest = path.slice('/od/api/'.length);
       if (!/^[A-Za-z0-9_\/.-]+$/.test(rest)) return json({ error: 'bad path' }, 400);
 
-      const ck = 'od|' + rest + (url.search || '');
+      const ck = 'od|' + rest + (url.search || '') + '|t' + trimOf(request, url);
       const ttl = TTL[rest] || TTL['default'];
       const hit = _cache.get(ck);
       if (hit && hit.exp > Date.now()) {
@@ -223,6 +237,29 @@ async function handle(request, env) {
           return textResponse(body, 200, 'application/json', null, 'MISS');
         }
         return forward(r);   // 非数组（异常响应）⇒ 原样透传，别自作主张
+      }
+
+      // ★★ 2026-10-10（问题A 修法①·按需裁剪，**默认不裁 ⇒ 零回归**）
+      //   背景：实测 `/teams/<id>/matches` **480KB / 21~37s**，远超客户端 12s 口径 ⇒ 必超时。
+      //   但**不能无差别裁**：`subpackages/detail/team-detail` 用它算 `totalMatches` + 分页翻页，
+      //   `subpackages/detail/h2h` 用它按对手过滤算**历史交锋** ⇒ 裁了会漏数据。
+      //   ⇒ 只对**显式声明"只要近期"**的调用裁剪：`?recent=N` 或请求头 `X-Trim: N`。
+      //   （关注流/赛事页只需近期 ⇒ 可安全带此标记；team-detail/h2h 不带 ⇒ 拿全量 ✓）
+      const trim = trimOf(request, url);
+      const isTeamMatches = /^teams\/[^\/]+\/matches$/.test(rest);
+      if (isTeamMatches && trim > 0 && r.ok) {
+        let data = null;
+        try { data = await r.json(); } catch (e) { data = null; }
+        if (Array.isArray(data)) {
+          // OpenDota 该端点按时间倒序 ⇒ 取**前 N 条 = 最近 N 场**（不改字段、不改形状）
+          const kept = data.slice(0, trim);
+          const body = JSON.stringify(kept);
+          _cache.set(ck, { exp: Date.now() + ttl, body: body, status: 200, ct: 'application/json', cr: null });
+          console.log('[proxy] OD ' + rest + ' → 裁剪 ' + data.length + '→' + kept.length + ' 场（原 ' +
+            Math.round(JSON.stringify(data).length / 1024) + 'KB）');
+          return textResponse(body, 200, 'application/json', null, 'MISS');
+        }
+        return forward(r);
       }
 
       const body = await r.text();

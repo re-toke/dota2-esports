@@ -201,6 +201,40 @@ const textOf = async (r) => { try { return await r.clone().text(); } catch (e) {
   ok('★ 不变量：EF 白名单覆盖客户端会调的全部 9 个 EF', missing.length === 0, '缺: ' + missing.join(','));
 }
 
+// ── ⑨ v3 新增：`/od/api/teams/<id>/matches` 的**按需裁剪**（默认不裁） ──────
+{
+  const saved = globalThis.fetch;
+  const many = [];
+  for (let i = 0; i < 120; i++) many.push({ match_id: 900000 + i, leagueid: 19102, n: i });
+  let upstream = 0;
+  globalThis.fetch = async (t) => {
+    upstream++;
+    if (String(t).indexOf('/teams/123/matches') >= 0) {
+      return new Response(JSON.stringify(many), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  // ① 不带标记 ⇒ 必须**不裁**（零回归：team-detail/h2h 需要全量）
+  const r0 = await handle(req('/od/api/teams/123/matches'), ENV);
+  const b0 = JSON.parse(await textOf(r0));
+  ok('★ v3 默认**不裁**（全量返回，零回归）', Array.isArray(b0) && b0.length === 120, 'len=' + (b0 && b0.length));
+  // ② ?recent=N ⇒ 裁到最近 N 条（且**保持原顺序/字段**）
+  const r1 = await handle(req('/od/api/teams/123/matches?recent=30'), ENV);
+  const b1 = JSON.parse(await textOf(r1));
+  ok('★ v3 ?recent=30 ⇒ 裁到 30 条', Array.isArray(b1) && b1.length === 30, 'len=' + (b1 && b1.length));
+  ok('★ v3 裁剪取的是**最近**（前 N 条，顺序与字段不变）',
+    b1[0].match_id === 900000 && b1[0].leagueid === 19102, JSON.stringify(b1[0]));
+  // ③ X-Trim 头同样生效
+  const r2 = await handle(req('/od/api/teams/123/matches', { headers: { 'X-Trim': '5' } }), ENV);
+  const b2 = JSON.parse(await textOf(r2));
+  ok('★ v3 X-Trim:5 ⇒ 裁到 5 条', Array.isArray(b2) && b2.length === 5, 'len=' + (b2 && b2.length));
+  // ④ 裁剪与不裁**缓存互不污染**（key 含 trim 维度）
+  const before = upstream;
+  await handle(req('/od/api/teams/123/matches?recent=30'), ENV);
+  ok('★ v3 裁剪版命中自身缓存（不再打上游）', upstream === before, 'upstream=' + upstream);
+  globalThis.fetch = saved;
+}
+
 console.log('\n=== 结果 ===');
 console.log('通过: ' + pass + '  失败: ' + fail);
 if (fail) { console.log('存在失败 ❌'); process.exit(1); }

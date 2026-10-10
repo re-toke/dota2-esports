@@ -70,8 +70,18 @@ function efAvailable(name) {
  * @returns {Promise<Object>} 响应 JSON
  */
 function edge(name, data, opts) {
+  // ★★ 2026-10-10（问题A 修法②·**熔断下沉到 action**）：
+  //   原实现按 **EF 名**分桶 ⇒ 一个「天生慢」的 action（如 getTeamMatches：实测 480KB / 21~37s，
+  //   超客户端 12s 口径必超时）会让**整个 EF** 熔断 ⇒ 连 1~4s 的快 action
+  //   （getLeagues / getProMatches / getLeagueWindows）也一起被跳过
+  //   （开发者工具日志已复现：40 条 unavailable: opendota-proxy）。
+  //   ⇒ 桶键改为 **name + '|' + action**：慢 action 只熔断自己，不再误伤同 EF 的其它 action。
+  //   ⚠️ 代价（已知并接受）：不带 action 的粗粒度早退检查 efAvailable(name) 不再会被打开
+  //      ⇒ 那些调用点会照常尝试一次（失败即快速 reject），不再提前短路。
+  var _action = (data && data.action) || '';
+  var _bkey = name + '|' + _action;
   return new Promise(function (resolve, reject) {
-    if (!efAvailable(name)) { reject(new Error('supabase ef unavailable: ' + name)); return; }
+    if (!efAvailable(_bkey)) { reject(new Error('supabase ef unavailable: ' + _bkey)); return; }
 
     var authKey = (opts && opts.jwt) ? opts.jwt : sb().anonKey;
     wx.request({
@@ -85,7 +95,7 @@ function edge(name, data, opts) {
       },
       success: function (res) {
         if (res.statusCode >= 200 && res.statusCode < 300) {
-          _countSuccess(name);   // 成功复位该 EF 的熔断计数
+          _countSuccess(_bkey);   // 成功复位**该 action 桶**的计数（见 edge() 头注释）
           resolve(res.data);
         } else if (res.statusCode === 401 && opts && opts.jwt) {
           // JWT 过期/无效：属鉴权问题而非 EF 服务故障 —— 不计失败、也不复位累计
@@ -106,12 +116,12 @@ function edge(name, data, opts) {
           //   此分支用于**兼容尚未部署新 EF 的环境**。
           reject(new Error('EF ' + name + ' empty result (not counted)'));
         } else {
-          _countFail(name);
+          _countFail(_bkey);
           reject(new Error('EF ' + name + ' HTTP ' + res.statusCode));
         }
       },
       fail: function (err) {
-        _countFail(name);
+        _countFail(_bkey);
         reject(new Error(err.errMsg || 'network fail'));
       }
     });
