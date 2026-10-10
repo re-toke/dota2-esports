@@ -36,18 +36,41 @@
 
 ## 部署方式 A：Cloudflare Workers（推荐，最快）
 
+### 🔑 先搞清楚这把 key：**从哪拿**、**放到哪**
+
+| 问题 | 答案 |
+|---|---|
+| **从哪拿** | Supabase 后台 → 选中项目 → **Settings → API Keys**（旧版叫 **API**）→ 找到 **`anon` / `public`** 那一栏 ⇒ 复制那一长串（**以 `eyJhbGciOiJIUzI1NiIs…` 开头**）<br>★ 就是你上次给我的「前 12 字符 = `eyJhbGciOiJI`」那串；**它很长（约 200+ 字符），不是** `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdrdGljemRhaWNwZHR4aGV5eHNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0OTI4NTIsImV4cCI6MjEwNDA2ODg1Mn0.ZzdBSKZskLI-GO-Tz3BsviNg_qNL8OhC1WV9jTJkAe8` 那种短值。<br>⚠️ 若界面给的是新版 `sb_publishable_…`，请优先用老的 **`anon` JWT**（`eyJ…`）——中转与 PostgREST 都按 JWT 走。 |
+| **放到哪** | **哪里都不放文件里。** 执行 `wrangler secret put SB_ANON_KEY` 后，终端会提示 `Enter a secret value:` ⇒ **直接粘贴 → 回车**（输入不显示字符）。它会被存进 **Cloudflare 的加密 Secret**，`worker.mjs` 运行时通过 `env.SB_ANON_KEY` 读取。 |
+| **⛔ 不要** | 不要写进 `wrangler.toml`（明文且会进 git）、不要贴到聊天/文档里、不要提交到仓库。 |
+| **怎么确认配好了** | 浏览器打开 `https://<你的域名>/healthz` ⇒ 看到 **`"hasKey": true`** 就说明读到了 ✓（这是我在 worker 里内置的自检）。 |
+
+> 也可以不用命令行：CF Dashboard → **Workers & Pages → 你的 Worker → Settings → Variables and Secrets
+> → Add** → 类型选 **Secret** → 名称填 `SB_ANON_KEY` → 值粘贴 → 保存。
+> （**Pages 部署走这条路径**，因为 Pages 的环境变量在 Dashboard 里配。）
+
+### 执行顺序（注意：**先 deploy 再 secret put**，然后复验）
+
 ```bash
-npm i -g wrangler          # 或 npx wrangler
+npm i -g wrangler          # 或全局换成 npx wrangler
 cd infra/proxy
-wrangler login
+wrangler login             # 会打开浏览器授权
 
-# ① 写入密钥（**不要**写进代码）
-wrangler secret put SB_ANON_KEY      # 粘贴 Supabase 后台 Settings → API 的 anon public key
+# ① 先部署（首次会创建 Worker；未配 key 也能部署成功，只是不带上游鉴权）
+wrangler deploy            # 得到 https://dota2-data-proxy.<你的账号>.workers.dev
 
-# ② 部署（首次会让你确认 worker 名称；wrangler.toml 已备好）
+# ② 再写入密钥（终端提示 Enter a secret value: ⇒ 粘贴 anon key → 回车）
+wrangler secret put SB_ANON_KEY
+
+# ③ 若刚才是首次创建，建议再 deploy 一次让 Secret 生效
 wrangler deploy
 ```
-部署后会得到 `https://<worker名>.<你的账号>.workers.dev` ⇒ **先做可达性实测**（见下）。
+
+**然后做可达性 + 配置自检**（**这一步决定方案成不成立**）：
+> 浏览器打开 `https://<你的域名>/healthz`
+> - ✅ `{"ok":true,"hasKey":true,...}` ⇒ 域名通 + key 已就位 ⇒ **可以进下一步（改客户端）**
+> - ⚠️ `hasKey:false` ⇒ key 没读到 ⇒ 回 Dashboard 确认 Secret 名称**恰好**是 `SB_ANON_KEY`，再 `wrangler deploy`
+> - ❌ 连接重置 / 证书错 / 超时 ⇒ **域名不可达** ⇒ 换域名或换宿主（备选 Vercel / Netlify / Deno Deploy）
 
 **`wrangler.toml` 内容**（若仓库里没有，可自建）：
 ```toml
@@ -90,6 +113,13 @@ curl -s -X POST "https://<你的域名>/sb/functions/v1/opendota-proxy" \
 | `utils/config.js` 的 `supabase.url` | `https://gkticzdaicpdtxheyxsd.supabase.co` | `https://<你的域名>/sb` |
 | `utils/api.js:29` 的 `BASE` | `https://api.opendota.com/api` | `https://<你的域名>/od/api` |
 | （可选）`utils/liquipedia.js` 的 `BASE` | `https://liquipedia.net/dota2/api.php` | `https://<你的域名>/lp` |
+| `utils/config.js` 的 `supabase.anonKey` | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdrdGljemRhaWNwZHR4aGV5eHNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0OTI4NTIsImV4cCI6MjEwNDA2ODg1Mn0.ZzdBSKZskLI-GO-Tz3BsviNg_qNL8OhC1WV9jTJkAe8`（**错值**） | **改成任意非空占位**（如 `via-proxy`）—— 见下方 ⚠️ |
+
+> ⚠️ **别把 `anonKey` 改成空字符串**：`supabaseClient.enabled()` 的判据是
+> `!!(enabled && url && anonKey)` ⇒ **空值会让"Supabase 已启用"直接变成 false**，
+> 于是 EF 路径**根本不会被调用**（这是很容易踩的坑）。
+> 改成 `via-proxy` 这类占位即可 —— 因为**中转会在服务端覆盖**它，客户端不需要持有真 key
+> （顺带的好处：**小程序包里不再有 Supabase 凭据**）。
 
 ★ 记得把 **`<你的域名>` 加进小程序后台 request 白名单**（改域名**不需要重新提审**，对已上线版本立即生效）。
 
