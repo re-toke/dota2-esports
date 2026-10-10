@@ -9,9 +9,16 @@
 
 | 文件 | 用途 |
 |---|---|
-| `worker.mjs` | **核心**：路由 + 服务端注入 key + `/leagues` 裁剪 + `/healthz` |
-| `functions/[[path]].js` | **Pages Functions** 入口（与 Worker 版共用同一逻辑） |
-| `test.mjs` | 本地测试（**不需要部署、不需要网络**）：`node infra/proxy/test.mjs` ⇒ 24 断言 |
+| `worker.mjs` | **核心**：路由 + 服务端注入 key + `/leagues` 裁剪 + `/healthz`（CF Workers 与 Node 共用） |
+| `node-server.mjs` | **普通服务器（Node 18+）版**：给"香港/境外轻量"这条路用的适配壳（复用同一套逻辑） |
+| `functions/[[path]].js` | Cloudflare **Pages Functions** 入口 |
+| `wrangler.toml` | Workers 部署配置 |
+| **`DEPLOY.md`** | ★ **分步部署手册**（两条路各 8 步 + 常见坑 + 自检） |
+| `test.mjs` | 本地测试（**不需要部署、不需要网络**）：`node infra/proxy/test.mjs` ⇒ **39 断言** |
+
+> ★ 已实测：`node-server.mjs` 能真实起服务（`/healthz` 200、未知路径 404、上游失败 502 且**重试生效**）。
+> ⚠️ **中转必须部署在境外/香港**：本机（国内）跑同一份代码，`fetch` 到 OpenDota **直接失败**
+> （实测 `/od/api/leagues` → 502 `fetch failed`）⇒ 放国内等于白装。
 
 ## 路由（对齐客户端现有 4 处 URL 拼接 ⇒ **客户端只需改 2 个常量**）
 
@@ -38,6 +45,11 @@
    刻意**不复制** EF 侧更复杂的裁剪，避免口径漂移。
 7. **最小权限**：仅 GET/POST/OPTIONS + 路径白名单；`/sb/rest/v1/*` 仅 GET。
 8. **耗时/状态码日志 + 结构化错误**（CF 控制台可查）。
+
+## 部署
+
+> ★ **完整分步手册见 [`DEPLOY.md`](./DEPLOY.md)**（两条路各 8 步 + 每步验证点 + 常见坑 + 部署后的自检）。
+> 下面是速查版。
 
 ## 部署方式 A：Cloudflare Workers（推荐，最快）
 
