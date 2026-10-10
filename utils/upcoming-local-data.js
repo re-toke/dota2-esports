@@ -6,7 +6,7 @@
 // 数据来源：utils/upcoming-local.json（由本脚本生成）
 
 module.exports = {
-  "generatedAt": 1791576344,
+  "generatedAt": 1791624869,
   "source": "liquipedia",
   "note": "build-time snapshot (Upcoming+Ongoing, Tier1-3), refresh via scripts/sync/fetch-liquipedia-upcoming.js",
   "events": [

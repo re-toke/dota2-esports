@@ -1,9 +1,9 @@
 {
-  "generatedAt": 1791576051,
+  "generatedAt": 1791624700,
   "source": "opendota",
   "note": "build-time leagues snapshot (active 90d + curated 60d), refresh via scripts/sync/fetch-leagues-snapshot.js",
   "stats": {
-    "total": 10342,
+    "total": 10346,
     "kept": 33,
     "windows": 17
   },
@@ -154,14 +154,14 @@
       "name": "ESL One Raleigh 2025"
     },
     {
-      "leagueid": 20208,
-      "tier": "professional",
-      "name": "BLAST SLAM IX"
-    },
-    {
       "leagueid": 20279,
       "tier": "professional",
       "name": "PGL Wallachia 2026 Season 9"
+    },
+    {
+      "leagueid": 20208,
+      "tier": "professional",
+      "name": "BLAST SLAM IX"
     },
     {
       "leagueid": 10482,
@@ -183,9 +183,9 @@
     },
     "19102": {
       "earliest": 1790675759,
-      "latest": 1791570470,
-      "lastEnd": 1791572671,
-      "count": 75
+      "latest": 1791574542,
+      "lastEnd": 1791577660,
+      "count": 76
     },
     "19719": {
       "earliest": 1786590206,
@@ -194,10 +194,10 @@
       "count": 147
     },
     "19785": {
-      "earliest": 1783760415,
+      "earliest": 1783846800,
       "latest": 1784483341,
       "lastEnd": 1784485548,
-      "count": 61
+      "count": 49
     },
     "19917": {
       "earliest": 1785476004,
@@ -267,9 +267,9 @@
     },
     "20359": {
       "earliest": 1791533047,
-      "latest": 1791567577,
-      "lastEnd": 1791571798,
-      "count": 24
+      "latest": 1791620812,
+      "lastEnd": 1791621549,
+      "count": 49
     },
     "20393": {
       "earliest": 1791187532,
