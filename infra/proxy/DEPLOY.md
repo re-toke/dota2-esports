@@ -90,22 +90,63 @@
 | `pages.dev` / `workers.dev`（CF） | ❌ 不通 / 不稳 | 不要用这两个 |
 | `duckdns.org` | ❌ ECONNRESET | 已被滥用进名单，别用 |
 
-### 推荐做法：Deno Deploy（约 10 分钟，零成本）
+### ★ 前置验证已通过（2026-10-10 实测）
+**不是只测了主域** —— 我实测了**已存在的子域**：`fresh.deno.dev` **TLS OK + HTTP 301 ✓**、
+`blog.deno.dev`/`hono.deno.dev`/`oakserver.deno.dev` **TLS OK + 404 ✓**（不存在但**域名族可达**）
+⇒ **`*.deno.dev` 子域在国内可达** ⇒ 这条路值得走。
 
-`infra/proxy/worker.mjs` **本身就是 Deno 兼容的**（`export default { fetch }` + Web 标准 API），**不用改代码**。
+### 方式 A · Deno Playground（最简单，约 10 分钟，推荐先试）
 
-1. 打开 <https://dash.deno.com>（用 GitHub 账号登录，免费）；
-2. **New Project → Deploy from CLI** 或直接 **Playground**：
-   - 最简单：**Playground** 里粘贴 `worker.mjs` 的内容 → 部署 → 得到一个 `https://<名字>.deno.dev`；
-3. 在项目 **Settings → Environment Variables** 加：
-   - `SB_ANON_KEY` = 你的 Supabase anon key（会当 Secret 存储）
-   - `SUPABASE_REF` = `gkticzdaicpdtxheyxsd`
-4. 部署后自检（**这一步决定成不成**）：
-   | 打开 | 期望 |
+`infra/proxy/worker.mjs` **本身就是 Deno 兼容的**（`export default { fetch }` + Web 标准 API）。
+
+1. 打开 <https://dash.deno.com> → 用 **GitHub 账号登录**（免费）；
+2. 进入 **Playground**（或 New Playground）；
+3. **打开本仓库的 `infra/proxy/worker.mjs`，全选复制，粘贴进 Playground**；
+4. **只改一行**：文件靠上位置有
+   ```js
+   const SB_ANON_KEY_FALLBACK = '';
+   ```
+   ⇒ 把你的 **Supabase `anon` key**（`eyJhbGciOiJI…` 那一长串）填进引号里。
+   > 为什么可以直接写在代码里：**anon key 是「公开键」**（受 RLS 保护，本来就随小程序包分发）⇒ 不是机密泄露；
+   > **但 `service_role` key 绝不可以这样放。** 若你想用环境变量（更规范）⇒ 见方式 B。
+5. 点 **Save & Deploy** ⇒ 得到一个 `https://<名字>.<你的org>.deno.dev`；
+6. 部署后自检（**这一步决定成不成**）：
+
+   | 浏览器打开 | 期望 |
    |---|---|
-   | `https://<名字>.deno.dev/healthz` | `{"ok":true,"hasKey":true,...}` |
-   | `https://<名字>.deno.dev/healthz?deep=1` | `deep.supabase.reachable=true` **且** `deep.opendota.reachable=true` |
-5. **把域名发我** ⇒ 我从这边实测国内可达性 ⇒ 通了就改客户端（仍是那 6 处，其中 2 处常量）
+   | `https://<名字>.<org>.deno.dev/healthz` | `{"ok":true,"hasKey":true,...}` |
+   | `https://<名字>.<org>.deno.dev/healthz?deep=1` | `deep.supabase.reachable=true` **且** `deep.opendota.reachable=true` |
+
+7. **把这个域名发我** ⇒ 我从这边实测国内可达性 + 深检 ⇒ 通了就改客户端（仍是 6 处，其中 2 处是常量）。
+
+### 方式 B · 从 GitHub 部署（推荐长期维护，可用环境变量）
+
+1. 建一个 **私有** GitHub 仓库，放 `infra/proxy/worker.mjs`（保持 `SB_ANON_KEY_FALLBACK = ''` 留空）；
+2. Deno Deploy → **New Project → Deploy from GitHub** → 选该仓库 → 入口文件填 `worker.mjs`；
+3. 项目 **Settings → Environment Variables** 加两条：
+   - `SB_ANON_KEY` = 你的 anon key（类型选 **Secret**）
+   - `SUPABASE_REF` = `gkticzdaicpdtxheyxsd`
+4. 部署 ⇒ 同样跑上面第 6 步的两个自检 URL。
+> 优先级：`env.SB_ANON_KEY` **覆盖**代码里的 `SB_ANON_KEY_FALLBACK`。
+
+### 方式 C · 命令行
+
+```bash
+npx deployctl deploy --project=<项目名> infra/proxy/worker.mjs
+```
+
+### ⚠️ 三个注意点
+1. **免费额度以官网当前页为准**（我无法在此核实它的实时政策）；**若注册流程要求绑卡/付费，先停下来告诉我** —— 那就换备选平台。
+2. **`*.deno.dev` 子域无法备案** —— 你的现状已证微信接受未备案境外域名，但**"野生子域"可能被风控** ⚠️
+   ⇒ 加白名单时若被拒，告诉我（这不代表方案失败，换 netlify/render/fly 或加个自有域名即可）。
+3. **中转必须跑在境外**（Deno Deploy 的边缘在境外 ✓ 符合）—— 在国内跑同一份代码会 `fetch failed`（实测）。
+
+### 备选平台（若 Deno 不可用，逐个试）
+| 平台 | 免费子域形态 | 特点 |
+|---|---|---|
+| **Netlify** | `*.netlify.app` | 有 **Netlify Drop**：把文件夹拖进网页即部署（连 Git 都不用） |
+| Render | `*.onrender.com` | 支持 Node，但免费实例会休眠 |
+| Fly.io | `*.fly.dev` | 需要 CLI + 信用卡验证 ⚠️ |
 
 > ⚠️ 免费子域**无法备案** —— 但你的现状已证明**微信后台接受未备案的境外域名**（`liquipedia.net`/`api.opendota.com` 都在你的白名单里且小程序在跑）⇒ **可以直接加白名单试**。
 

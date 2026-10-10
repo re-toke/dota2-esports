@@ -36,6 +36,12 @@
 
 const DEFAULT_SUPABASE_REF = 'gkticzdaicpdtxheyxsd';
 
+// ★ Deno Playground / 无环境变量部署入口：把 anon key 填在这里即可**不配环境变量直接跑**。
+//   为什么可以写在代码里：**Supabase 的 `anon` key 是「公开键」**（受 RLS 保护、本就随小程序包分发）
+//   ⇒ 不是机密泄露。**但 `service_role` key 绝不可如此。**
+//   ★ 优先级：`env.SB_ANON_KEY`（Dashboard/Secret，推荐） > 下面这个常量。
+const SB_ANON_KEY_FALLBACK = '';
+
 // 客户端真正会调的 EF —— 不在名单内一律 404（名单由 `utils/cloudProxy.js` 的 EDGE_ACTIONS 核准）
 const EF_ALLOW = new Set([
   'opendota-proxy', 'liquipedia-proxy', 'steam-proxy', 'stratz-proxy', 'haglund-proxy', 'bundle-aggregator',
@@ -128,7 +134,7 @@ async function handle(request, env) {
   if (method !== 'GET' && method !== 'POST') return json({ error: 'method not allowed' }, 405);
 
   const ref = (env && env.SUPABASE_REF) || DEFAULT_SUPABASE_REF;
-  const sbKey = env && env.SB_ANON_KEY;
+  const sbKey = (env && env.SB_ANON_KEY) || SB_ANON_KEY_FALLBACK;
   const sbHeaders = sbKey ? { Authorization: 'Bearer ' + sbKey, apikey: sbKey } : {};
 
   // ── 健康检查 ──────────────────────────────────────────────────────────────
