@@ -6,22 +6,10 @@
 // 数据来源：utils/upcoming-local.json（由本脚本生成）
 
 module.exports = {
-  "generatedAt": 1791712034,
+  "generatedAt": 1791746729,
   "source": "liquipedia",
   "note": "build-time snapshot (Upcoming+Ongoing, Tier1-3), refresh via scripts/sync/fetch-liquipedia-upcoming.js",
   "events": [
-    {
-      "id": -1632240,
-      "name": "BLAST SLAM VIII",
-      "grade": "S",
-      "rank": 3,
-      "label": "S级",
-      "tier": 1,
-      "start": 1790640000,
-      "end": 1791734399,
-      "date": "Sep 29 – Oct 11, 2026",
-      "source": "liquipedia"
-    },
     {
       "id": -1250009,
       "name": "Sber Tournament 2026",
@@ -107,6 +95,18 @@ module.exports = {
       "source": "liquipedia"
     },
     {
+      "id": -1032366,
+      "name": "EPL Masters III: Play-In",
+      "grade": "B",
+      "rank": 1,
+      "label": "B级",
+      "tier": 3,
+      "start": 1791763200,
+      "end": 1792252799,
+      "date": "Oct 12–17, 2026",
+      "source": "liquipedia"
+    },
+    {
       "id": -1404220,
       "name": "BLAST SLAM IX China Open Qualifier 1",
       "grade": "S",
@@ -167,6 +167,18 @@ module.exports = {
       "source": "liquipedia"
     },
     {
+      "id": -1914730,
+      "name": "NEXUS SERIES II",
+      "grade": "B",
+      "rank": 1,
+      "label": "B级",
+      "tier": 3,
+      "start": 1792022400,
+      "end": 1793548799,
+      "date": "Oct 15 – Nov 01, 2026",
+      "source": "liquipedia"
+    },
+    {
       "id": -1537037,
       "name": "BLAST SLAM IX China Closed Qualifier",
       "grade": "S",
@@ -200,6 +212,18 @@ module.exports = {
       "start": 1792022400,
       "end": 1792252799,
       "date": "Oct 15–17, 2026",
+      "source": "liquipedia"
+    },
+    {
+      "id": -1021703,
+      "name": "EPL Masters III",
+      "grade": "B",
+      "rank": 1,
+      "label": "B级",
+      "tier": 3,
+      "start": 1792281600,
+      "end": 1793894399,
+      "date": "Oct 18 – Nov 05, 2026",
       "source": "liquipedia"
     },
     {
