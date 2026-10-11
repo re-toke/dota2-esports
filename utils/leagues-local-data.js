@@ -7,19 +7,24 @@
 // 刷新：npm run fetch:leagues
 
 module.exports = {
-  "generatedAt": 1791659334,
+  "generatedAt": 1791711871,
   "source": "opendota",
   "note": "build-time leagues snapshot (active 90d + curated 60d), refresh via scripts/sync/fetch-leagues-snapshot.js",
   "stats": {
-    "total": 10346,
-    "kept": 33,
-    "windows": 17
+    "total": 10348,
+    "kept": 34,
+    "windows": 18
   },
   "leagues": [
     {
       "leagueid": 19066,
       "tier": "professional",
       "name": "肛宝联赛-老婆杯"
+    },
+    {
+      "leagueid": 20334,
+      "tier": "professional",
+      "name": "NEXUS SERIES II"
     },
     {
       "leagueid": 20359,
@@ -162,14 +167,14 @@ module.exports = {
       "name": "ESL One Raleigh 2025"
     },
     {
-      "leagueid": 20279,
-      "tier": "professional",
-      "name": "PGL Wallachia 2026 Season 9"
-    },
-    {
       "leagueid": 20208,
       "tier": "professional",
       "name": "BLAST SLAM IX"
+    },
+    {
+      "leagueid": 20279,
+      "tier": "professional",
+      "name": "PGL Wallachia 2026 Season 9"
     },
     {
       "leagueid": 10482,
@@ -202,10 +207,10 @@ module.exports = {
       "count": 147
     },
     "19785": {
-      "earliest": 1783846800,
+      "earliest": 1784026864,
       "latest": 1784483341,
       "lastEnd": 1784485548,
-      "count": 49
+      "count": 37
     },
     "19917": {
       "earliest": 1785476004,
@@ -273,11 +278,17 @@ module.exports = {
       "lastEnd": 1790522808,
       "count": 114
     },
+    "20334": {
+      "earliest": 1791662674,
+      "latest": 1791665659,
+      "lastEnd": 1791667268,
+      "count": 2
+    },
     "20359": {
       "earliest": 1791533047,
-      "latest": 1791649239,
-      "lastEnd": 1791652725,
-      "count": 55
+      "latest": 1791707895,
+      "lastEnd": 1791709417,
+      "count": 65
     },
     "20393": {
       "earliest": 1791187532,
