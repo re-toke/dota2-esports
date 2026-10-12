@@ -1,0 +1,19 @@
+# netlify.toml —— Netlify 部署配置（P1-2 备出口 [2]）
+#
+# 站点形态：**只有一个 Edge Function**，把 `/healthz`、`/sb/*`、`/od/api/*` 全部吃下来。
+#   · Edge Function 源码：`netlify/edge-functions/dota2-proxy.ts`（**走默认目录，不自定义** ——
+#     自定义目录名若写错会导致"函数没被发现"的静默失败，而默认目录最稳）。
+#     ★ 用 `.ts` 而非 `.js`：Edge Function 是 ESM，而本仓库 pre-commit 会对已暂存的 `.js` 跑
+#       CJS 口径的 `node --check` ⇒ `.js` 会被提交门禁阻断。详见该文件头注释。
+#   · 它 import 的是本仓库既有的 `infra/proxy/worker.mjs`（与 Deno 那台**共用同一份路由代码**）
+
+[build]
+  # ★★ 必须显式清空 Build command —— 实测（2026-10-12）Netlify 对这个仓库**自动识别错了框架**，
+  #    把 UI 上的 Build command 设成了 `expo export -p web`、Publish directory 设成了 `dist`，
+  #    导致首次部署在构建阶段 **Failed（exit code 2）**。本仓库是**微信小程序**项目，
+  #    完全没有构建步骤：本目录下只有两个纯 JS 文件（worker.mjs / node-server.mjs）。
+  #    注：`netlify.toml` 的配置**优先于 UI**，所以这两行会把 UI 里的错值覆盖掉。
+  #    用 `echo` 而**不**写成空串：空串有被当作"未设置"从而沿用 UI 值的风险，echo 是显式覆盖、必成功（exit 0）。
+  command = "echo no-build"
+  # Netlify 要求站点有一个发布目录；这里只放一个占位页，**不承载任何业务**
+  publish = "infra/proxy/netlify-public"
