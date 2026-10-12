@@ -7,9 +7,12 @@
 #
 # ## 告警通道
 # ① 主通道（零成本）：本 job 失败 → GitHub 自动发失败通知邮件给仓库 owner。
-# ② ★ 2026-10-12（P1-13）二级通道：若配置了 `ALERT_WEBHOOK`（飞书群机器人），
-#    失败时会额外推一条 Webhook 消息（见 scripts/ops/notify-alert.js）。
+# ② ★ 2026-10-12（P1-13）二级通道：若配置了 `ALERT_WEBHOOK`（推送服务地址，
+#    当前用 **Server酱**；见 scripts/ops/notify-alert.js，按 URL 自动判别平台），
+#    失败时会额外推一条消息到微信。
 #    动机：GH scheduled 实测会被丢弃/延迟 5~7h，且"job 失败邮件"极易被淹没。
+#    ⚠️ 本项最初按飞书群机器人设计，但实测该飞书租户**看不到「自定义机器人」**（群机器人列表
+#       只有官方应用）⇒ 改采 Server酱。**代码必须已推送**，否则 CI 会用旧的消息格式去发 Server酱。
 #
 # ## 探测口径（见 scripts/ops/probe-ef.js）
 # 「EF 活着」= 有任何 HTTP 响应（含 400/401，只证明函数被调度起来）。

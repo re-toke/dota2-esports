@@ -18,7 +18,9 @@
 # ## 前置 Secrets（缺 `ALERT_WEBHOOK` 时**只跳过告警推送**，不影响清理）
 #   SUPABASE_URL / SUPABASE_SERVICE_KEY —— 与 probe-ef.js / diag-report.js 同一套（已配置）。
 #     ⚠️ SUPABASE_URL 必须是**直连** `<ref>.supabase.co`：中转的 /sb/rest/v1 只允许 GET。
-#   ALERT_WEBHOOK —— 飞书群机器人 webhook（**新增，可选**；用于二级告警通道）。
+#   ALERT_WEBHOOK —— 推送服务地址（**新增，可选**；用于二级告警通道）。
+#     当前值 = **Server酱** 端点 `https://sctapi.ftqq.com/<SendKey>.send`（✅ 2026-10-12 已写入）。
+#     为何不是飞书：该飞书租户看不到「自定义机器人」。脚本按 URL 自动判别平台，换平台无需改代码。
 # ============================================================
 name: Ops Maintenance
 
