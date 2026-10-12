@@ -7,13 +7,13 @@
 // 刷新：npm run fetch:leagues
 
 module.exports = {
-  "generatedAt": 1791800567,
+  "generatedAt": 1791843876,
   "source": "opendota",
   "note": "build-time leagues snapshot (active 90d + curated 60d), refresh via scripts/sync/fetch-leagues-snapshot.js",
   "stats": {
     "total": 10348,
-    "kept": 35,
-    "windows": 19
+    "kept": 36,
+    "windows": 20
   },
   "leagues": [
     {
@@ -35,6 +35,11 @@ module.exports = {
       "leagueid": 20393,
       "tier": "professional",
       "name": "PARI Universe by FISSURE Closed Qualifiers "
+    },
+    {
+      "leagueid": 20406,
+      "tier": "professional",
+      "name": "1win Streamers League #3"
     },
     {
       "leagueid": 20411,
@@ -172,14 +177,14 @@ module.exports = {
       "name": "ESL One Raleigh 2025"
     },
     {
-      "leagueid": 20208,
-      "tier": "professional",
-      "name": "BLAST SLAM IX"
-    },
-    {
       "leagueid": 20279,
       "tier": "professional",
       "name": "PGL Wallachia 2026 Season 9"
+    },
+    {
+      "leagueid": 20208,
+      "tier": "professional",
+      "name": "BLAST SLAM IX"
     },
     {
       "leagueid": 10482,
@@ -225,9 +230,9 @@ module.exports = {
     },
     "19944": {
       "earliest": 1784531358,
-      "latest": 1791792969,
-      "lastEnd": 1791795184,
-      "count": 342
+      "latest": 1791839921,
+      "lastEnd": 1791841770,
+      "count": 352
     },
     "20009": {
       "earliest": 1785402206,
@@ -291,15 +296,21 @@ module.exports = {
     },
     "20359": {
       "earliest": 1791533047,
-      "latest": 1791795635,
-      "lastEnd": 1791797288,
-      "count": 111
+      "latest": 1791839779,
+      "lastEnd": 1791841391,
+      "count": 121
     },
     "20393": {
       "earliest": 1791187532,
       "latest": 1791489252,
       "lastEnd": 1791490855,
       "count": 34
+    },
+    "20406": {
+      "earliest": 1791813665,
+      "latest": 1791833417,
+      "lastEnd": 1791835969,
+      "count": 5
     },
     "20411": {
       "earliest": 1791721162,

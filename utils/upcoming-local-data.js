@@ -6,7 +6,7 @@
 // 数据来源：utils/upcoming-local.json（由本脚本生成）
 
 module.exports = {
-  "generatedAt": 1791800738,
+  "generatedAt": 1791844064,
   "source": "liquipedia",
   "note": "build-time snapshot (Upcoming+Ongoing, Tier1-3), refresh via scripts/sync/fetch-liquipedia-upcoming.js",
   "events": [
@@ -20,66 +20,6 @@ module.exports = {
       "start": 1791590400,
       "end": 1793548799,
       "date": "Oct 10 – Nov 01, 2026",
-      "source": "liquipedia"
-    },
-    {
-      "id": -1636745,
-      "name": "DreamLeague Season 30: China Open Qualifier 2",
-      "grade": "S",
-      "rank": 3,
-      "label": "S级",
-      "tier": 1,
-      "start": 1791676800,
-      "end": 1791820799,
-      "date": "Oct 11–12, 2026",
-      "source": "liquipedia"
-    },
-    {
-      "id": -1319589,
-      "name": "DreamLeague Season 30: South America Open Qualifier 2",
-      "grade": "S",
-      "rank": 3,
-      "label": "S级",
-      "tier": 1,
-      "start": 1791676800,
-      "end": 1791820799,
-      "date": "Oct 11–12, 2026",
-      "source": "liquipedia"
-    },
-    {
-      "id": -1860588,
-      "name": "DreamLeague Season 30: Western Europe Open Qualifier 2",
-      "grade": "S",
-      "rank": 3,
-      "label": "S级",
-      "tier": 1,
-      "start": 1791676800,
-      "end": 1791820799,
-      "date": "Oct 11–12, 2026",
-      "source": "liquipedia"
-    },
-    {
-      "id": -1122938,
-      "name": "DreamLeague Season 30: Eastern Europe Open Qualifier 2",
-      "grade": "S",
-      "rank": 3,
-      "label": "S级",
-      "tier": 1,
-      "start": 1791676800,
-      "end": 1791820799,
-      "date": "Oct 11–12, 2026",
-      "source": "liquipedia"
-    },
-    {
-      "id": -1878796,
-      "name": "DreamLeague Season 30: Southeast Asia Open Qualifier 2",
-      "grade": "S",
-      "rank": 3,
-      "label": "S级",
-      "tier": 1,
-      "start": 1791676800,
-      "end": 1791820799,
-      "date": "Oct 11–12, 2026",
       "source": "liquipedia"
     },
     {
