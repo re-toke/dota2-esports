@@ -80,7 +80,8 @@ jobs:
       #   ① 客户端「我的」页读它 ⇒ 用户/开发者都能看到"数据多久没更新"（消费方来源不同，非同一处自证）
       #   ② 该行本身就是**心跳**：定时任务若停摆，时间戳就不再前进
       #   ⚠️ 必须用 SUPABASE_SERVICE_KEY（curation_meta 仅 anon 只读 ⇒ 客户端写不了）；
-      #      且**不可**改用 EF admin-write 的 updateMeta（它把 key 硬编码为 ti_contestant_ids，会写坏数据）。
+      #      走 service key 直写而非 EF admin-write（后者是管理令牌口径，凭据模型不同）。
+      #      （★ 2026-10-12 P1-12：EF updateMeta 的 key 硬编码缺陷已修，不再是理由。）
       - name: Report pipeline metrics + heartbeat
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}

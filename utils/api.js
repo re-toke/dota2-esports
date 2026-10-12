@@ -11,7 +11,6 @@ const cache = require('./cache.js');
 const config = require('./config.js');
 const inc = require('./incremental.js');
 const sqlFragments = require('./sqlFragments.js');
-const breaker = require('./cloudBreaker.js');
 // ★ 2026-09-19（收录严谨化 · 白名单准入）：赛事列表入口闸门依赖分级规则。
 //   tiers.js 无任何依赖（纯规则表），require 无循环风险。
 const tiers = require('./tiers.js');
@@ -31,7 +30,13 @@ function _v() { return _dataVersion + ':'; }
 //   ⇒ 改走**中转**（同一个中转域名的 `/od/api` 前缀；中转侧会转发到 api.opendota.com）。
 //   ⚠️ **与 `utils/config.js` 的 `supabase.url` 是成对改动**（同一台中转）。
 //   ★ 回滚：改回 'https://api.opendota.com/api' 即可（一个常量）。
-const BASE = 'https://tough-ferret-3579.re-toke.deno.net/od/api';
+//
+// ★★ 2026-10-12（P1-2 双出口）：**主机名不再在此写死** —— 改由 `utils/endpoints.js` 的
+//   `odBase()`（= `config.endpoints.proxy` 当前选中宿主 + '/od/api'）**每次请求动态取**，
+//   以便主出口不可达时切到备出口（会话粘滞）。单一事实来源见 `utils/config.js` 的 PROXY_HOSTS。
+//   下方 BASE 仅为**主出口快照**（供 `module.exports.BASE` 兼容导出；当前全仓 0 调用点）。
+const endpoints = require('./endpoints.js');
+const BASE = endpoints.odBase();
 
 // 赛事等级映射（OpenDota 的 tier 字符串枚举）
 const TIER_RANK = {
@@ -68,15 +73,17 @@ function acquireSlot() {
   return sleep(wait).then(() => acquireSlot());
 }
 
-function rawRequest(path, data) {
+function rawRequest(path, data, headers) {
   return new Promise((resolve, reject) => {
     let settled = false;
     const task = wx.request({
-      url: BASE + path,
+      // ★ P1-2：每次请求动态取当前出口（主不可达时 endpoints 已切到备 ⇒ 下次自然走备）
+      url: endpoints.odBase() + path,
       data: data || {},
       method: 'GET',
       timeout: REQUEST_TIMEOUT_MS,
-      header: { 'content-type': 'application/json' },
+      // ★ P0-1 C：允许透传额外头（如 `X-Trim: 0` 声明"要全量" ⇒ 豁免中转默认裁剪）
+      header: Object.assign({ 'content-type': 'application/json' }, headers || {}),
       success: (res) => {
         if (settled) return;
         settled = true;
@@ -124,16 +131,29 @@ function request(path, data, opts) {
   const slotPromise = (retry > 0 && firstTs && (Date.now() - firstTs) < WINDOW_MS)
     ? Promise.resolve(firstTs)            // 重试且首次槽位未过期 → 复用（不再占位）
     : acquireSlot().then((ts) => { if (firstTs == null) opts._firstTs = ts; return ts; });
-  return slotPromise.then(() => rawRequest(path, data))
+  return slotPromise.then(() => rawRequest(path, data, opts.headers))
     .catch((err) => {
       const code = err && err.statusCode;
+      // ★ P1-2 双出口：**传输层失败**（无 HTTP 状态码 ⇒ 域名不可达 / TLS 被劫持 / 超时）+ 存在备出口
+      //   ⇒ 切换出口并重试一次（此后该会话**粘滞**在备出口）。依据：主出口被整域封禁时，请求
+      //   连不上是「无状态码」的 fail，与 429/5xx（已联通）性质不同，须靠切出口而非退避重试。
+      //   守卫：① count()===1（当前仅主出口）时**不进此分支 ⇒ 行为与改造前等价**；
+      //         ② `_hostFailover` 保证每条请求链**最多切一次**（主备皆挂时不来回横跳）。
+      if (!code && !opts._hostFailover && endpoints.count() > 1) {
+        const next = endpoints.failover();
+        if (next) {
+          return request(path, data, {
+            retries: retry, _firstTs: opts._firstTs, headers: opts.headers, _hostFailover: true
+          });
+        }
+      }
       // 429 限流 / 5xx 源站抖动（OpenDota 经 Cloudflare 常返回的 521/502/503）
       // 均做退避重试：429 是触发限流，5xx 多为瞬时源站不可用，重试通常可恢复，
       // 避免把瞬时故障直接暴露到 Console / 触发页面加载失败态。
       if ((code === 429 || (code >= 500 && code < 600)) && retry < RATE.maxRetries) {
         const delay = RATE.retryBaseMs * Math.pow(2, retry);
         return sleep(delay).then(() =>
-          request(path, data, { retries: retry + 1, _firstTs: opts._firstTs }));
+          request(path, data, { retries: retry + 1, _firstTs: opts._firstTs, headers: opts.headers }));
       }
       // G7.4：重试耗尽 / 不可重试的最终失败上报（按 path 去重，避免刷屏）。
       // 注：cached() 可能用陈旧缓存兜底不抛到调用方，但本次回源失败仍值得监控。
@@ -210,6 +230,22 @@ function cached(path, data, ttlSec) {
 // 后台刷新进行中的 key 集合（避免同一 key 重复触发刷新）
 const refreshInFlight = {};
 
+// ★ P1-6（2026-10-12）：**前台 fetch 去重** —— 与上方 cached() 同思路，但作用于
+//   cachedFresh / cachedFreshIncremental 的「硬过期 / 无缓存」分支。原实现只在**后台刷新**
+//   有 `refreshInFlight` 守卫，前台回源无去重 ⇒ 冷启动时多页面/多组件并发同一 key 会各发一次
+//   网络请求（首页关注流 + 详情页曾实测同 key 并发重复拉取）。
+//   ⚠️ key 必须与缓存 key **逐字符一致**（§6.2 key 构造铁律），否则去重会串数据或静默失效。
+const inflightFresh = {};
+function dedupFresh(key, fn) {
+  if (inflightFresh[key]) return inflightFresh[key];
+  // 用 microtask 包裹：把 fn 的**同步抛错**也转成 rejected promise（否则 map 不会登记、去重失效）
+  const p = Promise.resolve().then(fn);
+  inflightFresh[key] = p;
+  const clear = () => { try { delete inflightFresh[key]; } catch (e) { /* 静默 */ } };
+  p.then(clear, clear);
+  return p;
+}
+
 // 带「stale-while-revalidate」的请求：保障信息更新的及时性。
 //   - 硬 TTL 内且新鲜：直接返回缓存（最省流量）
 //   - 未过期但已陈旧：先返回旧值，再在后台静默刷新（用户无感拿到新数据）
@@ -219,7 +255,8 @@ function cachedFresh(path, data, freshSec, ttlSec) {
   const key = _v() + path + '|' + JSON.stringify(data || {});
   const meta = cache.getStale(key, freshSec, ttlSec);
   if (meta.expired || !meta.value) {
-    return request(path, data).then((data) => {
+    // ★ P1-6：前台回源去重（同 key 并发只发一次）
+    return dedupFresh(key, () => request(path, data).then((data) => {
       if (!validateResponse(path, data)) {
         // 畸形响应：回退到旧值（若有），否则抛错
         if (meta.value != null) return meta.value;
@@ -227,7 +264,7 @@ function cachedFresh(path, data, freshSec, ttlSec) {
       }
       cache.set(key, data, ttlSec);
       return data;
-    });
+    }));
   }
   if (meta.fresh) {
     return Promise.resolve(meta.value);
@@ -278,11 +315,13 @@ function fetchMatchDelta(resource, id, cursor) {
 }
 
 // 增量版 cachedFresh：resPath 为直连全量端点（首次/硬过期用）；resource/id 用于游标增量。
-function cachedFreshIncremental(resPath, resource, id, freshSec, ttlSec) {
+function cachedFreshIncremental(resPath, resource, id, freshSec, ttlSec, opts) {
   const key = _v() + resPath + '|{}';
   const meta = cache.getStale(key, freshSec, ttlSec);
   if (meta.expired || !meta.value) {
-    return request(resPath).then((data) => {
+    // ★ P1-6：前台回源去重（同 key 并发只发一次）。同一 resPath 仅一个调用点持有 opts
+    //   （`/teams/<id>/matches` 恒带 `X-Trim: 0`）⇒ key 不含 headers 不会串语义。
+    return dedupFresh(key, () => request(resPath, undefined, opts).then((data) => {
       if (!validateResponse(resPath, data)) {
         // 畸形响应：回退到旧值（若有），否则抛错
         if (meta.value != null) return meta.value;
@@ -290,7 +329,7 @@ function cachedFreshIncremental(resPath, resource, id, freshSec, ttlSec) {
       }
       cache.set(key, data, ttlSec);
       return data;
-    });
+    }));
   }
   if (meta.fresh) {
     return Promise.resolve(meta.value);
@@ -326,17 +365,8 @@ function cachedFreshIncremental(resPath, resource, id, freshSec, ttlSec) {
 // 通用 OpenDota handler `if (!force)` 跳过缓存（云函数已支持，缺客户端通道）。
 // 仅透传 truthy，未传时保持原形状（向后兼容）。
 
-// 云调用超时（ms）：与 utils/cloudProxy.js 的 ACTION_TIMEOUT_MS 对齐（单一事实来源）。
-// 读缓存/轻量 action 8s；实时抓取（云端需现场拉 Liquipedia/Steam/OpenDota 大端点）12s。
-// ★ 2026-09-01（loadLeagues 12s 性能修复）：原 cloudFetch 无超时，云函数冷启动/回源慢时
-//   页面 Promise.all 卡死（实测 12029ms）。超时 reject → tryCloudOrDirect 回退直连。
-const CLOUD_ACTION_TIMEOUT = {
-  _default: 8000,
-  getLeagueMatches: 12000,
-  getTeamMatches: 12000,
-  getProMatches: 12000,
-  getLiveMatches: 12000
-};
+// ⚠️ 2026-10-12（P1-5 清死代码）：原 `CLOUD_ACTION_TIMEOUT` 表**已删除** —— 全仓无调用点。
+//   EF/直连的真实超时见 utils/supabaseClient.js `edge()`（25s）与 api.js `REQUEST_TIMEOUT_MS`（20s）。
 
 // ★ 2026-09-19 新增：OpenDota 主数据源**优先走 EF**（补上缺失的接线）。
 //   背景：api.js 的 cloudFetch 原先**只调云函数**；而 opendota-proxy EF 与 EDGE_ACTIONS
@@ -361,12 +391,9 @@ function cloudFetch(action, params, force) {
 }
 // ★★ 2026-09-22（微信云开发退役）：原 `_cloudFetchViaCloud`（云函数直调兜底）**已整体移除**。
 //   EF 是唯一后端；不再存在任何云开发调用路径。
-
-
-function cloudEnabled() {
-  const threshold = (config.cloudProxy && config.cloudProxy.circuitBreakerThreshold) || 0;
-  return breaker.isAvailable(config.cloudProxy && config.cloudProxy.enabled, threshold);
-}
+// ⚠️ 2026-10-12（P1-4）：原 `cloudEnabled()`（基于 cloudBreaker 的全局闸门）**已删除** —— 该全局熔断器
+//   从未被 markFailure ⇒ 闸门恒开（误导）；EF 可用性由 cloudProxy.call → supabaseClient 的 per-action
+//   熔断负责，EF 不可用时 call 会 reject 从而走 direct 回退（见 tryCloudOrDirect 的 .catch）。
 
 // 方法名 → (action, params-builder)，与 cloudProxy.js 的 PARAM_MAP 对齐
 // O-4（2026-08-15）：增加 path / data / ttlKey 元数据，供 tryCloudOrDirect 云成功路径
@@ -418,7 +445,6 @@ function writeThrough(path, reqData, respData, ttlSec) {
 }
 function tryCloudOrDirect(methodName, args, directFn, transform, force) {
   const direct = directFn;
-  if (!cloudEnabled()) return direct();
   const m = ACTION_MAP[methodName].apply(null, args || []);
   const cloud = cloudFetch(m.action, m.params, force);
   // O-4：写穿必须用 cloud 原始响应（transform 前），与 direct 侧 cached 的缓存内容
@@ -692,13 +718,23 @@ function getTeamMatches(teamId, opts) {
   //        `team-detail`/`h2h` 依赖的全量缓存）—— 已确认 `fetchedAtOf('teamMatches')` 只被
   //        `team-detail` 使用、且走的是不带 query 的 path ⇒ 互不影响。
   //   ⚠️ **不要**给 `team-detail`（要 `totalMatches` 全量 + 分页）/ `h2h`（要历史交锋）传 recent。
+  // ★ P0-1 B′（2026-10-12）：双方交锋。服务端（中转）按 `?vs=<teamId>` 只回 A∩B 对局。
+  //   与 `recent` 同为 cached() 直连支路（带 query ⇒ 缓存 key 与全量/裁剪版天然隔离）。
+  const vs = (opts && opts.vs) ? String(opts.vs) : '';
+  if (vs) {
+    return cached('/teams/' + teamId + '/matches?vs=' + encodeURIComponent(vs), null, config.cacheTTL.teamMatches);
+  }
   const recent = (opts && Number(opts.recent) > 0) ? Math.min(Number(opts.recent), 500) : 0;
   if (recent) {
     return cached('/teams/' + teamId + '/matches?recent=' + recent, null, config.cacheTTL.teamMatches);
   }
   return tryCloudOrDirect('getTeamMatches', [teamId],
     function () {
-      return cachedFreshIncremental('/teams/' + teamId + '/matches', 'team', teamId, 10 * 60, config.cacheTTL.teamMatches);
+      // ★ P0-1 C：显式声明「要全量」（`X-Trim: 0`）⇒ 豁免中转的默认裁剪白名单（DEFAULT_TEAM_TRIM）。
+      //   该头**不进缓存键**（键仍为 `_v()+'/teams/<id>/matches'+"|{}"`）⇒ `fetchedAtOf('teamMatches')`
+      //   与 EF 侧 `writeThrough` 的键**保持不变**（无迁移、无失效）。
+      return cachedFreshIncremental('/teams/' + teamId + '/matches', 'team', teamId, 10 * 60, config.cacheTTL.teamMatches,
+        { headers: { 'X-Trim': '0' } });
     });
 }
 

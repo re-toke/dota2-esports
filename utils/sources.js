@@ -79,7 +79,7 @@ const monitor = require('./monitor.js');
 //      原设计每个 .catch 隔离错误，但无法避免「明知不可用仍每次重试」的开销。
 // 方案：模块级变量追踪连续失败次数，达到阈值后本会话跳过 STRATZ 调用。
 //      成功一次即复位（STRATZ 恢复后自动重新启用）。
-//      与 cloudBreaker.js 区别：cloudBreaker 针对云函数整体，此处针对 STRATZ 单源。
+//      （cloudBreaker.js 已于 2026-10-12 删除，见优化方案 v1.2.1 P1-4；此处是针对 STRATZ 单源的独立熔断。）
 const STRATZ_FAIL_THRESHOLD = 3;  // 连续失败 3 次后跳过
 let _stratzFails = 0;
 let _stratzSkippedUntil = 0;     // 跳过截止时间戳（ms），0=不跳过

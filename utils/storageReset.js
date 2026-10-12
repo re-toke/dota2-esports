@@ -37,8 +37,7 @@ var CACHE_EXACT = [
   'haglund_circuit_v1',
   'haglund_upcoming_v1',
   'remote_curation_v3',
-  'remote_curation_version',
-  'dota2_cloud_cb'         // cloudProxy 熔断器状态
+  'remote_curation_version'
 ];
 
 /** 用户数据（关注/提醒/资料/偏好）—— 属「用户内容」，不是缓存 */

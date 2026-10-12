@@ -9,3 +9,11 @@ mockup/
 # `sourceType: "script"`（小程序侧 CommonJS）⇒ 语法模型不同，不应套用本项目规则。
 # 该目录的正确性由 `infra/proxy/test.mjs`（24 断言）与 CF 运行时保证。
 infra/
+
+# ★ 2026-10-12：admin/ 与 infra/ 同属「ESM 代码 + 本项目 .eslintrc 是 sourceType: script」这一冲突。
+#   实测：`admin/src/api/supabase.js:18` 用了 `import.meta.env`（Vite 约定）⇒ 以 script 口径解析
+#   直接 `Parsing error: Cannot use 'import.meta' outside a module`，**阻断任何含该文件的提交**
+#   （本次 P1-12 改该文件 updateMeta 时踩到）。
+#   同时 CI 的 `npm run lint` 本来就**只扫** `utils/ pages/ subpackages/ scripts/` ⇒ 不豁免 admin/
+#   等于 pre-commit 比 CI 更严、并非有意为之。此处对齐两者口径。
+admin/

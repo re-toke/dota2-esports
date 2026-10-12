@@ -127,7 +127,7 @@ function getSearchIndex() {
   return _sbKvGet('search_index').then((d) => {
     if (d && d.leagues && d.leagues.length) {
       try { cache.set(localKey(INDEX_LOCAL_KEY), d, LOCAL_TTL); } catch (e) {}
-      console.log('[cloudCache] search_index 走 Supabase 直读（零云开发）');
+      // ★ P1-6（2026-10-12）：移除热路径 console.log（每次缓存读取都打 ⇒ 刷屏、埋真信号）
       return d;
     }
     return _cloudSearchIndex(local);
@@ -169,7 +169,7 @@ function getTeamsHot() {
   return _sbKvGet('teams_hot').then((d) => {
     if (d && Object.keys(d).length) {
       try { cache.set(localKey(TEAMS_HOT_LOCAL_KEY), d, LOCAL_TTL); } catch (e) {}
-      console.log('[cloudCache] teams_hot 走 Supabase 直读（零云开发）');
+      // ★ P1-6（2026-10-12）：移除热路径 console.log
       return d;
     }
     return _cloudTeamsHot(local);
@@ -199,7 +199,7 @@ function getTeamsIndex() {
   return _sbKvGet('teams_search').then((d) => {
     if (d && d.teams && d.teams.length) {
       try { cache.set(localKey(TEAMS_INDEX_LOCAL_KEY), d, LOCAL_TTL); } catch (e) {}
-      console.log('[cloudCache] teams_search 走 Supabase 直读（零云开发）');
+      // ★ P1-6（2026-10-12）：移除热路径 console.log
       return d;
     }
     return _cloudTeamsIndex(local);

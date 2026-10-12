@@ -317,7 +317,7 @@ function fetchPageWikitext(pageName) {
   // 云代理优先：通过云函数（got + UA + redirects:1）代理抓取 raw wikitext，
   // 规避 wx.request 禁设 User-Agent 的限制（Liquipedia 要求合规 UA 才返回数据）。
   // 仅当 wx.cloud 存在且熔断器放行时才走云代理；测试/纯本地环境下回退本地。
-  if (typeof wx !== 'undefined' && wx.cloud && (cloudProxy.isAvailable() || cloudProxy.efAvailable())) {
+  if (typeof wx !== 'undefined' && wx.cloud && cloudProxy.efAvailable()) {
     // ★★ 2026-09-11（LP 服务迁 EF · 第一步）：原实现直接调 EF（非 cacheOnly）——
     //   未命中时 EF 会去现抓 LP，而 Supabase 出口被持续 429 → **白等约 7s 才失败**。
     //   现改为三级链路：
@@ -406,7 +406,7 @@ function getLeagueMetadata(name) {
   //   现 fetchPageWikitext 已是三级链路（EF 缓存命中 → 零云开发），且本地解析
   //   已补齐 liquipediaTier（见 fetchAndParseLeague）→ 与云函数产出字段对齐。
   //   本地无 wikitext / 解析失败时回落云函数，可靠性不变。
-  if (typeof wx !== 'undefined' && wx.cloud && (cloudProxy.isAvailable() || cloudProxy.efAvailable())) {
+  if (typeof wx !== 'undefined' && wx.cloud && cloudProxy.efAvailable()) {
     return fetchAndParseLeague(slug, cacheKey, name).then(function (local) {
       if (local) {
         console.log('[liquipedia] 元数据走 EF 缓存 + 本地解析（' + (local.canonical || name) + '）');
@@ -593,15 +593,10 @@ function getScheduledMatches(name, opts) {
   if (!name) return Promise.resolve({ matches: [], boFormat: null });
 
   // ★ 2026-09-01（P0-2 配套）：熔断状态不再无条件清零 —— 原实现每次进详情页都把
-  //   cloudBreaker 的 10 分钟熔断窗口强行复位，熔断器对详情页近似失效（云函数真挂时
-  //   每次请求都先失败一次再回退直连的额外开销）。现改为：
-  //     - LIQ_FAILURES / slugMapCache（本模块会话级）保持每次清零（模拟器旧状态兜底，原行为）；
-  //     - cloudBreaker 熔断状态仅在 force（用户显式刷新/轮询主动重试）时复位——
-  //       属「明确想再试一次云」的语义，与 breaker 10 分钟自动过期互补。
+  //   cloudBreaker 的 10 分钟熔断窗口强行复位，熔断器对详情页近似失效。
+  //   ⚠️ 2026-10-12（P1-4）：cloudBreaker 已整体删除（恒开、误导）；本节仅保留 LIQ_FAILURES /
+  //   slugMapCache 的会话级清零（模拟器旧状态兜底）。EF 失败由 supabaseClient per-action 熔断负责。
   LIQ_FAILURES = 0;
-  if (!!(opts && opts.force)) {
-    try { wx.setStorageSync('dota2_cloud_cb', { broken: false, fails: 0 }); } catch (e) {}
-  }
   slugMapCache = null;
 
   // ★ 2026-08-11：多页面赛事（如 TI）的主页面可能不含 {{Match}} 模板（对阵在 Group_Stage 子页面）。
@@ -658,7 +653,7 @@ function getScheduledMatches(name, opts) {
     if (steamTried) return null;
     steamTried = true;
     if (!leagueId) return null;
-    if (typeof wx === 'undefined' || !wx.cloud || !(cloudProxy.isAvailable() || cloudProxy.efAvailable())) return null;
+    if (typeof wx === 'undefined' || !wx.cloud || !cloudProxy.efAvailable()) return null;
     return cloudProxy.steamLeagueScheduledProxy(leagueId, force).then(function (res) {
       var norm = normalizeScheduled(res);
       // Steam 命中（有 LIVE 或 UPCOMING 数据）→ 直接返回
@@ -728,7 +723,7 @@ function getScheduledMatches(name, opts) {
     });
   }
 
-  if (typeof wx !== 'undefined' && wx.cloud && (cloudProxy.isAvailable() || cloudProxy.efAvailable())) {
+  if (typeof wx !== 'undefined' && wx.cloud && cloudProxy.efAvailable()) {
     // Steam 与 Liquipedia/haglund 并行拉取，合并两源的 matches（互补覆盖 LIVE/UPCOMING）
     var steamPromise = trySteamFirst();
     var liqPromise = fetchLiquipediaChain();

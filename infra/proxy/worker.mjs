@@ -71,7 +71,7 @@ const CORS = {
   'Access-Control-Allow-Origin': '*',            // 只读代理、不带凭据 ⇒ 放开便于浏览器自测
   'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type,Authorization,apikey,Prefer,Range,X-Trim',
-  'Access-Control-Expose-Headers': 'Content-Range'
+  'Access-Control-Expose-Headers': 'Content-Range, X-Proxy-Cache, X-Proxy-Trim'
 };
 
 // 模块级短路缓存（isolate 内有效）
@@ -90,19 +90,57 @@ function passHeaders(src, keep) {
   return out;
 }
 
+// ★★ P1-12（2026-10-12）：**轻量速率限制**（按调用方 IP 的固定窗口计数，模块内存）。
+//   背景：EF 均为 `--no-verify-jwt` 部署且**无任何频控**（本文件原先只有函数名白名单）
+//   ⇒ 中转可被当跳板，单客户端可刷爆上游 OpenDota / Supabase 配额。
+//   ⚠️ **默认关闭**：`env.PROXY_RATE_LIMIT_MAX`（每分钟/每 IP）缺省 0 = 不限流。
+//      关闭的诚实理由：限流依赖调用方 IP 头，而本中转**当前部署在 Deno Deploy**，
+//      它是否注入 `CF-Connecting-IP` / `x-forwarded-for` **尚未在真机核实**；取不到 IP 时
+//      所有客户端会共用同一个 'unknown' 桶 ⇒ **可能误伤正常用户**。
+//      ⇒ 随代码上线（可本地测、可控），待确认 IP 头存在后由用户打开该 env（改一个变量）。
+//   ⚠️ `/healthz` **天然豁免**（在上方分支已 return）—— 探活/开机体检不得被限流限死。
+const _rl = new Map();   // ip -> { win, n }
+function clientIp(request) {
+  try {
+    return request.headers.get('CF-Connecting-IP')
+      || (request.headers.get('X-Forwarded-For') || '').split(',')[0].trim()
+      || 'unknown';
+  } catch (e) { return 'unknown'; }
+}
+function rateLimited(request, env, now) {
+  const max = parseInt((env && env.PROXY_RATE_LIMIT_MAX) || '0', 10) || 0;
+  if (max <= 0) return false;                       // 未启用（默认）
+  const win = Math.floor(now / 60000);
+  const ip = clientIp(request);
+  let e = _rl.get(ip);
+  if (!e || e.win !== win) { e = { win, n: 0 }; _rl.set(ip, e); }
+  e.n++;
+  // 防内存膨胀：条目过多时清掉非当前窗口
+  if (_rl.size > 10000) { for (const [k, v] of _rl) { if (v.win !== win) _rl.delete(k); } }
+  return e.n > max;
+}
+
 /**
- * 「按需裁剪」条数：`?recent=N` 或请求头 `X-Trim: N`，两者取其一（**默认 0 = 不裁**）。
- * ★ 设计取舍：**默认不裁 ⇒ 零回归**。只有显式声明"只要近期"的调用才裁
- *   （由 `infra/proxy/DEPLOY.md` 与问题A复核意见记录：team-detail/h2h 需要全量，不能裁）。
+ * 「按需裁剪」解析：`?recent=N` 或请求头 `X-Trim: N`，两者取其一。
+ * ★ P0-1 C（2026-10-12）语义升级 —— **区分「未声明」与「显式不裁」**：
+ *   · 未声明（既无 `recent` 也无 `X-Trim`）→ `{n:0, declared:false}` ⇒ 交由默认白名单（见 DEFAULT_TEAM_TRIM）；
+ *   · 显式 `?recent=0` / `X-Trim: 0`（或负数）→ `{n:0, declared:true}` ⇒ **明确要全量，豁免默认裁剪**。
+ *   ⇒ 这样「后台补全量」这类调用可主动声明全量，而未来漏声明的调用点被默认值兜住（零回归保证靠显式豁免）。
  * 上限 500，避免被传巨大值当"绕过"。
  */
-function trimOf(request, url) {
-  let raw = url.searchParams.get('recent');
-  if (!raw) { try { raw = request.headers.get('X-Trim'); } catch (e) { raw = null; } }
+function trimInfo(request, url) {
+  let raw = null, declared = false;
+  if (url.searchParams.has('recent')) { raw = url.searchParams.get('recent'); declared = true; }
+  else { try { const h = request.headers.get('X-Trim'); if (h !== null && h !== '') { raw = h; declared = true; } } catch (e) {} }
+  if (!declared) return { n: 0, declared: false };
   const n = parseInt(raw, 10);
-  if (!isFinite(n) || n <= 0) return 0;
-  return Math.min(n, 500);
+  if (!isFinite(n) || n <= 0) return { n: 0, declared: true };   // 显式不裁
+  return { n: Math.min(n, 500), declared: true };
 }
+
+// ★ P0-1 C：端点级**默认裁剪白名单** —— 调用方未声明时的保守默认
+//   （避免未来新调用点重蹈"拉 480KB 全量 ⇒ 超时"覆辙）。需要全量的调用用 `X-Trim: 0` 显式豁免。
+const DEFAULT_TEAM_TRIM = 300;
 
 /** 带超时 + 1 次重试的上游请求（仅 5xx/网络异常重试） */
 async function fetchUpstream(url, init, label) {
@@ -142,10 +180,11 @@ function forward(r) {
   return new Response(r.body, { status: r.status, headers: headers });
 }
 
-function textResponse(body, status, ct, cr, cacheState) {
+function textResponse(body, status, ct, cr, cacheState, extra) {
   const h = Object.assign({}, CORS, { 'Content-Type': ct || 'application/json' });
   if (cr) h['Content-Range'] = cr;
   if (cacheState) h['X-Proxy-Cache'] = cacheState;
+  if (extra) Object.assign(h, extra);   // ★ P0-1：裁剪/过滤回执头（X-Proxy-Trim）
   return new Response(body, { status: status, headers: new Headers(h) });
 }
 
@@ -189,6 +228,9 @@ async function handle(request, env) {
   }
 
   try {
+    // ★ P1-12：速率限制（默认关闭，见 rateLimited 注释；/healthz 已在上方 return ⇒ 天然豁免）
+    if (rateLimited(request, env, Date.now())) return json({ error: 'rate limited' }, 429);
+
     // ─────────────── ① Supabase Edge Function：/sb/functions/v1/<name> ───────────────
     let m = /^\/sb\/functions\/v1\/([A-Za-z0-9_-]+)\/?$/.exec(path);
     if (m) {
@@ -249,7 +291,13 @@ async function handle(request, env) {
       const rest = path.slice('/od/api/'.length);
       if (!/^[A-Za-z0-9_\/.-]+$/.test(rest)) return json({ error: 'bad path' }, 400);
 
-      const ck = 'od|' + rest + (url.search || '') + '|t' + trimOf(request, url);
+      // ★ P0-1 C：**先算「有效裁剪量」再入缓存键** —— 否则「默认裁 300」与「显式不裁」会共用同一 `t0` 键 ⇒ 缓存污染。
+      const ti = trimInfo(request, url);
+      const vs = (url.searchParams.get('vs') || '').trim();   // ★ P0-1 B′：双方交锋过滤
+      const isTeamMatches = /^teams\/[^\/]+\/matches$/.test(rest);
+      const effTrim = ti.n > 0 ? ti.n
+        : (isTeamMatches && !ti.declared && !vs ? DEFAULT_TEAM_TRIM : 0);
+      const ck = 'od|' + rest + (url.search || '') + '|t' + effTrim;
       const ttl = TTL[rest] || TTL['default'];
       const hit = _cache.get(ck);
       if (hit && hit.exp > Date.now()) {
@@ -272,25 +320,32 @@ async function handle(request, env) {
         return forward(r);   // 非数组（异常响应）⇒ 原样透传，别自作主张
       }
 
-      // ★★ 2026-10-10（问题A 修法①·按需裁剪，**默认不裁 ⇒ 零回归**）
-      //   背景：实测 `/teams/<id>/matches` **480KB / 21~37s**，远超客户端 12s 口径 ⇒ 必超时。
-      //   但**不能无差别裁**：`subpackages/detail/team-detail` 用它算 `totalMatches` + 分页翻页，
-      //   `subpackages/detail/h2h` 用它按对手过滤算**历史交锋** ⇒ 裁了会漏数据。
-      //   ⇒ 只对**显式声明"只要近期"**的调用裁剪：`?recent=N` 或请求头 `X-Trim: N`。
-      //   （关注流/赛事页只需近期 ⇒ 可安全带此标记；team-detail/h2h 不带 ⇒ 拿全量 ✓）
-      const trim = trimOf(request, url);
-      const isTeamMatches = /^teams\/[^\/]+\/matches$/.test(rest);
-      if (isTeamMatches && trim > 0 && r.ok) {
+      // ★★ 2026-10-10（问题A 修法①·按需裁剪）／2026-10-12（P0-1 B′ + C）
+      //   背景：实测 `/teams/<id>/matches` **480KB**，远超上游 12s 口径 ⇒ 全量易超时。
+      //   ★ P0-1 B′：`?vs=<id>` ⇒ 端点级「双方交锋」过滤（全历史 A∩B，语义精确、payload 极小）。
+      //   ★ P0-1 C：未声明（无 `recent`/`X-Trim`）且非 `vs` ⇒ **默认裁 DEFAULT_TEAM_TRIM(300)** 兜底；
+      //     需要全量的调用（team-detail 后台补全量）用 `X-Trim: 0` **显式豁免**（`trimInfo.declared`）。
+      if (isTeamMatches && r.ok && (effTrim > 0 || vs)) {
         let data = null;
         try { data = await r.json(); } catch (e) { data = null; }
         if (Array.isArray(data)) {
-          // OpenDota 该端点按时间倒序 ⇒ 取**前 N 条 = 最近 N 场**（不改字段、不改形状）
-          const kept = data.slice(0, trim);
+          let kept = data;
+          let receipt = '';
+          if (vs) {
+            // ★ P0-1 B′（2026-10-12）：只回 `opposing_team_id === vs` 的对局 = **全历史 A∩B**（语义精确，
+            //   不受客户端 recent 窗口限制）。客户端仍保留同条件过滤 ⇒ **中转未部署新版（忽略 vs）也零回归**。
+            kept = data.filter((x) => x && String(x.opposing_team_id) === vs);
+            receipt = 'vs:' + kept.length;
+          } else {
+            // OpenDota 该端点按时间倒序 ⇒ 取**前 N 条 = 最近 N 场**（不改字段、不改形状）
+            kept = data.slice(0, effTrim);
+            receipt = 'recent:' + kept.length;
+          }
           const body = JSON.stringify(kept);
           _cache.set(ck, { exp: Date.now() + ttl, body: body, status: 200, ct: 'application/json', cr: null });
-          console.log('[proxy] OD ' + rest + ' → 裁剪 ' + data.length + '→' + kept.length + ' 场（原 ' +
+          console.log('[proxy] OD ' + rest + ' → ' + receipt + '（原 ' +
             Math.round(JSON.stringify(data).length / 1024) + 'KB）');
-          return textResponse(body, 200, 'application/json', null, 'MISS');
+          return textResponse(body, 200, 'application/json', null, 'MISS', { 'X-Proxy-Trim': receipt });
         }
         return forward(r);
       }

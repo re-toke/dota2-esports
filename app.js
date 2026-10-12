@@ -9,6 +9,8 @@ const auth = require('./utils/auth.js');
 // ★ 2026-08-11 方案 E：迁移老用户 fakeId 关注记录到真实 leagueId
 const follow = require('./utils/follow.js');
 const curation = require('./utils/curation.js');
+// ★ 2026-10-12（P1-2 双出口）：开机「通道体检」——并发探候选中转宿主 /healthz 选可达出口。
+const endpoints = require('./utils/endpoints.js');
 
 // 方案 E 一次性幂等迁移：将 follow.leagues 中的负数 fakeId 关注记录迁移到真实 leagueId。
 // 幂等：已迁移过的真实 id 不会被重复处理；无 curation 真实 id 对应的 fakeId 原样保留。
@@ -54,6 +56,10 @@ App({
     // 避免 onLaunch 同步阶段堆满 wx.getStorageSync / JSON.parse / 云调用而触发长任务告警。
     // 页面已用 heroReady / itemReady 守卫，延迟填充不影响首屏与交互。
     setTimeout(() => {
+      // ★ 2026-10-12（P1-2 开机通道体检）：并发探测候选中转宿主 /healthz，结果**异步**写回
+      //   utils/endpoints.js 作为首选出口（不阻塞首屏、失败静默）。①单出口时 no-op（当前状态）；
+      //   ②探活本身也要 ~10s（本项目「小程序→中转」固定开销）⇒ 必须异步生效，不可阻塞首屏。
+      try { endpoints.probe(); } catch (e) {}
       // §6.4 启动时清理过期/超限缓存（LRU prune），释放存储空间
       // ★ 2026-09-25：启动期改用**分片版** prune（原同步版会一次阻塞 ~900ms ✗）；
       //   写入路径（cache.set 内部）仍用同步 prune ✓ —— 那条路径依赖"返回时空间已腾出" ✓
@@ -62,8 +68,9 @@ App({
       //   云函数/云数据库/云存储均已退役（客户端 0 处 wx.cloud.* 调用，已全库核查 ✓），
       //   再调用 wx.cloud.init() 只会去初始化一个**正在关闭/已关闭**的云环境 ✗
       //   （真机启动期 `[Violation] 'setTimeout' handler took 410ms` 的高度可疑来源 ✓）。
-      //   ⚠️ 保留 config.cloudProxy.enabled **不动** —— 该 flag 现被 cloudProxy/api 的
-      //      `breaker.isAvailable(...)` 用作 **Supabase EF 熔断闸门** ✓（名字已名不副实，但改名风险高 ✓）
+      //   ⚠️ 保留 config.cloudProxy.enabled **不动** —— 2026-10-12（P1-4）已删除 cloudBreaker 全局闸门；
+      //      该 flag 现仅用于「是否尝试走 EF」的开关（app.js / stratz.js / steam.js），
+      //      EF 可用性本身由 cloudProxy.efAvailable() 判定。
       // 远程 curation（若配置 url）后台静默加载，失败不阻塞
       remoteCuration.load();
       api.getHeroes()

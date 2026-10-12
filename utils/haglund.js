@@ -332,11 +332,11 @@ function fetchUpcoming(opts) {
   //    云代理不可用（未开云开发/熔断）时直接走直连（开发态 urlCheck:false 可用；
   //    正式版直连会被白名单拦截，属预期——此时靠 stale 缓存兜底）。
   function fetchRaw() {
-    if (typeof wx !== 'undefined' && wx.cloud && (cloudProxy.isAvailable() || cloudProxy.efAvailable())) {
+    if (typeof wx !== 'undefined' && wx.cloud && cloudProxy.efAvailable()) {
       return cloudProxy.haglundUpcomingProxy(false)
         .then(function (data) { return { data: data, source: 'cloud' }; })
         .catch(function (e) {
-          // 云代理失败（超时不计熔断，breaker 内部已处理）→ 回退直连
+          // 云代理失败（EF 只有 per-action 熔断，内部已处理）→ 回退直连
           console.info('[haglund] 云代理失败，回退直连:', (e && e.message) || e);
           return rawRequest();
         });

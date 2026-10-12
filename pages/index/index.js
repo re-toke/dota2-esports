@@ -664,8 +664,8 @@ Page({
   // ★ v8.12（S3）：stale LP 数据后台 force 刷新。
   //   触发：本轮 LP 渲染数据带 _stale 标记（本地赛程缓存 >5min 旧）。旧值已秒开渲染，
   //   此处后台 force 重拉最新排期，完成后二次渲染转新（用户无感知，卡片原地更新）。
-  //   节流：距上次 force >5min 且每会话最多 2 次——force 会复位 cloudBreaker
-  //   （liquipedia.js 入口处复核确认），限次防云函数真挂时反复打破熔断保护。
+  //   节流：距上次 force >5min 且每会话最多 2 次——原 force 会复位 cloudBreaker（已于
+  //   2026-10-12 删除，见 P1-4）；限次仍保留，防 EF 真挂时反复重试。
   _refreshStaleLp(myEpoch) {
     const nowMs = Date.now();
     if (this._lpForceCount >= 2) return;

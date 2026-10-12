@@ -281,27 +281,42 @@ Page({
       });
   },
 
+  // ★ P0-1 A（2026-10-12）：**两阶段加载** —— 先 `?recent=N` 快出（秒开），再后台补全量。
+  //   背景：全量 `/teams/<id>/matches` 实测 480KB（远超上游 12s 口径）⇒ 单次全量会让本页超时。
+  //   语义：`totalMatches` / 完整分页 / `buildH2h` 依赖全量 ⇒ 阶段 2 到达后**覆盖**为全量结果；
+  //         阶段 1 先按「最近 N 场」渲染（分页在 N 内可达），全量失败则保留 recent 视图（可接受降级）。
   loadMatches() {
+    const seq = (this._matchSeq = (this._matchSeq || 0) + 1);
     this.setData({ matchLoading: true });
-    return api.getTeamMatches(this.data.teamId)
-      .then((list) => {
-        this.allMatches = (list || []).map((m) => this.fmtMatch(m));
-        const pageSize = config.pageSize;
-        const slice = this.allMatches.slice(0, pageSize);
-        const at = api.fetchedAtOf('teamMatches', this.data.teamId) || this.data.updatedAt;
-        // 合并 4 次 setData → 1 次（含 H2H 聚合）
-        this.setData({
-          totalMatches: this.allMatches.length,
-          matches: slice,
-          matchPage: 0,
-          matchHasMore: this.allMatches.length > slice.length,
-          matchLoading: false,
-          h2hList: this.buildH2h(this.allMatches),
-          updatedAt: at,
-          updatedLabel: util.formatAgo(at)
-        });
-      })
-      .catch(() => this.setData({ matchLoading: false }));
+    const apply = (list) => {
+      if (seq !== this._matchSeq) return;   // 页面已离开 / 已发起新加载 ⇒ 丢弃过期结果
+      this.allMatches = (list || []).map((m) => this.fmtMatch(m));
+      const pageSize = config.pageSize;
+      const slice = this.allMatches.slice(0, pageSize);
+      const at = api.fetchedAtOf('teamMatches', this.data.teamId) || this.data.updatedAt;
+      // 合并 4 次 setData → 1 次（含 H2H 聚合）
+      this.setData({
+        totalMatches: this.allMatches.length,
+        matches: slice,
+        matchPage: 0,
+        matchHasMore: this.allMatches.length > slice.length,
+        matchLoading: false,
+        h2hList: this.buildH2h(this.allMatches),
+        updatedAt: at,
+        updatedLabel: util.formatAgo(at)
+      });
+    };
+    // 阶段 1：最近 N 场（走中转裁剪，快）
+    return api.getTeamMatches(this.data.teamId, { recent: api.RECENT_TEAM_MATCHES })
+      .then((recentList) => apply(recentList))
+      .catch(() => {})
+      .then(() => {
+        if (seq !== this._matchSeq) return null;
+        // 阶段 2：后台补全量（totalMatches / 完整分页 / buildH2h）；失败保留阶段 1 视图
+        return api.getTeamMatches(this.data.teamId)
+          .then((full) => apply(full))
+          .catch(() => { if (seq === this._matchSeq) this.setData({ matchLoading: false }); });
+      });
   },
 
   // 对战记录聚合：按对手 team_id 分组统计胜负。

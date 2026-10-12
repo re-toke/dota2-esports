@@ -24,9 +24,9 @@
  * ## 凭据（与 fetch-liquipedia-upcoming.js 同一套，已在 GitHub Secrets 配好）
  *   SUPABASE_URL + SUPABASE_SERVICE_KEY —— 直连 PostgREST 写 `curation_meta`；
  *   ⚠️ `curation_meta` 的 RLS 只有 `anon_read_meta`（只读）⇒ **客户端写不了**，必须 CI/服务端写。
- *   ⛔ **不可**回退 EF `admin-write` 的 `updateMeta` —— 实测它把 key **硬编码**为 `ti_contestant_ids`，
- *      任何调用方传别的 key 都会**写坏该行**（TI 参赛选手数据）。故本脚本只允许 service key 写库。
- *      EF 修正建议：`key: String(params.key || 'ti_contestant_ids')` + 必填校验。 */
+ *   ★ 2026-10-12（P1-12 已修）：EF `admin-write` 的 `updateMeta` **key 已参数化**
+ *     （`{ key, value }`，key 必填；原先硬编码 `ti_contestant_ids` ⇒ 传别的 key 会写坏该行）。
+ *     本脚本仍**直接走 service key 写库**：本报告是 CI 侧运维数据，不经管理令牌（ADMIN_TOKEN）。 */
 'use strict';
 
 const path = require('path');
@@ -96,12 +96,11 @@ async function writeMeta(report) {
     if (!res.ok) throw new Error('upsert HTTP ' + res.status + ' ' + (await res.text()).slice(0, 200));
     return 'service_key';
   }
-  // ② ⛔ **不使用 EF `admin-write` 的 `updateMeta` 作回退** ——
-  //   实测该 operation 把 key **硬编码**为 `'ti_contestant_ids'`（`admin-write/index.ts` 的 case 'updateMeta'），
-  //   即：**任何调用方传别的 key 都会覆盖 TI 参赛选手数据**（静默写坏数据）。
-  //   ⇒ 在 EF 修正前，本脚本**只允许 service key 写库**；本地手动跑请显式设 `SUPABASE_SERVICE_KEY`。
-  //   ★ 该缺陷已记录，建议 EF 改为 `key: String(params.key || 'ti_contestant_ids')` 并加校验。
-  throw new Error('缺少 SUPABASE_SERVICE_KEY（CI 已配）。注意：不可用 EF updateMeta —— 它把 key 硬编码为 ti_contestant_ids，会写坏该行数据');
+  // ② 不使用 EF `admin-write` 的 `updateMeta` 作回退 ——
+  //   本脚本是 **CI 侧运维写入**，只走 service key（不依赖管理令牌 ADMIN_TOKEN）。
+  //   （★ 2026-10-12 P1-12：EF 侧 key 硬编码缺陷**已修**，`updateMeta` 现为 `{ key, value }` 参数化；
+  //     但其鉴权口径是管理令牌，与本脚本的凭据模型不同，故仍不串用。）
+  throw new Error('缺少 SUPABASE_SERVICE_KEY（CI 已配）；本地手动跑请显式设置该环境变量');
 }
 
 (async () => {

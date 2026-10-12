@@ -5,9 +5,11 @@
 # 项目已决定「接受 EF 单点」（不再依赖云开发做兜底）。代价是：EF 挂了 = 小程序核心
 # 功能不可用。所以**故障必须能被及时发现**，否则是「用户先发现」。
 #
-# ## 告警通道（零成本）
-# 本 job 失败 → GitHub 自动发失败通知邮件给仓库 owner。
-# 不需要接任何第三方告警服务。
+# ## 告警通道
+# ① 主通道（零成本）：本 job 失败 → GitHub 自动发失败通知邮件给仓库 owner。
+# ② ★ 2026-10-12（P1-13）二级通道：若配置了 `ALERT_WEBHOOK`（飞书群机器人），
+#    失败时会额外推一条 Webhook 消息（见 scripts/ops/notify-alert.js）。
+#    动机：GH scheduled 实测会被丢弃/延迟 5~7h，且"job 失败邮件"极易被淹没。
 #
 # ## 探测口径（见 scripts/ops/probe-ef.js）
 # 「EF 活着」= 有任何 HTTP 响应（含 400/401，只证明函数被调度起来）。
@@ -40,8 +42,26 @@ jobs:
           node-version: '20'
 
       - name: Probe Edge Functions
+        id: probe
+        continue-on-error: true
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-        # 退出码 1 = 有 EF 故障 → job 失败 → GitHub 发失败通知（这就是告警）
+        # 退出码 1 = 有 EF 故障 → job 失败 → GitHub 发失败通知
         run: node scripts/ops/probe-ef.js
+
+      # ★ P1-13（2026-10-12）：**二级告警通道** —— 不再只依赖"GitHub job 失败邮件"
+      #   （实测 scheduled 会被丢弃/延迟 5~7h，且邮件易被淹没）。
+      #   未配 `ALERT_WEBHOOK` 时脚本自行跳过，不会制造第二个失败。
+      - name: Notify on failure (webhook)
+        if: steps.probe.outcome == 'failure'
+        env:
+          ALERT_WEBHOOK: ${{ secrets.ALERT_WEBHOOK }}
+        run: node scripts/ops/notify-alert.js "EF 健康探测失败（见 EF Health Check 日志）"
+
+      # 保持原语义：探测失败 ⇒ job 失败（GitHub 邮件仍是兜底通道）
+      - name: Propagate failure
+        if: steps.probe.outcome == 'failure'
+        run: |
+          echo "::error::EF 探测失败（已尝试 Webhook 告警）"
+          exit 1

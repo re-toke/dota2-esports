@@ -3,9 +3,8 @@
 //
 // 用途：客户端在「数据为空」时区分「数据源暂不可用」与「赛事确实无数据」，
 //       避免 Liquipedia / OpenDota 链路异常时静默降级让用户误以为没数据。
-// 实现：调云函数 health action（云端轻量探测 Liquipedia / OpenDota 可达性），
-//       本地 TTL 缓存结果（5min）控制调用频率；云函数不可用/失败时静默返回
-//       unknown（不阻断业务），由调用方决定是否展示提示。
+// 实现：调 EF health action（经中转 → opendota-proxy，探测 OpenDota 可达性；Liquipedia 记 unknown），
+//       本地 TTL 缓存结果（5min）控制调用频率；失败时静默返回 unknown（不阻断业务）。
 //
 // 对外 API：
 //   - getStatus()           → 同步读缓存状态（{ ts, sources, ok } 或 null）
@@ -28,9 +27,9 @@ function getStatus() {
   }
 }
 
-// 异步探测（云函数 health action），成功后写缓存；失败静默返回 null
+// 异步探测（EF health action），成功后写缓存；失败静默返回 null
 function check() {
-  if (!cloudProxy.isAvailable()) return Promise.resolve(null);
+  if (!cloudProxy.efAvailable()) return Promise.resolve(null);
   return cloudProxy.health()
     .then(function (data) {
       if (data && data.sources) cache.set(KEY, data, TTL);

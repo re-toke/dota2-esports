@@ -1,68 +1,28 @@
 // utils/cloudProxy.js
-// CloudBase 云函数代理层：当 config.cloudProxy.enabled 时，优先通过云函数调用
+// Supabase EF 代理层：当 config.supabase 可用时，优先通过 Edge Function 调用
 // OpenDota / STRATZ / Steam / Liquipedia（国内加速 + 共享缓存 + key 不上客户端），
-// 云函数不可用时静默回退到 api.js / stratz.js / steam.js / liquipedia.js 直连。
+// EF 不可用时静默回退到 api.js / stratz.js / steam.js / liquipedia.js 直连。
 //
 // 本文件统一导出两类接口：
 //   1) 与 api.js 方法对齐的代理方法（getLeagues / getMatch …）—— 调用方无需感知底层。
 //   2) 通用 call(action, params) + 各源的便捷方法（steamProxy …）。
 //
-// 熔断逻辑见 utils/cloudBreaker.js（独立模块，避免与 api.js 循环依赖）。
+// ⚠️ 2026-10-12（P1-4）：原 `cloudBreaker` 全局闸门**已删除**（其 markFailure/markSuccess 全仓 0 调用
+//   ⇒ 闸门恒开、只是误导）。EF 可用性改用下方 `_sbEfAvailable()`；EF 失败由 supabaseClient 的
+//   per-action 熔断（name|action）负责。详见 v1.2.1 P1-4。
 
 const api = require('./api.js');
 const config = require('./config.js');
-const breaker = require('./cloudBreaker.js');
-
-const THRESHOLD = (config.cloudProxy && config.cloudProxy.circuitBreakerThreshold) || 0;
-
-function isAvailable() {
-  return breaker.isAvailable(config.cloudProxy && config.cloudProxy.enabled, THRESHOLD);
-}
 
 // 通用云函数调用：返回 Promise<data>；失败（含熔断）reject，由调用方决定回退。
 // 2026-08-03 优化（A3 force 链路）：call 增加可选 extra 参数，
 // 透传云函数顶层字段（如 { force: true }，云函数入口读 e.force）。
 // 现有调用不传 extra，行为完全不变（向后兼容）。
 //
-// ★ 2026-09-01（P0-2）：客户端超时兜底 —— wx.cloud.callFunction 无原生 abort 且默认超时很长，
-//   云函数冷启动/排队时页面会无限白屏。按 action 分类设客户端超时：
-//   - 读缓存/轻量 action（getLeagues 等）：8s
-//   - 实时抓取 action（liquipediaScheduledMatches / steamLeagueScheduled）：12s
-//   超时后 reject（err.isTimeout=true）走既有 direct 回退链；callFunction 本身无法 abort，
-//   晚到的结果因 Promise 已 settle 被自然丢弃（调用方 gen 代际已是第二道防线）。
-//   ★ 超时 ≠ 源故障：不计 breaker.markFailure —— 冷启动慢是正常抖动，
-//   计入会把 3 次慢启动误判成熔断 10 分钟全量回退直连（比慢更糟）。
-//   端到端预算：超时后 direct 侧还有 12s 请求超时 + 退避重试，最坏 ~25s 落 stale 兜底，
-//   与列表页/「即将」tab 的 8s 超时口径统一。
-var ACTION_TIMEOUT_MS = {
-  _default: 8000,
-  // 云端需现场抓 Liquipedia wikitext（2-4s）或 Steam 签名转发的实时 action
-  steamLeagueScheduled: 12000,
-  liquipediaFetchRawWikitext: 12000,
-  // P0-C1（2026-09-01）：haglund 云代理 —— 云端现场拉 Cloudflare Workers（1-3s），归实时类 12s
-  haglundUpcoming: 12000,
-  // ★★ 2026-10-10（死代码清理）：已删除 3 条**无调用点**的条目 —— `liquipediaScheduledMatches` /
-  //   `liquipediaLeagueMeta` / `liquipediaTeamLogo`（对应的 wrapper 同批删除，详见 proxy 段注释）。
-  // P0-3③（2026-09-01）：详情页聚合 bundle —— 云端含 OD 现抓 + explorer。
-  // ★ 2026-09-01（详情页 13s 修复）：12s → 8s。云函数端 OD 子任务已改短超时单次尝试
-  //   （最坏 6s 快速失败），bundle 整体 8s 内必回；超时回退旧链（getLeagueMatches direct
-  //   有 30min cachedFresh 缓存，比干等 bundle 更快拿数据）。
-  getLeagueDetailBundle: 8000
-};
-
-function timeoutFor(action) {
-  // ★★ 2026-10-10（实测驱动的修复）：**统一抬到 20s 下限**。
-  //   依据（开发者工具隔离测量，真实 wx.request 并发 6 个）：
-  //     `/healthz`（纯本地 JSON、不碰任何上游）**也要 10885ms**，其余 18~23s；
-  //     而**同一台中转用 node 打只要 0.8~4s**（全部 200）⇒ 慢在「小程序 → 中转」这条路径，
-  //     不是中转、也不是 Supabase/OpenDota。
-  //   ⇒ 原 `_default: 8000` / 实时类 `12000` 会把**全部** EF 调用判成超时
-  //     （这就是「赛事详情页 对局/队伍/排名 全空」的直接原因：日志 15 × request:fail timeout）。
-  //   ⚠️ 代价（已知并接受）：真正失败时用户多等约 8~12s；当前失败态本就是"页面空 + 可下拉重试"。
-  //   ⚠️ 后续应**用真机复测**：若真机没有这 ~10s 基线，可再回调（本改动对快路径无副作用）。
-  var FLOOR = 20000;
-  return Math.max((ACTION_TIMEOUT_MS[action] != null) ? ACTION_TIMEOUT_MS[action] : ACTION_TIMEOUT_MS._default, FLOOR);
-}
+// ⚠️ 2026-10-12（P1-5 清死代码）：原 `ACTION_TIMEOUT_MS` 与 `timeoutFor()` **已删除** —— 二者全仓无调用点，
+//   唯一影响是制造「超时受控」的假象。EF 路径的真实超时由 utils/supabaseClient.js `edge()` 的
+//   `wx.request timeout=25000` 决定；直连路径由 api.js `REQUEST_TIMEOUT_MS=20000` 决定。
+//   详见 deliverables/优化方案-数据加载-后端-代码-2026-10-10.md v1.2.1 的 P1-5 / BUG-B。
 
 // ===== M2.4（2026-09-09）：Supabase 数据代理路由 =====
 // supabase.enabled=true 时，下列 action 走 Supabase Edge Function（香港，带 Postgres 缓存），
@@ -89,6 +49,8 @@ var EDGE_ACTIONS = {
   getHeroes: 'opendota-proxy',
   getProMatches: 'opendota-proxy',
   getLiveMatches: 'opendota-proxy',
+  // ★ 2026-10-12（BUG-A 接线）：数据源健康探测 —— opendota-proxy 新增 health action（探 OpenDota 可达性）
+  health: 'opendota-proxy',
   // Steam / STRATZ / Liquipedia 薄代理
   steamProxy: 'steam-proxy',
   steamLeagueScheduled: 'steam-proxy',
@@ -197,10 +159,17 @@ function _efCall(action, efName, sbPayload) {
   });
 }
 
+// ★ P1-6（2026-10-12）：热缓存过期的**后台刷新去重** —— 原实现每个调用点都各触发一次
+//   `_efRefresh`（首页/赛事页多个热 action 调用点在陈旧窗口内并发 ⇒ 同一 action 重复打 EF）。
+//   守卫按 action 粒度（本模块热缓存本就是按 action 存的，与 HOT_ACTIONS 同键）。
+var _efRefreshInFlight = {};
 // 后台静默刷新（不阻塞调用方；失败静默——旧值仍可用）
 function _efRefresh(action, efName, sbPayload) {
+  if (_efRefreshInFlight[action]) return;
+  _efRefreshInFlight[action] = true;
   console.info('[cloudProxy] 热缓存过期 ' + action + ' → 后台刷新');
-  _efCall(action, efName, sbPayload).catch(function () { /* 静默：旧值仍可用 */ });
+  var done = function () { delete _efRefreshInFlight[action]; };
+  _efCall(action, efName, sbPayload).then(done, done);
 }
 // ★★ 2026-09-22（微信云开发脱离）：原 `callCloud`（云函数直调）**已移除**。
 //   EF 是唯一后端；调用方在 EF 不可用时各自兜底。
@@ -225,7 +194,7 @@ const PARAM_MAP = {
 function wrap(methodName) {
   return function () {
     var args = arguments;
-    if (!isAvailable()) {
+    if (!_sbEfAvailable()) {
       return api[methodName].apply(api, args);
     }
     var params = (PARAM_MAP[methodName] || function () { return {}; }).apply(null, args);
@@ -294,8 +263,8 @@ proxy.leagueDetailBundle = function (leagueId, force) {
   return call('getLeagueDetailBundle', { leagueId: leagueId }, force ? { force: true } : null);
 };
 
-// 数据源健康检查（2026-08-11 长期架构改进落地）：
-// 调云函数 action=health，云端轻量探测 Liquipedia / OpenDota 可达性，
+// 数据源健康检查（2026-08-11 长期架构改进落地；★ 2026-10-12 BUG-A 接线修复）：
+// 调 EF `health` action（经 EDGE_ACTIONS → opendota-proxy），服务端探测 OpenDota 可达性，
 // 返回 { ts, sources: { liquipedia: {status,latencyMs}, opendota: {...} }, ok }。
 // 客户端在「数据为空」时据此区分「数据源暂不可用」与「赛事确实无数据」。
 // 失败 reject → 调用方 catch 静默降级（视为 unknown，不阻断业务）。
@@ -304,8 +273,7 @@ proxy.health = function () {
 };
 
 // 暴露给其它模块（api.js / stratz.js / leagues.js 复用）
-proxy.isAvailable = isAvailable;
-// ★ v8.25：EF 可用性（供调用方守卫使用——云熔断打开但 EF 可用时不应拦代理路径）
+// ⚠️ 2026-10-12（P1-4）：`proxy.isAvailable`（全局熔断闸门）已删除；调用方统一改用 `efAvailable`。
 proxy.efAvailable = function () { try { return _sbEfAvailable(); } catch (e) { return false; } };
 proxy.call = call;
 

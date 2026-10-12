@@ -18,7 +18,7 @@
 //   deleteEvent  { docId }  → curation_events（按 canonical_key）
 //   upsertTeam   { data }   → curation_teams（team_id）
 //   deleteTeam   { docId }  → curation_teams（按 team_id）
-//   updateMeta   { data }   → curation_meta（key = 'ti_contestant_ids'）
+//   updateMeta   { key, value } → curation_meta（★ P1-12：key 参数化，不再写死 'ti_contestant_ids'）
 //
 // ## 与云函数 adminWriteCuration 的差异
 //   · version 重算：不再持久化。客户端迁到 Supabase 直读后（阶段2-③B），
@@ -180,13 +180,19 @@ Deno.serve(async (req: Request) => {
       }
 
       case 'updateMeta': {
-        const data = params.data || {};
+        // ★★ 2026-10-12（P1-12）：key **参数化** —— 原实现把 key 硬编码为 'ti_contestant_ids'，
+        //   任何其它 key 的调用都会**静默写坏该行**（数据损坏且无报错）。
+        //   调用契约（前端 `admin/src/api/supabase.js` 的 updateMeta 已同步）：
+        //     { key: string(必填), value: any }
+        const key = String(params.key || '');
+        if (!key) return json({ success: false, error: { message: 'key 必填（禁止隐式写死）' } }, 400);
+        if (params.value === undefined) return json({ success: false, error: { message: 'value 必填' } }, 400);
         const { error } = await db.from('curation_meta').upsert(
-          { key: 'ti_contestant_ids', value: data, updated_at: new Date().toISOString() },
+          { key, value: params.value, updated_at: new Date().toISOString() },
           { onConflict: 'key' },
         );
         if (error) throw error;
-        await afterWrite({ table: 'curation_meta', key: 'ti_contestant_ids', op: 'upsert' });
+        await afterWrite({ table: 'curation_meta', key, op: 'upsert' });
         return json({ success: true, version: 'v' + Date.now(), source: 'supabase' });
       }
 

@@ -1,6 +1,36 @@
 // utils/config.js
 // 集中管理可配置项：订阅消息模板、缓存 TTL、分页大小、限流参数。
 
+// ★★ 2026-10-12（P1-2 双出口 · **唯一事实来源**）：中转候选宿主列表（主 → 备）。
+//   客户端**所有**网络出口共用同一台中转（`supabase.url` = `<host>/sb`；`utils/api.js` BASE = `<host>/od/api`），
+//   ⇒ 中转挂即全挂（文档 §14.6 单点）。本列表是「出口主机」的唯一声明点：
+//     · 主 → 备失败切换 / 会话粘滞 / 开机通道体检 由 `utils/endpoints.js` 负责；
+//     · `supabase.url` 由本列表 `[0]` 派生（改这块即改全局出口，勿在别处再写字面量）。
+//   ⚠️ **备槽**：2026-10-12 已定「**两台都加**」（用户择定 C），按下面顺序填：
+//        [1] = **Deno Deploy 新项目** —— ★★ **实测更正（2026-10-12）**：Deno 现行 scheme
+//              **一律给 `*.deno.net`**（`*.deno.dev` 是 **Deploy Classic 的旧域名**，
+//              而 Classic 已于 2026-07-20 关停 ⇒ **新项目拿不到 deno.dev**）。
+//              ⇒ 它与 [0] **同 provider + 同注册域（deno.net）+ 同 IP** ⇒
+//              **只防「主机名级 SNI 阻断」，防不了整域 / 整 provider 故障**。
+//        [2] = **Netlify Edge Function**（`*.netlify.app`，已实测国内可达）—— 因 Render 注册被
+//              风控挡在"需要银行卡"而改用本方案。⚠️ 其运行时是 **Deno**（与主出口同族）⇒
+//              只能防**域名级阻断**（`*.netlify.app` ≠ `*.deno.net`），**防不了"Deno 系整体故障"**；
+//              "真正的跨提供商"本轮因无卡未落地。
+//      ⚠️ 顺序有讲究：`probe()` 取**第一个可达**、`failover()` 取**下一个**
+//          ⇒ 响应更快的放前面（故无冷启动的 Deno 新项目排在 Render 之前）。
+//      ⚠️ **加白名单必须早于发版**：每个备域名都要先加进微信后台「request 合法域名」，
+//          否则主出口一旦抖动触发 failover，会切到**小程序连不上**的备域 ⇒ 那一跳全失败
+//          （虽有自愈：下次请求会再切回主，但会白烧一跳）。
+//      未填时 `endpoints.count()===1` ⇒ 切换/体检均为 no-op，行为与改造前等价。
+//   ⛔ **绝对不要**填占位符/假域名：`endpoints.js` 只过滤**空串**，非空的假 URL 会被当真候选
+//      ⇒ `failover()` 可能切到它、`probe()` 会去打它（等于自伤）。**拿不到真域名就留空串。**
+//   ★ 回滚：把 `[0]` 改回 'https://gkticzdaicpdtxheyxsd.supabase.co'（并把 anonKey 填回真值）。
+const PROXY_HOSTS = [
+  'https://tough-ferret-3579.re-toke.deno.net',      // [0] 主出口（Deno Deploy，现网）
+  'https://sparkly-gharial-1210.re-toke.deno.net',   // [1] 备①：Deno 新项目（同注册域/同 IP ⇒ 仅防主机名级）
+  'https://velvety-llama-a7700e.netlify.app'         // [2] 备②：Netlify（不同注册域 ⇒ 防域名级阻断；运行时是 Deno，与主出口同族）
+];
+
 module.exports = {
   // ★ 2026-09-25: per-item diagnostic log switch (**default false**).
   // Why: this project repeatedly hit "diagnostic logs left on per-item / hot paths"
@@ -209,8 +239,8 @@ module.exports = {
     // 若账号下有多个环境，必须显式填写，否则真机会报 "env not found"。
     // 填写后会传给 wx.cloud.init({ env })，保证真机/模拟器一致。
     envId: 'cloud1-d2g0wufv8f2ce3871',
-    // 连续失败达到阈值后，本会话内暂时停用云代理（避免无云环境时的持续失败开销）。
-    // 设为 0 表示不启用熔断（始终尝试云调用）。
+    // ⚠️ 2026-10-12（P1-4）：原 cloudBreaker 全局熔断已删除 ⇒ 本字段**不再被任何代码读取**
+    //   （保留仅为配置兼容）。EF 失败改由 supabaseClient 的 per-action 熔断负责（阈值 3 / 冷却 2min）。
     circuitBreakerThreshold: 3
   },
 
@@ -228,9 +258,10 @@ module.exports = {
     //   （DNS 正常解析、TLS 握手被 RST ⇒ 换 IP/DoH/hosts 全无效）⇒ 客户端改走**中转**。
     //   中转部署在境外边缘（出口在境外 ⇒ 能连上 Supabase），域名国内可达（已实测 TLS OK + 业务接口 200）。
     //   中转代码与部署/自检：`infra/proxy/`（`worker.mjs` + `DEPLOY.md`）。
-    //   ⚠️ **与 `utils/api.js` 的 `BASE` 是成对改动**（同一台中转的不同路径前缀）。
-    //   ★ 回滚：把本行改回 'https://gkticzdaicpdtxheyxsd.supabase.co'（并把 anonKey 填回真值）。
-    url: 'https://tough-ferret-3579.re-toke.deno.net/sb',
+    //   ⚠️ **不再在此写死主机名**：改为由 `PROXY_HOSTS[0]` 派生（= 与 `utils/api.js` 的 BASE
+    //      同一台宿主）。P1-2 后出口切换由 `utils/endpoints.js` 负责，运行时实际出口取其 `sbUrl()`。
+    //   ★ 回滚：改 `PROXY_HOSTS[0]`（并把 anonKey 填回真值）——单一改动点。
+    url: PROXY_HOSTS[0] + '/sb',
     // anon key（公开密钥，RLS 保护；service_role 绝不出现在客户端）
     // ★ 2026-10-10：**客户端不再持有真实 key** —— 中转会在**服务端注入**（见 infra/proxy/worker.mjs），
     //   顺带消除"客户端 key 写错/过期"这一整类故障（此前正是错的：`eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdrdGljemRhaWNwZHR4aGV5eHNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0OTI4NTIsImV4cCI6MjEwNDA2ODg1Mn0.ZzdBSKZskLI-GO-Tz3BsviNg_qNL8OhC1WV9jTJkAe8`）。
@@ -245,6 +276,13 @@ module.exports = {
     },
     // 业务 JWT 本地存储 key（wechat-auth 签发，30 天有效；follow-profile 用）
     jwtKey: 'dota2_jwt'
+  },
+
+  // ★ 2026-10-12（P1-2 双出口）：中转候选宿主（**单一事实来源**，见文件顶 `PROXY_HOSTS`）。
+  //   消费方：`utils/endpoints.js`（失败切换 + 会话粘滞 + 开机体检）；`supabase.url` 由 [0] 派生。
+  //   ⚠️ 勿在别处再写中转主机名字面量——否则「切换出口」会漏改那一处（本项目的成对改动坑）。
+  endpoints: {
+    proxy: PROXY_HOSTS
   },
 
   // 北京时间偏移（秒）。O-7（2026-08-15）：原 league-detail.js 5 处硬编码 8*3600

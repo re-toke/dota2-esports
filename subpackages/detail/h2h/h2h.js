@@ -113,13 +113,19 @@ Page({
 
   load() {
     this.setData({ loading: true, error: '' });
+    // ★ P0-1 B′（2026-10-12）：把「历史交锋」与「近期状态雷达」拆成不同来源 ——
+    //   ① 历史交锋：`?vs=<B>`（中转端点级过滤 A∩B，全历史、语义精确、payload 极小）；
+    //   ② 雷达：各自 `?recent=R`（`computeForm` 本就只取最近 30 场 ⇒ 语义不变）。
+    //   ⚠️ 客户端仍保留 `opposing_team_id===B` 过滤 ⇒ 中转未部署新版（忽略 vs/recent）时也**零回归**。
+    const FORM_WINDOW = 30;
     Promise.all([
       api.getTeam(this.teamAId),
       api.getTeam(this.teamBId),
-      api.getTeamMatches(this.teamAId),
-      api.getTeamMatches(this.teamBId)
+      api.getTeamMatches(this.teamAId, { vs: this.teamBId }),
+      api.getTeamMatches(this.teamAId, { recent: FORM_WINDOW }),
+      api.getTeamMatches(this.teamBId, { recent: FORM_WINDOW })
     ].map((p) => p.catch(() => null)))   // P3-4：单源失败降级 null，不拖垮整页（下游已有 ||{} / ||[] 兜底）
-      .then(([ta, tb, matchesA, matchesB]) => {
+      .then(([ta, tb, vsMatches, formARecent, formBRecent]) => {
         const mA = ta || {};
         const mB = tb || {};
         const teamA = {
@@ -138,9 +144,9 @@ Page({
         // ★ 2026-09-21：首帧优先用已持久化的本地队标（零网络）；未缓存则原样返回远程 URL
         teamA.logo = logoLocal.preferLocal(teamA.logo);
         teamB.logo = logoLocal.preferLocal(teamB.logo);
-        const vs = (matchesA || []).filter(
+        const vs = (vsMatches || []).filter(
           (m) => String(m.opposing_team_id) === this.teamBId
-        );
+        );   // 服务端已按 `?vs=` 过滤；此处保留同条件过滤 ⇒ 中转未部署新版时仍正确（零回归）
 
         let x = 0;
         let y = 0;
@@ -197,8 +203,8 @@ Page({
           { name: '近期密度', max: 100 },
           { name: '大赛占比', max: 100 }
         ];
-        const formA = computeForm(matchesA);
-        const formB = computeForm(matchesB);
+        const formA = computeForm(formARecent);
+        const formB = computeForm(formBRecent);
         const radarSeries = [
           { name: teamA.name, color: '#C8A951', data: formA },
           { name: teamB.name, color: '#58a6ff', data: formB }

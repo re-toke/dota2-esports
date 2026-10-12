@@ -14,6 +14,9 @@
 // - 安全：anon key 是公开密钥（RLS 保护），JWT 来自 wechat-auth 签发（WX_APPSECRET 在 EF Secrets）
 
 var config = require('./config');
+// ★ 2026-10-12（P1-2 双出口）：EF / PostgREST 的出口主机改由 endpoints 提供（主→备失败切换）。
+//   原实现直接拼 `sb().url`（= config 的主出口快照）⇒ 切出口后这里仍打主出口。
+var endpoints = require('./endpoints.js');
 
 var EF_BREAKER_THRESHOLD = 3;              // 连续失败阈值
 // ★ 2026-09-25：OPEN 冷却 10min → **2min**。
@@ -21,8 +24,8 @@ var EF_BREAKER_THRESHOLD = 3;              // 连续失败阈值
 //   会把 opendota-proxy 熔断 10 分钟 ⇒ **首页主数据源停摆 10 分钟**（只能靠本地快照兜底出卡）。
 //   改 2min 的代价：硬故障期间每 ~2min 一次半开探测（单请求 12s 超时）⇒ 30min 故障约 15 次探测，可忽略；
 //   收益：抖动恢复后 **≤2min** 自动回血（原 10min），首页少空 8 分钟。
-//   ⚠️ 不再是「对齐 cloudBreaker.js 的 10min」——本熔断器只管 EF（supabaseClient），
-//      cloudBreaker.js 是云函数时代的另一套（调用方 api.js / cloudProxy.js 仍存活，语义不同）。
+//   ⚠️ 本熔断器只管 EF（supabaseClient）。项目原另一套 `cloudBreaker.js`（云函数时代的全局闸门）
+//      已于 2026-10-12（P1-4）删除——其 markFailure 全仓 0 调用 ⇒ 恒开、仅误导。
 var EF_BREAKER_TTL_MS = 2 * 60 * 1000;     // OPEN 冷却时长（到期后 efAvailable 放行一次半开探测）
 // ★ 2026-09-17（P1-10 修复）：熔断状态改为「按 EF 名分桶 + TTL 冷却 + 半开探测」。
 //   原实现是单一全局布尔（_efBreakerOpen），三个缺陷：
@@ -30,7 +33,7 @@ var EF_BREAKER_TTL_MS = 2 * 60 * 1000;     // OPEN 冷却时长（到期后 efAv
 //        liquipedia-proxy / steam-proxy / bundle-aggregator 一起拖下水；
 //     ② 无 TTL：置 true 后**整个会话**不再尝试任何 EF，无冷却窗口；
 //     ③ 无半开：没有恢复探测，源恢复后客户端也无从得知。
-//   项目内另两套熔断器（cloudBreaker.js 有 10min TTL、haglund.js 有 HALF_OPEN）
+//   项目内另一套熔断器 haglund.js 有 HALF_OPEN（cloudBreaker.js 已于 2026-10-12 删除）
 //   均已具备这些能力，本处属实现不一致。
 //   ⚠️ 云函数下线后 EF 是这些 action 的唯一后端 —— 该缺陷届时会由 P1 升为 P0。
 var _efBreakers = {};                      // { [efName]: { fails, openUntil, halfOpen } }
@@ -85,7 +88,8 @@ function edge(name, data, opts) {
 
     var authKey = (opts && opts.jwt) ? opts.jwt : sb().anonKey;
     wx.request({
-      url: sb().url + '/functions/v1/' + name,
+      // ★ P1-2：动态取当前出口（endpoints 主→备粘滞）；`sb().url` 仅作回退（endpoints 不可用时）
+      url: (endpoints.sbUrl() || sb().url) + '/functions/v1/' + name,
       method: 'POST',
       data: data || {},
       timeout: 25000,
@@ -122,6 +126,9 @@ function edge(name, data, opts) {
       },
       fail: function (err) {
         _countFail(_bkey);
+        // ★ P1-2：传输层失败（未联通中转）⇒ 标记切出口，后续 EF/REST 请求自然走备出口。
+        //   仅在有备出口时生效（count()>1）；此处不重试（重试由上层调用方/熔断策略决定）。
+        if (endpoints.count() > 1) endpoints.failover();
         reject(new Error(err.errMsg || 'network fail'));
       }
     });
@@ -161,7 +168,8 @@ function rest(table, query) {
       'apikey': sb().anonKey,
       'Authorization': 'Bearer ' + sb().anonKey
     };
-    var url = sb().url + '/rest/v1/' + table + '?select=' + encodeURIComponent(q.select || '*');
+    // ★ P1-2：动态取当前出口（同 edge()）
+    var url = (endpoints.sbUrl() || sb().url) + '/rest/v1/' + table + '?select=' + encodeURIComponent(q.select || '*');
     if (q.eq) {
       Object.keys(q.eq).forEach(function (k) {
         // ★ 2026-09-13：值可带操作符前缀（gte./lte./gt./lt./not.）——若带则原样使用
@@ -185,7 +193,11 @@ function rest(table, query) {
         if (res.statusCode >= 200 && res.statusCode < 300) resolve(res.data || []);
         else reject(new Error('REST ' + table + ' HTTP ' + res.statusCode));
       },
-      fail: function (err) { reject(new Error(err.errMsg || 'network fail')); }
+      fail: function (err) {
+        // ★ P1-2：传输层失败 ⇒ 标记切出口（同 edge()）
+        if (endpoints.count() > 1) endpoints.failover();
+        reject(new Error(err.errMsg || 'network fail'));
+      }
     });
   });
 }

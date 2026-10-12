@@ -368,7 +368,7 @@ function load(force) {
   // ★ 阶段2-③A：SB 可用时也允许进入（不再依赖云开发可用性）
   var _sbOn = false;
   try { _sbOn = require('./supabaseClient.js').enabled(); } catch (e) {}
-  if (!_sbOn && !(cloudProxy.isAvailable() || cloudProxy.efAvailable())) { ensure(); return Promise.resolve(false); }
+  if (!_sbOn && !cloudProxy.efAvailable()) { ensure(); return Promise.resolve(false); }
   const meta = cache.getStale(CACHE_KEY, config.remoteCuration.ttlSec, config.remoteCuration.ttlSec);
   // ★ 2026-09-15：此前此处静默早退，用户两次把「没有日志」误读为「代码没跑」→ 补日志
   if (!force && meta.value) {

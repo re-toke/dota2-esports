@@ -125,9 +125,15 @@ export async function deleteTeam(docId) {
   return callAdminWrite('deleteTeam', { docId })
 }
 
-/** 更新 meta（TI 参赛队 id 列表等） */
-export async function updateMeta(data) {
-  return callAdminWrite('updateMeta', { data })
+/**
+ * 更新 meta（TI 参赛队 id 列表等）
+ * ★ 2026-10-12（P1-12）：EF 侧 key 已**参数化**（原先硬编码 ti_contestant_ids ⇒ 传其它 key 会静默写坏该行）。
+ *   key 默认值放在**调用层**（视图用的就是这个 key），EF 不再隐式兜底。
+ * @param {*} value 要写入的 meta 值（TI 参赛队 id 列表）
+ * @param {string} [key] curation_meta 主键
+ */
+export async function updateMeta(value, key = 'ti_contestant_ids') {
+  return callAdminWrite('updateMeta', { key, value })
 }
 
 // ===== 纯函数工具（从原 api/cloudbase.js 原样沿用，供视图直接使用）=====

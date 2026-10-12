@@ -215,6 +215,33 @@ async function handleAction(action: string, params: any, force?: boolean): Promi
     return { data: { ok: true }, source: "preheat" };
   }
 
+  // 特殊 action：数据源健康探测（供客户端 utils/dataHealth.js 区分「数据源故障」与「确实无数据」）
+  // ★ 2026-10-12（BUG-A 接线）：原 cloudProxy.health() 因 EDGE_ACTIONS 缺 health 而恒 reject；
+  //   现由本 EF 承接。只探 OpenDota（Supabase 出口到 Liquipedia 被 429 拦 ⇒ liquipedia 记 unknown，
+  //   不误报 down）；返回形状与旧云函数契约一致，dataHealth 零改动即可用。
+  if (action === "health") {
+    const t0 = Date.now();
+    let opendota = { status: "down", latencyMs: 0 };
+    try {
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 6000);
+      const r = await fetch(OD_BASE + "/health", { signal: ac.signal });
+      clearTimeout(timer);
+      if (r.ok) opendota = { status: "up", latencyMs: Date.now() - t0 };
+      else opendota = { status: "down", latencyMs: Date.now() - t0 };
+    } catch (e) {
+      opendota = { status: "down", latencyMs: Date.now() - t0 };
+    }
+    return {
+      data: {
+        ts: new Date().toISOString(),
+        sources: { opendota, liquipedia: { status: "unknown", latencyMs: 0 } },
+        ok: opendota.status === "up"
+      },
+      source: "health"
+    };
+  }
+
   const path = buildPath(action, params);
   if (!path) return { error: "unknown action: " + action };
 

@@ -3,6 +3,8 @@
 //   逐条断言：① 路由命中 ② **服务端确实覆盖了客户端的错 key** ③ /leagues 裁剪 ④ 最小权限/健康检查
 // 运行：node infra/proxy/test.mjs
 import { handle, EF_ALLOW, TTL } from './worker.mjs';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
 
 let pass = 0, fail = 0;
 const ok = (name, cond, detail) => {
@@ -214,10 +216,10 @@ const textOf = async (r) => { try { return await r.clone().text(); } catch (e) {
     }
     return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
   };
-  // ① 不带标记 ⇒ 必须**不裁**（零回归：team-detail/h2h 需要全量）
+  // ① 不带标记且 120<300 ⇒ 默认白名单未触发，原样返回
   const r0 = await handle(req('/od/api/teams/123/matches'), ENV);
   const b0 = JSON.parse(await textOf(r0));
-  ok('★ v3 默认**不裁**（全量返回，零回归）', Array.isArray(b0) && b0.length === 120, 'len=' + (b0 && b0.length));
+  ok('★ v3/C 未声明且 120<300 ⇒ 原样返回（默认白名单未触发）', Array.isArray(b0) && b0.length === 120, 'len=' + (b0 && b0.length));
   // ② ?recent=N ⇒ 裁到最近 N 条（且**保持原顺序/字段**）
   const r1 = await handle(req('/od/api/teams/123/matches?recent=30'), ENV);
   const b1 = JSON.parse(await textOf(r1));
@@ -259,6 +261,150 @@ const textOf = async (r) => { try { return await r.clone().text(); } catch (e) {
   calls.length = 0;
   const r3 = await handle(req('/sb/functions/v1/bundle-aggregator', { method: 'POST', body: b3, headers: H }), ENV);
   ok('★ v4 不同参数不互相命中（键含 params）', r3.headers.get('X-Proxy-Cache') === 'MISS' && calls.length === 1, String(r3.headers.get('X-Proxy-Cache')));
+}
+
+// ── ⑪ P0-1 B′ 新增：`?vs=<teamId>` 端点级「双方交锋」过滤 + X-Proxy-Trim 回执 ──────
+{
+  const saved = globalThis.fetch;
+  const mixed = [
+    { match_id: 5, opposing_team_id: 777, leagueid: 1 },
+    { match_id: 4, opposing_team_id: 888, leagueid: 2 },
+    { match_id: 3, opposing_team_id: 777, leagueid: 3 },
+    { match_id: 2, opposing_team_id: '777', leagueid: 4 },   // 字符串型 id 亦须匹配
+    { match_id: 1, opposing_team_id: 999, leagueid: 5 }
+  ];
+  let upstream = 0;
+  globalThis.fetch = async (t) => {
+    upstream++;
+    if (String(t).indexOf('/teams/321/matches') >= 0) {
+      return new Response(JSON.stringify(mixed), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  const r = await handle(req('/od/api/teams/321/matches?vs=777'), ENV);
+  const b = JSON.parse(await textOf(r));
+  ok('★ P0-1 ?vs=777 ⇒ 只回 A∩B 对局（3 条，含字符串型 id）',
+    Array.isArray(b) && b.length === 3 && b.every((m) => String(m.opposing_team_id) === '777'),
+    JSON.stringify(b.map((m) => m.match_id)));
+  ok('★ P0-1 ?vs= 回执头 X-Proxy-Trim=vs:3', r.headers.get('X-Proxy-Trim') === 'vs:3', String(r.headers.get('X-Proxy-Trim')));
+  ok('★ P0-1 ?vs= 只减不增（不放大 payload）', b.length <= mixed.length);
+  const r2 = await handle(req('/od/api/teams/321/matches?recent=2'), ENV);
+  ok('★ P0-1 ?recent= 回执头 X-Proxy-Trim=recent:2', r2.headers.get('X-Proxy-Trim') === 'recent:2', String(r2.headers.get('X-Proxy-Trim')));
+  const before = upstream;
+  await handle(req('/od/api/teams/321/matches?vs=777'), ENV);
+  ok('★ P0-1 ?vs= 缓存键隔离（二次命中自身缓存，不再打上游）', upstream === before, 'upstream=' + upstream);
+  globalThis.fetch = saved;
+}
+
+// ── ⑫ P0-1 C 新增：`/teams/*/matches` **默认裁剪白名单(300)** + 显式豁免 ───────────
+{
+  const saved = globalThis.fetch;
+  const big = [];
+  for (let i = 0; i < 500; i++) big.push({ match_id: 800000 + i, opposing_team_id: 999 });
+  globalThis.fetch = async (t) => String(t).indexOf('/teams/555/matches') >= 0
+    ? new Response(JSON.stringify(big), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    : new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
+  const lenOf = async (r) => { const b = JSON.parse(await textOf(r)); return Array.isArray(b) ? b.length : -1; };
+  const r1 = await handle(req('/od/api/teams/555/matches'), ENV);
+  ok('★ C 未声明 ⇒ 默认裁到 300（白名单兜底）', (await lenOf(r1)) === 300, 'len=' + (await lenOf(r1)));
+  ok('★ C 默认裁剪带回执头 recent:300', r1.headers.get('X-Proxy-Trim') === 'recent:300', String(r1.headers.get('X-Proxy-Trim')));
+  const r2 = await handle(req('/od/api/teams/555/matches', { headers: { 'X-Trim': '0' } }), ENV);
+  ok('★ C 显式 `X-Trim: 0` ⇒ 豁免默认裁剪（返回全量 500）', (await lenOf(r2)) === 500, 'len=' + (await lenOf(r2)));
+  ok('★ C 豁免路径**不回写裁剪回执**（未裁剪）', !r2.headers.get('X-Proxy-Trim'), String(r2.headers.get('X-Proxy-Trim')));
+  const r3 = await handle(req('/od/api/teams/555/matches?recent=0'), ENV);
+  ok('★ C 显式 `?recent=0` ⇒ 同样豁免（返回全量 500）', (await lenOf(r3)) === 500, 'len=' + (await lenOf(r3)));
+  const r4 = await handle(req('/od/api/teams/555/matches'), ENV);
+  ok('★ C 缓存键按「有效裁剪量」隔离（豁免不污染默认 300 键）', (await lenOf(r4)) === 300, 'len=' + (await lenOf(r4)));
+  globalThis.fetch = saved;
+}
+
+// ── ⑬ P1-2 新增①：出口「单一事实来源」三向一致（config ↔ endpoints ↔ api） ──────
+{
+  const cfg = require('../../utils/config.js');
+  const ep = require('../../utils/endpoints.js');
+  const api = require('../../utils/api.js');
+  const primary = cfg.endpoints.proxy[0];
+  ok('★ P1-2 config：supabase.url 由 PROXY_HOSTS[0] 派生（无重复字面量）',
+    cfg.supabase.url === primary + '/sb', cfg.supabase.url);
+  ok('★ P1-2 api：BASE 导出 = 主出口 + /od/api',
+    api.BASE === primary + '/od/api', api.BASE);
+  ok('★ P1-2 endpoints：odBase()/sbUrl() 与 api.BASE / supabase.url 同宿主',
+    ep.odBase() === api.BASE && ep.sbUrl() === cfg.supabase.url, ep.odBase() + ' / ' + ep.sbUrl());
+}
+
+// ── ⑭ P1-2 新增②：主→备失败切换 + 会话粘滞 + 开机通道体检（utils/endpoints.js） ──
+{
+  const ep = require('../../utils/endpoints.js');
+  const A = 'https://a.example.com', B = 'https://b.example.com';
+
+  // ① 单出口（当前真实状态）：切不动、体检 no-op
+  ep.setHosts([A]);
+  ok('★ P1-2 单出口：failover 原地不动（行为与改造前等价）',
+    ep.failover() === A && ep.count() === 1 && ep.current() === A, ep.current());
+  ok('★ P1-2 单出口：probe 为 no-op（不发起任何探测）',
+    (await ep.probe(() => { throw new Error('probe 不应被调用'); })) === A);
+
+  // ② 双出口：空槽被过滤、主失败切备、会话粘滞、循环不越界
+  ep.setHosts([A, B, '']);
+  ok('★ P1-2 候选去重/去空槽', ep.count() === 2 && ep.current() === A, JSON.stringify(ep.hosts()));
+  ok('★ P1-2 主失败 → 切备', ep.failover() === B && ep.current() === B);
+  ok('★ P1-2 会话粘滞：后续请求保持备出口', ep.current() === B);
+  ok('★ P1-2 再失败 → 回主（有限集合内循环）', ep.failover() === A && ep.current() === A);
+
+  // ③ 开机体检：主不可达 → 选备；主可达 → 主优先；全不可达 → 维持现状
+  ep.setHosts([A, B]);
+  const p1 = await ep.probe((h) => Promise.resolve(h === B));
+  ok('★ P1-2 体检：主不可达 → 选中备出口（异步写回粘滞）', p1 === B && ep.current() === B, p1);
+  ep.reset();
+  const p2 = await ep.probe(() => Promise.resolve(true));
+  ok('★ P1-2 体检：主优先（可达即选主）', p2 === A && ep.current() === A, p2);
+  ep.setHosts([A, B]);
+  const p3 = await ep.probe(() => Promise.resolve(false));
+  ok('★ P1-2 体检：全不可达 → 维持现状且不抛错', p3 === A && ep.current() === A, p3);
+
+  // ④ 三台候选（2026-10-12 用户择定 C：Deno 现网 + Deno 新项目 + Render）
+  //    —— 证明机制支持 >2 台，无需改代码（failover 是模运算循环、probe 遍历全部候选）
+  const C3 = 'https://c.example.com';
+  ep.setHosts([A, B, C3]);
+  ok('★ P1-2 三台候选：count=3（支持 N 台，非"仅两台"硬编码）', ep.count() === 3, ep.count());
+  ok('★ P1-2 三台：failover 循环 A→B', ep.failover() === B);
+  ok('★ P1-2 三台：failover 循环 B→C', ep.failover() === C3);
+  ok('★ P1-2 三台：failover 循环 C→A（回到主）', ep.failover() === A && ep.current() === A);
+  ep.setHosts([A, B, C3]);
+  const q1 = await ep.probe((h) => Promise.resolve(h === C3));
+  ok('★ P1-2 三台体检：仅第 3 台可达 ⇒ 选中第 3 台（不只看前两台）', q1 === C3 && ep.current() === C3, q1);
+  ep.setHosts([A, B, C3]);
+  const q2 = await ep.probe((h) => Promise.resolve(h !== A));
+  ok('★ P1-2 三台体检：主不可达 ⇒ 取**顺序最前**的可达者（B，而非 C）', q2 === B && ep.current() === B, q2);
+
+  ep.setHosts(require('../../utils/config.js').endpoints.proxy);   // 复位为真实候选
+  ep.reset();
+}
+
+// ── ⑮ P1-12 新增：轻量速率限制（默认关闭；开启后按 IP 计数，/healthz 豁免） ─────────
+{
+  const IP = { 'CF-Connecting-IP': '203.0.113.7' };
+  // ① 默认（未配 env）⇒ 不限流
+  const d1 = await handle(req('/od/api/proMatches?rl=off1', { headers: IP }), ENV);
+  ok('★ P1-12 限流默认关闭（未配 PROXY_RATE_LIMIT_MAX）', d1.status !== 429, String(d1.status));
+
+  // ② 开启（max=3/分钟）：阈值内放行、超阈值 429
+  const ENV2 = Object.assign({}, ENV, { PROXY_RATE_LIMIT_MAX: '3' });
+  const codes = [];
+  for (let i = 0; i < 5; i++) {
+    codes.push((await handle(req('/od/api/proMatches?rl=on' + i, { headers: IP }), ENV2)).status);
+  }
+  ok('★ P1-12 开启后：前 3 次放行、第 4 次起 429',
+    codes.slice(0, 3).every((c) => c !== 429) && codes.slice(3).every((c) => c === 429),
+    JSON.stringify(codes));
+
+  // ③ /healthz 豁免（同 IP 已超阈值，但探活仍须 200 —— 否则开机体检会把自己限死）
+  const h = await handle(req('/healthz', { headers: IP }), ENV2);
+  ok('★ P1-12 /healthz 豁免限流（探活/体检不被限死）', h.status === 200, String(h.status));
+
+  // ④ 不同 IP 独立计数（不误伤他人）
+  const o = await handle(req('/od/api/proMatches?rl=other', { headers: { 'CF-Connecting-IP': '203.0.113.8' } }), ENV2);
+  ok('★ P1-12 不同 IP 独立计数', o.status !== 429, String(o.status));
 }
 
 console.log('\n=== 结果 ===');

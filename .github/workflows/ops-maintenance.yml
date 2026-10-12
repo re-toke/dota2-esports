@@ -1,0 +1,83 @@
+# ============================================================
+# 运维维护（P1-13，2026-10-12）
+#
+# ## 为什么需要
+# 三处「静默失效」此前只能靠人工偶然发现：
+#   ① `aggregation_cache` 过期行**无自动清理**（001 只有一句"每周手动跑一次 SQL"）；
+#   ② 快照停更（leagues 曾 12.7 天 / team-logo 曾 ≈26 天）而全部门禁仍绿 ——
+#      `check-snapshot-freshness` 现只在 `push/PR` 跑，**调度没跑时无人知道**；
+#   ③ 告警**只有一条**通道（GitHub job 失败邮件），且 GH scheduled 实测会被丢弃/延迟 5~7h。
+#
+# ## 设计取舍
+#   · 清理**不启用 pg_cron**：`005` 头注定性 pg_cron 的 net.http_post 是 fire-and-forget
+#     （失败不重试、不告警）⇒ 不是更可靠的调度器；「管道逻辑搬 EF」路线项目已否决。
+#     ⇒ 本条只做「定时执行一条清理 SQL」，不触碰任何管道迁移。
+#   · `freshness-alert` 用 `continue-on-error`：它失败的原因**几乎总是"调度没跑"**，
+#     不是代码回归 ⇒ 可见但不阻塞（与 `ci.yml` 的 snapshot-freshness 同口径）。
+#
+# ## 前置 Secrets（缺 `ALERT_WEBHOOK` 时**只跳过告警推送**，不影响清理）
+#   SUPABASE_URL / SUPABASE_SERVICE_KEY —— 与 probe-ef.js / diag-report.js 同一套（已配置）。
+#     ⚠️ SUPABASE_URL 必须是**直连** `<ref>.supabase.co`：中转的 /sb/rest/v1 只允许 GET。
+#   ALERT_WEBHOOK —— 飞书群机器人 webhook（**新增，可选**；用于二级告警通道）。
+# ============================================================
+name: Ops Maintenance
+
+on:
+  schedule:
+    # 每天 18:20 UTC（北京时间 02:20，避开整点拥堵）
+    - cron: '20 18 * * *'
+  workflow_dispatch:
+
+jobs:
+  # ① aggregation_cache 过期行清理（service key 绕过 RLS；anon 只读 ⇒ 匿名 key 会静默 0 行删除）
+  cleanup-cache:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Clean expired aggregation_cache rows
+        id: clean
+        continue-on-error: true
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node scripts/ops/cleanup-cache.js
+
+      # 二级告警通道（未配 ALERT_WEBHOOK 时脚本自行跳过，不制造第二个失败）
+      - name: Notify on failure (webhook)
+        if: steps.clean.outcome == 'failure'
+        env:
+          ALERT_WEBHOOK: ${{ secrets.ALERT_WEBHOOK }}
+        run: node scripts/ops/notify-alert.js "aggregation_cache 过期清理失败（见 Ops Maintenance 日志）"
+
+      - name: Propagate failure
+        if: steps.clean.outcome == 'failure'
+        run: |
+          echo "::error::aggregation_cache 清理失败（已尝试 Webhook 告警）"
+          exit 1
+
+  # ② 快照新鲜度：**定时**跑（补齐"调度停摆时无人知道"的缺口）
+  freshness-alert:
+    runs-on: ubuntu-latest
+    continue-on-error: true          # 失败=调度没跑，非代码回归 ⇒ 可见不阻塞
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check build-time snapshot freshness
+        id: fresh
+        continue-on-error: true
+        run: node scripts/ops/check-snapshot-freshness.js
+
+      - name: Notify on stale snapshot (webhook)
+        if: steps.fresh.outcome == 'failure'
+        env:
+          ALERT_WEBHOOK: ${{ secrets.ALERT_WEBHOOK }}
+        run: node scripts/ops/notify-alert.js "构建期快照已超龄（check-snapshot-freshness 失败）—— 大概率是 sync-upcoming 调度没跑"
