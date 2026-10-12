@@ -397,13 +397,12 @@ export const config = { path: '/*' };   // ⚠️ 必须 '/*'；只写 '/' 会�
 3. **跑门禁**（改 `utils/api.js`/`config.js` 属"改动即回归"范围）：
    ```bash
    node scripts/ops/check-syntax.js
-   node infra/proxy/test.mjs          # 期望 75/75（测试用注入宿主，与你填几台无关）
+   node infra/proxy/test.mjs          # 期望 81/81（测试用注入宿主，与你填几台无关）
    node scripts/test/test-api-inflight.js
    ```
    （`test:all` 亦可，耗时更长。）
 
-**真机验证「真的会切」**（唯一可行办法——没法真去封域名）：
-临时把 `PROXY_HOSTS[0]` 改成一个**不可达**的域名（如 `https://invalid.example.invalid`）→ 打开小程序 → 数据**仍应正常出**（说明切到了备）；验完**改回**。
+**真机验证「真的会切」** ⇒ 完整步骤见下方 **E7**（含逐条日志断言与两个必须知道的边界）。
 
 ---
 
@@ -422,6 +421,70 @@ export const config = { path: '/*' };   // ⚠️ 必须 '/*'；只写 '/' 会�
 > **注意（P1-12 相关）**：本次 `worker.mjs` 里**新增了限流代码**（默认关闭）。
 > 第二台部署时**同一份代码**已含该功能；`PROXY_RATE_LIMIT_MAX` 两台可分别设置，**建议都先不设**。
 > 打开前必须先确认该平台确实注入了客户端 IP 头（否则所有客户端会共用 `unknown` 桶 ⇒ 可能误伤）。
+
+---
+
+### E7. 切出口演练（验证「主不可达时真的会切」）
+
+> **为什么用「改配置」来模拟**：设备上没法真去封一个域名。**逻辑层**已由 `infra/proxy/test.mjs` 的
+> 18 条断言覆盖（failover 轮转 / `probe()` 选可达 / 主优先）；本演练验的是**接线**（app.js → endpoints → api/supabaseClient 真串起来了）。
+
+**① 改动（只动一处，验完**必须**改回）**
+
+[utils/config.js](../../utils/config.js) 顶部 `PROXY_HOSTS[0]` 改为：
+
+```js
+const PROXY_HOSTS = [
+  'https://invalid.example.invalid',                 // ← 临时：模拟主出口不可达
+  'https://sparkly-gharial-1210.re-toke.deno.net',
+  'https://velvety-llama-a7700e.netlify.app'
+];
+```
+
+选 `.invalid` 的原因：它是**保留 TLD，必然解析失败**；且**不在微信白名单里** ⇒ `wx.request` 会**立即**失败，
+不用等超时（最快、最可控）。想更贴近真实故障（已加白名单但网络层不通），可换 `https://example.vercel.app`（本项目实测超时），代价是要等超时。
+
+**② 跑**
+
+1. 微信开发者工具 → **重新编译**（等价于重启小程序）—— 这样 `app.js:62` 的 `endpoints.probe()` 才会执行。
+2. Console 面板过滤 `endpoints`，核对日志：
+
+| 日志 | 出处 | 含义 |
+|---|---|---|
+| `[endpoints] 体检选中 https://sparkly-gharial-…` | `endpoints.probe()` ← `app.js:62` | 开机体检跳过不可达的主出口，选中可达的备出口 |
+| `[endpoints] 出口切换 https://invalid… → https://sparkly-…` | `api.js:142-147` | 请求期**传输层**失败 ⇒ 切出口，并把**这次请求在备出口重放** |
+
+> ⚠️ **`出口切换` 可能出现也可能不出现**：若体检先完成（本例大概率如此），首个数据请求就直接走备出口、
+> 不再经过「失败 → 切」这一步。**只出现 `体检选中` 同样算通过**，不是失败。
+
+3. **功能断言（三条都要过）**：
+   - 首页有数据（比赛流 / 关注流不再空转）
+   - 详情页（`league-detail` / `team-detail`）能出内容
+   - **不出现**「数据源暂不可用」告警（即 BUG-A 修好的那条 `dataHealth.check`）
+
+**③ 想单独验证「请求期切换 + 重放」（可选，隔离体检的干扰）**
+
+体检会抢先把出口改成备 ⇒ 要隔离它，临时把 `app.js:62` 注释掉：
+
+```js
+// try { endpoints.probe(); } catch (e) {}   // 演练临时注释
+```
+
+再重新编译。此时 `_idx` 恒为 0 ⇒ 首个数据请求打到不可达的 `[0]`，应看到 `出口切换` 且**数据仍出得来**
+（证明 `api.js:144` 的重放在起作用）。**验完把这行恢复。**
+
+**④ 收尾（必做）**
+
+1. `PROXY_HOSTS[0]` 改回 `'https://tough-ferret-3579.re-toke.deno.net'`
+2. 若做过 ③，恢复 `app.js:62`
+3. 跑门禁：`node scripts/ops/check-syntax.js` + `node infra/proxy/test.mjs`（应仍 81/81）
+
+**⑤ 两个必须知道的边界（不然会误判成 bug）**
+
+- **有状态码的失败不切**：`api.js:142` 的守卫是 `!code`（**无**响应码）。若中转返回 404/500，说明**链路是通的**，
+  按设计**不切** —— 换了备出口也一样错，切没有意义。
+- **Supabase 链路（EF / REST）不重放**：`utils/supabaseClient.js:131,198` 在 `wx.request` fail 时**只**调
+  `failover()`，本次请求仍失败、由上层重试 ⇒ 立刻看 EF 相关卡片可能仍然缺，**下一次**请求才走备出口。这是有意为之（不放大重试）。
 
 ---
 
