@@ -7,7 +7,7 @@
 // 刷新：npm run fetch:leagues
 
 module.exports = {
-  "generatedAt": 1791886369,
+  "generatedAt": 1791923515,
   "source": "opendota",
   "note": "build-time leagues snapshot (active 90d + curated 60d), refresh via scripts/sync/fetch-leagues-snapshot.js",
   "stats": {
@@ -25,11 +25,6 @@ module.exports = {
       "leagueid": 10810,
       "tier": "premium",
       "name": "MDL Disneyland® Paris Major"
-    },
-    {
-      "leagueid": 14268,
-      "tier": "premium",
-      "name": "The International 2022"
     },
     {
       "leagueid": 15728,
@@ -50,11 +45,6 @@ module.exports = {
       "leagueid": 17795,
       "tier": "professional",
       "name": "ESL One Raleigh 2025"
-    },
-    {
-      "leagueid": 18111,
-      "tier": "professional",
-      "name": "DreamLeague Season 26"
     },
     {
       "leagueid": 18324,
@@ -97,6 +87,21 @@ module.exports = {
       "name": "EPL Masters 2026 "
     },
     {
+      "leagueid": 14268,
+      "tier": "premium",
+      "name": "The International 2022"
+    },
+    {
+      "leagueid": 18111,
+      "tier": "professional",
+      "name": "DreamLeague Season 26"
+    },
+    {
+      "leagueid": 18359,
+      "tier": "professional",
+      "name": "Clavision DOTA2 Masters 2025: Snow-Ruyi"
+    },
+    {
       "leagueid": 20009,
       "tier": "professional",
       "name": "1win Essence II"
@@ -107,14 +112,14 @@ module.exports = {
       "name": "BLAST Slam VII China Qualifier"
     },
     {
-      "leagueid": 20176,
-      "tier": "professional",
-      "name": "BETBOOM Streamers Battle Dota 15"
-    },
-    {
       "leagueid": 20279,
       "tier": "professional",
       "name": "PGL Wallachia 2026 Season 9"
+    },
+    {
+      "leagueid": 20176,
+      "tier": "professional",
+      "name": "BETBOOM Streamers Battle Dota 15"
     },
     {
       "leagueid": 20334,
@@ -125,11 +130,6 @@ module.exports = {
       "leagueid": 20359,
       "tier": "professional",
       "name": "DreamLeague Season 30 Qualifiers"
-    },
-    {
-      "leagueid": 18359,
-      "tier": "professional",
-      "name": "Clavision DOTA2 Masters 2025: Snow-Ruyi"
     },
     {
       "leagueid": 20208,
@@ -230,9 +230,9 @@ module.exports = {
     },
     "19944": {
       "earliest": 1784531358,
-      "latest": 1791878819,
-      "lastEnd": 1791881600,
-      "count": 354
+      "latest": 1791915677,
+      "lastEnd": 1791918337,
+      "count": 360
     },
     "20009": {
       "earliest": 1785402206,
@@ -296,9 +296,9 @@ module.exports = {
     },
     "20359": {
       "earliest": 1791533047,
-      "latest": 1791882457,
-      "lastEnd": 1791884945,
-      "count": 133
+      "latest": 1791917504,
+      "lastEnd": 1791918995,
+      "count": 156
     },
     "20393": {
       "earliest": 1791187532,
@@ -308,15 +308,15 @@ module.exports = {
     },
     "20406": {
       "earliest": 1791813665,
-      "latest": 1791833417,
-      "lastEnd": 1791835969,
-      "count": 5
+      "latest": 1791915470,
+      "lastEnd": 1791917448,
+      "count": 12
     },
     "20411": {
       "earliest": 1791721162,
-      "latest": 1791724488,
-      "lastEnd": 1791726409,
-      "count": 2
+      "latest": 1791895133,
+      "lastEnd": 1791897373,
+      "count": 3
     }
   }
 };

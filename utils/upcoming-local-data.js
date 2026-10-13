@@ -6,7 +6,7 @@
 // 数据来源：utils/upcoming-local.json（由本脚本生成）
 
 module.exports = {
-  "generatedAt": 1791844064,
+  "generatedAt": 1791923680,
   "source": "liquipedia",
   "note": "build-time snapshot (Upcoming+Ongoing, Tier1-3), refresh via scripts/sync/fetch-liquipedia-upcoming.js",
   "events": [
@@ -44,18 +44,6 @@ module.exports = {
       "start": 1791763200,
       "end": 1792252799,
       "date": "Oct 12–17, 2026",
-      "source": "liquipedia"
-    },
-    {
-      "id": -1404220,
-      "name": "BLAST SLAM IX China Open Qualifier 1",
-      "grade": "S",
-      "rank": 3,
-      "label": "S级",
-      "tier": 1,
-      "start": 1791849600,
-      "end": 1791907199,
-      "date": "Oct 13, 2026",
       "source": "liquipedia"
     },
     {
