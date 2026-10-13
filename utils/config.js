@@ -26,7 +26,7 @@
 //      ⇒ `failover()` 可能切到它、`probe()` 会去打它（等于自伤）。**拿不到真域名就留空串。**
 //   ★ 回滚：把 `[0]` 改回 'https://gkticzdaicpdtxheyxsd.supabase.co'（并把 anonKey 填回真值）。
 const PROXY_HOSTS = [
-  'https://tough-ferret-3579.re-toke.deno.net',      // [0] 主出口（Deno Deploy，现网）
+  'https://hungry-pike-9907.re-toke.deno.net',       // [0] 主出口（Deno Deploy，现网）★ 2026-10-13 替换旧 tough-ferret-3579（其 App 构建损坏、无法更新，旧项目保留可访问但已不再引用）
   'https://sparkly-gharial-1210.re-toke.deno.net',   // [1] 备①：Deno 新项目（同注册域/同 IP ⇒ 仅防主机名级）
   'https://velvety-llama-a7700e.netlify.app'         // [2] 备②：Netlify（不同注册域 ⇒ 防域名级阻断；运行时是 Deno，与主出口同族）
 ];

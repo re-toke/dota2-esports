@@ -172,7 +172,7 @@ npx deployctl deploy --project=<项目名> infra/proxy/worker.mjs
 
 ## 路径 E · **跨提供商第二台中转**（P1-2 双出口备槽，约 20 分钟）
 
-> **什么时候需要**：现网只有**一台**中转（`tough-ferret-3579.re-toke.deno.net`）⇒ 它挂即全挂。
+> **什么时候需要**：现网只有**一台**中转（`hungry-pike-9907.re-toke.deno.net`）⇒ 它挂即全挂。
 > 客户端已在 `utils/config.js` 的 `PROXY_HOSTS` 预留**备槽**（`PROXY_HOSTS[1]`，当前为空串），
 > 并配套实现了「主→备失败切换 + 会话粘滞 + 开机通道体检」（`utils/endpoints.js`）。
 > **你只需部署第二台并把域名填进备槽**，其余客户端逻辑已就绪。
@@ -206,7 +206,7 @@ npx deployctl deploy --project=<项目名> infra/proxy/worker.mjs
 
 | 槽位 | 载体 | 防什么 | 代价 |
 |---|---|---|---|
-| `[0]` | Deno Deploy 现网（`tough-ferret-3579.re-toke.deno.net`） | —（主出口） | — |
+| `[0]` | Deno Deploy 现网（`hungry-pike-9907.re-toke.deno.net`）★ 2026-10-13 替换旧 `tough-ferret-3579`（其 App 构建损坏、无法更新） | —（主出口） | — |
 | `[1]` | **Deno Deploy 新项目**（`sparkly-gharial-1210.re-toke.deno.net`） | ⚠️ **仅「主机名级 SNI 阻断」**（同注册域 + 同 IP，见下） | 无冷启动 |
 | `[2]` | **Netlify Edge Function**（§E3 全文） | **域名级阻断**（`*.netlify.app` ≠ `*.deno.net`）。⚠️ 运行时是 Deno ⇒ **与主出口同族**，防不了"Deno 系整体故障"；真跨提供商因无卡本轮未落地 | 无冷启动 |
 
@@ -387,7 +387,7 @@ export const config = { path: '/*' };   // ⚠️ 必须 '/*'；只写 '/' 会�
 1. **填备槽** —— [utils/config.js](../../utils/config.js) 顶部的 `PROXY_HOSTS`：
    ```js
    const PROXY_HOSTS = [
-     'https://tough-ferret-3579.re-toke.deno.net',   // 主
+     'https://hungry-pike-9907.re-toke.deno.net',    // 主
      'https://<你的新子域>',                          // ← 填这里
    ];
    ```
@@ -497,7 +497,7 @@ const PROXY_HOSTS = [
 
 **④ 收尾（必做）**
 
-1. `PROXY_HOSTS[0]` 改回 `'https://tough-ferret-3579.re-toke.deno.net'`
+1. `PROXY_HOSTS[0]` 改回 `'https://hungry-pike-9907.re-toke.deno.net'`
 2. 若做过 ③，恢复 `app.js:62`
 3. 跑门禁：`node scripts/ops/check-syntax.js` + `node infra/proxy/test.mjs`（应仍 81/81）
 
@@ -519,7 +519,7 @@ const PROXY_HOSTS = [
 **贴完跑这三条自检（本机执行，逐条对）**
 
 ```powershell
-$H = 'https://tough-ferret-3579.re-toke.deno.net'   # 另一台同理换成 sparkly-gharial-1210
+$H = 'https://hungry-pike-9907.re-toke.deno.net'   # 另一台同理换成 sparkly-gharial-1210
 
 # ① C 的默认裁剪：未声明的 /teams/*/matches 应回 X-Proxy-Trim: recent:300
 curl.exe -sS -D - -o NUL "$H/od/api/teams/7119388/matches" | Select-String 'X-Proxy-Trim'
