@@ -18,6 +18,7 @@
 //         -d '{"action":"liquipediaFetchRawWikitext","params":{"pageName":"PGL Wallachia Season 9"}}'
 // ============================================================
 import { cors, db } from "../_shared/auth.ts";
+import { createL1Cache } from "../_shared/l1cache.ts";
 
 // ★ v8.16：slugmap 改为 TS 内联常量（Supabase EF 运行时对 `with { type: "json" }`
 //   import attributes 支持不稳，导致 500 启动错误）。由 scripts/gen-slugmap-ts.js 生成。
@@ -111,13 +112,18 @@ async function fetchWikitext(pageTitle: string): Promise<string | null> {
 }
 
 // ===== 缓存（key: lp:<slug>，TTL 按用途） =====
+// ★ 2026-10-13（P1-9）：L1（进程内）优先 —— 命中免一次 Postgres 往返。
+const L1 = createL1Cache({ cap: 40, ttlMs: 10 * 60 * 1000 });
 async function getCache(key: string): Promise<any | null> {
+  const hit = L1.get(key);
+  if (hit !== null) return hit;
   const client = await db();
   const { data, error } = await client
     .from("aggregation_cache").select("payload, expire_at")
     .eq("key", key).maybeSingle();
   if (error || !data) return null;
   if (new Date(data.expire_at) < new Date()) return null;
+  L1.set(key, data.payload, 10 * 60 * 1000);   // 表命中 → 回填内存
   return data.payload;
 }
 async function setCache(key: string, value: any, ttlMs: number): Promise<void> {
@@ -127,6 +133,7 @@ async function setCache(key: string, value: any, ttlMs: number): Promise<void> {
     expire_at: new Date(Date.now() + ttlMs).toISOString(),
     updated_at: new Date().toISOString()
   }, { onConflict: "key" }).then(r => { if (r.error) console.warn("[setCache]", r.error.message); });
+  L1.set(key, value, ttlMs);
 }
 
 // ★ v8.22：读表不过滤过期——LP 数据 TTL 由 sync 脚本管理，EF 纯读

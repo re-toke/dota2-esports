@@ -16,13 +16,18 @@
 //         -d '{"action":"steamProxy","params":{"path":"/GetHeroStats"}}'
 // ============================================================
 import { cors, db } from "../_shared/auth.ts";
+import { createL1Cache } from "../_shared/l1cache.ts";
 
 const STEAM_BASE = "https://api.steampowered.com/IDOTA2Match_570";
 const SCHEDULE_TTL_MS = 5 * 60 * 1000;      // 对齐云函数 TTL.liquipediaSchedule
 const FORCE_MIN_GAP_MS = 30 * 1000;         // force 节流（对齐云函数）
 
 // ===== 缓存（aggregation_cache 表，语义与云函数 getCache/setCache 一致） =====
+// ★ 2026-10-13（P1-9）：L1（进程内）优先 —— 命中免一次 Postgres 往返。
+const L1 = createL1Cache({ cap: 40, ttlMs: 10 * 60 * 1000 });
 async function getCache(key: string): Promise<any | null> {
+  const hit = L1.get(key);
+  if (hit !== null) return hit;
   const client = await db();
   const { data, error } = await client
     .from("aggregation_cache")
@@ -31,6 +36,7 @@ async function getCache(key: string): Promise<any | null> {
     .maybeSingle();
   if (error || !data) return null;
   if (new Date(data.expire_at) < new Date()) return null;
+  L1.set(key, data.payload, 10 * 60 * 1000);   // 表命中 → 回填内存
   return data.payload;
 }
 
@@ -44,6 +50,7 @@ async function setCache(key: string, value: any, ttlMs: number): Promise<void> {
       updated_at: new Date().toISOString()
     }, { onConflict: "key" });
   if (error) console.warn("[setCache]", error.message);
+  L1.set(key, value, ttlMs);
 }
 
 // ===== Steam GET 透传（对齐 fetchSteam：path + '/v1/?key=...&query'） =====

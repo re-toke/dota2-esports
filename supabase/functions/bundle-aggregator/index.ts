@@ -18,9 +18,20 @@
 //         -d '{"action":"getLeagueDetailBundle","params":{"leagueId":19944}}'
 // ============================================================
 import { cors, db } from "../_shared/auth.ts";
+import { createL1Cache } from "../_shared/l1cache.ts";
 
 const OD_BASE = "https://api.opendota.com/api";
 const NAMES_TTL_MS = 6 * 3600 * 1000;
+
+// ★ 2026-10-13（P1-10）：`loadNames` 的 explorer IN 列表**分批上限** —— 原实现为单个无界
+//   `IN (…)`（最坏数百 id 一条 SQL）⇒ 现按 150 分块并行查询（各块独立缓存），消除无界 SQL。
+const NAMES_ID_CHUNK = 150;
+// ★ 2026-10-13（P1-10 · bundle 裁剪）：返回的 `matches` 字段**当前无客户端消费方** ——
+//   唯一调用方 `subpackages/detail/league-detail/league-detail.js` 只读 `bundle.teamNames`
+//   （实测核过），赛事列表另经 `api.getLeagueMatches` 单独获取 ⇒ 把返回的 `matches` 裁到
+//   最近 N 条（复用 P0-1 思路：OD `/leagues/{id}/matches` 按时间倒序），既控 EF→客户端
+//   payload 又**零功能回归**；`teamNames` 仍由**全量** od 推导，不受此裁剪影响。
+const BUNDLE_MATCH_CAP = 300;
 
 // ===== 缓存（key 与 opendota-proxy 对齐："od:" + path） =====
 async function getAnyCache(key: string): Promise<any | null> {
@@ -31,13 +42,18 @@ async function getAnyCache(key: string): Promise<any | null> {
   return data ? data.payload : null;
 }
 
+// ★ 2026-10-13（P1-9）：L1（进程内）优先 —— 命中免一次 Postgres 往返（bundle 热路径重复命中收益最直接）。
+const L1 = createL1Cache({ cap: 40, ttlMs: 10 * 60 * 1000 });
 async function getFreshCache(key: string): Promise<any | null> {
+  const hit = L1.get(key);
+  if (hit !== null) return hit;
   const client = await db();
   const { data, error } = await client
     .from("aggregation_cache").select("payload, expire_at")
     .eq("key", key).maybeSingle();
   if (error || !data) return null;
   if (new Date(data.expire_at) < new Date()) return null;
+  L1.set(key, data.payload, 10 * 60 * 1000);   // 表命中 → 回填内存
   return data.payload;
 }
 
@@ -50,6 +66,7 @@ async function setCache(key: string, value: any, ttlMs: number): Promise<void> {
       updated_at: new Date().toISOString()
     }, { onConflict: "key" });
   if (error) console.warn("[setCache]", error.message);
+  L1.set(key, value, ttlMs);
 }
 
 // ===== OpenDota 抓取（6s 短超时单次尝试，对齐云函数「快失败」设计） =====
@@ -88,6 +105,7 @@ async function loadOd(leagueId: number, force: boolean, odPath: string): Promise
 }
 
 // ===== 子任务 ②：explorer teamNames（id 集合从 od 结果提取） =====
+// ★ P1-10：原为单个无界 IN 查询；现按 NAMES_ID_CHUNK 分块**并行**（各块独立缓存）。
 async function loadNames(odList: any[]): Promise<Record<string, string>> {
   const ids: number[] = [];
   const seen: Record<string, boolean> = {};
@@ -104,8 +122,22 @@ async function loadNames(odList: any[]): Promise<Record<string, string>> {
     }
   });
   if (!ids.length) return {};
+  // ★ P1-10：升序排序 ⇒ 分块键稳定（跨 bundle 命中缓存；od 顺序变化不影响键）。
+  ids.sort((a, b) => a - b);
+  const chunks: number[][] = [];
+  for (let i = 0; i < ids.length; i += NAMES_ID_CHUNK) {
+    chunks.push(ids.slice(i, i + NAMES_ID_CHUNK));
+  }
+  const parts = await Promise.all(chunks.map((c) => loadNamesChunk(c)));
+  const map: Record<string, string> = {};
+  parts.forEach((p) => Object.assign(map, p));
+  return map;
+}
+
+// ★ P1-10：单块 explorer 查询（有界 IN）+ 6h 缓存 / stale 兜底。
+async function loadNamesChunk(chunk: number[]): Promise<Record<string, string>> {
   const sqlPath = "/explorer?sql=" + encodeURIComponent(
-    "SELECT team_id, name FROM teams WHERE team_id IN (" + ids.join(",") + ")");
+    "SELECT team_id, name FROM teams WHERE team_id IN (" + chunk.join(",") + ")");
   let data: any = null;
   const cached = await getFreshCache(sqlPath);
   if (cached) {
@@ -158,7 +190,9 @@ Deno.serve(async (req) => {
       console.log("[bundle] league=" + leagueId + " 两者皆空 → 200 + data:null（非故障，不计熔断）");
       return Response.json({ data: null, source: "empty" }, { status: 200 });
     }
-    return Response.json({ data: { matches: od, teamNames: names }, source: "bundle" });
+    // ★ P1-10：返回的 matches 裁到最近 BUNDLE_MATCH_CAP 条（客户端不读 matches，见顶部注释）
+    const odOut = (Array.isArray(od) && od.length > BUNDLE_MATCH_CAP) ? od.slice(0, BUNDLE_MATCH_CAP) : od;
+    return Response.json({ data: { matches: odOut, teamNames: names }, source: "bundle" });
   } catch (e) {
     console.error("[bundle-aggregator] unhandled:", (e as Error).message);
     return Response.json({ error: (e as Error).message }, { status: 500 });

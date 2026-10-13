@@ -13,17 +13,23 @@
 // 验证：curl -X POST .../functions/v1/haglund-proxy -d '{}'
 // ============================================================
 import { cors, db } from "../_shared/auth.ts";
+import { createL1Cache } from "../_shared/l1cache.ts";
 
 const HAGLUND_BASE = "https://dota.haglund.dev/v1/matches";
 const TTL_MS = 10 * 60 * 1000;
 
+// ★ 2026-10-13（P1-9）：L1（进程内）优先 —— 命中免一次 Postgres 往返。
+const L1 = createL1Cache({ cap: 40, ttlMs: 10 * 60 * 1000 });
 async function getFreshCache(key: string): Promise<any | null> {
+  const hit = L1.get(key);
+  if (hit !== null) return hit;
   const client = await db();
   const { data, error } = await client
     .from("aggregation_cache").select("payload, expire_at")
     .eq("key", key).maybeSingle();
   if (error || !data) return null;
   if (new Date(data.expire_at) < new Date()) return null;
+  L1.set(key, data.payload, 10 * 60 * 1000);   // 表命中 → 回填内存
   return data.payload;
 }
 
@@ -36,6 +42,7 @@ async function setCache(key: string, value: any, ttlMs: number): Promise<void> {
       updated_at: new Date().toISOString()
     }, { onConflict: "key" });
   if (error) console.warn("[setCache]", error.message);
+  L1.set(key, value, ttlMs);
 }
 
 Deno.serve(async (req) => {

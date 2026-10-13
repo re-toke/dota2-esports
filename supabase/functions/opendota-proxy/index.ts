@@ -17,6 +17,7 @@
 //         -H "Content-Type: application/json" -d '{"action":"getHeroes"}'
 // ============================================================
 import { cors, db } from "../_shared/auth.ts";
+import { createL1Cache } from "../_shared/l1cache.ts";
 
 const OD_BASE = "https://api.opendota.com/api";
 
@@ -76,28 +77,14 @@ function resolveTtl(action: string): number {
 }
 
 // ===== 缓存层（字段与 001-init.sql 实际表结构一致：key/payload/expire_at） =====
-// ★ v8.31：实例内存热缓存（L1）——preheat 灌入 + 热点 key 常驻，同实例重复请求
-//   免 Postgres 往返（省 100-300ms）。实例级 best-effort（免费版单实例为主）。
-const MEM = new Map<string, { payload: any; expire: number }>();
-const MEM_CAP = 40;                 // 容量上限（防大响应撑爆 512MB 内存）
-const MEM_TTL_MS = 10 * 60 * 1000;  // 内存 TTL 10min（表 TTL 是权威，此处仅加速）
-
-function memGet(key: string): any | null {
-  const m = MEM.get(key);
-  if (!m) return null;
-  if (m.expire < Date.now()) { MEM.delete(key); return null; }
-  return m.payload;
-}
-function memSet(key: string, payload: any, ttlMs: number): void {
-  if (MEM.size >= MEM_CAP) {
-    const oldest = MEM.keys().next().value;
-    if (oldest) MEM.delete(oldest);   // FIFO 淘汰
-  }
-  MEM.set(key, { payload, expire: Date.now() + Math.min(ttlMs, MEM_TTL_MS) });
-}
+// ★ 2026-10-13（P1-9）：实例内存热缓存（L1）**抽取为共享模块** `_shared/l1cache.ts`，
+//   与 liquipedia-proxy / steam-proxy / haglund-proxy / bundle-aggregator 复用同一实现
+//   （Map + TTL + 容量 FIFO 淘汰）。preheat 灌入 + 热点 key 常驻，同实例重复请求免
+//   Postgres 往返（省 100-300ms）。实例级 best-effort（免费版单实例为主）。
+const L1 = createL1Cache({ cap: 40, ttlMs: 10 * 60 * 1000 });
 
 async function getCache(key: string): Promise<any | null> {
-  const hit = memGet(key);
+  const hit = L1.get(key);
   if (hit !== null) return hit;
   const client = await db();
   const { data, error } = await client
@@ -107,7 +94,7 @@ async function getCache(key: string): Promise<any | null> {
     .maybeSingle();
   if (error || !data) return null;
   if (new Date(data.expire_at) < new Date()) return null;  // 过期
-  memSet(key, data.payload, 10 * 60 * 1000);               // 表命中 → 回填内存
+  L1.set(key, data.payload, 10 * 60 * 1000);               // 表命中 → 回填内存
   return data.payload;
 }
 
@@ -122,7 +109,7 @@ async function setCache(key: string, value: any, ttlMs: number): Promise<void> {
       updated_at: new Date().toISOString()
     }, { onConflict: "key" });
   if (error) { console.warn("[setCache] upsert failed:", error.message); return; }
-  memSet(key, value, ttlMs);
+  L1.set(key, value, ttlMs);
 }
 
 // ===== stale 兜底查询（失败时用过期缓存顶上，与云函数语义一致） =====
