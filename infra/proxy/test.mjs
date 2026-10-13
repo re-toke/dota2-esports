@@ -448,6 +448,12 @@ const textOf = async (r) => { try { return await r.clone().text(); } catch (e) {
   const b4 = await (await handle(req('/healthz'), ENV)).json();
   ok('★ P1-12 /healthz：完全取不到 ⇒ ipSource=none（据此可判定平台未注入）',
     b4.ipSource === 'none' && b4.ipMasked === '', b4.ipSource);
+
+  // ⑧ **IPv4-mapped IPv6**（Deno Deploy 对 IPv4 客户端返回 `::ffff:1.2.3.4`）⇒ 必须剥前缀后
+  //   按 IPv4 打码。不剥会塌成 `::ffff::x`、各客户端看起来一样（2026-10-13 修复）。
+  const b5 = await (await handle(req('/healthz'), ENV, { ip: '::ffff:203.0.113.9' })).json();
+  ok('★ P1-12 /healthz：IPv4-mapped IPv6 按 IPv4 打码（不塌成 ::ffff::x）',
+    b5.ipSource === 'ctx' && b5.ipMasked === '203.0.113.x', b5.ipSource + ' / ' + b5.ipMasked);
 }
 
 // ── ⑯ 方案 B（2026-10-13）：按需 gzip —— `X-Gzip-Ok` 显式门控（老客户端零回归） ─────────

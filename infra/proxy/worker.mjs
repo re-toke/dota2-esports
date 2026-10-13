@@ -126,6 +126,12 @@ function clientIp(request, ctx) {
 function maskIp(ip) {
   var s = String(ip || '');
   if (!s) return '';
+  // ★ 2026-10-13：**先剥掉 IPv4-mapped IPv6 前缀** —— Deno Deploy 的 `connInfo.remoteAddr.hostname`
+  //   对 IPv4 客户端返回的是 `::ffff:1.2.3.4`。若不剥，就会走下面的 IPv6 分支、打码成 `::ffff::x`
+  //   ⇒ **所有 IPv4 客户端看起来一模一样**，`/healthz` 的 `ipMasked` 就再也不能用来核对
+  //   「是不是每客户端一个桶」（开 `PROXY_RATE_LIMIT_MAX` 前的必做验证）。
+  var m = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(s);
+  if (m) s = m[1];
   if (s.indexOf(':') >= 0) return s.split(':').slice(0, 3).join(':') + '::x';
   var p = s.split('.');
   return p.length === 4 ? p[0] + '.' + p[1] + '.' + p[2] + '.x' : s;
