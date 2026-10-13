@@ -131,7 +131,9 @@ function request(path, data, opts) {
   const slotPromise = (retry > 0 && firstTs && (Date.now() - firstTs) < WINDOW_MS)
     ? Promise.resolve(firstTs)            // 重试且首次槽位未过期 → 复用（不再占位）
     : acquireSlot().then((ts) => { if (firstTs == null) opts._firstTs = ts; return ts; });
-  return slotPromise.then(() => rawRequest(path, data, opts.headers))
+  // ★ 2026-10-13：记下**本次实际使用的宿主**，供失败时精确切换（见 endpoints.failover(fromHost)）
+  let _usedHost = '';
+  return slotPromise.then(() => { _usedHost = endpoints.current(); return rawRequest(path, data, opts.headers); })
     .catch((err) => {
       const code = err && err.statusCode;
       // ★ P1-2 双出口：**传输层失败**（无 HTTP 状态码 ⇒ 域名不可达 / TLS 被劫持 / 超时）+ 存在备出口
@@ -140,7 +142,8 @@ function request(path, data, opts) {
       //   守卫：① count()===1（当前仅主出口）时**不进此分支 ⇒ 行为与改造前等价**；
       //         ② `_hostFailover` 保证每条请求链**最多切一次**（主备皆挂时不来回横跳）。
       if (!code && !opts._hostFailover && endpoints.count() > 1) {
-        const next = endpoints.failover();
+        // ★ 2026-10-13：传入本次使用的宿主 ⇒ 迟到失败不再重复推进出口（修「切换过冲」）
+        const next = endpoints.failover(_usedHost);
         if (next) {
           return request(path, data, {
             retries: retry, _firstTs: opts._firstTs, headers: opts.headers, _hostFailover: true

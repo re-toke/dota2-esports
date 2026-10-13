@@ -87,6 +87,7 @@ function edge(name, data, opts) {
     if (!efAvailable(_bkey)) { reject(new Error('supabase ef unavailable: ' + _bkey)); return; }
 
     var authKey = (opts && opts.jwt) ? opts.jwt : sb().anonKey;
+    var _usedHost = endpoints.current();   // ★ 2026-10-13：本次实际使用的宿主（供失败时精确切换）
     wx.request({
       // ★ P1-2：动态取当前出口（endpoints 主→备粘滞）；`sb().url` 仅作回退（endpoints 不可用时）
       url: (endpoints.sbUrl() || sb().url) + '/functions/v1/' + name,
@@ -128,7 +129,8 @@ function edge(name, data, opts) {
         _countFail(_bkey);
         // ★ P1-2：传输层失败（未联通中转）⇒ 标记切出口，后续 EF/REST 请求自然走备出口。
         //   仅在有备出口时生效（count()>1）；此处不重试（重试由上层调用方/熔断策略决定）。
-        if (endpoints.count() > 1) endpoints.failover();
+        // ★ 2026-10-13：传入本次使用的宿主 ⇒ 迟到失败不再重复推进出口（修「切换过冲」）。
+        if (endpoints.count() > 1) endpoints.failover(_usedHost);
         reject(new Error(err.errMsg || 'network fail'));
       }
     });
@@ -169,6 +171,7 @@ function rest(table, query) {
       'Authorization': 'Bearer ' + sb().anonKey
     };
     // ★ P1-2：动态取当前出口（同 edge()）
+    var _usedHost = endpoints.current();   // ★ 2026-10-13：本次实际使用的宿主（供失败时精确切换）
     var url = (endpoints.sbUrl() || sb().url) + '/rest/v1/' + table + '?select=' + encodeURIComponent(q.select || '*');
     if (q.eq) {
       Object.keys(q.eq).forEach(function (k) {
@@ -195,7 +198,8 @@ function rest(table, query) {
       },
       fail: function (err) {
         // ★ P1-2：传输层失败 ⇒ 标记切出口（同 edge()）
-        if (endpoints.count() > 1) endpoints.failover();
+        // ★ 2026-10-13：传入本次使用的宿主 ⇒ 迟到失败不再重复推进出口（修「切换过冲」）
+        if (endpoints.count() > 1) endpoints.failover(_usedHost);
         reject(new Error(err.errMsg || 'network fail'));
       }
     });

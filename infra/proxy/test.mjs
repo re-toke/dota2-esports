@@ -377,6 +377,22 @@ const textOf = async (r) => { try { return await r.clone().text(); } catch (e) {
   const q2 = await ep.probe((h) => Promise.resolve(h !== A));
   ok('★ P1-2 三台体检：主不可达 ⇒ 取**顺序最前**的可达者（B，而非 C）', q2 === B && ep.current() === B, q2);
 
+  // ⑤ 2026-10-13 真机演练修「切换过冲」：failover(fromHost) 只认「**失败的那台**」
+  //    真机复现：启动瞬间一批并发请求同时打到坏出口、各自失败各自盲转 ⇒ 3 台被转了一圈（8 次轮转，
+  //    正确只需 1 次）。修法：迟到失败（fromHost ≠ 当前出口）⇒ 原地不动。
+  ep.setHosts([A, B, C3]);
+  ok('★ 过冲：fromHost = 当前出口 ⇒ 正常切一格（A→B）',
+    ep.failover(A) === B && ep.current() === B, ep.current());
+  ok('★ 过冲：**同一个坏宿主的迟到失败**（fromHost=A，已切到 B）⇒ 原地不动，不推到 C',
+    ep.failover(A) === B && ep.current() === B, ep.current());
+  ok('★ 过冲：连发 3 个迟到失败 ⇒ 仍停在 B（不绕回 A / 不越到 C）',
+    ep.failover(A) === B && ep.failover(A) === B && ep.failover(A) === B && ep.current() === B, ep.current());
+  ok('★ 过冲：新出口 B 真的失败 ⇒ 才继续切到 C',
+    ep.failover(B) === C3 && ep.current() === C3, ep.current());
+  ep.setHosts([A]);
+  ok('★ 过冲：单出口时传 fromHost 亦原地不动',
+    ep.failover(A) === A && ep.current() === A, ep.current());
+
   ep.setHosts(require('../../utils/config.js').endpoints.proxy);   // 复位为真实候选
   ep.reset();
 }
