@@ -1,3 +1,4 @@
+// ⚠️ P1-20 子项 4｜非测试：本机密钥加载辅助模块（供「按需诊断」脚本 require），不属门禁用例。
 // scripts/test/load-local-secrets.js
 // 读取本机密钥（.secrets.local.json，已被 .gitignore 排除，绝不入库）。
 // 返回 {} 表示未配置 —— 调用方应优雅跳过，而不是报错。

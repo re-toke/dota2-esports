@@ -1,3 +1,4 @@
+// ⚠️ P1-20 子项 4｜不入门禁 ·「按需诊断」：用 https 直拉 Liquipedia 真实 wikitext（需联网，无法离线稳定运行）。
 // 完整诊断测试：验证 parseScheduledMatches 在真实 wikitext 上的解析能力
 // 用法：node scripts/test-scheduled-full.js
 //

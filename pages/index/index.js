@@ -16,6 +16,7 @@ const homeDedupe = require('../../utils/homeDedupe.js');
 const diagnostics = require('../../utils/diagnostics.js');
 const seriesStatus = require('../../utils/seriesStatus.js');   // ★ P0-A：终局判据单一纯实现
 const followBatch = require('../../utils/followBatch.js');   // ★ 2026-09-27：关注流三态/合并/编组纯逻辑
+const indexCardHelpers = require('../../utils/indexCardHelpers.js');   // ★ 2026-10-13（P1-20 子项 2）：首页卡片纯函数层（队名整形 + LIVE 局归一）
 const config = require('../../utils/config.js');   // ★ P0-B：诊断明细开关（config.debug.verboseLog）
 // v5.1（2026-09-01）：首页「对局级 upcoming」源 —— Liquipedia/Steam/haglund 排期（云代理，30min 缓存）
 const liquipedia = require('../../utils/liquipedia.js');
@@ -55,15 +56,8 @@ const LIVE_WINDOW_SEC = 6 * 3600;
 //   Xtreme Gaming → "XTRE"、Gaimin Gladiators → "GAIM"，用户完全无法分辨是哪支队伍。
 //   这是「显示的信息不知道是什么」的首要根因。
 //   → 卡面改用完整队名；缩写只保留给「队徽加载失败时的占位文字」（圆框里最多放 5 字符）。
-const TEAM_NAME_FALLBACK = '待定';
-function teamFullName(name) {
-  const s = (name == null ? '' : String(name)).trim();
-  return s || TEAM_NAME_FALLBACK;
-}
-function teamShortTag(name) {
-  const s = (name == null ? '' : String(name)).replace(/\s+/g, '');
-  return s ? s.slice(0, 5).toUpperCase() : '?';
-}
+// ★★★ 2026-10-13（P1-20 子项 2）：`TEAM_NAME_FALLBACK` / `teamFullName` / `teamShortTag`
+//   已整段搬到 `utils/indexCardHelpers.js`（可测纯函数层），本页改为 require 使用。
 
 // 根因 2：中央大数字其实是「击杀数」，不是系列比分。
 //   OpenDota proMatches / live 的 radiant_score / dire_score 都是 kills。
@@ -905,7 +899,7 @@ Page({
       //     （本例 2.7h 未达既有 `isStaleLiveSeries` 的 3h 兜底）。
       //   ⚠️ 已结束的局**不在此并入**，交给 pro 侧权威（含比分/胜负）——避免"未结算副本顶掉已结算数据"。
       if (Number(m.deactivate_time) > 0) return;
-      const norm = this._normalizeLiveMatch(m, now);
+      const norm = indexCardHelpers.normalizeLiveMatch(m, now);
       // league_name 空值回填（修复 2）
       if (!norm.league_name) {
         norm.league_name = proLeagueNameById[m.league_id] || '';
@@ -1173,26 +1167,8 @@ Page({
   //   原实现丢弃 → ② /live 场与 ⑥ lpUp（Steam 云代理）同一对局因系列键不同拆成两张卡
   //   （lpUp 卡 leagueName 正确，/live 卡 league_name 缺失显示「职业赛事」）。
   //   透传后 groupSeries 按 series_id 聚合，② 与 ⑥ 可合并（配合 _applyMatchSources ⑥ 段覆盖）。
-  _normalizeLiveMatch(m, now) {
-    return {
-      match_id: m.match_id,
-      start_time: m.activate_time || m.start_time || (now - (m.duration || 0)),
-      radiant_win: null,
-      leagueid: m.league_id,
-      league_name: m.league_name || '',
-      radiant_team_id: m.team_id_radiant,
-      dire_team_id: m.team_id_dire,
-      radiant_name: m.team_name_radiant,
-      dire_name: m.team_name_dire,
-      series_id: m.series_id || null,      // ★ 2026-09-01：透传 Steam 原生 series_id
-      series_type: m.series_type,
-      radiant_score: m.radiant_score,
-      dire_score: m.dire_score,
-      duration: m.duration,
-      spectators: m.spectators,
-      _isLiveSource: true
-    };
-  },
+  // ★★★ 2026-10-13（P1-20 子项 2）：原 `_normalizeLiveMatch` 已抽到
+  //   `utils/indexCardHelpers.normalizeLiveMatch`（可测纯函数层）。调用点见本文件 ~L908。
 
   // groupSeries 系列 → 首页卡片（字段对齐 v4.2 体系：name/subScoreText/bo/boText/boGames）
   //   boType 由 applyBo 权威判定（S3 series_type → BO3/BO5/BO2；S5 局数约束兜底）。
@@ -1338,8 +1314,8 @@ Page({
       // ★ 2026-09-01（进行中卡修复）：LP live 系列（buildLpLiveSeries）带 Steam 原生队标
       //   （team1Logo/team2Logo，UGC URL）。直出免 _enrichMatchLogos 查询；
       //   _enrichMatchLogos 的 `if (!team.logo) return` 会跳过已带 logo 的队，天然兼容。
-      teamA: { id: s.radiantTeamId, name: teamFullName(aName), tag: teamShortTag(aName), logo: logoUrlOf(s.team1Logo) },
-      teamB: { id: s.direTeamId, name: teamFullName(bName), tag: teamShortTag(bName), logo: logoUrlOf(s.team2Logo) },
+      teamA: { id: s.radiantTeamId, name: indexCardHelpers.teamFullName(aName), tag: indexCardHelpers.teamShortTag(aName), logo: logoUrlOf(s.team1Logo) },
+      teamB: { id: s.direTeamId, name: indexCardHelpers.teamFullName(bName), tag: indexCardHelpers.teamShortTag(bName), logo: logoUrlOf(s.team2Logo) },
       scoreA: s.scoreA || 0,           // ★ 系列胜局（非击杀）
       scoreB: s.scoreB || 0,
       subScoreText: subScoreText,      // 击杀标注（仅 live 卡渲染，模板按 status 过滤）

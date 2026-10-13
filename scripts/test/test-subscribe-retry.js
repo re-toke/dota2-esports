@@ -1,3 +1,6 @@
+// ⚠️ P1-20 子项 4｜不入门禁 ·「漂移待修」：其 mock 仍按「wx.cloud.callFunction」单一发送链路编写，
+//    而 `utils/subscribe.js` 已迁移为「supabase 主 + cloud 兜底」⇒ 6 条用例红（非生产回归，是测试 mock 漂移）。
+//    离线本身可跑，但需专项重写 mock 后方可入禁。
 // scripts/test-subscribe-retry.js
 // §8.3 云端推送重试单元测试（2026-07-29）
 //

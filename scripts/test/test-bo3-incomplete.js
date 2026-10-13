@@ -24,6 +24,10 @@ console.log('=== 根因 H：BO3 中途单局独立成 BO1 卡 ===\n');
       radiant_win: false, start_time: T, duration: 3163 }
   ];
   var series = sources.groupSeries(matches);
+  // ★ 2026-10-13（P1-20 子项 4，接入门禁前修正漂移）：boType 的**权威判定在 applyBo**
+  //   —— groupSeries 内部的 boType 是「旧比分反推」推断，仅为兼容保留（见 sources.js L1434 注释）。
+  //   本场景（st=1 中途单局）groupSeries 旧推断给 BO1，applyBo 据 S3 series_type 正确定为 BO3。
+  if (series[0]) sources.applyBo(series[0], {});
   ok('S1: 仅 1 局已结算(series_type=1) → 1 张卡', series.length === 1, 'series=' + series.length);
   ok('S1: phase 应为 live（系列仍进行）', series[0].phase === 'live', 'phase=' + series[0].phase);
   ok('S1: 比分 1:0', series[0].scoreA === 0 && series[0].scoreB === 1, 'A=' + series[0].scoreA + ' B=' + series[0].scoreB);

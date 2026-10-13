@@ -1,3 +1,4 @@
+// ⚠️ P1-20 子项 4｜不入门禁 ·「按需诊断」：需联网 + 本机 STRATZ_API_KEY（无法离线稳定运行）。
 // STRATZ API 直连诊断脚本
 // 验证：1) apiKey 是否有效 2) GraphQL schema 是否变更 3) 赛程查询是否返回数据
 

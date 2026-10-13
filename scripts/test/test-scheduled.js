@@ -1,3 +1,5 @@
+// ⚠️ P1-20 子项 4｜不入门禁 ·「按需诊断」：第 2 条用例 `getScheduledMatches` 需联网（Liquipedia）
+//    ⇒ 无法离线稳定运行。（其 1/3 条 parseScheduledMatches 用例本身离线，如需入禁可拆分为独立文件。）
 // 测试 Liquipedia 赛程解析（parseScheduledMatches + getScheduledMatches）
 // 用法：node scripts/test-scheduled.js
 

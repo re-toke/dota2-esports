@@ -1,3 +1,4 @@
+// ⚠️ P1-20 子项 4｜不入门禁 ·「按需诊断」：调试脚本，调用 liquipedia.getScheduledMatches（需联网）。
 // 调试脚本：直接查看 Liquipedia 返回的 wikitext 内容
 const liquipedia = require('../../utils/liquipedia.js');
 

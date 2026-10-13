@@ -1,3 +1,4 @@
+// ⚠️ P1-20 子项 4｜不入门禁 ·「按需诊断」：为开发者工具 Console / 云函数本地调试手工运行而写，非 Node 测试。
 // scripts/test-cloud-env.js
 // 云函数环境变量配置测试（STRATZ_API_KEY / STEAM_API_KEY）
 //

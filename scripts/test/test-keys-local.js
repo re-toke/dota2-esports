@@ -1,3 +1,4 @@
+// ⚠️ P1-20 子项 4｜不入门禁 ·「按需诊断」：需联网 + 本机 key（无法离线稳定运行）。
 // scripts/test-keys-local.js
 // 本地直连 STRATZ + Steam API 测试 key 有效性
 // 使用方法：
