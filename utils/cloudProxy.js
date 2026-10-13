@@ -4,7 +4,8 @@
 // EF 不可用时静默回退到 api.js / stratz.js / steam.js / liquipedia.js 直连。
 //
 // 本文件统一导出两类接口：
-//   1) 与 api.js 方法对齐的代理方法（getLeagues / getMatch …）—— 调用方无需感知底层。
+//   1) 与 api.js 方法对齐的代理方法（getLeagues / getTeam …）—— 调用方无需感知底层。
+//      ⚠️ 2026-10-13：`getMatch` **已刻意移除**（EF 未实现该 action ⇒ 有意走直连，见 BUG-G）。
 //   2) 通用 call(action, params) + 各源的便捷方法（steamProxy …）。
 //
 // ⚠️ 2026-10-12（P1-4）：原 `cloudBreaker` 全局闸门**已删除**（其 markFailure/markSuccess 全仓 0 调用
@@ -202,7 +203,10 @@ const PARAM_MAP = {
   getLeagues: function () { return {}; },
   getLeagueWindows: function () { return {}; },
   getLeagueMatches: function (id) { return { leagueId: id }; },
-  getMatch: function (id) { return { matchId: id }; },
+  // ★ 2026-10-13（BUG-G 改法②）：**刻意移除 `getMatch`**（与 `api.js` 的 `ACTION_MAP` 必须同步）——
+  //   `opendota-proxy.buildPath()` 未实现该 action ⇒ 登记只会多一次必然失败的 EF 往返（负优化）。
+  //   同时**移除 `cloudProxy.proxy.getMatch` 方法**（`METHOD_NAMES = Object.keys(PARAM_MAP)`）⇒
+  //   有意不经 EF 的调用一律走 `api.js` 直连（`tryCloudOrDirect` 的「未登记 ⇒ 直接 direct()」守卫）。
   searchTeams: function (name) { return { q: name }; },
   getTeam: function (id) { return { teamId: id }; },
   getTeamPlayers: function (id) { return { teamId: id }; },

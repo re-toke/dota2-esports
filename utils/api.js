@@ -411,7 +411,11 @@ const ACTION_MAP = {
   getLeagues: function () { return { action: 'getLeagues', params: {}, path: '/leagues', ttlKey: 'leagues' }; },
   getLeagueWindows: function () { return { action: 'getLeagueWindows', params: {}, path: '/explorer?sql=' + encodeURIComponent(sqlFragments.LEAGUE_WINDOWS_SQL()), ttlKey: 'leagueWindows' }; },
   getLeagueMatches: function (id) { return { action: 'getLeagueMatches', params: { leagueId: id }, path: '/leagues/' + id + '/matches', ttlKey: 'leagueMatches' }; },
-  getMatch: function (id) { return { action: 'getMatch', params: { matchId: id }, path: '/matches/' + id, ttlKey: 'match' }; },
+  // ★ 2026-10-13（BUG-G 改法②）：**刻意移除 `getMatch`** —— `opendota-proxy` 的 `buildPath()`
+  //   未实现该 action（`supabase/functions/opendota-proxy/index.ts` 的 switch 无 `getMatch`），
+  //   登记它只会让每次 `getMatch` 先发一趟**必然失败的 EF 往返**再回落直连（负优化）。
+  //   ⇒ 语义 = 「**有意不经 EF**」；由 `tryCloudOrDirect` 的「未登记 ⇒ 直接直连」守卫承接。
+  //   ⚠️ 同时从 `cloudProxy.js` 的 `PARAM_MAP` 移除（两处必须同步，否则三向守卫报错）。
   searchTeams: function (name) { return { action: 'searchTeams', params: { q: name }, path: '/search', data: { q: name }, ttlKey: 'search' }; },
   getTeam: function (id) { return { action: 'getTeam', params: { teamId: id }, path: '/teams/' + id, ttlKey: 'team' }; },
   getTeamPlayers: function (id) { return { action: 'getTeamPlayers', params: { teamId: id }, path: '/teams/' + id + '/players', ttlKey: 'teamPlayers' }; },
@@ -451,7 +455,16 @@ function writeThrough(path, reqData, respData, ttlSec) {
 }
 function tryCloudOrDirect(methodName, args, directFn, transform, force) {
   const direct = directFn;
-  const m = ACTION_MAP[methodName].apply(null, args || []);
+  // ★★ 2026-10-13（BUG-G · P1-20 三向守卫的配套改造）：**未登记 = 有意不经 EF ⇒ 直接走直连**。
+  //   背景：原实现 `ACTION_MAP[methodName].apply(...)` 假定**每个**调用方都已登记；
+  //   而 BUG-G 的改法②要求把 `getMatch` 从 `ACTION_MAP`/`PARAM_MAP` **移除**（EF 侧
+  //   `opendota-proxy.buildPath()` **未实现** `getMatch` ⇒ 登记反而多一次必然失败的 EF 往返、属负优化）。
+  //   若只是删映射而不加本守卫 ⇒ `ACTION_MAP['getMatch']` 为 undefined ⇒ **`.apply` 抛 TypeError**
+  //   （`getMatch` 被 `match-detail.js` / `league-detail.js:3004` 真实调用）。
+  //   ⇒ 语义改为「未登记即**有意**走直连」，与既有「EF 失败→回落直连」的最终结果**等价**（少一次无用往返）。
+  const entry = ACTION_MAP[methodName];
+  if (!entry) return direct();
+  const m = entry.apply(null, args || []);
   const cloud = cloudFetch(m.action, m.params, force);
   // O-4：写穿必须用 cloud 原始响应（transform 前），与 direct 侧 cached 的缓存内容
   //   （原始数据，transform 在返回给调用方前才做）完全一致；若写穿 transform 后的数据，
