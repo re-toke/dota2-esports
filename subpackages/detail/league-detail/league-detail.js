@@ -1288,6 +1288,8 @@ Page({
               //     ② BO2 口径不一致：原 Math.ceil(2/2)=1 会把 1:0 进行中的 BO2 判为已结束。
               //        本处以 utils/sources.js（BO 引擎权威实现）为准：
               //        「BO2 双局积分制必须打满 2 局才算结束」。
+              //   ⛔ 刻意不收敛（P1-18）：本条用 `boType → _boNum`（BO 局数）的**另一套表述**判"是否达上限"，
+              //      与 `seriesStatus.isDecidedByScore` **不等价**（依赖 BO 推导，一旦偏大即失效）——见 seriesStatus.js 收敛清单。
               if (_scoreA + _scoreB > 0) {
                 var _boNum = 0;
                 if (s.boType && /^BO\s*([1-9])$/i.test(s.boType)) {

@@ -1350,6 +1350,8 @@ function groupSeries(matches) {
         // ★ BO2 特殊：双局积分制必须打满 2 局才算结束（不论 2:0 还是 1:1 平局），
         //   不能用「比分达胜场条件」判定（BO2 的 ceil(2/2)=1 → 1:0 会误判已结束）。
         //   BO3/BO5 用「比分达胜场条件」判定（先达 BO_WIN 即结束，未必打满）。
+        //   ⛔ 刻意不收敛（P1-18）：本判据用 **BO 局数阈值**（`ceil(boNum/2)`）且先看 `games.length`
+        //      ⇒ 比「比分达 2 胜」更精细，与 `seriesStatus.isDecidedByScore` **不等价**（见 seriesStatus.js 收敛清单）。
         var _seriesStillGoing = false;
         if (st === 3) {  // BO2
           _seriesStillGoing = games.length < _boNumH;  // 局数不足 → 仍进行
@@ -1497,6 +1499,8 @@ function groupSeries(matches) {
   //   或 BO5 实际打了 6 局等），说明 patch 误并 → 自动剥离软关联键，重新分组（最多重试 1 次）。
   //   这是前 4 道约束都失效后的兜底保险，只在 PATCH_NULL_SERIES_ENABLED=true 时生效。
   if (PATCH_NULL_SERIES_ENABLED) {
+    //   ⛔ 刻意不收敛（P1-18）：本条是「**越界回滚**」（约束⑤）——用 BO 上限表判定"比分越界"，
+    //      与 `seriesStatus.isDecidedByScore`（状态终局判定）**语义不同**（见 seriesStatus.js 收敛清单）。
     const BO_LIMIT = { 'BO1': 1, 'BO2': 2, 'BO3': 3, 'BO5': 5 };
     var rollbackKeys = [];
     list.forEach(function (s) {
@@ -1692,6 +1696,8 @@ function buildBoContext(seriesList, league) {
     }
     if (played > ev.maxPlayed) ev.maxPlayed = played;
     // 联赛默认粗判（保守推导，仅供 S6 兜底）
+    //   ⛔ 刻意不收敛（P1-18）：本条是「**BO 制式推导**」（比分反推 BO），非状态终局判定；
+    //      与 `seriesStatus.isDecidedByScore` **语义不同**（见 seriesStatus.js 收敛清单）。
     const maxScore = Math.max(s.scoreA || 0, s.scoreB || 0);
     let bo = 'BO1';
     if (maxScore >= 3) bo = 'BO5';
