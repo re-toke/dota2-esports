@@ -136,7 +136,21 @@ function call(action, params, extra) {
         return Promise.resolve(h.data);
       }
     }
-    return _efCall(action, efName, sbPayload);
+    // ★ 2026-10-13（方案 A · 流量）：**前台并发去重**。冷启动/切页时多个调用点会在同一 tick
+    //   并发同一 action（实测：`app.js` 预取 + `leagues.js` onLoad + `search.js` onLoad 同时拉
+    //   `getLeagues`，单次 **321KB** ⇒ 重复 2~3 份）。此处与下方 `_efRefreshInFlight`（只覆盖
+    //   **后台刷新**）互补：这一条覆盖**前台首调**。守卫按「action + 载荷」粒度 ⇒ 参数不同
+    //   （不同 leagueId / force 标志）不会误合并；命中即复用**同一个 Promise**（成功与失败一并复用）。
+    var _k = _callKey(action, sbPayload);
+    if (_inflight[_k]) {
+      console.info('[cloudProxy] 并发去重命中 ' + action);
+      return _inflight[_k];
+    }
+    var _p = _efCall(action, efName, sbPayload);
+    _inflight[_k] = _p;
+    var _release = function () { delete _inflight[_k]; };
+    _p.then(_release, _release);
+    return _p;
   }
   // ★ 2026-09-22：未在 EDGE_ACTIONS 注册的 action 不再回落云开发（云开发已退役）
   return Promise.reject(new Error('action not mapped to any Edge Function: ' + action));
@@ -157,6 +171,14 @@ function _efCall(action, efName, sbPayload) {
     console.info('[cloudProxy] EF ' + efName + ' fail(' + (efErr && efErr.message) + ') → 无云开发回落（已退役）');
     throw efErr;
   });
+}
+
+// ★ 2026-10-13（方案 A）：前台（`call()`）并发去重的守卫表 + 键函数（见 `call()` 内注释）
+var _inflight = {};
+function _callKey(action, payload) {
+  var s = '';
+  try { s = JSON.stringify(payload); } catch (e) { s = ''; }
+  return action + '|' + s;
 }
 
 // ★ P1-6（2026-10-12）：热缓存过期的**后台刷新去重** —— 原实现每个调用点都各触发一次

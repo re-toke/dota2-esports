@@ -1813,8 +1813,16 @@ Page({
           }
         }).catch(() => { /* LP 补拉失败静默，等下轮 */ });
       }
+      // ★ 2026-10-13（方案 A · 口径对齐）：live 也加**与 pro 同款**的节流守卫。
+      //   原先 tick 内**无条件**拉 live（只靠 60s 缓存兜底）⇒ 与 `_kickMatchFlow` 的首屏 / onShow
+      //   拉取重叠时，会在同一窗口内**实拉两次**（实测单次 **142KB**，是首页最重的单项）。
+      //   阈值取 `POLL_BASE_MS`（= 轮询间隔）⇒ 语义是「**本窗口内已拉过就复用**」，
+      //   **不改变比分刷新节奏**：tick 时刻 `_lastLiveTs` 距响应已 ≥ 一个间隔，守卫必然放行。
+      const liveTask = (this._lastLive && this._lastLiveTs && (Date.now() - this._lastLiveTs < POLL_BASE_MS))
+        ? Promise.resolve(this._lastLive)
+        : api.getLiveMatches().catch(() => null);
       Promise.all([
-        api.getLiveMatches().catch(() => null),
+        liveTask,
         proTask
       ]).then(([live, pro]) => {
         if (_epoch !== this._pollEpoch) return;   // ★ P1-4：停止后不再写数据 / 不再武装

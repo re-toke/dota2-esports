@@ -118,6 +118,50 @@ async function main() {
     assert(reqCount > afterFail, '恢复后应能再次回源（inflight 未泄漏）');
   });
 
+  // ── 方案 A（2026-10-13）：**EF 前台并发去重**（`cloudProxy.call`） ──────────────────
+  //   背景（实测）：冷启动时 `app.js` 预取 + `leagues.js` onLoad + `search.js` onLoad 会同 tick
+  //   并发 `getLeagues`，单次 **321KB** ⇒ 原实现各发一次 ⇒ 重复 2~3 份出网。
+  //   实现：`cloudProxy.call` 按「action + 载荷」复用同一个 Promise（与 `api.js` 的三条前台路径互补）。
+  //   桩法：`_sbEfAvailable()` 与 `_efCall()` 都在**调用时**才 `require('./supabaseClient.js')`
+  //   ⇒ 直接改其 exports 即可；`{force:true}` 用于跳过热缓存，确保每次都落到 edge 计数上。
+  const sb = require(path.join(SRC, 'supabaseClient.js'));
+  const cloudProxy = require(path.join(SRC, 'cloudProxy.js'));
+  let edgeCalls = 0;
+  sb.efAvailable = function () { return true; };
+  sb.edge = function () {
+    edgeCalls++;
+    return new Promise(function (r) { setTimeout(function () { r({ data: [{ ok: 1 }] }); }, 20); });
+  };
+  config.supabase.enabled = true;   // `_sbEfAvailable()` 要求 enabled/url/anonKey 三者齐备
+
+  await check('EF 前台并发去重：同 action+同载荷并发 3 次只打 1 次 EF', async () => {
+    edgeCalls = 0;
+    const rs = await Promise.all([
+      cloudProxy.call('getLeagues', [], { force: true }),
+      cloudProxy.call('getLeagues', [], { force: true }),
+      cloudProxy.call('getLeagues', [], { force: true })
+    ]);
+    assert(edgeCalls === 1, '期望 1 次 EF 调用，实际 ' + edgeCalls);
+    assert(rs.every(function (x) { return Array.isArray(x) && x.length === 1; }), '三个调用方都应拿到同一份结果');
+  });
+
+  await check('EF 去重按载荷区分：不同参数**不**合并（避免误伤）', async () => {
+    edgeCalls = 0;
+    await Promise.all([
+      cloudProxy.call('getLeagues', { leagueId: 1 }, { force: true }),
+      cloudProxy.call('getLeagues', { leagueId: 2 }, { force: true })
+    ]);
+    assert(edgeCalls === 2, '不同载荷应各发 1 次（共 2），实际 ' + edgeCalls);
+  });
+
+  await check('EF 去重不粘滞：请求完成后同 key 再次调用不复用旧 Promise', async () => {
+    edgeCalls = 0;
+    await cloudProxy.call('getLeagues', [], { force: true });
+    assert(edgeCalls === 1, '首次应 1 次，实际 ' + edgeCalls);
+    await cloudProxy.call('getLeagues', [], { force: true });
+    assert(edgeCalls === 2, '完成后应能再次回源（inflight 已清理），实际 ' + edgeCalls);
+  });
+
   console.log('\n=== 结果 ===');
   console.log('通过: ' + passed + '  失败: ' + failed);
   if (failed) { console.log('存在失败 ❌'); process.exit(1); }

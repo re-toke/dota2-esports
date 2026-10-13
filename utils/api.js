@@ -513,7 +513,9 @@ function getProMatches() {
 
 // OpenDota /live：当前所有进行中的公开对局（含路人局）。
 // 职业场判定：league_id > 0（注意字段名是 league_id，与 proMatches 的 leagueid 不同）。
-// 该端点天然含 radiant_score/dire_score 实时比分，供 LIVE 卡 60s 轮询刷新。
+// 该端点天然含 radiant_score/dire_score 实时比分，供 LIVE 卡轮询刷新。
+// ★ 2026-10-13（方案 A）：TTL 与**实际轮询间隔**对齐（`pages/index/index.js` 的 `POLL_BASE_MS`），
+//   原先 60s < 120s ⇒ 轮询每次必 miss、每次实拉 142KB。见 `config.cacheTTL.liveMatches` 注释。
 function getLiveMatches() {
   return tryCloudOrDirect('getLiveMatches', [],
     function () { return cached('/live', null, config.cacheTTL.liveMatches); });
