@@ -510,6 +510,37 @@ const PROXY_HOSTS = [
 
 ---
 
+### E8. `[0]`/`[1]` 一次贴齐三样（C 裁剪 + IP 来源 + gzip）后的自检
+
+> 背景：这两台是**手贴副本**（`[0]` 还是**现网主出口**），所以别零散重贴 —— 一次把三样带齐：
+> ① P0-1 **C 的默认裁剪**（`DEFAULT_TEAM_TRIM`）；② P1-12 **IP 来源改造**（`clientIp(request, ctx)` + `ctx.ip` + fail-open）；③ 方案 B **按需 gzip**（`X-Gzip-Ok` 门控）。
+> 操作：把仓库 [infra/proxy/worker.mjs](worker.mjs) **整份**贴进 Deno 项目的入口文件（注意新模型要求入口叫 `src/main.ts`，见下方"坑"），保存并部署。
+
+**贴完跑这三条自检（本机执行，逐条对）**
+
+```powershell
+$H = 'https://tough-ferret-3579.re-toke.deno.net'   # 另一台同理换成 sparkly-gharial-1210
+
+# ① C 的默认裁剪：未声明的 /teams/*/matches 应回 X-Proxy-Trim: recent:300
+curl.exe -sS -D - -o NUL "$H/od/api/teams/7119388/matches" | Select-String 'X-Proxy-Trim'
+
+# ② IP 来源：应回 ipSource 非 none（Deno 上期望 ctx）+ 打码 IP
+curl.exe -sS "$H/healthz" | Select-String 'ipSource|ipMasked'
+
+# ③ gzip：带 X-Gzip-Ok 才有 Content-Encoding: gzip + X-Proxy-Gzip: 1（且体积骤降）
+curl.exe -sS --compressed -D - -o NUL -w "size=%{size_download}`n" -H "X-Gzip-Ok: 1" "$H/od/api/leagues"
+curl.exe -sS --compressed -D - -o NUL -w "size=%{size_download}`n" "$H/od/api/leagues"   # 期望：无 gzip、体积大
+```
+
+**通过标准**：①有 `X-Proxy-Trim`；②`ipSource` 非 `none`；③带头的 43KB 级 / 不带的 320KB 级。
+**老客户端零回归**：不带 `X-Gzip-Ok` 的请求**行为逐字节不变**（②③ 的"不带"那两条就是它的镜像）。
+
+> **坑**：Deno 新模型的 App 构建要求入口路径为 `src/main.ts`（草稿文件叫 `new.ts` 会 build 失败：
+> `Entrypoint at '/tmp/build/src/main.ts' not found`）。Playground 那份部署**目前仍在服务**，
+> 别在没验证替代品之前动它。另：**验证组织**后额度已从 `0.2 GiB` 提到 **20 GiB** 出网。
+
+---
+
 ## 路径 A · Cloudflare Worker（约 15 分钟）
 
 ### A1. 准备域名（10 分钟，一次性）
