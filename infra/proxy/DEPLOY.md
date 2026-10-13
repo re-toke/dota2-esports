@@ -3,13 +3,14 @@
 > 目标：得到一个**国内可达的域名**，把 Supabase（与 OpenDota 兜底）藏到它后面。
 > **两条路任选**；先试 A（免费、免运维），若 A 的域名被阻断再上 B。
 
-## 0. 先记住三条（都是实测出来的）
+## 0. 先记住四条（都是实测出来的）
 
 | # | 结论 | 依据 |
 |---|---|---|
 | 1 | **中转必须部署在境外/香港** | 本机（国内）跑同一份代码，`fetch('https://api.opendota.com/...')` **直接失败**（实测 `/od/api/leagues` → 502 `fetch failed`）⇒ 放国内等于白装 |
 | 2 | **必须用"自有域名"** | 免费子域实测不稳（`pages.dev` 一会儿通一会儿被重置；`workers.dev`/`vercel.app` 不通） |
 | 3 | **改域名不需要重新提审** | 小程序后台加 request 白名单后**对已上线版本立即生效** ✓ |
+| 4 | ★★ **Cloudflare 全系在国内已不可达（2026-10-13 实测，**推翻了 2026-10-10 的记录**）** | `cloudflare.com` / `www.cloudflare.com` / `workers.dev` / CF 代理域 `dota.haglund.dev` **全部 RST**。⚠️ 其中 `dota.haglund.dev` 在 **2026-10-10 曾实测「302 ✓ 可达」** ⇒ **CF 系可达性已明显恶化**。⇒ **「路径 A · Cloudflare Worker」当前不可行**（迁过去只会得到一个永远连不上的出口），**不要再按它部署**；若将来 CF 恢复，再按本节 §0.3 的表格复测一次即可。 |
 
 ### 0.1 「必须要自有域名吗？」—— 要，但只需买一个域名
 
@@ -32,7 +33,7 @@
 |---|---|---|---|
 | `*.workers.dev`（CF 默认） | ✅ | ❌ **DNS 被污染（解析到 65.49.26.97）+ TIMEOUT** | ❌ |
 | `*.pages.dev`（CF Pages） | ✅ | ⚠️ **不稳定**：一次 CF 真实 IP + 301 ✓，另一次被污染 + `ECONNRESET` | ❌ |
-| **自有域名 + CF Custom Domain** | 仅域名费 | ✅ 稳（同类参照 `dota.haglund.dev` 多轮一致 ✓） | ✅ **唯一稳的** |
+| **自有域名 + CF Custom Domain** | 仅域名费 | ⚠️ **该参照已失效（2026-10-13 复核）**：`dota.haglund.dev` 现为 **RST**（2026-10-10 曾 302 ✓）⇒ **CF 全系当前均不可达** | ⚠️ **当前不可用**（除非 CF 在国内恢复；见 §0 第 4 条） |
 
 **所以真正要花的只有"一个域名"**（+ 可能的备案），Worker / 证书 / CDN **全都免费**。
 
@@ -61,6 +62,31 @@
 
 ⇒ **一句话**：**新增的长期支出 = 域名的年费（¥60~90/年）**；可能还多一步**备案**（免费但费时间，且要国内云资源）。
 其余（Worker/DNS/证书/CDN）**长期免费**。
+
+### 0.3 ★ 平台可达性普查（2026-10-13 实测，**选平台前先看这张表**）
+
+> 方法同 §E0：**拿"不存在的子域"去连** —— 回 `404`/`502` 说明**域族可达**（DNS/TLS 通，只是该子域没服务）；
+> 报 `RST`/超时说明**域族被阻断**。全部用**本机国内网络**跑（与真机同网络）。
+> ⚠️ **可达性是会变的**（见下 `haglund.dev` 的反例）⇒ 本条只是**当日快照**，**选用前必须复测**。
+
+| 目标（域族） | 结果 | 判定 |
+|---|---|---|
+| `cloudflare.com` / `www.cloudflare.com` | **RST** | ❌ CF 主域不可达 |
+| `workers.dev` | **RST** | ❌ CF Workers 默认子域不可达 |
+| `dota.haglund.dev`（**CF 代理域**） | **RST** | ❌ ⚠️ **2026-10-10 曾实测「302 ✓」⇒ CF 系可达性已恶化** |
+| `example.koyeb.app` | **RST** | ❌ 不可达 |
+| `example.fly.dev` | **RST** | ❌ 不可达 |
+| `example.onrender.com` | **404** | ✅ 域族可达（但 **Render 注册已被风控要求银行卡**，用户已放弃） |
+| `example.zeabur.app` | **502** | ✅ 域族可达（免费层待核） |
+| `example.up.railway.app` | **404** | ✅ 域族可达（免费层待核） |
+| `example.netlify.app` | **200** | ✅ 可达（**现役 `[2]`**；额度仅 300 credits/月） |
+| `sparkly-gharial-1210.re-toke.deno.net/healthz` | **200** | ✅ 可达（**现役 `[0]`/`[1]`**） |
+
+**由此得出的结论（重要）**：
+- **Cloudflare 全系（含 apex / Workers / CF 代理域）在国内不可达** ⇒ 方案 D「把 `[2]` 迁 CF Workers」**当前不可行**（详见 §5.5「六」）。
+- **可达的免费 PaaS 只剩 Deno Deploy 与 Netlify，而两者运行时都是 Deno（同族）** ⇒
+  **「真正的跨提供商冗余」在免费层 + 当前网络下无法达成**（这正是本项目长期未落地的原因，**不是没做，是做不到**）。
+- 其余可达域族（Render / Railway / Zeabur）**均有付费或注册门槛**（Render 已因要卡被放弃）⇒ 若真要跨提供商，代价是**银行卡或自建服务器**（路径 B）。
 
 ---
 
@@ -167,7 +193,9 @@ npx deployctl deploy --project=<项目名> infra/proxy/worker.mjs
 
 ### 若 Deno/netlify 子域也被阻断
 
-按 §5 退到**零后端**路线（客户端直连已实测可达的 `dota.haglund.dev` ✓ / `liquipedia.net` ✓ / `api.steampowered.com` ✓ + curation 烘焙）。
+按 §5 退到**零后端**路线（客户端直连 `liquipedia.net` ✓ / `api.steampowered.com` ✓ + curation 烘焙）。
+> ⚠️ **2026-10-13 更正**：原列于此的 `dota.haglund.dev` **现已 RST 不可达**（它在 2026-10-10 曾实测 302 ✓）
+> ⇒ **不再是可用源**；这同时是"可达性是会变的"的又一个实例（见 §0.3）。
 
 
 ## 路径 E · **跨提供商第二台中转**（P1-2 双出口备槽，约 20 分钟）
@@ -570,6 +598,11 @@ curl.exe -sS --compressed -D - -o NUL -w "size=%{size_download}`n" "$H/od/api/le
 ---
 
 ## 路径 A · Cloudflare Worker（约 15 分钟）
+
+> ⛔ **本条当前不可用 —— 别按它部署（2026-10-13 实测）**
+> `cloudflare.com` / `www.cloudflare.com` / `workers.dev` / CF 代理域 `dota.haglund.dev` **全部 RST**
+> （`dota.haglund.dev` 在 2026-10-10 还实测 302 可达 ⇒ **CF 系可达性已恶化**）。
+> 部署到 CF 只会得到一个**国内永远连不上的出口**。以下步骤**仅作留档**，供**将来 CF 恢复时**复测后使用（复测方法见 §0.3）。
 
 ### A1. 准备域名（10 分钟，一次性）
 - 在哪买都行：**腾讯云 / 阿里云**（微信支付、实名方便）或 **Cloudflare Registrar**（要信用卡）。
