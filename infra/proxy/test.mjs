@@ -450,6 +450,47 @@ const textOf = async (r) => { try { return await r.clone().text(); } catch (e) {
     b4.ipSource === 'none' && b4.ipMasked === '', b4.ipSource);
 }
 
+// ── ⑯ 方案 B（2026-10-13）：按需 gzip —— `X-Gzip-Ok` 显式门控（老客户端零回归） ─────────
+{
+  const savedFetch = globalThis.fetch;
+  // 造一个 >1KB 的 JSON 上游响应（200 条 ≈ 8KB）
+  const bigBody = JSON.stringify({ data: Array.from({ length: 200 }, (_, i) => ({ id: i, name: 'team-' + i })) });
+  const mkRes = (body) => new Response(body, { status: 200, headers: { 'Content-Type': 'application/json' } });
+  const GZ = { headers: { 'X-Gzip-Ok': '1' } };
+
+  // ① 老客户端（已发布版本，不带 X-Gzip-Ok）⇒ **必须**明文且逐字节不变 ⇒ 零回归
+  globalThis.fetch = async () => mkRes(bigBody);
+  const plain = await handle(req('/od/api/proMatches?gz=p1'), ENV);
+  ok('★ 方案B 老客户端不带 X-Gzip-Ok ⇒ 不压缩（零回归）',
+    !plain.headers.get('Content-Encoding') && (await plain.text()) === bigBody,
+    'ce=' + plain.headers.get('Content-Encoding'));
+
+  // ② 新客户端（带 X-Gzip-Ok: 1）⇒ gzip + 回执头，且**解压后与明文一致**
+  globalThis.fetch = async () => mkRes(bigBody);
+  const gz = await handle(req('/od/api/proMatches?gz=p2', GZ), ENV);
+  const gzBuf = await gz.arrayBuffer();
+  const backText = Buffer.from(await new Response(
+    new Blob([gzBuf]).stream().pipeThrough(new DecompressionStream('gzip'))
+  ).arrayBuffer()).toString('utf8');
+  ok('★ 方案B 新客户端 ⇒ gzip + 解压后与明文逐字节一致',
+    gz.headers.get('Content-Encoding') === 'gzip' && gz.headers.get('X-Proxy-Gzip') === '1' && backText === bigBody,
+    'ce=' + gz.headers.get('Content-Encoding') + ' bytes=' + gzBuf.byteLength + '/' + bigBody.length);
+  ok('★ 方案B 压缩确实更小', gzBuf.byteLength < bigBody.length, gzBuf.byteLength + ' vs ' + bigBody.length);
+
+  // ③ 小响应（<1KB）即使声明了也**不压**（省不下多少、徒增解码开销）
+  globalThis.fetch = async () => mkRes('{"error":"tiny"}');
+  const tiny = await handle(req('/od/api/proMatches?gz=p3', GZ), ENV);
+  ok('★ 方案B <1KB 不压', !tiny.headers.get('Content-Encoding'), 'ce=' + tiny.headers.get('Content-Encoding'));
+
+  // ④ env.PROXY_GZIP=1 可强制开启（不依赖客户端头；自测/应急用）
+  globalThis.fetch = async () => mkRes(bigBody);
+  const forced = await handle(req('/od/api/proMatches?gz=p4'), Object.assign({}, ENV, { PROXY_GZIP: '1' }));
+  ok('★ 方案B env.PROXY_GZIP=1 强制压缩', forced.headers.get('Content-Encoding') === 'gzip',
+    'ce=' + forced.headers.get('Content-Encoding'));
+
+  globalThis.fetch = savedFetch;
+}
+
 console.log('\n=== 结果 ===');
 console.log('通过: ' + pass + '  失败: ' + fail);
 if (fail) { console.log('存在失败 ❌'); process.exit(1); }

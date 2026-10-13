@@ -96,7 +96,8 @@ function edge(name, data, opts) {
       timeout: 25000,
       header: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + authKey
+        'Authorization': 'Bearer ' + authKey,
+        'X-Gzip-Ok': '1'   // ★ 2026-10-13（方案 B）：声明可解 gzip ⇒ 中转才压缩（老版本不带 ⇒ 明文，零回归）
       },
       success: function (res) {
         if (res.statusCode >= 200 && res.statusCode < 300) {
@@ -168,7 +169,8 @@ function rest(table, query) {
     var q = query || {};
     var hdr = {
       'apikey': sb().anonKey,
-      'Authorization': 'Bearer ' + sb().anonKey
+      'Authorization': 'Bearer ' + sb().anonKey,
+      'X-Gzip-Ok': '1'   // ★ 2026-10-13（方案 B）：同上（声明可解 gzip）
     };
     // ★ P1-2：动态取当前出口（同 edge()）
     var _usedHost = endpoints.current();   // ★ 2026-10-13：本次实际使用的宿主（供失败时精确切换）

@@ -216,7 +216,8 @@ function textResponse(body, status, ct, cr, cacheState, extra) {
   return new Response(body, { status: status, headers: new Headers(h) });
 }
 
-async function handle(request, env, ctx) {
+// ★ 2026-10-13（方案 B）：原 `handle` 改名 `_handle`；对外仍导出 `handle`（= `_handle` + 按需 gzip 包装）。
+async function _handle(request, env, ctx) {
   const url = new URL(request.url);
   const path = url.pathname;
   const method = request.method.toUpperCase();
@@ -399,6 +400,58 @@ async function handle(request, env, ctx) {
     // 上游失败：把原因回给调用方（便于真机排查），但**不泄露任何凭据**
     return json({ error: 'upstream failed', detail: String((e && e.message) || e) }, 502);
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ★★ 2026-10-13（方案 B · 省出网）：**按需 gzip**（实测 JSON 体可压到 1/5~1/8）
+//
+// ## 为什么用「客户端显式声明」而不是看 `Accept-Encoding`
+//   真机对照实验证实：**微信 HTTP 栈会自动发 `Accept-Encoding: gzip`**（我们没设 header 也拿到了
+//   `Content-Encoding: gzip`）。⇒ 若按 `Accept-Encoding` 判断，**一部署就对所有客户端生效**
+//   （含已发布老版本），一旦解码不兼容就是**全站白屏**。故改为显式门控：
+//     · 新版本客户端请求头带 **`X-Gzip-Ok: 1`** ⇒ 回 gzip；
+//     · 老版本不带 ⇒ 照旧明文 ⇒ **零回归**（老客户端行为逐字节不变）。
+//   `env.PROXY_GZIP === '1'` 可强制开启（自测 / 应急）。
+//
+// ## 实现选型（三个避坑点）
+//   ① **只回 gzip，绝不回 br/zstd**（小程序对这两类无透明解压）⇒ 因此**不能**直接透传上游的
+//      `Content-Encoding`；本函数是在「已拿到解压后的明文 Response」之上**自己再压**。
+//   ② **fail-open**：压缩环节任何异常都还原成明文，绝不因压缩失败破坏响应。
+//   ③ 只压 `application/json`；已带 `Content-Encoding` 的不重复压；**小于 1KB 的不压**
+//      （省不下多少，反而增加解码开销）。
+function wantGzip(request, env) {
+  try {
+    if (env && String(env.PROXY_GZIP || '') === '1') return true;
+    var h = request && request.headers;
+    return !!(h && h.get && h.get('X-Gzip-Ok') === '1');
+  } catch (e) { return false; }
+}
+
+async function maybeGzip(request, env, res) {
+  if (!wantGzip(request, env)) return res;
+  var ct = res.headers.get('Content-Type') || '';
+  if (ct.indexOf('application/json') < 0) return res;
+  if (res.headers.get('Content-Encoding')) return res;
+  var buf = null;
+  try { buf = await res.arrayBuffer(); } catch (e) { return res; }   // 读不出 ⇒ 原样（可能已被消费）
+  // ⚠️ 读到 buf 后**原 res 的 body 已被消费**，任何"原样返回"都必须用 buf 重建
+  var plain = function () { return new Response(buf, { status: res.status, headers: res.headers }); };
+  if (buf.byteLength < 1024) return plain();
+  try {
+    var stream = new Response(buf).body.pipeThrough(new CompressionStream('gzip'));
+    var h = new Headers(res.headers);
+    h.set('Content-Encoding', 'gzip');
+    h.set('Vary', 'X-Gzip-Ok');
+    h.set('X-Proxy-Gzip', '1');     // 回执：便于验证「本条确实被压了」
+    h.delete('Content-Length');     // 长度由运行时重算（分块传输）
+    return new Response(stream, { status: res.status, headers: h });
+  } catch (e) { return plain(); }
+}
+
+// 唯一出口：所有 adapter（Deno 默认导出 / Netlify Edge / node-server）都经此
+// ⇒ gzip 是**单一 choke point**，天然覆盖 `/sb/*`、`/od/api/*`、`/healthz` 全部响应路径。
+async function handle(request, env, ctx) {
+  return await maybeGzip(request, env, await _handle(request, env, ctx));
 }
 
 export default {

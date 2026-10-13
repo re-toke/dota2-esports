@@ -83,7 +83,10 @@ function rawRequest(path, data, headers) {
       method: 'GET',
       timeout: REQUEST_TIMEOUT_MS,
       // ★ P0-1 C：允许透传额外头（如 `X-Trim: 0` 声明"要全量" ⇒ 豁免中转默认裁剪）
-      header: Object.assign({ 'content-type': 'application/json' }, headers || {}),
+      // ★ 2026-10-13（方案 B · 省出网）：**显式声明可解 gzip** ⇒ 中转才会压缩回传。
+      //   为什么不靠 `Accept-Encoding`：真机实测**微信栈会自动发它** ⇒ 中转若按它判断，
+      //   会对**已发布老版本**也生效、一旦不兼容即全站白屏。带上本头 = 明确"我（这一版）能解"。
+      header: Object.assign({ 'content-type': 'application/json', 'X-Gzip-Ok': '1' }, headers || {}),
       success: (res) => {
         if (settled) return;
         settled = true;
