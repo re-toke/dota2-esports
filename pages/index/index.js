@@ -1016,14 +1016,8 @@ Page({
     //   用户确认：保留 lpUp 卡（Inner Circle vs Team Lynx 简称，leagueName/BO 正确）。
     let lpCtx = null;
     if (lpUp && lpUp.length) lpCtx = sources.buildBoContext(lpUp, null);
-    const _normTeamX = (s) => {
-      if (!s) return '';
-      var n = String(s).toLowerCase().trim();
-      n = n.replace(/\s*[x×]\s+\S+.*$/i, '');
-      n = n.replace(/\s*(esports|e-sports|gaming|team|club)\s*$/g, '');
-      n = n.replace(/[^a-z0-9一-鿿а-яё]/g, '');
-      return n;
-    };
+    // ★ 2026-10-13（P1-17）：并入 names.js「含 CJK 族」单一实现（原为内联副本）。
+    const _normTeamX = names.normTeamNameCjkSponsor;
     const _pairKeyX = (a, b) => {
       var na = _normTeamX(a), nb = _normTeamX(b);
       if (!na || !nb) return null;

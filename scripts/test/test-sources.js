@@ -1010,7 +1010,7 @@ check('names：★ 全库禁止再内联该规则（白名单外一律 FAIL）',
   // 白名单：给出文件的**存在理由**，新增前请先确认无法 require utils/names.js
   const ALLOW = {
     'utils/names.js': '单一实现本体',
-    'utils/league-canon-map.js': '与 cloudfunctions 副本是**镜像对**（云端 bundle 无法 require 主包）',
+    'utils/league-canon-map.js': '★ 2026-10-13（P1-17）：`normalizeKey` 已改调 `names.normAsciiKey`（规则逐字相同）⇒ 本豁免已不再命中；条目保留作历史备查',
     'cloudfunctions/aggregation/league-canon-map.js': '同上（镜像对另一半）',
     'cloudfunctions/aggregation/names.js': '**镜像**（与 utils/names.js 同实现；云端 bundle 无法 require 主包）\n      —— 云函数 index.js 已于 2026-09-21 迁移完成、不再豁免；本条目随该目录退役一并失效',
     'scripts/ops/discover-tournaments.js': 'consensus.js 加载失败时的**刻意内联回退**实现'

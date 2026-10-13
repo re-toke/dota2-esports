@@ -2152,12 +2152,8 @@ function filterMatchesByWindow(raw, win) {
 function dedupeLiveSeries(seriesList) {
   if (!Array.isArray(seriesList) || seriesList.length < 2) return seriesList;
   var PLACEHOLDER_RE = /^(天辉|夜魇|tbd|tba|unknown|待定|待公布)$/i;
-  function _norm(s) {
-    var n = String(s || '').toLowerCase().trim();
-    n = n.replace(/\s*(esports|e-sports|gaming|team|club)\s*$/g, '');
-    n = n.replace(/[^a-z0-9一-鿿а-яё]/g, '');
-    return n;
-  }
+  // ★ 2026-10-13（P1-17）：并入 names.js「含 CJK 族」单一实现（原为内联副本）。
+  var _norm = names.normTeamNameCjk;
   function _pairKey(s) {
     var a = _norm(s.radiantName || s.team1Name);
     var b = _norm(s.direName || s.team2Name);
@@ -2419,15 +2415,8 @@ const PHASE_RANK = { live: 3, recent: 2, upcoming: 1 };
 // 信息量排序：① 有有效 series_id > 无；② phase rank 高 > 低；③ 系列比分总和 大 > 小；④ 有 boType > 无。
 function _dedupCrossSourceMatches(matches) {
   if (!matches || matches.length <= 1) return matches;
-  function _normTeam(s) {
-    if (!s) return '';
-    var n = String(s).toLowerCase().trim();
-    // ★ 2026-09-01（三卡修复）：剥离「 x 赞助商」后缀（与 buildLpLiveSeries._normTeamX 同口径）
-    n = n.replace(/\s*[x×]\s+\S+.*$/i, '');
-    n = n.replace(/\s*(esports|e-sports|gaming|team|club)\s*$/g, '');
-    n = n.replace(/[^a-z0-9一-鿿а-яё]/g, '');
-    return n;
-  }
+  // ★ 2026-10-13（P1-17）：并入 names.js「含 CJK 族」单一实现（原为内联副本）。
+  var _normTeam = names.normTeamNameCjkSponsor;
   function _isTBD(n) { return !n || n === 'tbd' || n === 'tba'; }
   function _hasValidSid(m) {
     var sid = m.series_id;
@@ -2529,14 +2518,8 @@ function groupLiquipediaMatches(matches) {
     //   "Nigma Galaxy" vs "Nigma" 后缀差异等切开 → 同一 BO3 各局分到不同桶。
     //   归一化：小写 + 去 esports/gaming/team/club 后缀 + 去非字母数字 + 双向排序。
     //   ★ 2026-09-01（三卡修复）：剥离「 x 赞助商」后缀（与 buildLpLiveSeries._normTeamX 同口径）
-    function _normTeam(s) {
-      if (!s) return '';
-      var n = String(s).toLowerCase().trim();
-      n = n.replace(/\s*[x×]\s+\S+.*$/i, '');
-      n = n.replace(/\s*(esports|e-sports|gaming|team|club)\s*$/g, '');
-      n = n.replace(/[^a-z0-9一-鿿а-яё]/g, '');
-      return n;
-    }
+    // ★ 2026-10-13（P1-17）：并入 names.js「含 CJK 族」单一实现（原为内联副本）。
+    var _normTeam = names.normTeamNameCjkSponsor;
     var t1 = _normTeam(m.team1Name || m.radiant_team_name);
     var t2 = _normTeam(m.team2Name || m.dire_team_name);
     const st = _liqStartOf(m);
@@ -2831,16 +2814,8 @@ function buildLpLiveSeries(lpMatches, now) {
   //   → 归一化键不匹配 + 「同 UTC 日」分组失效 → 同一对局拆成多张卡。
   //   方案：按「剥离 x 赞助商后缀后的队名对」去重（**时间无关**——live 场 startTime 不可靠），
   //   组内保留信息量最大的一条（有 series_id > 无；有比分 > 无；score 总和大 > 小）。
-  function _normTeamX(s) {
-    if (!s) return '';
-    var n = String(s).toLowerCase().trim();
-    // 剥离「 x 赞助商」后缀（Valve 全名 'Team x Sponsor' → 'Team'）：
-    //   'Inner Circle x Insanity' → 'innercircle'；'Pipsqueak + 4' → 'pipsqueak4'
-    n = n.replace(/\s*[x×]\s+\S+.*$/i, '');
-    n = n.replace(/\s*(esports|e-sports|gaming|team|club)\s*$/g, '');
-    n = n.replace(/[^a-z0-9一-鿿а-яё]/g, '');
-    return n;
-  }
+  // ★ 2026-10-13（P1-17）：并入 names.js「含 CJK 族」单一实现（原为内联副本）。
+  var _normTeamX = names.normTeamNameCjkSponsor;
   function _pairKeyX(m) {
     var a = _normTeamX(m.team1Name || m.radiant_team_name);
     var b = _normTeamX(m.team2Name || m.dire_team_name);

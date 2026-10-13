@@ -29,6 +29,7 @@
 var config = require('./config.js');
 var cache = require('./cache.js');
 var consensus = require('./consensus.js');
+var names = require('./names.js');   // ★ 2026-10-13（P1-17）：队名归一单一实现（含 CJK 族）
 var cloudProxy = require('./cloudProxy.js');
 // ★ 2026-08-22 新增：haglund 兜底源（Liquipedia 云代理失败/空时的降级路径）
 var haglund = require('./haglund.js');
@@ -742,14 +743,8 @@ function getScheduledMatches(name, opts) {
       // ★ 2026-09-01（三卡修复）：剥离「 x 赞助商」后缀（Valve 全名 'Team x Sponsor' → 'Team'），
       //   与 sources.buildLpLiveSeries._normTeamX 同口径 —— 修复 Steam 全名 vs Liquipedia 简称
       //   同对局跨源去重失效（Inner Circle x Insanity vs Inner Circle → 同一队）。
-      function _normTeam(s) {
-        if (!s) return '';
-        var n = String(s).toLowerCase().trim();
-        n = n.replace(/\s*[x×]\s+\S+.*$/i, '');
-        n = n.replace(/\s*(esports|e-sports|gaming|team|club)\s*$/g, '');
-        n = n.replace(/[^a-z0-9一-鿿а-яё]/g, '');
-        return n;
-      }
+      // ★ 2026-10-13（P1-17）：并入 names.js「含 CJK 族」单一实现（原为内联副本）。
+      var _normTeam = names.normTeamNameCjkSponsor;
       function _teamPairKey(n1, n2) {
         // 顺序无关：两归一名排序后拼接（防 Steam/haglund 队名换边）
         return n1 < n2 ? (n1 + '|' + n2) : (n2 + '|' + n1);

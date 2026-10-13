@@ -46,12 +46,9 @@ function isTBD(name) {
 // ★ v3 优化项25（2026-08-22 提升为模块级）：队名归一化 —— 小写 + 去常见后缀（esports/gaming/team/club）+ 去空格标点。
 //   原实现位于 §9 局部 if 块内（原 L738），8-22 新增的 refresh logo 队名兜底（oldByTeamPair 双保险，L1332 起）
 //   在块外调用导致 no-undef（ESLint error）+ 运行时 ReferenceError。纯函数无外部依赖，提升后两处共用同一口径。
+// ★ 2026-10-13（P1-17）：并入 names.js「含 CJK 族」单一实现（原为内联副本）。
 function normalizeTeamNameForDedup(name) {
-  if (!name) return '';
-  var n = String(name).toLowerCase().trim();
-  n = n.replace(/\s*(esports|e-sports|gaming|team|club)\s*$/g, '');
-  n = n.replace(/[^a-z0-9一-鿿а-яё]/g, '');
-  return n;
+  return names.normTeamNameCjk(name);
 }
 
 // B4 定时刷新（2026-08-03）：series 指纹 —— 稳定 key + 关键状态字段。

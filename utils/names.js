@@ -66,6 +66,49 @@ function normTeamNameLoose(s) {
   return normAsciiKey(s).replace(TEAM_SUFFIX_RE, '');
 }
 
+// ===== 语义族 ②「含 CJK / 西里尔」（**与族 ① 语义不同，勿合并**）=====
+// ★★ 2026-10-13（P1-17）：把仓内**仍内联**的队名归一收敛到本族单一实现 ——
+//   原重复点（8 处，均为逐字或近逐字的副本）：
+//     · `utils/sources.js` ×4：`dedupeLiveSeries._norm`（无赞助商）/ `_dedupCrossSourceMatches._normTeam` /
+//       `groupLiquipediaMatches.keyOf._normTeam` / `buildLpLiveSeries._normTeamX`（后三者剥「 x 赞助商」）
+//     · `utils/liquipedia.js` `_normTeam`（剥 x 赞助商）
+//     · `subpackages/detail/league-detail/league-detail.js` `normalizeTeamNameForDedup`（无赞助商）
+//     · `pages/index/index.js` `_normTeamX`（剥 x 赞助商）
+//   ⇒ 消除「同名归一结果不一致」类静默 bug（族 ① 曾因 `[^a-z0-9]` vs `\s+` 不一致导致整队 logo 全 miss）。
+//
+// 与族 ①（`normAsciiKey`）的区别：
+//   · 本族**保留 CJK / 西里尔**（`[^a-z0-9一-鿿а-яё]`）——族 ① 会抹成空串（"天辉" → ""）；
+//   · 本族**剥队后缀** `esports|e-sports|gaming|team|club`（含 e-sports、**不含 dota/esport** ⇒ 与 TEAM_SUFFIX_RE 不同）。
+//   ⚠️ 两族**不可互相替代**；也**不可**改用 `sources.leagueKey`（那个是语义级，会剥阶段后缀 + 查 curation，见文件头）。
+//   ⚠️ 字符类须与 `utils/consensus.js` 的 `normName`（赛事名族）**逐字一致**；两处改动要同步并回归
+//     `test-consensus` / `test-sources`。
+const KEEP_ASCII_CJK_CYR_RE = /[^a-z0-9\u4e00-\u9fff\u0430-\u044f\u0451]/g;  // = [^a-z0-9一-鿿а-яё]
+const TEAM_SUFFIX_CJK_RE = /\s*(esports|e-sports|gaming|team|club)\s*$/g;
+// 「 x 赞助商」后缀（Valve live 全名 'Inner Circle x Insanity' → 'Inner Circle'）
+const SPONSOR_X_RE = /\s*[x×]\s+\S+.*$/i;
+
+/**
+ * 含 CJK 队名归一：小写 + 剥队后缀 + 保留 ASCII/CJK/西里尔（去其余符号）。
+ * 契约：'Team Spirit' → 'teamspirit'；'Level UP esports' → 'levelup'；
+ *       'Чемпионат Москвы' → 'чемпионатмосквы'；'天辉' → '天辉'（族 ① 则为 ""）。
+ */
+function normTeamNameCjk(s) {
+  return String(s || '').toLowerCase().trim()
+    .replace(TEAM_SUFFIX_CJK_RE, '')
+    .replace(KEEP_ASCII_CJK_CYR_RE, '');
+}
+
+/**
+ * 同 `normTeamNameCjk`，但**先剥「 x 赞助商」后缀**（Steam/Valve live 全名）。
+ * 契约：'Inner Circle x Insanity' → 'innercircle'；'Pipsqueak + 4' → 'pipsqueak4'。
+ */
+function normTeamNameCjkSponsor(s) {
+  return String(s || '').toLowerCase().trim()
+    .replace(SPONSOR_X_RE, '')
+    .replace(TEAM_SUFFIX_CJK_RE, '')
+    .replace(KEEP_ASCII_CJK_CYR_RE, '');
+}
+
 // ★★ 2026-09-25：清理**上游 LP/LPDB 混进队名的系统文案**（队名清洗的单一实现处）。
 //
 // 背景（线上实测，用户 2026-09-23 Console 诊断）：
@@ -89,5 +132,8 @@ module.exports = {
   normAsciiKey: normAsciiKey,
   normTeamName: normTeamName,
   normTeamNameLoose: normTeamNameLoose,
-  TEAM_SUFFIX_RE: TEAM_SUFFIX_RE
+  TEAM_SUFFIX_RE: TEAM_SUFFIX_RE,
+  // 语义族 ②（含 CJK/西里尔）—— P1-17 收敛后的单一实现
+  normTeamNameCjk: normTeamNameCjk,
+  normTeamNameCjkSponsor: normTeamNameCjkSponsor
 };

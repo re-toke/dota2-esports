@@ -9,16 +9,19 @@
 // ⚠️ 必须用 .js 模块而非 .json：微信小程序 require() 直接加载 .json 会报
 //   "module '...curation-shared.json.js' is not defined"（解析器补 .js 后缀）。
 //
-// 归一：小写 + 去非字母数字（与 consensus.normName 对 ASCII 联赛名等价）。
+// 归一：小写 + 去非字母数字 —— ★ 2026-10-13（P1-17）改调 `names.normAsciiKey`（ASCII 族单一实现）。
+//   ⚠️ 已知偏差（P1-17 发现，**未修**）：生成器 `scripts/sync-canon-map.js:25` 的键规则用**含 CJK** 字符类
+//      （`[^a-z0-9一-鿿а-яё]`），与本文件 lookup 的 **ASCII** 族仅对含 CJK/西里尔名的 curation 项不一致；
+//      当前 curation canonical 名全为 ASCII ⇒ **无实际影响**。若要收敛须同时改生成器并重生成 `curation-shared.js`（留作后续项）。
 // 精确匹配：命中返回规范名；未命中返回原始 raw（与 sources.canonicalLeagueName
 // 「原样返回」契约一致）。空输入返回空串，由调用方按需兜底。
 
 const DATA = require('./curation-shared');
+const names = require('./names.js');   // ★ 2026-10-13（P1-17）：ASCII 族归一单一实现
 const MAP = (DATA && DATA.map) || {};
 
-function normalizeKey(raw) {
-  return String(raw == null ? '' : raw).toLowerCase().replace(/[^a-z0-9]/g, '');
-}
+// ★ 2026-10-13（P1-17）：并入 names.js 的 ASCII 族单一实现（原为内联副本；规则逐字相同）。
+const normalizeKey = names.normAsciiKey;
 
 function resolveCanonical(raw) {
   const k = normalizeKey(raw);
