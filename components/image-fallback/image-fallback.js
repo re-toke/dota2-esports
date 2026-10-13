@@ -20,8 +20,15 @@ Component({
     addGlobalClass: true
   },
   properties: {
-    // 图片地址；空字符串视为无图，直接展示占位
-    src: { type: String, value: '' },
+    // 图片地址；空字符串视为无图，直接展示占位。
+    // ★ 2026-10-13（小修，随 P1-22 一起）：**类型由 `String` 改为 `null`**。
+    //   起因（真机日志）：2 次 `[Component] property "src" … expected <String> but get null value` ——
+    //   某调用处把 `null`（如 `{{team.logo}}` 取到 null）传了进来，以 `String` 声明会**打警告**。
+    //   微信 property 的 `type` 允许取 `null`（官方语义 = **任意类型 / 不做校验**）⇒ 改后警告消除。
+    //   ⚠️ 为什么不把 `null` 塞进 `optionalTypes`：官方 `optionalTypes` 接受的是**类型**（`[String, Boolean]`），
+    //      并未包含 `null` ⇒ 写法不可靠。也**不**逐个改调用处（9 处、根因不可定位），组件层一处兜住即可。
+    //   ✅ 行为不变：`_resolve()` 与 wxml 对「非字符串」一律走首字母占位（本组件既有的数据层防护设计）。
+    src: { type: null, value: '' },
     // 占位文字（通常是队标缩写或姓名首字母）
     placeholder: { type: String, value: '?' },
     // 裁剪模式
