@@ -711,6 +711,43 @@ Caddy 会自动申请并续期证书 ✓
 
 ---
 
+## 推送失败：`github.com:443` 被阻断（2026-10-13 实测）
+
+**现象**：`git push origin master` 反复失败 ——
+`fatal: unable to access 'https://github.com/re-toke/dota2-esports.git/': Failed to connect to github.com:443 after 21s`。
+但同时：`Test-NetConnection github.com -Port 443` **返回 `True`**、`curl https://api.github.com/` **200**
+⇒ **TCP 握手成功、TLS 被丢**（SNI 干扰的典型形态），**不是网络断开**（所以"重试/换时机"常常无效）。
+
+**处置：改走 SSH**（本仓库已预留 `origin-ssh` 远端）：
+
+```powershell
+# ① 探活：下面两条都应 True（TCP 层）
+Test-NetConnection github.com -Port 22 -InformationLevel Quiet
+Test-NetConnection ssh.github.com -Port 443 -InformationLevel Quiet
+
+# ② 用 SSH 拉取（https 不通时它照样能更新远端引用）
+git fetch origin-ssh
+
+# ③ 若远端领先（CI 快照提交，如 chore(snapshot)）⇒ 直接推会被拒，先对齐。
+#    ⚠️ 本项目工作区常驻大量「未暂存删除态」⇒ 必须 --autostash，否则 rebase 会被挡下。
+git rebase --autostash origin-ssh/master
+
+# ④ 推
+git push origin-ssh master
+
+# ⑤ 同步本地追踪引用（https 那条已不可达，避免 origin/master 滞后造成误判）
+$sha = git rev-parse HEAD
+git update-ref refs/remotes/origin/master $sha
+```
+
+**两条纪律**：
+- ⛔ **不要**用 `git push --force` 去"压掉"远端 —— 被拒多半是 **CI 快照提交**（`chore(snapshot): 定时刷新快照…`），
+  那是 CI 的正常产物，**正确做法是 `rebase`**。
+- 若 `github.com:22` 也不通：GitHub 另有 **SSH over 443**（`ssh.github.com:443`，实测可达）⇒ 在 `~/.ssh/config` 配
+  `Host github.com` / `HostName ssh.github.com` / `Port 443` 即可。
+
+---
+
 ## 部署完成后交给我的信息
 
 **第一台（换主出口）**：只要 **一个东西** —— `https://api.你的域名.com`。
