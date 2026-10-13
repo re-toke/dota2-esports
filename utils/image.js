@@ -20,9 +20,25 @@ const config = require('./config');
 //       image-fallback 组件对空 src 展示首字母占位，不再尝试加载必然失败的 URL）
 //   ⚠️ 微信侧待办（用户操作）：downloadFile 白名单补 https://cdn.steamusercontent.com（UGC 主力，
 //      cloudflare 不镜像 /ugc/ 路径，代码无法替代），否则 UGC 队标仍被拦截。
+//
+// ★★ P1-22（2026-10-13）：**`avatars.steamstatic.com` 被国内网络 RST** ⇒ 选手/队员头像加载失败
+//   （真机日志 10+ 条 `downloadFile:fail -101:net::ERR_CONNECTION_RESET ... avatars.steamstatic.com/<hash>`）。
+//   实测（2026-10-13，本机国内网络，与真机同网络）：
+//     · `avatars.steamstatic.com/fef49e..._full.jpg`        → **RST（连不通）** ❌
+//     · `avatars.akamai.steamstatic.com/fef49e..._full.jpg` → **200 / 3409B** ✅ **同一张图**
+//       （Steam 官方 Akamai 镜像域；路径结构相同，host 级替换即可，与上面 ② 的 cloudflare 收敛同构）
+//     · `cdn.cloudflare.steamstatic.com`（队标主力）→ 200 ✅ 不受影响
+//     · `cdn.steamusercontent.com`（UGC 队标）→ 404（**可达，非被墙**；仅差微信白名单）
+//   ⇒ 修复：把 `avatars.steamstatic.com` 收敛到其 Akamai 镜像（**只改 host、路径不变**）。
+//   ⚠️ 与 ② 的唯一差别（诚实声明）：`steamcdn-a` 那条当年做过"100% 同文件"的逐条比对；
+//      本条因**原域取不到（被 RST）无法逐字节比对**，依据是「Steam 官方镜像域 + 路径同构 + 单例 200」。
+//   ⚠️ 微信侧待办（用户操作）：downloadFile 白名单需补 **`https://avatars.akamai.steamstatic.com`**，
+//      否则替换后的 URL 仍会被微信拦截（与本文件其它镜像域同等要求）。
 const DEAD_HOSTS = ['steamusercontent-a.akamaihd.net', 'cloud-3.steamusercontent.com'];
 const MIRROR_HOST_MAP = {
-  'steamcdn-a.akamaihd.net': 'cdn.cloudflare.steamstatic.com'
+  'steamcdn-a.akamaihd.net': 'cdn.cloudflare.steamstatic.com',
+  // ★ P1-22：被 RST ⇒ 收敛到可达的 Akamai 镜像（host 在 URL 中唯一出现，直接字面替换）
+  'avatars.steamstatic.com': 'avatars.akamai.steamstatic.com'
 };
 
 function normalizeLogoUrl(url) {

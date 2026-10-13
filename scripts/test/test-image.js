@@ -35,6 +35,23 @@ check('cloud-3.steamusercontent.com（http 协议 + 死域）→ 空串剔除', 
   assert(out === '', 'http 死域应剔除，实际: ' + out);
 });
 
+// ★ P1-22（2026-10-13）：avatars.steamstatic.com 被国内 RST ⇒ 收敛到可达的 Akamai 镜像
+check('★ avatars.steamstatic.com（国内被 RST）→ avatars.akamai.steamstatic.com（可达镜像，路径不变）', () => {
+  const out = normalizeLogoUrl('https://avatars.steamstatic.com/fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb_full.jpg');
+  assert(out === 'https://avatars.akamai.steamstatic.com/fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb_full.jpg',
+    '应收敛到 akamai 镜像，实际: ' + out);
+});
+
+check('★ P1-22 幂等：已是 akamai 镜像的头像 URL → 原样返回（不重复改写）', () => {
+  const u = 'https://avatars.akamai.steamstatic.com/abc_full.jpg';
+  assert(normalizeLogoUrl(u) === u, 'akamai 应保持原样，实际: ' + normalizeLogoUrl(u));
+});
+
+check('★ P1-22 不误伤：队标域（cdn.cloudflare）不受头像映射影响', () => {
+  const u = 'https://cdn.cloudflare.steamstatic.com/apps/dota2/images/team_logos/55.png';
+  assert(normalizeLogoUrl(u) === u, '队标域应原样保留，实际: ' + normalizeLogoUrl(u));
+});
+
 check('cdn.steamusercontent.com（UGC 主力，URL 有效）→ 原样保留（微信白名单待补）', () => {
   const u = 'https://cdn.steamusercontent.com/ugc/14844266645370842778/47230D9640A722EAF06548C2EEB813ED4296AE3F/';
   assert(normalizeLogoUrl(u) === u, 'UGC 有效 URL 应原样保留');
