@@ -137,9 +137,21 @@ function maskIp(ip) {
   return p.length === 4 ? p[0] + '.' + p[1] + '.' + p[2] + '.x' : s;
 }
 
+// ★★ 2026-10-13（P1-12 实开）：**限流阈值兜底常量**（`env` 优先、本常量兜底）。
+//   背景（三台 200 并发实测，决定性）：三台均已按平台文档在**平台侧设置 env** `PROXY_RATE_LIMIT_MAX=120`
+//   并**重新部署**（两家文档都明写"部署不可变、env 只在部署时注入"），结果：
+//     · `[2]` **Netlify** ⇒ **生效**（404×120 + 429×26，第 121 次起如期限流）；
+//     · `[0]`/`[1]` **Deno** ⇒ **不生效**（404×200、0 个 429）⇒ 本项目 Deno 两台是 **Playground 型部署**，
+//       实测**不注入项目 env**。这与此前 `SB_ANON_KEY` 的既有铁证一致（两台从未配 env，
+//       `/healthz` 却一直 `hasKey:true` —— key 其实取自 `SB_ANON_KEY_FALLBACK` 常量）。
+//   ⇒ 故阈值改为「env 优先、常量兜底」，保证三台一致生效。Netlify 侧 env=120 与本常量同值，无冲突。
+//   ⚠️ 阈值**非机密**（本中转是公开只读代理，知晓阈值无实质危害）⇒ 可安全写入代码。
+//   ⚠️ 仍未取到客户端 IP 时**照旧 fail-open**（见下），绝不把全体用户一起 429。
+const PROXY_RATE_LIMIT_MAX_FALLBACK = '120';
+
 function rateLimited(request, env, ctx, now) {
-  const max = parseInt((env && env.PROXY_RATE_LIMIT_MAX) || '0', 10) || 0;
-  if (max <= 0) return false;                       // 未启用（默认）
+  const max = parseInt((env && env.PROXY_RATE_LIMIT_MAX) || PROXY_RATE_LIMIT_MAX_FALLBACK || '0', 10) || 0;
+  if (max <= 0) return false;                       // 阈值 0 ⇒ 关闭
   // ★ 取不到 IP ⇒ **fail-open（不限流）**。旧实现把"取不到"的客户端都塞进 `'unknown'` 同一个桶，
   //   一旦开启限流会**把全体用户一起 429**（误伤远大于收益）⇒ 宁可暂不限流。
   const ci = clientIp(request, ctx);
@@ -240,11 +252,16 @@ async function _handle(request, env, ctx) {
   if (path === '/healthz') {
     // ★ P1-12：探活回显「限流键来源 + 打码 IP」—— 供「IP 头是否注入」的验证（见 DEPLOY.md）
     const _ci = clientIp(request, ctx);
+    // ★ P1-12：回显**限流阈值 + 来源** ⇒ 一眼判定平台是否真的注入了 env（本项目为此"靠猜"多轮，
+    //   今后不必再猜：`rlSrc==='env'` = 平台注入生效；`'fallback'` = 走代码常量兜底；`'off'` = 关闭）。
+    const _rlEnv = (env && env.PROXY_RATE_LIMIT_MAX) || '';
+    const _rlMax = parseInt(_rlEnv || PROXY_RATE_LIMIT_MAX_FALLBACK || '0', 10) || 0;
     const base = {
       ok: true, ts: new Date().toISOString(),
       hasKey: !!sbKey, ref: ref,
       routes: ['/sb/functions/v1/*', '/sb/rest/v1/*', '/od/api/*'],
-      ipSource: _ci.source, ipMasked: maskIp(_ci.ip)
+      ipSource: _ci.source, ipMasked: maskIp(_ci.ip),
+      rlMax: _rlMax, rlSrc: _rlEnv ? 'env' : (PROXY_RATE_LIMIT_MAX_FALLBACK ? 'fallback' : 'off')
     };
     if (url.searchParams.get('deep') !== '1') return json(base);
 

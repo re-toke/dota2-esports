@@ -400,9 +400,11 @@ const textOf = async (r) => { try { return await r.clone().text(); } catch (e) {
 // ── ⑮ P1-12 新增：轻量速率限制（默认关闭；开启后按 IP 计数，/healthz 豁免） ─────────
 {
   const IP = { 'CF-Connecting-IP': '203.0.113.7' };
-  // ① 默认（未配 env）⇒ 不限流
-  const d1 = await handle(req('/od/api/proMatches?rl=off1', { headers: IP }), ENV);
-  ok('★ P1-12 限流默认关闭（未配 PROXY_RATE_LIMIT_MAX）', d1.status !== 429, String(d1.status));
+  // ① **显式 0 ⇒ 关闭**。⚠️ 不能再拿"未配 env"表达关闭：未配时会走**常量兜底 120**（见 ⑨⑩）。
+  //   显式 0 同时保证该 IP **不计数**，不污染下面 ② 的阈值断言（`_rl` 按 IP 计数、不分 env）。
+  const ENV0 = Object.assign({}, ENV, { PROXY_RATE_LIMIT_MAX: '0' });
+  const d1 = await handle(req('/od/api/proMatches?rl=off1', { headers: IP }), ENV0);
+  ok('★ P1-12 显式 0 ⇒ 关闭（且不计数，不污染后续断言）', d1.status !== 429, String(d1.status));
 
   // ② 开启（max=3/分钟）：阈值内放行、超阈值 429
   const ENV2 = Object.assign({}, ENV, { PROXY_RATE_LIMIT_MAX: '3' });
@@ -454,6 +456,15 @@ const textOf = async (r) => { try { return await r.clone().text(); } catch (e) {
   const b5 = await (await handle(req('/healthz'), ENV, { ip: '::ffff:203.0.113.9' })).json();
   ok('★ P1-12 /healthz：IPv4-mapped IPv6 按 IPv4 打码（不塌成 ::ffff::x）',
     b5.ipSource === 'ctx' && b5.ipMasked === '203.0.113.x', b5.ipSource + ' / ' + b5.ipMasked);
+
+  // ⑨ 未配 env ⇒ 走**常量兜底** 120（Deno Playground 不注入 env ⇒ 这是 Deno 两台能开限流的唯一路径）
+  const b6 = await (await handle(req('/healthz'), ENV)).json();
+  ok('★ P1-12 /healthz：未配 env ⇒ 走常量兜底（rlMax=120 / rlSrc=fallback）',
+    b6.rlMax === 120 && b6.rlSrc === 'fallback', b6.rlMax + ' / ' + b6.rlSrc);
+  // ⑩ env 有值 ⇒ **env 优先**（Netlify 侧即走此路；实测已生效）
+  const b7 = await (await handle(req('/healthz'), ENV2)).json();
+  ok('★ P1-12 /healthz：env 有值 ⇒ env 优先（rlSrc=env，阈值取 env 值）',
+    b7.rlMax === 3 && b7.rlSrc === 'env', b7.rlMax + ' / ' + b7.rlSrc);
 }
 
 // ── ⑯ 方案 B（2026-10-13）：按需 gzip —— `X-Gzip-Ok` 显式门控（老客户端零回归） ─────────
