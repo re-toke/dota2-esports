@@ -40,11 +40,16 @@ function envGet(key: string): string | undefined {
 }
 
 // @ts-ignore handle 来自 .mjs（无类型声明），此处只需其运行时行为
-export default async (request: Request) => handle(request, {
+export default async (request: Request, context: any) => handle(request, {
   SB_ANON_KEY: envGet('SB_ANON_KEY') || '',
   SUPABASE_REF: envGet('SUPABASE_REF') || undefined,
-  // P1-12 的限流开关：**默认不设**（取不到客户端 IP 时会误伤，先不开）
+  // P1-12 的限流开关：**默认不设**（先按 DEPLOY.md 的验证步骤确认 IP 来源再开）
   PROXY_RATE_LIMIT_MAX: envGet('PROXY_RATE_LIMIT_MAX') || ''
+}, {
+  // ★ 2026-10-13（P1-12）：Netlify Edge 的客户端 IP 正规来源是 `context.ip`
+  //   （Netlify 专有 Context 对象的属性）。**不是** `CF-Connecting-IP`（Netlify 不是 Cloudflare）。
+  //   该值由平台注入、客户端无法伪造 ⇒ 作为限流键的可信来源；取不到时 worker 会 fail-open。
+  ip: (context && context.ip) || ''
 });
 
 // ⚠️ 挂在全部路径（见文件头约束 1）

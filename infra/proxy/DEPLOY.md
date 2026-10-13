@@ -418,9 +418,27 @@ export const config = { path: '/*' };   // ⚠️ 必须 '/*'；只写 '/' 会�
 | 加了备域名后小程序报「不在合法域名列表」 | 白名单只加了主域 ⇒ 把备域也加上（两条都要） |
 | 想确认当前走哪台 | `endpoints.js` 在切换/体检命中时会打 `[endpoints] 出口切换 …` / `[endpoints] 体检选中 …` |
 
-> **注意（P1-12 相关）**：本次 `worker.mjs` 里**新增了限流代码**（默认关闭）。
-> 第二台部署时**同一份代码**已含该功能；`PROXY_RATE_LIMIT_MAX` 两台可分别设置，**建议都先不设**。
-> 打开前必须先确认该平台确实注入了客户端 IP 头（否则所有客户端会共用 `unknown` 桶 ⇒ 可能误伤）。
+> **注意（P1-12 相关）**：`worker.mjs` 含**轻量限流**（按 IP 固定窗口，**默认关闭**）。
+> `PROXY_RATE_LIMIT_MAX`（每分钟/每 IP）各台可分别设置，**建议都先不设**，按下表验完再开。
+
+**★ IP 来源已核实（2026-10-13）——`CF-Connecting-IP` 在本项目两台主力平台上都不存在**
+
+| 宿主 | 平台 | 客户端 IP 的正规来源 | worker 内的 `ipSource` |
+|---|---|---|---|
+| `[0]` `[1]` | Deno Deploy | handler **第二参数** `connInfo.remoteAddr.hostname` | `ctx` |
+| `[2]` | Netlify Edge | **第二参数** `context.ip` | `ctx` |
+| （自建 Node） | Caddy 反代后 | 反代写入的 `X-Forwarded-For`（须**覆写**，见 `node-server.mjs` 注释） | `xff` |
+
+> ⚠️ 连带修正：**Deno 上第二个参数是 `connInfo`、不是 `env`** ⇒ 环境变量必须用 `Deno.env.get()`。
+> 这解释了为何 Deno 那两台从未配过环境变量、`/healthz` 却一直 `hasKey:true`（key 取自 `SB_ANON_KEY_FALLBACK` 常量）。
+
+**开限流前的验证（4 步，别跳）**
+
+1. 部署含本改动的 `worker.mjs`（`[2]` Netlify push 即自动部署；`[0]`/`[1]` 是手贴副本，**建议与发版同步做**）。
+2. 三台各 `curl /healthz` ⇒ 都应回 **`ipSource !== "none"`**（如 `ctx`），且 `ipMasked` 非空。
+3. **换一个网络**（手机热点）访问同一 URL ⇒ **`ipMasked` 必须不同**。这一步才是关键：证明是「每客户端一个桶」，而不是所有人共用一个桶。
+4. 全绿后再设 `PROXY_RATE_LIMIT_MAX`（建议从 120/分钟起）。
+   ⚠️ 取不到 IP 时 worker **fail-open（不限流）**——宁可暂不限流，也不会把全体用户一起 429。
 
 ---
 

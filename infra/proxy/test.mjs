@@ -421,6 +421,33 @@ const textOf = async (r) => { try { return await r.clone().text(); } catch (e) {
   // ④ 不同 IP 独立计数（不误伤他人）
   const o = await handle(req('/od/api/proMatches?rl=other', { headers: { 'CF-Connecting-IP': '203.0.113.8' } }), ENV2);
   ok('★ P1-12 不同 IP 独立计数', o.status !== 429, String(o.status));
+
+  // ── 2026-10-13（P1-12 复核）新增：IP 来源优先级 / fail-open / 探活回显 ──────────────
+  //   背景：核实后确认 **CF-Connecting-IP 在 Deno Deploy 与 Netlify 上都不存在** ⇒ 改为
+  //   「平台注入的 ctx.ip 优先 + 头兜底 + 取不到则 fail-open」。以下断言用 `/nope`（直奔 404，
+  //   不打上游）以免引入真实网络调用。
+  // ⑤ ctx.ip 优先于请求头（平台注入值可信；头可伪造）
+  const c1 = await handle(req('/nope?rl=ctx'), ENV2, { ip: '198.51.100.9' });
+  ok('★ P1-12 ctx.ip 优先于头（不并入已被限的 203.0.113.7 桶）', c1.status === 404, String(c1.status));
+
+  // ⑥ **fail-open**：开了限流但**取不到任何 IP 来源** ⇒ 不限流。
+  //   旧实现把取不到的客户端都塞进 'unknown' 同一个桶 ⇒ 一开限流就**全站 429**（本项目最该防的误伤）。
+  const ENV3 = Object.assign({}, ENV, { PROXY_RATE_LIMIT_MAX: '1' });
+  const n1 = await handle(req('/nope?rl=none1'), ENV3);
+  const n2 = await handle(req('/nope?rl=none2'), ENV3);
+  ok('★ P1-12 取不到 IP ⇒ fail-open（连续多次都不 429，绝不共用 unknown 桶）',
+    n1.status === 404 && n2.status === 404, n1.status + '/' + n2.status);
+
+  // ⑦ /healthz 回显 IP 来源 + 打码 IP（供 DEPLOY.md「IP 头是否注入」的验证步骤）
+  const b2 = await (await handle(req('/healthz', { headers: IP }), ENV)).json();
+  ok('★ P1-12 /healthz 回显 ipSource=cf，且 IP 打码为 203.0.113.x',
+    b2.ipSource === 'cf' && b2.ipMasked === '203.0.113.x', b2.ipSource + ' / ' + b2.ipMasked);
+  const b3 = await (await handle(req('/healthz'), ENV, { ip: '2001:db8:1234:5678::1' })).json();
+  ok('★ P1-12 /healthz：ctx.ip ⇒ ipSource=ctx，IPv6 打码留前 3 组',
+    b3.ipSource === 'ctx' && b3.ipMasked === '2001:db8:1234::x', b3.ipSource + ' / ' + b3.ipMasked);
+  const b4 = await (await handle(req('/healthz'), ENV)).json();
+  ok('★ P1-12 /healthz：完全取不到 ⇒ ipSource=none（据此可判定平台未注入）',
+    b4.ipSource === 'none' && b4.ipMasked === '', b4.ipSource);
 }
 
 console.log('\n=== 结果 ===');

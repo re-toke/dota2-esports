@@ -93,25 +93,53 @@ function passHeaders(src, keep) {
 // ★★ P1-12（2026-10-12）：**轻量速率限制**（按调用方 IP 的固定窗口计数，模块内存）。
 //   背景：EF 均为 `--no-verify-jwt` 部署且**无任何频控**（本文件原先只有函数名白名单）
 //   ⇒ 中转可被当跳板，单客户端可刷爆上游 OpenDota / Supabase 配额。
-//   ⚠️ **默认关闭**：`env.PROXY_RATE_LIMIT_MAX`（每分钟/每 IP）缺省 0 = 不限流。
-//      关闭的诚实理由：限流依赖调用方 IP 头，而本中转**当前部署在 Deno Deploy**，
-//      它是否注入 `CF-Connecting-IP` / `x-forwarded-for` **尚未在真机核实**；取不到 IP 时
-//      所有客户端会共用同一个 'unknown' 桶 ⇒ **可能误伤正常用户**。
-//      ⇒ 随代码上线（可本地测、可控），待确认 IP 头存在后由用户打开该 env（改一个变量）。
+//   ⚠️ **默认关闭**：`PROXY_RATE_LIMIT_MAX`（每分钟/每 IP）缺省 0 = 不限流。
+//      关闭的诚实理由（2026-10-12）：限流依赖调用方 IP，而当时**未核实平台上到底有没有**
+//      `CF-Connecting-IP` / `X-Forwarded-For`；取不到时会把所有客户端混进同一个桶 ⇒ 可能误伤。
+//      ⇒ **已按平台核实并改造（2026-10-13）**：见 `clientIp()` —— 平台注入值优先、取不到则 **fail-open**；
+//        且 Deno 侧须用 `Deno.env.get('PROXY_RATE_LIMIT_MAX')`（第二参数是 connInfo，不是 env）。
+//        ⚠️ 打开前仍须按 DEPLOY.md 的「IP 头验证」步骤确认 `ipSource` 非 `none`、且**换网络后 IP 不同**。
 //   ⚠️ `/healthz` **天然豁免**（在上方分支已 return）—— 探活/开机体检不得被限流限死。
 const _rl = new Map();   // ip -> { win, n }
-function clientIp(request) {
-  try {
-    return request.headers.get('CF-Connecting-IP')
-      || (request.headers.get('X-Forwarded-For') || '').split(',')[0].trim()
-      || 'unknown';
-  } catch (e) { return 'unknown'; }
+
+// 客户端 IP 解析：**优先 adapter 注入的可信值**，请求头只作兜底。
+// ★★ 2026-10-13（P1-12 复核，已核实平台事实）：**`CF-Connecting-IP` 在本项目的两个平台都不存在**——
+//   ① **Deno Deploy**：正规来源是 handler 的**第二参数** `connInfo.remoteAddr.hostname`（不是 Cloudflare）；
+//   ② **Netlify Edge**：正规来源是**第二参数** `context.ip`（另有 `x-nf-client-connection-ip` 头可用）；
+//   ③ **Node 自建**（`node-server.mjs`）：**刻意不注入** `ctx.ip` —— 它按设计跑在 Caddy 反代之后，
+//      那时 socket IP 是反代自己；应由反代把 `X-Forwarded-For` **覆写**成真实客户端 IP，
+//      再走本函数末段的头兜底链（否则会把所有用户归到反代那一个 IP 上）。
+//   ⇒ 各入口通过 `handle(request, env, ctx)` 的 `ctx = { ip }` 注入；缺省回落到请求头。
+//   ⚠️ 头是**可伪造**的：只有平台/反代注入的 `ctx.ip` 才可信；本中转是只读代理，风险有限。
+function clientIp(request, ctx) {
+  var h = (request && request.headers) || null;
+  var get = function (k) { try { return h && h.get ? h.get(k) : null; } catch (e) { return null; } };
+  var v = (ctx && ctx.ip) || '';
+  if (v) return { ip: String(v).trim(), source: 'ctx' };
+  v = get('CF-Connecting-IP'); if (v) return { ip: String(v).trim(), source: 'cf' };
+  v = get('x-nf-client-connection-ip'); if (v) return { ip: String(v).trim(), source: 'nf' };
+  v = get('X-Forwarded-For'); if (v) return { ip: String(v).split(',')[0].trim(), source: 'xff' };
+  return { ip: '', source: 'none' };
 }
-function rateLimited(request, env, now) {
+
+// `/healthz` 回显用的打码（避免探活接口变成 IP 收集器）：IPv4 留前三段、IPv6 留前 3 组
+function maskIp(ip) {
+  var s = String(ip || '');
+  if (!s) return '';
+  if (s.indexOf(':') >= 0) return s.split(':').slice(0, 3).join(':') + '::x';
+  var p = s.split('.');
+  return p.length === 4 ? p[0] + '.' + p[1] + '.' + p[2] + '.x' : s;
+}
+
+function rateLimited(request, env, ctx, now) {
   const max = parseInt((env && env.PROXY_RATE_LIMIT_MAX) || '0', 10) || 0;
   if (max <= 0) return false;                       // 未启用（默认）
+  // ★ 取不到 IP ⇒ **fail-open（不限流）**。旧实现把"取不到"的客户端都塞进 `'unknown'` 同一个桶，
+  //   一旦开启限流会**把全体用户一起 429**（误伤远大于收益）⇒ 宁可暂不限流。
+  const ci = clientIp(request, ctx);
+  if (!ci.ip) return false;
   const win = Math.floor(now / 60000);
-  const ip = clientIp(request);
+  const ip = ci.ip;
   let e = _rl.get(ip);
   if (!e || e.win !== win) { e = { win, n: 0 }; _rl.set(ip, e); }
   e.n++;
@@ -188,7 +216,7 @@ function textResponse(body, status, ct, cr, cacheState, extra) {
   return new Response(body, { status: status, headers: new Headers(h) });
 }
 
-async function handle(request, env) {
+async function handle(request, env, ctx) {
   const url = new URL(request.url);
   const path = url.pathname;
   const method = request.method.toUpperCase();
@@ -203,10 +231,13 @@ async function handle(request, env) {
 
   // ── 健康检查 ──────────────────────────────────────────────────────────────
   if (path === '/healthz') {
+    // ★ P1-12：探活回显「限流键来源 + 打码 IP」—— 供「IP 头是否注入」的验证（见 DEPLOY.md）
+    const _ci = clientIp(request, ctx);
     const base = {
       ok: true, ts: new Date().toISOString(),
       hasKey: !!sbKey, ref: ref,
-      routes: ['/sb/functions/v1/*', '/sb/rest/v1/*', '/od/api/*']
+      routes: ['/sb/functions/v1/*', '/sb/rest/v1/*', '/od/api/*'],
+      ipSource: _ci.source, ipMasked: maskIp(_ci.ip)
     };
     if (url.searchParams.get('deep') !== '1') return json(base);
 
@@ -229,7 +260,7 @@ async function handle(request, env) {
 
   try {
     // ★ P1-12：速率限制（默认关闭，见 rateLimited 注释；/healthz 已在上方 return ⇒ 天然豁免）
-    if (rateLimited(request, env, Date.now())) return json({ error: 'rate limited' }, 429);
+    if (rateLimited(request, env, ctx, Date.now())) return json({ error: 'rate limited' }, 429);
 
     // ─────────────── ① Supabase Edge Function：/sb/functions/v1/<name> ───────────────
     let m = /^\/sb\/functions\/v1\/([A-Za-z0-9_-]+)\/?$/.exec(path);
@@ -371,7 +402,26 @@ async function handle(request, env) {
 }
 
 export default {
-  fetch(request, env) { return handle(request, env); }
+  // ★★ 2026-10-13（P1-12 复核的连带修正）：**Deno Deploy 的第二个参数是 `connInfo`，不是 `env`**
+  //   —— 这正是此前 `env.PROXY_RATE_LIMIT_MAX` 恒为 undefined、限流**想开也开不了**的原因；
+  //   同时也解释了「Deno 那两台从未配过环境变量、`/healthz` 却一直 `hasKey:true`」：
+  //   key 其实取自本文件顶部的 `SB_ANON_KEY_FALLBACK` 常量（`env.SB_ANON_KEY` 一直是 undefined）。
+  //   ⇒ env 必须走 `Deno.env.get()`；客户端 IP 走 `connInfo.remoteAddr.hostname`。
+  fetch(request, connInfo) {
+    var env = {};
+    try {
+      if (typeof Deno !== 'undefined' && Deno.env && Deno.env.get) {
+        env = {
+          SB_ANON_KEY: Deno.env.get('SB_ANON_KEY') || '',
+          SUPABASE_REF: Deno.env.get('SUPABASE_REF') || undefined,
+          PROXY_RATE_LIMIT_MAX: Deno.env.get('PROXY_RATE_LIMIT_MAX') || ''
+        };
+      }
+    } catch (e) { /* 无 Deno 环境 ⇒ 走下面的常量回落 */ }
+    var ip = '';
+    try { ip = (connInfo && connInfo.remoteAddr && connInfo.remoteAddr.hostname) || ''; } catch (e) { ip = ''; }
+    return handle(request, env, { ip: ip });
+  }
 };
 
 // 供 Pages Functions / 本地测试复用

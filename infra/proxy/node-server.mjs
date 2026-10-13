@@ -50,6 +50,11 @@ const server = http.createServer(async (req, res) => {
       body: (body && body.length) ? body : undefined,
       duplex: 'half'
     });
+    // ★ 2026-10-13（P1-12）：**刻意不注入 `ctx.ip`** —— 本服务按设计跑在 Caddy/Nginx 反代**之后**，
+    //   此时 socket 地址是**反代自己**（照传会把所有用户挤进同一个限流桶 ⇒ 一开限流就误伤）。
+    //   真实客户端 IP 应由反代写入 `X-Forwarded-For`，交给 `worker.mjs` 的头兜底链读取。
+    //   ⚠️ 反代须**覆写**而非追加，例如 Caddy：`header_up X-Forwarded-For {remote_host}`。
+    //   ⚠️ 若把本服务**直接暴露**公网（无反代），请自行改为 `handle(request, ENV, { ip: req.socket.remoteAddress })`。
     const response = await handle(request, ENV);
     const headers = {};
     response.headers.forEach((v, k) => { headers[k] = v; });
