@@ -31,6 +31,20 @@ const PROXY_HOSTS = [
   'https://velvety-llama-a7700e.netlify.app'         // [2] 备②：Netlify（不同注册域 ⇒ 防域名级阻断；运行时是 Deno，与主出口同族）
 ];
 
+// ★★ 2026-10-13（P1-19 · 时间窗口**单一事实源**）：**跨模块共享**的时间窗口集中在此声明，
+//   各消费方一律引用（**勿再在别处内联字面量**，否则阈值会漂移）。模块内**私有**常量不在此列
+//   （如首页 POLL_BACKOFF_* / LIVE_WINDOW_SEC / *_FRESH_MS 仅在 pages/index/index.js 内使用，仍留在那里）。
+//   ⚠️ 「同名不同义」必须**不同名**：快照年龄存在三个语义互斥的量，历史上都含 "SNAPSHOT...AGE"
+//      ⇒ 极易被误改。现按下表区分命名（诊断 SLO 的 24h「目标」与列表的 7d「降权」曾同名不同义）：
+//        · SNAPSHOT_TARGET_AGE_SEC（24h）= diagnostics SLO 的**目标新鲜度（尺子）**；
+//        · SNAPSHOT_DECAY_AGE_SEC（7d）   = leagues 列表的**降权/提示阈值**（超此不当"主源"）；
+//        · SNAPSHOT_UNUSABLE_AGE_SEC（30d）= leagues 列表的**可用性硬门限**（超此完全不用它渲染）。
+const LIVE_POLL_SEC = 120;                     // 首页 LIVE 轮询基础间隔（秒）—— 同时定义 cacheTTL.liveMatches（TTL 与之对齐）
+const LIVE_STALE_MAX_SEC = 3 * 3600;           // 最后活动已过去仍判「进行中」的上限（sources 降级 + diagnostics SLO 降级收敛）
+const SNAPSHOT_TARGET_AGE_SEC = 24 * 3600;     // 快照目标新鲜度（diagnostics SLO 尺子）
+const SNAPSHOT_DECAY_AGE_SEC = 7 * 86400;      // 快照降权/提示阈值（leagues 列表）
+const SNAPSHOT_UNUSABLE_AGE_SEC = 30 * 86400;  // 快照可用性硬门限（leagues 列表）
+
 module.exports = {
   // ★ 2026-09-25: per-item diagnostic log switch (**default false**).
   // Why: this project repeatedly hit "diagnostic logs left on per-item / hot paths"
@@ -86,7 +100,7 @@ module.exports = {
     //   ⚠️ 对齐到 120s 后**边界仍可能 miss**（`expireAt == now`）⇒ 这一步主要是**口径正确性**；
     //   若要连「每次轮询都实拉」也省掉，需把 TTL 设到 **> 轮询间隔**（代价：比分最大陈旧度翻倍）——
     //   属产品取舍，**暂不做**（见方案文档 §5.5）。
-    liveMatches: 120          // 全部进行中比赛（LIVE 比分；TTL 与首页轮询间隔对齐）
+    liveMatches: LIVE_POLL_SEC   // 全部进行中比赛（LIVE 比分；= 首页轮询间隔，单一事实源见顶 LIVE_POLL_SEC）
   },
 
   // 赛事时间窗口判定（用于「正在进行 / 即将到来」筛选）
@@ -296,6 +310,18 @@ module.exports = {
   // 用途：按北京时间计算「今天/明天/更早」的日界分组（dateGroup/timeLayer 等）。
   time: {
     bjOffsetSec: 8 * 3600
+  },
+
+  // ★ 2026-10-13（P1-19）：**跨模块共享时间窗口**的单一事实源（值见文件顶 `LIVE_*` / `SNAPSHOT_*` 常量）。
+  //   消费方：`utils/sources.js`（liveStaleMaxSec）、`pages/index/index.js`（livePollSec）、
+  //   `pages/leagues/leagues.js`（snapshotDecay/UnusableAgeSec）、`utils/diagnostics.js`（SLO 口径）。
+  //   ⚠️ 需要时间窗口时请引用此对象，不要再在别处写字面量。
+  timeWindow: {
+    livePollSec: LIVE_POLL_SEC,
+    liveStaleMaxSec: LIVE_STALE_MAX_SEC,
+    snapshotTargetAgeSec: SNAPSHOT_TARGET_AGE_SEC,
+    snapshotDecayAgeSec: SNAPSHOT_DECAY_AGE_SEC,
+    snapshotUnusableAgeSec: SNAPSHOT_UNUSABLE_AGE_SEC
   },
 
   // T4 实时比分连接配置。

@@ -91,7 +91,8 @@ assert('未打标卡片**不计入分母**（total=4 / 已打标=3）⇒ 不虚�
   mi.total === 4 && mi.heuristicKnown === 3, JSON.stringify({ t: mi.total, k: mi.heuristicKnown }));
 assert('汇总一行含身份三态', diag.formatSummary(mi).indexOf('身份') > 0);
 
-console.log('\n--- ③ ★ 漂移守卫：SLO 阈值必须与代码常量一致 ---');
+console.log('\n--- ③ ★ 单一事实源守卫（P1-19）：SLO 阈值与 config.timeWindow 同源 ---');
+// P1-19 后，时间窗口值**只在 config.js 声明一次**；此处读 config 源码作「值守卫」（防被就地改坏）。
 // 只允许「数字 * 数字」形态（不做 eval，避免执行任意代码）
 function readConst(file, name) {
   const src = fs.readFileSync(path.join(ROOT, file), 'utf8');
@@ -100,17 +101,23 @@ function readConst(file, name) {
   if (!hit) return null;
   return hit[1].split('*').map((x) => Number(x.trim())).reduce((a, b) => a * b, 1);
 }
-const stale = readConst('utils/sources.js', 'STALE_LIVE_MAX_SEC');
-assert('能读到 sources.js 的 STALE_LIVE_MAX_SEC（守卫前提）', stale !== null, '未匹配到常量');
-assert('★ SLO 降级收敛延迟 == 代码 STALE_LIVE_MAX_SEC（' + stale + 's）',
-  diag.SLO.statusConvergeDegradedSec.target === stale,
-  'SLO=' + diag.SLO.statusConvergeDegradedSec.target + '  code=' + stale);
-const snap = readConst('pages/leagues/leagues.js', 'SNAPSHOT_MAX_AGE_SEC');
-assert('能读到 leagues.js 的 SNAPSHOT_MAX_AGE_SEC（守卫前提）', snap !== null, '未匹配到常量');
-assert('★ SLO 降级阈值 == 代码 SNAPSHOT_MAX_AGE_SEC（' + snap + 's）', snap === 7 * 86400, '实际 ' + snap);
-assert('★ 快照"目标 24h"必须**严于**"降权阈值 7d"（两者语义不同，不可混用）',
-  diag.SLO.snapshotAgeSec.target === 24 * 3600 && diag.SLO.snapshotAgeSec.target < snap,
-  'target=' + diag.SLO.snapshotAgeSec.target + '  threshold=' + snap);
+const CFG = 'utils/config.js';
+const liveStale = readConst(CFG, 'LIVE_STALE_MAX_SEC');
+assert('能读到 config.js 的 LIVE_STALE_MAX_SEC（守卫前提）', liveStale !== null, '未匹配到常量');
+assert('★ config LIVE_STALE_MAX_SEC == 3h（与 sources 降级口径一致）', liveStale === 3 * 3600, '实际 ' + liveStale);
+assert('★ SLO 降级收敛延迟 == config LIVE_STALE_MAX_SEC（同源，' + liveStale + 's）',
+  diag.SLO.statusConvergeDegradedSec.target === liveStale,
+  'SLO=' + diag.SLO.statusConvergeDegradedSec.target + '  config=' + liveStale);
+const snapTarget = readConst(CFG, 'SNAPSHOT_TARGET_AGE_SEC');
+const snapDecay = readConst(CFG, 'SNAPSHOT_DECAY_AGE_SEC');
+assert('能读到 config.js 的 SNAPSHOT_TARGET_AGE_SEC / SNAPSHOT_DECAY_AGE_SEC（守卫前提）',
+  snapTarget !== null && snapDecay !== null, '未匹配到常量');
+assert('★ config 快照降权阈值 == 7d', snapDecay === 7 * 86400, '实际 ' + snapDecay);
+assert('★ SLO 快照目标 == config SNAPSHOT_TARGET_AGE_SEC（同源）',
+  diag.SLO.snapshotAgeSec.target === snapTarget, 'target=' + diag.SLO.snapshotAgeSec.target + ' config=' + snapTarget);
+assert('★ 快照"目标 24h"必须**严于**"降权阈值 7d"（同名不同义，不可混用）',
+  diag.SLO.snapshotAgeSec.target === 24 * 3600 && diag.SLO.snapshotAgeSec.target < snapDecay,
+  'target=' + diag.SLO.snapshotAgeSec.target + '  threshold=' + snapDecay);
 assert('★ 硬判据收敛目标 5min 必须**严于**降级路径（否则口径自相矛盾）',
   diag.SLO.statusConvergeHardSec.target < diag.SLO.statusConvergeDegradedSec.target,
   JSON.stringify({ hard: diag.SLO.statusConvergeHardSec.target, deg: diag.SLO.statusConvergeDegradedSec.target }));

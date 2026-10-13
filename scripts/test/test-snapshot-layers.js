@@ -86,17 +86,18 @@ delete storage[Object.keys(storage)[0]];
 assert('空缓存 ⇒ 返回 null（不抛错，首屏继续走下一层）', api.peekLeagues() === null);
 storage[(curationShared.dataVersion + ':') + '/leagues|{}'] = saved;
 
-console.log('\n--- ③ 两个快照阈值的关系（语义不同，但必须有序）---');
-const ls = read('pages/leagues/leagues.js');
+console.log('\n--- ③ 两个快照阈值的关系（语义不同，但必须有序；P1-19 后单一事实源在 config.js）---');
+const ls = read('pages/leagues/leagues.js');   // 页面引用（_snapshotIsTooOld/_snapshotIsStale 并存守卫）
+const cfg = read('utils/config.js');           // 阈值单一事实源
 const num = (name) => {
-  const m = ls.match(new RegExp('const\\s+' + name + '\\s*=\\s*([0-9*\\s]+);'));
+  const m = cfg.match(new RegExp('const\\s+' + name + '\\s*=\\s*([0-9*\\s]+);'));
   if (!m) return null;
   const e = m[1].replace(/\s/g, '');
   return /^[0-9*]+$/.test(e) ? e.split('*').reduce((a, b) => a * Number(b), 1) : null;
 };
-const STALE = num('SNAPSHOT_MAX_AGE_SEC');
+const STALE = num('SNAPSHOT_DECAY_AGE_SEC');
 const UNUSABLE = num('SNAPSHOT_UNUSABLE_AGE_SEC');
-console.log('    SNAPSHOT_MAX_AGE_SEC=' + STALE + '（' + (STALE / 86400) + ' 天）, SNAPSHOT_UNUSABLE_AGE_SEC=' +
+console.log('    SNAPSHOT_DECAY_AGE_SEC=' + STALE + '（' + (STALE / 86400) + ' 天）, SNAPSHOT_UNUSABLE_AGE_SEC=' +
   UNUSABLE + '（' + (UNUSABLE / 86400) + ' 天）');
 assert('★ 可用性阈值必须**严于**提示阈值（否则"不可用"永不触发 / 语义自相矛盾）',
   UNUSABLE != null && STALE != null && UNUSABLE > STALE, 'unusable=' + UNUSABLE + ' stale=' + STALE);
@@ -130,9 +131,9 @@ console.log('\n--- ⑤ 守卫可证伪性（对源码做变异，判据必须由
   assert('变异2：「须标注更新方式」应判 false',
     !(mut2.indexOf('内置快照更新于') >= 0 && mut2.indexOf('随版本发布更新') >= 0));
   // 变异 3：把两个阈值改到相等 → 关系断言应变 false
-  const mut3 = ls.replace('const SNAPSHOT_UNUSABLE_AGE_SEC = 30 * 86400;',
+  const mut3 = cfg.replace('const SNAPSHOT_UNUSABLE_AGE_SEC = 30 * 86400;',
     'const SNAPSHOT_UNUSABLE_AGE_SEC = 7 * 86400;');
-  assert('变异3 确实改到了源码', mut3 !== ls);
+  assert('变异3 确实改到了源码', mut3 !== cfg);
   const m3 = mut3.match(/const\s+SNAPSHOT_UNUSABLE_AGE_SEC\s*=\s*([0-9*\s]+);/);
   const u3 = m3[1].replace(/\s/g, '').split('*').reduce((a, b) => a * Number(b), 1);
   assert('变异3：「可用性>提示」应判 false', !(u3 > STALE), 'u3=' + u3);

@@ -18,11 +18,13 @@
 
 var seriesStatus = require('./seriesStatus.js');
 var homeDedupe = require('./homeDedupe.js');
+// ★ 2026-10-13（P1-19）：SLO 时间阈值与业务代码**同源**（config.timeWindow），避免口径漂移。
+var config = require('./config.js');
 
 // ===== SLO（2026-09-26 修订口径）=====
 // ★ 与 v2 方案 §9.2 的差异（均为复核后修正，理由写在 note 里）：
 //   · 收敛延迟**拆两条**：硬判据路径 ≤5min（可达） / 降级路径 ≤3h（受 sources.js 阈值限制，物理上不可能 5min）
-//   · 快照年龄**拆两量**：目标 24h（目标值） / 7d（leagues.js 的降权阈值）—— 同名不同义曾致误判
+//   · 快照年龄**拆三量**：目标 24h（尺子） / 7d（leagues 降权阈值） / 30d（leagues 可用性门限）—— 同名不同义曾致误判；现均取自 config.timeWindow（P1-19）
 //   · 重复卡率目标 0 **原理不可达**（同日同队两场在"队名+时间窗"信号下不可区分）⇒ 改为「≤基线 + 例外可解释」
 var SLO = {
   // —— 准确性 ——
@@ -51,12 +53,12 @@ var SLO = {
   liveScoreLagSec: { target: 90, note: '最新比分时间 → 当前时间（现有 30s 轮询 + 5min 重拉）' },
   statusConvergeHardSec: { target: 5 * 60, note: '真实终局 → status=ended，走「比分达 BO 上限」硬判据路径' },
   statusConvergeDegradedSec: {
-    target: 3 * 3600,
-    note: '降级路径（超时推断）—— 必须与 utils/sources.js 的 STALE_LIVE_MAX_SEC 对齐，故不可能 ≤5min'
+    target: config.timeWindow.liveStaleMaxSec,   // = utils/sources.js STALE_LIVE_MAX_SEC（单一事实源，P1-19）
+    note: '降级路径（超时推断）—— 与 utils/sources.js 的 STALE_LIVE_MAX_SEC 同源（config.timeWindow.liveStaleMaxSec），故不可能 ≤5min'
   },
   snapshotAgeSec: {
-    target: 24 * 3600,
-    note: '快照"目标新鲜度"；另有**降权阈值** 7d（pages/leagues/leagues.js 的 SNAPSHOT_MAX_AGE_SEC），两者语义不同'
+    target: config.timeWindow.snapshotTargetAgeSec,   // = 24h（单一事实源，P1-19）
+    note: '快照"目标新鲜度"（尺子）；另有**降权阈值** 7d（config.timeWindow.snapshotDecayAgeSec）与**可用性硬门限** 30d（config.timeWindow.snapshotUnusableAgeSec），三者语义互斥、不可混用'
   }
 };
 

@@ -10,8 +10,9 @@
  * 本守卫把「过期」变成**可见**：过期 ⇒ 退出码非 0 + 明确打印是哪一份、多久没动。
  *
  * ## 阈值口径：**不新增常量**
- * 复用 `pages/leagues/leagues.js` 的 `SNAPSHOT_MAX_AGE_SEC`（**读源码取常量**，只允许数字与 `*`，
- * 不做 eval）—— 与页面「是否显示日期提示」**同口径**，避免出现第三个"过期"定义。
+ * 复用 `utils/config.js` 的 `SNAPSHOT_DECAY_AGE_SEC` / `SNAPSHOT_UNUSABLE_AGE_SEC`（**读源码取常量**，
+ * 只允许数字与 `*`，不做 eval）—— 与页面「是否显示日期提示」**同口径**（P1-19 后这两个阈值的
+ * 单一事实源就在 config.js），避免出现第三个"过期"定义。
  *
  * ## 为什么**刻意不进** `test:all` 串行链
  * 本守卫失败的原因**几乎总是"调度没跑"**（GH scheduled 实测延迟 ~5h、9 次里 3 次失败），
@@ -36,7 +37,7 @@ const SNAPSHOTS = [
   { name: '队标快照', file: 'utils/team-logo-map.json',           module: 'utils/team-logo-local-data.js',  ci: 'sync-upcoming.yml' },
 ];
 
-/** 从页面源码读常量（只允许数字与 `*`；与 SLO 漂移守卫同一套路，避免 eval） */
+/** 从源码读常量（只允许数字与 `*`；与 SLO 漂移守卫同一套路，避免 eval） */
 function readConst(file, name) {
   const src = fs.readFileSync(path.join(ROOT, file), 'utf8');
   const re = new RegExp('const\\s+' + name + '\\s*=\\s*([0-9*\\s]+);');
@@ -47,9 +48,9 @@ function readConst(file, name) {
   return expr.split('*').reduce((a, b) => a * Number(b), 1);
 }
 
-const LEAGUES_PAGE = 'pages/leagues/leagues.js';
-const STALE_SEC = readConst(LEAGUES_PAGE, 'SNAPSHOT_MAX_AGE_SEC');        // 7 天：降权/提示阈值
-const UNUSABLE_SEC = readConst(LEAGUES_PAGE, 'SNAPSHOT_UNUSABLE_AGE_SEC'); // 30 天：可用性阈值
+const CONFIG_FILE = 'utils/config.js';
+const STALE_SEC = readConst(CONFIG_FILE, 'SNAPSHOT_DECAY_AGE_SEC');        // 7 天：降权/提示阈值
+const UNUSABLE_SEC = readConst(CONFIG_FILE, 'SNAPSHOT_UNUSABLE_AGE_SEC'); // 30 天：可用性阈值
 
 function readGeneratedAt(s) {
   // 优先读 JSON 留档；缺 JSON 时回退 JS wrapper（两者由同一脚本同次写出，应一致）
@@ -72,7 +73,7 @@ const nowSec = Math.floor(Date.now() / 1000);
 const fmtDays = (sec) => (Math.round((sec / 86400) * 10) / 10);
 
 console.log('[snapshot-freshness] 阈值：提示 ' + fmtDays(STALE_SEC) + ' 天 / 不可用 ' + fmtDays(UNUSABLE_SEC) +
-  ' 天（读自 ' + LEAGUES_PAGE + '，单一来源）\n');
+  ' 天（读自 ' + CONFIG_FILE + '，单一来源）\n');
 
 const rows = [];
 let staleCount = 0;

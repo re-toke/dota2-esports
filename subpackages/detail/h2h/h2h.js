@@ -102,12 +102,15 @@ Page({
   onLoad(options) {
     const a = options.teamA;
     const b = options.teamB;
+    // ★ 2026-10-13（P1-21）：首屏分段 `[perf]` 埋点基准（相对本时刻的毫秒；每段每轮 1 行）。
+    this._perfT0 = Date.now();
     if (!a || !b) {
       this.setData({ loading: false, error: '缺少对战双方参数' });
       return;
     }
     this.teamAId = String(a);
     this.teamBId = String(b);
+    console.info('[h2h][perf] onLoad 起 A=' + a + ' B=' + b);
     this.load();
   },
 
@@ -126,6 +129,8 @@ Page({
       api.getTeamMatches(this.teamBId, { recent: FORM_WINDOW })
     ].map((p) => p.catch(() => null)))   // P3-4：单源失败降级 null，不拖垮整页（下游已有 ||{} / ||[] 兜底）
       .then(([ta, tb, vsMatches, formARecent, formBRecent]) => {
+        // ★ P1-21：网络段（5 源 Promise.all）settle
+        if (this._perfT0) console.info('[h2h][perf] 5 源 settle +' + (Date.now() - this._perfT0) + 'ms');
         const mA = ta || {};
         const mB = tb || {};
         const teamA = {
@@ -226,6 +231,9 @@ Page({
           radarSeries: radarSeries,
           loading: false
         });
+
+        // ★ 2026-10-13（P1-21）：首屏（交锋 + 雷达）已渲染
+        if (this._perfT0) console.info('[h2h][perf] 首屏渲染 +' + (Date.now() - this._perfT0) + 'ms（交锋 ' + history.length + ' 场）');
 
         // 3.4 异步增强队名展示：用 curation 规范名覆盖 OpenDota 原始队名
         // （如 OpenDota 的 "Team liquid" 统一显示为 curation 的 "Team Liquid"）

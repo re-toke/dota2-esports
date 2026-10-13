@@ -86,20 +86,24 @@ function _snapKeyCached(name) {
   return v;
 }
 
-// ★ v8.1（2026-08-31）：本地快照最大可用「主源」年龄（秒）。超过则降权为兜底渲染，
+// ★ v8.1（2026-08-31）：本地快照可用「主源」年龄（秒）。超过则降权为兜底渲染，
 //   放行串行实时查询（详见 tryLocalUpcoming 注释）。7 天对齐「即将到来」数据源的
 //   周级刷新节奏（fetch:upcoming SOP）。
-const SNAPSHOT_MAX_AGE_SEC = 7 * 86400;
+//   ★ 2026-10-13（P1-19）：值上收 `config.timeWindow.snapshotDecayAgeSec`（单一事实源）。
+//     命名由 `SNAPSHOT_MAX_AGE_SEC` 改为 `SNAPSHOT_DECAY_AGE_SEC` —— 原「MAX」含义模糊，
+//     且与 diagnostics SLO 的 24h 快照「目标」`SNAPSHOT_TARGET_AGE_SEC` 属**同名不同义**，改名区分。
+const SNAPSHOT_DECAY_AGE_SEC = config.timeWindow.snapshotDecayAgeSec;
 
 // ★ 2026-09-27（R9 硬门限）：快照**不可用**年龄（秒）。超过则**完全不用它渲染**（走骨架屏等网络）。
-//   与 SNAPSHOT_MAX_AGE_SEC 的分工（两个量，语义不同，勿混用）：
-//     · SNAPSHOT_MAX_AGE_SEC（7 天）= **降权/提示阈值**：超过则不当"主源"、并显示日期提示；
+//   与 SNAPSHOT_DECAY_AGE_SEC 的分工（两个量，语义不同，勿混用）：
+//     · SNAPSHOT_DECAY_AGE_SEC（7 天）= **降权/提示阈值**：超过则不当"主源"、并显示日期提示；
 //     · SNAPSHOT_UNUSABLE_AGE_SEC（30 天）= **可用性阈值**：超过则连"兜底渲染"都不做。
 //   为什么需要它：赛事列表的「进行中 / 即将到来」由快照 `windows` + curation 赛期**推导**，
 //   过旧快照给出的是**语义错误**（把早已开赛的标成"即将到来"），不只是"旧"。
 //   30 天取值依据：赛事列表按周/月变化（列表页注释自证"S 级赛事排期以周计"），
 //     超过一个月仍在使用，错误的概率已高于"骨架屏零信息"的代价。
-const SNAPSHOT_UNUSABLE_AGE_SEC = 30 * 86400;
+//   ★ 2026-10-13（P1-19）：值上收 `config.timeWindow.snapshotUnusableAgeSec`（单一事实源）。
+const SNAPSHOT_UNUSABLE_AGE_SEC = config.timeWindow.snapshotUnusableAgeSec;
 
 // 等级 -> TDesign Tag 主题/变体
 function tagThemeOf(grade) {
@@ -1194,7 +1198,7 @@ Page({
   // 数据为「运行抓取脚本那一刻」的快照，非实时；刷新需重跑脚本并重新构建发布：
   //   node scripts/fetch-liquipedia-upcoming.js
   // 与云端缓存共用 buildUpcomingCard，字段形状一致；同样经 mergeCurationUpcoming 去重/补充。
-  // ★ 2026-08-31（快照过期降权，v8.1）：快照 generatedAt 距今 > SNAPSHOT_MAX_AGE_SEC（7 天）时，
+  // ★ 2026-08-31（快照过期降权，v8.1）：快照 generatedAt 距今 > SNAPSHOT_DECAY_AGE_SEC（7 天）时，
   //   不再作为「命中主源」直接 return true（旧快照仅剩 1 条有效数据也会屏蔽串行 OpenDota 路径，
   //   导致列表停在抓取当天的世界状态）。降权规则：
   //     - 新鲜（≤7 天）：行为不变，命中即停（云函数与串行查询之间的高速通道）
@@ -1216,7 +1220,7 @@ Page({
     // 快照新鲜度判定（generatedAt 缺失按过期处理，倒逼快照携带时间戳）
     const genAt = (data && data.generatedAt) || 0;
     const snapshotAgeSec = genAt ? (util.nowSec() - genAt) : Infinity;
-    const isStale = snapshotAgeSec > SNAPSHOT_MAX_AGE_SEC;
+    const isStale = snapshotAgeSec > SNAPSHOT_DECAY_AGE_SEC;
 
     const now = util.nowSec();
     const horizon = now + config.leagueWindow.upcomingRangeSec;
@@ -1256,7 +1260,7 @@ Page({
   _snapshotIsStale(genAt) {
     const t = Number(genAt) || 0;
     if (!t) return true;                       // 无时间戳按过期处理
-    return (util.nowSec() - t) > SNAPSHOT_MAX_AGE_SEC;
+    return (util.nowSec() - t) > SNAPSHOT_DECAY_AGE_SEC;
   },
   // ★ 2026-09-27（R9）：快照是否**过旧到不该使用**（> SNAPSHOT_UNUSABLE_AGE_SEC）。
   //   与 `_snapshotIsStale` 的区别：那个只决定"是否显示日期提示"，这个决定"是否还能用"。

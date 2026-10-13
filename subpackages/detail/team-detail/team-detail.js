@@ -61,6 +61,9 @@ Page({
 
   onLoad(options) {
     const teamId = options.teamId;
+    // ★ 2026-10-13（P1-21）：首屏分段 `[perf]` 埋点基准（相对本时刻的毫秒；每段每轮 1 行）。
+    this._perfT0 = Date.now();
+    console.info('[team-detail][perf] onLoad 起 teamId=' + teamId);
     this.setData({
       teamId: teamId,
       followed: follow.isFollowed('teams', teamId)
@@ -160,6 +163,9 @@ Page({
             { label: '最近', value: teamInfo.lastMatch || '—' }
           ]
         });
+
+        // ★ 2026-10-13（P1-21）：首屏（战队 + 成员）已渲染
+        if (this._perfT0) console.info('[team-detail][perf] 战队+成员 段 +' + (Date.now() - this._perfT0) + 'ms');
 
         // 异步增强：4 个源用计数器统一收口，避免各自独立 setData。
         // crossMembers 修改 current/history + memberQuality；enrichInfo/enrichLogo 修改 team；
@@ -307,14 +313,21 @@ Page({
       });
     };
     // 阶段 1：最近 N 场（走中转裁剪，快）
+    // ★ 2026-10-13（P1-21）：比赛流分段 `[perf]`（近期段 / 全量段），相对 onLoad 起点。
     return api.getTeamMatches(this.data.teamId, { recent: api.RECENT_TEAM_MATCHES })
-      .then((recentList) => apply(recentList))
+      .then((recentList) => {
+        apply(recentList);
+        if (this._perfT0) console.info('[team-detail][perf] 比赛·近期段 +' + (Date.now() - this._perfT0) + 'ms（' + ((recentList || []).length) + ' 场）');
+      })
       .catch(() => {})
       .then(() => {
         if (seq !== this._matchSeq) return null;
         // 阶段 2：后台补全量（totalMatches / 完整分页 / buildH2h）；失败保留阶段 1 视图
         return api.getTeamMatches(this.data.teamId)
-          .then((full) => apply(full))
+          .then((full) => {
+            apply(full);
+            if (this._perfT0) console.info('[team-detail][perf] 比赛·全量段 +' + (Date.now() - this._perfT0) + 'ms（' + ((full || []).length) + ' 场）');
+          })
           .catch(() => { if (seq === this._matchSeq) this.setData({ matchLoading: false }); });
       });
   },

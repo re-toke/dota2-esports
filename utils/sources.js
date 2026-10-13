@@ -1218,7 +1218,9 @@ function patchNullSeriesId(matches) {
 //   一局 Dota 时长上限约 2 小时；若最后活动已过去 STALE_LIVE_MAX_SEC（默认 3 小时）仍无新活动
 //   ⇒ 判定为已结束。**单向降级**：只把 live → ended，绝不把 ended 反升为 live（避免反向误判）。
 //   ⚠️ 无任何时间信息时返回 false（不敢判定，保持原状）。
-const STALE_LIVE_MAX_SEC = 3 * 3600;
+//   ★ 2026-10-13（P1-19）：值上收 `config.timeWindow.liveStaleMaxSec`（与 diagnostics SLO 同源），
+//      改一处即全局生效；本常量仅作可读别名，勿再直接写字面量。
+const STALE_LIVE_MAX_SEC = config.timeWindow.liveStaleMaxSec;
 
 function seriesLastActivitySec(s) {
   if (!s) return 0;

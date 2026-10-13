@@ -30,7 +30,9 @@ const FOLLOW_CAP = 15;
 // LIVE 轮询：F3a（2026-08-31）基线 60s → 120s。
 //   实测 /live 端点 144.5KB/1.4s，100 场中职业场（league_id>0）0 场，每 60s 重复拉纯浪费。
 //   改为 120s 基线（含 TTL 缓存兜底），轮询流量减半（8.6 → 4.3 MB/h），职业场刷新延迟可接受。
-const POLL_BASE_MS = 120 * 1000;
+//   ★ 2026-10-13（P1-19）：秒值上收 `config.timeWindow.livePollSec` —— 与 `cacheTTL.liveMatches`
+//     同源（TTL 必须 ≥ 本间隔，否则轮询每次必 miss 而实拉 /live）。改轮询间隔请只改 config。
+const POLL_BASE_MS = config.timeWindow.livePollSec * 1000;
 const POLL_BACKOFF_1_MS = 180 * 1000;
 const POLL_BACKOFF_MAX_MS = 300 * 1000;
 // 比赛卡 logo 懒加载上限（首屏可见卡片，避免全列表 2N 次 getTeam）
@@ -557,6 +559,10 @@ Page({
     //   再调大到 600ms 可进一步减少中间态渲染（代价：填充最多晚 600ms，属可接受）。
     const _COALESCE_MS = 600;
     if (!(opts && opts._trailing) && this._flowAt && (_now - this._flowAt) < _COALESCE_MS) {
+      // ★ 2026-10-13（P1-21）：合并窗口内的重复触发**不产生分段日志**（避免刷屏）；明细走 verboseLog。
+      if (config.debug && config.debug.verboseLog) {
+        console.info('[index][perf] 合并窗口内跳过（距上次 ' + (_now - this._flowAt) + 'ms）');
+      }
       if (!this._flowTimer) {
         this._flowTimer = setTimeout(() => {
           this._flowTimer = null;
@@ -566,6 +572,9 @@ Page({
       return;
     }
     this._flowAt = _now;
+    // ★ 2026-10-13（P1-21）：本轮首屏分段 `[perf]` 埋点基准（各段耗时均相对本时刻，毫秒）。
+    //   段：pro/live settle → ⑥段发起 → ⑥段完成 → 合并渲染完成。**每段每轮 1 行**（对齐「汇总常开」约定）。
+    this._perfT0 = _now;
     const nowMs = Date.now();
     const PRO_FRESH_MS = 60 * 1000;
     const LIVE_FRESH_MS = 60 * 1000;
@@ -610,9 +619,12 @@ Page({
     //      无新竞态（epoch 守卫与原有两条渲染路径都不变）。
     //   ⚠️ 兜底：若首屏分支因异常没跑，5s 后强制发起，保证 ⑥段**不会永久不跑**。
     let lpStarted = false;
+    let lpStartAt = 0;                   // ★ P1-21：⑥段发起时刻（供完成段计时）
     const startLp = () => {
       if (lpStarted) return;
       lpStarted = true;
+      lpStartAt = Date.now();
+      console.info('[index][perf] ⑥段发起 +' + (lpStartAt - _now) + 'ms');
       resolveLp(this._fetchLpUpcoming().catch(() => []));
     };
     let resolveLp = null;
@@ -621,6 +633,9 @@ Page({
     let lpReady = null;                  // 本 epoch LP 就绪缓存（pro/live 渲染时带上，省一次二次渲染）
     lpP.then((lpUp) => {
       if (myEpoch !== this._epoch) return;
+      // ★ P1-21：⑥段完成（相对 flow 起点 / 自发起）
+      console.info('[index][perf] ⑥段完成 +' + (Date.now() - _now) + 'ms（自发起 ' +
+        (Date.now() - lpStartAt) + 'ms，' + ((lpUp && lpUp.length) || 0) + ' 条）');
       this._lastLpUp = lpUp; this._lastLpUpTs = Date.now();
       // ★ 2026-09-19 修复（**同一 bug 的第二段**）：stale 刷新触发必须放在
       //   「空数组提前 return」**之前**。
@@ -641,6 +656,9 @@ Page({
       new Promise((_, reject) => setTimeout(() => reject(new Error('matchflow_timeout')), FETCH_TIMEOUT_MS))
     ]).then(([pro, live]) => {
       if (myEpoch !== this._epoch) return;
+      // ★ P1-21：pro/live settle（首屏主请求段）
+      console.info('[index][perf] pro/live settle +' + (Date.now() - _now) + 'ms（pro=' +
+        ((pro && pro.length) || 0) + ' live=' + ((live && live.length) || 0) + '）');
       this._lastPro = pro; this._lastProTs = Date.now();
       this._lastLive = live; this._lastLiveTs = Date.now();
       const degraded = (pro == null) && (live == null) && !this._allMatches;
@@ -650,6 +668,8 @@ Page({
       startLp();   // ★ 优化①：首屏已渲染 ⇒ 现在才发起 ⑥段（不抢首屏并发）
     }).catch(() => {
       if (myEpoch !== this._epoch) return;
+      // ★ P1-21：pro/live 超时/失败（15s 兜底）
+      console.info('[index][perf] pro/live 超时/失败 +' + (Date.now() - _now) + 'ms');
       // F10 超时/失败降级。★ S1 补漏：原实现此分支不处理 lpP——超时场景 LP 数据
       //   到手也永远不渲染。现带上 lpReady（若已就绪）。
       if (this._lastPro || this._lastLive || lpReady) {
@@ -1141,6 +1161,11 @@ Page({
     });
     this._dayCounts = dayCounts;
     this._buildWeekDays();
+    // ★ 2026-10-13（P1-21）：**合并渲染窗口 → 渲染完成**（相对本轮起点）。
+    //   `_perfT0` 由 `_kickMatchFlow` / 轮询 tick 设置；缺失时不伪造耗时，只记条数。
+    const _pt0 = this._perfT0;
+    console.info('[index][perf] 渲染完成 ' + keptCards.length + ' 卡' +
+      (_pt0 ? '（本轮 +' + (Date.now() - _pt0) + 'ms）' : ''));
   },
 
   // /live 职业场 → OpenDota match 平铺结构（groupSeries 输入兼容）。
@@ -1785,6 +1810,8 @@ Page({
     this._pollFails = this._pollFails || 0;
     const tick = () => {
       if (_epoch !== this._pollEpoch) return;  // 已停止 → 直接退出
+      // ★ 2026-10-13（P1-21）：tick 轮起点（供本轮 `_applyMatchSources` 的「渲染完成」分段计时）
+      this._perfT0 = Date.now();
       // F1（2026-08-31）：轮询通过 _kickMatchFlow 统一入口，复用 epoch 代际守卫与缓存逻辑。
       //   _kickMatchFlow 内部会判断 pro/live 缓存新鲜度，仅在必要时发起请求。
       //   失败计数由 _pollFails 在外层维护，控制退避间隔。
