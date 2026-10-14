@@ -7,11 +7,11 @@
 // 刷新：npm run fetch:leagues
 
 module.exports = {
-  "generatedAt": 1791923515,
+  "generatedAt": 1791966461,
   "source": "opendota",
   "note": "build-time leagues snapshot (active 90d + curated 60d), refresh via scripts/sync/fetch-leagues-snapshot.js",
   "stats": {
-    "total": 10352,
+    "total": 10356,
     "kept": 36,
     "windows": 20
   },
@@ -42,14 +42,19 @@ module.exports = {
       "name": "Riyadh Masters 2024 at Esports World Cup Qualifiers"
     },
     {
-      "leagueid": 17795,
-      "tier": "professional",
-      "name": "ESL One Raleigh 2025"
+      "leagueid": 14268,
+      "tier": "premium",
+      "name": "The International 2022"
     },
     {
       "leagueid": 18324,
       "tier": "premium",
       "name": "The International 2025"
+    },
+    {
+      "leagueid": 17795,
+      "tier": "professional",
+      "name": "ESL One Raleigh 2025"
     },
     {
       "leagueid": 19066,
@@ -87,9 +92,9 @@ module.exports = {
       "name": "EPL Masters 2026 "
     },
     {
-      "leagueid": 14268,
-      "tier": "premium",
-      "name": "The International 2022"
+      "leagueid": 20176,
+      "tier": "professional",
+      "name": "BETBOOM Streamers Battle Dota 15"
     },
     {
       "leagueid": 18111,
@@ -97,19 +102,19 @@ module.exports = {
       "name": "DreamLeague Season 26"
     },
     {
-      "leagueid": 18359,
-      "tier": "professional",
-      "name": "Clavision DOTA2 Masters 2025: Snow-Ruyi"
-    },
-    {
-      "leagueid": 20009,
-      "tier": "professional",
-      "name": "1win Essence II"
-    },
-    {
       "leagueid": 20169,
       "tier": "professional",
       "name": "BLAST Slam VII China Qualifier"
+    },
+    {
+      "leagueid": 20208,
+      "tier": "professional",
+      "name": "BLAST SLAM IX"
+    },
+    {
+      "leagueid": 18359,
+      "tier": "professional",
+      "name": "Clavision DOTA2 Masters 2025: Snow-Ruyi"
     },
     {
       "leagueid": 20279,
@@ -117,24 +122,19 @@ module.exports = {
       "name": "PGL Wallachia 2026 Season 9"
     },
     {
-      "leagueid": 20176,
-      "tier": "professional",
-      "name": "BETBOOM Streamers Battle Dota 15"
-    },
-    {
       "leagueid": 20334,
       "tier": "professional",
       "name": "NEXUS SERIES II"
     },
     {
+      "leagueid": 20009,
+      "tier": "professional",
+      "name": "1win Essence II"
+    },
+    {
       "leagueid": 20359,
       "tier": "professional",
       "name": "DreamLeague Season 30 Qualifiers"
-    },
-    {
-      "leagueid": 20208,
-      "tier": "professional",
-      "name": "BLAST SLAM IX"
     },
     {
       "leagueid": 18375,
@@ -217,10 +217,10 @@ module.exports = {
       "count": 147
     },
     "19785": {
-      "earliest": 1784113191,
+      "earliest": 1784200005,
       "latest": 1784483341,
       "lastEnd": 1784485548,
-      "count": 29
+      "count": 19
     },
     "19917": {
       "earliest": 1785476004,
@@ -230,9 +230,9 @@ module.exports = {
     },
     "19944": {
       "earliest": 1784531358,
-      "latest": 1791915677,
-      "lastEnd": 1791918337,
-      "count": 360
+      "latest": 1791959468,
+      "lastEnd": 1791962843,
+      "count": 361
     },
     "20009": {
       "earliest": 1785402206,
@@ -296,9 +296,9 @@ module.exports = {
     },
     "20359": {
       "earliest": 1791533047,
-      "latest": 1791917504,
-      "lastEnd": 1791918995,
-      "count": 156
+      "latest": 1791954073,
+      "lastEnd": 1791956130,
+      "count": 169
     },
     "20393": {
       "earliest": 1791187532,
@@ -308,9 +308,9 @@ module.exports = {
     },
     "20406": {
       "earliest": 1791813665,
-      "latest": 1791915470,
-      "lastEnd": 1791917448,
-      "count": 12
+      "latest": 1791930739,
+      "lastEnd": 1791933010,
+      "count": 15
     },
     "20411": {
       "earliest": 1791721162,
