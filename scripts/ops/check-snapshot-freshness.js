@@ -4,7 +4,7 @@
  * build-time 快照**新鲜度守卫**（2026-09-27 · 快照过期诊断「缺口 B」）
  *
  * ## 为什么需要它（实测教训）
- * `utils/leagues-local.json` 停更 **12.7 天**、`utils/team-logo-local-data.js` 停更 **≈26 天**，
+ * `utils/leagues-local.json` 停更 **12.7 天**、队标快照（`utils/team-logo-local-data.js`；★ P2-21 后已移至 `subpackages/detail/`）停更 **≈26 天**，
  * 而**全部 CI 门禁仍全绿** —— 因为没有任何判据在看"数据是否过期"。
  * ⇒ 这是典型的**静默失效**：只能等用户在界面上偶然看到才发现（本次就是这么发现的）。
  * 本守卫把「过期」变成**可见**：过期 ⇒ 退出码非 0 + 明确打印是哪一份、多久没动。
@@ -34,7 +34,7 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const SNAPSHOTS = [
   { name: '赛程快照', file: 'utils/upcoming-local.json',          module: 'utils/upcoming-local-data.js',   ci: 'sync-upcoming.yml' },
   { name: '联赛快照', file: 'utils/leagues-local.json',           module: 'utils/leagues-local-data.js',    ci: 'sync-upcoming.yml' },
-  { name: '队标快照', file: 'utils/team-logo-map.json',           module: 'utils/team-logo-local-data.js',  ci: 'sync-upcoming.yml' },
+  { name: '队标快照', file: 'utils/team-logo-map.json',           module: 'subpackages/detail/team-logo-local-data.js',  ci: 'sync-upcoming.yml' },
 ];
 
 /** 从源码读常量（只允许数字与 `*`；与 SLO 漂移守卫同一套路，避免 eval） */

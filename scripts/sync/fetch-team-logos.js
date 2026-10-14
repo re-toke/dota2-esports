@@ -2,8 +2,8 @@
 // scripts/sync/fetch-team-logos.js —— P1-3（2026-09-01）：build-time 队伍 logo 快照生成器
 //
 // 产出：
-//   utils/team-logo-map.json        （数据快照，主包 require 用）
-//   utils/team-logo-local-data.js   （JS wrapper，分包 require 稳定——同 upcoming-local-data.js 模式）
+//   utils/team-logo-map.json                  （数据快照；★ 已被 project.config.json packOptions.ignore 排除，仅留档/CI 读取）
+//   subpackages/detail/team-logo-local-data.js（JS wrapper；★ P2-21 下沉 detail 分包——主包不可 require 分包模块）
 //
 // 动机（v8.5 复核结论）：赛事详情页 enrichTeamLogos 对每支无 logo 队伍发起
 //   api.getTeam / api.findTeamByName 网络查询（客户端 60req/min 配额 + 慢网 RTT），
@@ -27,7 +27,7 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..', '..');
 const OUT_JSON = path.join(ROOT, 'utils', 'team-logo-map.json');
-const OUT_JS = path.join(ROOT, 'utils', 'team-logo-local-data.js');
+const OUT_JS = path.join(ROOT, 'subpackages', 'detail', 'team-logo-local-data.js');
 
 const OD_BASE = 'https://api.opendota.com/api';
 const TOP_RATED = 400;        // /api/teams 高排名广覆盖条数
@@ -210,11 +210,13 @@ function normName(s) {
 
   fs.writeFileSync(OUT_JSON, JSON.stringify(out, null, 2));
   // JS wrapper（分包 require 主包 JSON 有兼容性问题 —— 同 upcoming-local-data.js 模式）
-  const jsOut = '// utils/team-logo-local-data.js\n' +
+  const jsOut = '// subpackages/detail/team-logo-local-data.js\n' +
     '// team-logo-map.json 的 JS 包装模块（由 scripts/sync/fetch-team-logos.js 自动生成，请勿手动修改）\n' +
     '//\n' +
+    '// ★ 2026-10-14（P2-21）：**下沉到 detail 分包**（原在主包 utils/）—— 微信规则「主包不可 require 分包模块」，\n' +
+    '//   故仅 detail 分包内（league-detail）使用；主包不再 require（主包体积 -199KB）。\n' +
     '// 背景：微信小程序分包直接 require 主包 JSON 存在兼容性问题（返回 null），\n' +
-    '//   改为 JS 模块导出，在主包/分包中 require 均稳定可靠（同 upcoming-local-data.js 模式）。\n' +
+    '//   改为 JS 模块导出，在分包内 require 稳定可靠（同 upcoming-local-data.js 模式）。\n' +
     '// 运行时用法：league-detail _doEnrichTeamLogos 快照命中 → 零网络；未命中走原查询链。\n' +
     '// 刷新：npm run fetch:logos\n\n' +
     'module.exports = ' + JSON.stringify(out, null, 2) + ';\n';

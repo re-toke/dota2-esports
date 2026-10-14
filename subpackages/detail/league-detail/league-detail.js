@@ -1970,13 +1970,13 @@ Page({
     });
 
     // ★ 2026-09-01（P1-3）：build-time logo 快照命中 —— 零网络直填。
-    //   快照（utils/team-logo-local-data.js，npm run fetch:logos 产出）覆盖
+    //   快照（subpackages/detail/team-logo-local-data.js，npm run fetch:logos 产出；★ P2-21 已下沉分包）覆盖
     //   「活跃赛事参赛队 + rating 前 400」：命中 byId/byName 的队伍转为合成结果
     //   （走既有 logoMap/nameLogoMap/_logoQueryCache/路径更新管线），不再发网络请求；
     //   未命中队伍仍走下方原查询链（增量兜底）。快照未生成（require 失败）→ 全量走原链路。
     if (!this._logoSnapChecked) {
       this._logoSnapChecked = true;   // 只 require 一次（成功或失败均不重试）
-      try { this._logoSnap = require('../../../utils/team-logo-local-data.js'); }
+      try { this._logoSnap = require('../team-logo-local-data.js'); }
       catch (e) { this._logoSnap = null; }
     }
     const snap = this._logoSnap;

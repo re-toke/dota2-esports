@@ -100,7 +100,7 @@ jobs:
           # ★ 2026-09-27：回写范围扩到**全部有鲜度要求的产物**（此前只有 upcoming ⇒ leagues 停更 12.7 天）
           git add utils/upcoming-local.json utils/upcoming-local-data.js \
                   utils/leagues-local.json  utils/leagues-local-data.js \
-                  utils/team-logo-map.json  utils/team-logo-local-data.js
+                  utils/team-logo-map.json  subpackages/detail/team-logo-local-data.js
           if git diff --quiet --cached; then
             echo "快照无变化，跳过提交"
           else

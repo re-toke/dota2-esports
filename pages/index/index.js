@@ -21,9 +21,9 @@ const config = require('../../utils/config.js');   // ★ P0-B：诊断明细开
 const monitor = require('../../utils/monitor.js');   // ★ P2-23：数据质量未达标 → 上报（wx.reportAnalytics）
 // v5.1（2026-09-01）：首页「对局级 upcoming」源 —— Liquipedia/Steam/haglund 排期（云代理，30min 缓存）
 const liquipedia = require('../../utils/liquipedia.js');
-// ★ 2026-09-01：构建时队徽快照（byName 键 = consensus.normName 规范化队名 → Steam CDN 可靠域）。
-//   LP 排期卡无 team_id，无法走 logoCache 按 id 查询 → 本地快照按名命中可零网络回填。
-const _teamLogoLocal = require('../../utils/team-logo-local-data.js');
+// ★ 2026-10-14（P2-21）：原在此 require 的构建时队徽快照（utils/team-logo-local-data.js，199KB）
+//   已**下沉到 detail 分包**（微信规则：主包不可 require 分包模块）⇒ 主包不再持有该快照。
+//   LP 排期卡的按名补 logo 现直接走 api.findTeamByName（OpenDota 24h 缓存；见 _enrichNameLogos）。
 
 // 关注卡片流展示上限，避免关注过多战队时批量请求打满 OpenDota 60 req/min
 const FOLLOW_CAP = 15;
@@ -1554,48 +1554,20 @@ Page({
   //   ★ 2026-09-01 修复「Failed to load image liquipedia.net/...」：
   //     liquipedia.getTeamLogo 返回的是 liquipedia.net 图片域 URL，小程序渲染层加载
   //     该域图片会被 Liquipedia 热链保护拦截（net::OK 但加载失败）。
-  //     → 改为三级可靠链路：
-  //       ① 本地 team-logo-map.json byName（构建时快照，全 Steam CDN 可靠域，零网络）
-  //       ② api.findTeamByName（OpenDota /teams 24h 缓存，返回 Steam CDN logo_url）
-  //       ③ 前两者都未命中 → 记负缓存（liquipedia.getTeamLogo 不再直接用于 <image> src）
+  //     → 改为可靠链路：
+  //       ① api.findTeamByName（OpenDota /teams 24h 缓存，返回 Steam CDN logo_url）
+  //       ② 未命中 → 记负缓存（liquipedia.getTeamLogo 不再直接用于 <image> src）
   //   控制：按规范化队名去重 + 会话级缓存/负缓存 + 首屏数量上限，避免请求轰炸。
-  // ★ 2026-09-01 v2：按队名查快照的统一匹配（与详情页 _snapByNameFuzzy 同规则）。
-  //   ① 精确：norm 直接命中 byName 键
-  //   ② 正向模糊：快照键以 norm 开头（简称→全名，levelup→levelupesports），取最短键
-  //   ③ 反向模糊：norm 以快照键开头且更长，剩余为修饰词（DYNASTY (stack)→dynasty），取最长键
-  //   ⚠️ norm 必须是「去非字母数字」——快照 byName 键由此生成（fetch-team-logos.js）。
-  //     原实现 trim().toLowerCase() 保留空格（"klim sani4"），与快照键 klimsani4 永不匹配
-  //     → 首页快照命中全部 miss（只能走 findTeamByName 网络兜底）。v2 修复。
-  _snapLogoByName(nk) {
-    const byName = (_teamLogoLocal && _teamLogoLocal.byName) || {};
-    if (!byName || !nk) return '';
-    const hit = byName[nk];
-    if (hit && /^https?:\/\//i.test(hit.logo)) return hit.logo;
-    // 正向：快照键以 norm 开头且长于 norm+3（防 mouz→mouzesports 过度扩展）
-    let bestKey = null;
-    Object.keys(byName).forEach((k) => {
-      if (k.length >= nk.length + 3 && k.indexOf(nk) === 0) {
-        if (!bestKey || k.length < bestKey.length) bestKey = k;
-      }
-    });
-    if (bestKey && /^https?:\/\//i.test(byName[bestKey].logo)) return byName[bestKey].logo;
-    // 反向：norm 以快照键开头且更长，剩余为修饰词（LP 队名带后缀场景）
-    const MODS = ['stack', 'academy', 'esports', 'esport', 'gaming', 'team', 'club', 'gg', 'division', 'x'];
-    let revKey = null;
-    Object.keys(byName).forEach((k) => {
-      if (k.length < 4 || k.length >= nk.length) return;
-      if (nk.indexOf(k) === 0 && MODS.indexOf(nk.slice(k.length)) >= 0) {
-        if (!revKey || k.length > revKey.length) revKey = k;
-      }
-    });
-    if (revKey && /^https?:\/\//i.test(byName[revKey].logo)) return byName[revKey].logo;
-    return '';
-  },
-
+  //   ⚠️ norm 必须是「去非字母数字」（names.normTeamName）——与详情页 nameTeams / findTeamByName
+  //     归一化一致（原 trim().toLowerCase() 保留空格/加号会致失配）。
+  //
+  // ★ 2026-10-14（P2-21）：原「① 本地 team-logo-map.json byName 快照（全 Steam CDN 可靠域，零网络）」
+  //   路径**已移除** —— 该快照（199KB）下沉到 detail 分包（主包不可 require 分包模块）⇒ 主包不再持有它。
+  //   首页 LP 卡 logo 首帧改为直接走 api.findTeamByName（既有网络兜底；命中 OpenDota 24h 缓存时仍零网络）。
   _enrichNameLogos(cards) {
-    // ★ v2：norm 统一为「去非字母数字」——与快照 byName 键 / findTeamByName / 详情页
-    //   nameTeams 的归一化完全一致。原实现 trim().toLowerCase() 保留空格/加号，
-    //   与快照键（klimsani4）永不匹配，首页快照命中全 miss。
+    // ★ v2：norm 统一为「去非字母数字」（names.normTeamName）——与 findTeamByName / 详情页
+    //   nameTeams 的归一化完全一致。原实现 trim().toLowerCase() 保留空格/加号 → 归一键失配
+    //   （如 "Pipsqueak + 4" ≠ pipsqueak4），按名查询命中率低。
     const norm = names.normTeamName;   // ★ 2026-09-20：统一走单一实现（原内联）
     // 收集待查：无 id、有真实队名、尚无 logo、未负缓存
     const jobs = [];
@@ -1615,15 +1587,7 @@ Page({
           this.setData(patch);
           return;
         }
-        // ① 本地快照（Steam CDN，最可靠）优先，零网络（精确 + 双向模糊）
-        const snapLogo = this._snapLogoByName(nk);
-        if (snapLogo) {
-          _nameLogoCache[nk] = snapLogo;
-          const patch = {};
-          patch['matchCards[' + idx + '].' + side + '.logo'] = snapLogo;
-          this.setData(patch);
-          return;
-        }
+        // ★ 2026-10-14（P2-21）：本地快照路径已移除（快照下沉 detail 分包）⇒ 直接进下方 ② 网络查询。
         seen[nk] = true;
         jobs.push({ idx: idx, side: side, name: t.name, nk: nk });
       });

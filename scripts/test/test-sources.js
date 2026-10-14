@@ -965,7 +965,7 @@ const _fs = require('fs');
 const _path = require('path');
 
 check('names：★ 与队标快照键三重对齐（真实数据契约）', function () {
-  const snap = require('../../utils/team-logo-local-data.js');
+  const snap = require('../../subpackages/detail/team-logo-local-data.js');
   const byName = snap.byName || {};
   const keys = Object.keys(byName);
   assert(keys.length > 100, '快照 byName 应有足量键，实际: ' + keys.length);
