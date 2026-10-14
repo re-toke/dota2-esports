@@ -18,6 +18,7 @@ const seriesStatus = require('../../utils/seriesStatus.js');   // ★ P0-A：终
 const followBatch = require('../../utils/followBatch.js');   // ★ 2026-09-27：关注流三态/合并/编组纯逻辑
 const indexCardHelpers = require('../../utils/indexCardHelpers.js');   // ★ 2026-10-13（P1-20 子项 2）：首页卡片纯函数层（队名整形 + LIVE 局归一）
 const config = require('../../utils/config.js');   // ★ P0-B：诊断明细开关（config.debug.verboseLog）
+const monitor = require('../../utils/monitor.js');   // ★ P2-23：数据质量未达标 → 上报（wx.reportAnalytics）
 // v5.1（2026-09-01）：首页「对局级 upcoming」源 —— Liquipedia/Steam/haglund 排期（云代理，30min 缓存）
 const liquipedia = require('../../utils/liquipedia.js');
 // ★ 2026-09-01：构建时队徽快照（byName 键 = consensus.normName 规范化队名 → Steam CDN 可靠域）。
@@ -1137,6 +1138,9 @@ Page({
       }
       // ★ P0-B 下半：把最近一次指标留给消费方（"我的"页展示）—— 避免两页各算一遍
       diagnostics.recordLast(_dm, { source: 'index' });
+      // ★ P2-23（2026-10-14）：数据质量**未达标**上报（采样：仅违例轮、且同会话同类组合 1 次；
+      //   达标轮次不上报，避免常态噪声）。事件 card_quality_violation 在 MP 后台「自定义分析」可见。
+      monitor.cardQuality(_dm);
     } catch (e) { /* 诊断失败静默：不得影响首页渲染 */ }
     // 按日期分桶 → 周日历角标（语义升级：角标 = 当日系列数，非局数）
     // ★★ 2026-09-23 修复「角标数字与卡片数不符」：角标必须与**首页实际渲染的集合同口径** ——

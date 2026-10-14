@@ -17,6 +17,8 @@ var config = require('./config');
 // ★ 2026-10-12（P1-2 双出口）：EF / PostgREST 的出口主机改由 endpoints 提供（主→备失败切换）。
 //   原实现直接拼 `sb().url`（= config 的主出口快照）⇒ 切出口后这里仍打主出口。
 var endpoints = require('./endpoints.js');
+// ★ P2-23（2026-10-14）：EF/中转失败上报（monitor.js 零依赖 ⇒ 无循环风险）。
+var monitor = require('./monitor.js');
 
 var EF_BREAKER_THRESHOLD = 3;              // 连续失败阈值
 // ★ 2026-09-25：OPEN 冷却 10min → **2min**。
@@ -131,7 +133,8 @@ function edge(name, data, opts) {
         // ★ P1-2：传输层失败（未联通中转）⇒ 标记切出口，后续 EF/REST 请求自然走备出口。
         //   仅在有备出口时生效（count()>1）；此处不重试（重试由上层调用方/熔断策略决定）。
         // ★ 2026-10-13：传入本次使用的宿主 ⇒ 迟到失败不再重复推进出口（修「切换过冲」）。
-        if (endpoints.count() > 1) endpoints.failover(_usedHost);
+        // ★ P2-23（2026-10-14）：出口切换上报（此前切换在线上无可观测信号）。
+        if (endpoints.count() > 1) { endpoints.failover(_usedHost); monitor.relayFailover(_usedHost, 'edge_fail'); }
         reject(new Error(err.errMsg || 'network fail'));
       }
     });
@@ -143,6 +146,11 @@ function _countFail(name) {
   if (!name) return;
   var b = _breakerOf(name);
   b.fails++;
+  // ★ P2-23（2026-10-14）：EF 失败上报（按 ef|action 去重 ⇒ 同 action 同会话 1 次）。
+  //   name 形如 'opendota-proxy|getLeagues'（见 edge() 的 _bkey）。
+  var _sep = name.indexOf('|');
+  monitor.efFailure(_sep >= 0 ? name.slice(0, _sep) : name,
+    _sep >= 0 ? name.slice(_sep + 1) : '', 'count_fail');
   if (b.fails >= EF_BREAKER_THRESHOLD) {
     b.openUntil = Date.now() + EF_BREAKER_TTL_MS;
     b.halfOpen = false;
@@ -201,7 +209,8 @@ function rest(table, query) {
       fail: function (err) {
         // ★ P1-2：传输层失败 ⇒ 标记切出口（同 edge()）
         // ★ 2026-10-13：传入本次使用的宿主 ⇒ 迟到失败不再重复推进出口（修「切换过冲」）
-        if (endpoints.count() > 1) endpoints.failover(_usedHost);
+        // ★ P2-23（2026-10-14）：出口切换上报（同 edge()）
+        if (endpoints.count() > 1) { endpoints.failover(_usedHost); monitor.relayFailover(_usedHost, 'rest_fail'); }
         reject(new Error(err.errMsg || 'network fail'));
       }
     });

@@ -130,7 +130,8 @@ function call(action, params, extra) {
           // 旧值 + 后台静默刷新（结果写回热缓存，本次调用立即返回旧值）
           _efRefresh(action, efName, sbPayload);
         }
-        console.info('[cloudProxy] 热缓存秒回 ' + action + '（' + ageSec + 's 前）');
+        // ★ P2-23（2026-10-14）：热路径日志走 verboseLog（生产默认静默，避免 Console 噪声刷屏）。
+        if (config.debug && config.debug.verboseLog) console.info('[cloudProxy] 热缓存秒回 ' + action + '（' + ageSec + 's 前）');
         return Promise.resolve(h.data);
       }
     }
@@ -141,7 +142,7 @@ function call(action, params, extra) {
     //   （不同 leagueId / force 标志）不会误合并；命中即复用**同一个 Promise**（成功与失败一并复用）。
     var _k = _callKey(action, sbPayload);
     if (_inflight[_k]) {
-      console.info('[cloudProxy] 并发去重命中 ' + action);
+      if (config.debug && config.debug.verboseLog) console.info('[cloudProxy] 并发去重命中 ' + action);
       return _inflight[_k];
     }
     var _p = _efCall(action, efName, sbPayload);
@@ -166,7 +167,8 @@ function _efCall(action, efName, sbPayload) {
   }).catch(function (efErr) {
     // ★★ 2026-09-22（微信云开发脱离）：**不再回落云开发** —— EF 是唯一后端，失败即失败，
     //   由调用方各自兜底（api.js 直连 / leagues.js 本地快照 / filterCollectableLeagues 等）。
-    console.info('[cloudProxy] EF ' + efName + ' fail(' + (efErr && efErr.message) + ') → 无云开发回落（已退役）');
+    // ★ P2-23（2026-10-14）：失败日志走 verboseLog（失败已由 supabaseClient 上报 monitor，Console 可静默）。
+    if (config.debug && config.debug.verboseLog) console.info('[cloudProxy] EF ' + efName + ' fail(' + (efErr && efErr.message) + ') → 无云开发回落（已退役）');
     throw efErr;
   });
 }
@@ -187,7 +189,7 @@ var _efRefreshInFlight = {};
 function _efRefresh(action, efName, sbPayload) {
   if (_efRefreshInFlight[action]) return;
   _efRefreshInFlight[action] = true;
-  console.info('[cloudProxy] 热缓存过期 ' + action + ' → 后台刷新');
+  if (config.debug && config.debug.verboseLog) console.info('[cloudProxy] 热缓存过期 ' + action + ' → 后台刷新');
   var done = function () { delete _efRefreshInFlight[action]; };
   _efCall(action, efName, sbPayload).then(done, done);
 }

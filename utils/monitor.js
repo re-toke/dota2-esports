@@ -116,11 +116,72 @@ function sourceCacheMiss(source, op, reason) {
   });
 }
 
+// ===== P2-23（2026-10-14）：可观测性补强 —— EF / 中转 / 卡片质量 失败上报 =====
+// 背景（方案 §P2-23）：`app.js` 已有 js_error / unhandled_rejection / memory_warning；
+//   `api.js` 已有 apiCallError（**直连**失败）；`sources.js` 已有 sourceCacheMiss / logoLoadFailed。
+//   **缺口 = EF（Supabase Edge Function）与中转出口切换失败无上报通道** ⇒ 线上 EF 停摆 /
+//   出口劣化只能靠用户截图发现。本段补齐该通道（复用同一 report() + _seen 同会话去重，防刷屏）。
+// ⚠️ 边界（v1.2.1 ★）：本段聚焦**错误/失败上报**；**性能分段**归 P1-21 的 `[perf]`，此处不重复。
+
+// EF 调用失败（supabaseClient 传输层 / 非 2xx / 熔断计数点）：按 ef|action 去重。
+//   efName 如 'opendota-proxy'；action 如 'getLeagues'（无 action 时为 ''）。
+function efFailure(efName, action, reason) {
+  const key = 'ef:' + (efName || '') + '|' + (action || '');
+  if (_seen.has(key)) return;
+  if (_seen.size >= MAX_SEEN) return;
+  _seen.add(key);
+  report('ef_failure', {
+    ef: String(efName || '').slice(0, 40),
+    action: String(action || '').slice(0, 40),
+    reason: String(reason || '').slice(0, 40)
+  });
+}
+
+// 中转出口切换（P1-2 双出口）：传输层失败触发的主→备切换。按来源宿主去重（同宿主同会话 1 次）。
+function relayFailover(host, reason) {
+  const key = 'relay:' + (host || 'unknown');
+  if (_seen.has(key)) return;
+  if (_seen.size >= MAX_SEEN) return;
+  _seen.add(key);
+  report('relay_failover', {
+    host: String(host || '').slice(0, 60),
+    reason: String(reason || '').slice(0, 40)
+  });
+}
+
+// 首页卡片数据质量**未达标**上报（入参 = diagnostics.computeCardMetrics 的输出）。
+//   **采样口径**：仅在「存在硬指标违例」的轮次上报（达标轮次**不上报**，避免常态噪声）；
+//   并**按违例类别集合去重**（同会话每类组合 1 次）。硬指标 = 严格重复卡>0 / 状态误判>0 / 已结束无比分率超 SLO。
+//   ⚠️ 空页（total=0）不上报（无卡可评，且 dupRateStrict=null 会被 pass 误判为 false）。
+function cardQuality(m) {
+  if (!m || !(m.total > 0)) return;
+  const p = m.pass || {};
+  const kinds = [];
+  if (p.dupCardRateStrict === false) kinds.push('dup_strict');
+  if (p.statusMismatch === false) kinds.push('status_mismatch');
+  if (p.endedNoScore === false) kinds.push('ended_no_score');
+  if (!kinds.length) return;
+  const key = 'cq:' + kinds.join(',');
+  if (_seen.has(key)) return;
+  if (_seen.size >= MAX_SEEN) return;
+  _seen.add(key);
+  report('card_quality_violation', {
+    kinds: kinds.join(','),
+    total: String(m.total || 0),
+    dupStrict: String(m.dupGroupsStrict || 0),
+    statusMismatch: String(m.statusMismatch || 0),
+    endedNoScore: String(m.endedNoScore || 0)
+  });
+}
+
 module.exports = {
   report,
   leagueNameUncovered,
   statusConflict,
   logoLoadFailed,
   apiCallError,
-  sourceCacheMiss
+  sourceCacheMiss,
+  efFailure,
+  relayFailover,
+  cardQuality
 };
