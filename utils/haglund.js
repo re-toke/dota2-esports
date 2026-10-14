@@ -35,7 +35,7 @@
 
 var cache = require('./cache.js');
 // ★ 2026-09-01（P0-C1）：haglund 云代理。正式版客户端直连 dota.haglund.dev 必被域名白名单
-//   拦截（海外未备案不可配）→ 改由云函数服务端拉取（10min 云端缓存），本模块仅做
+//   拦截（海外未备案不可配）→ 改由 EF 服务端拉取（10min 云端缓存），本模块仅做
 //   「云代理优先 → 失败回退直连（开发态）→ stale 缓存」三级回退，归一化逻辑不变。
 var cloudProxy = require('./cloudProxy.js');
 

@@ -36,7 +36,7 @@ function check() {
       return data || null;
     })
     .catch(function () {
-      // 云函数不可用 → 回退缓存（若有），否则 null；不阻断业务
+      // EF 不可用 → 回退缓存（若有），否则 null；不阻断业务
       return getStatus();
     });
 }

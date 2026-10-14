@@ -590,7 +590,7 @@ Page({
     const FETCH_TIMEOUT_MS = 15 * 1000;  // F10：pro/live 15s 超时兜底
     // ★ 2026-09-04 v8.12（S1 三源独立就绪独立渲染）：修复「即将开始卡仍延迟」。
     //   v8.11 拆链只修了一半——lpP.then 注册在 pro/live then 内部，LP 数据即使
-    //   本地缓存秒回（~10ms），也要干等 pro/live（云函数冷启动 1-3s）完成才渲染。
+    //   本地缓存秒回（~10ms），也要干等 pro/live（EF 冷启动 1-3s）完成才渲染。
     //   现改为顶层注册：LP 先到 → 立即渲染（_lastPro/_lastLive 此刻为 null，
     //   _applyMatchSources 内部 (pro || []) 兜底安全）；LP 后到 → 用已就绪的
     //   pro/live 渲染。两种到达顺序都覆盖，无竞态（JS 单线程 + epoch 守卫）。

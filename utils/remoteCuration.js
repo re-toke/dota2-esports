@@ -1,18 +1,18 @@
 // utils/remoteCuration.js
 // curation（精选权威库）的远程覆盖层：在不发版的前提下热更新赛事/战队数据。
 //
-// ★ 阶段1-③ 改造（2026-07-30）：从拉取远程 URL 改为调用云函数 getCuration
+// ★ 阶段1-③ 改造（2026-07-30）：从拉取远程 URL 改为服务端读取 curation
 //   - 旧方案：config.remoteCuration.url 拉取远程 JSON（需自建 HTTP 服务器）
-//   - 新方案：通过云函数 aggregation 的 getCuration action 从云数据库读取
-//   - 始终保留 curation.js 本地数据作为兜底（离线/首启/云调用失败可用）
+//   - 新方案：**Supabase 直读 curation 表**（阶段2-③A 2026-09-13 起；原云函数 getCuration 已随退役移除）
+//   - 始终保留 curation.js 本地数据作为兜底（离线/首启/读取失败可用）
 //
 // 策略（与 api.cachedFresh 一致的「本地兜底 + 远程优先」）：
 //   - 同步初始化：读 Storage 缓存（若新鲜）否则用本地 curation.js 兜底
-//   - 异步后台刷新：调用云函数 getCuration，带 clientVersion 增量更新
+//   - 异步后台刷新：读服务端 curation（Supabase 直读），带 clientVersion 增量更新
 //   - 失败静默回退（本地/旧缓存），不影响业务
 //
 // 数据形状（与 curation.js 完全兼容）：
-//   云函数返回 { events: [...], teams: { <id>: {...} }, tiContestantIds: [...], version: 'xxx' }
+//   服务端返回 { events: [...], teams: { <id>: {...} }, tiContestantIds: [...], version: 'xxx' }
 //   客户端构建 effectiveEvents / effectiveTeams / tiContestantSet
 
 const curation = require('./curation.js');
@@ -128,11 +128,11 @@ function getEffectiveEvents() {
 }
 
 // 拉取云端 curation（异步、幂等、失败静默回退）。
-//   - 云函数不可用 → 仅用本地，返回 false；
+//   - 服务端不可用 → 仅用本地，返回 false；
 //   - 缓存新鲜且非强制 → 直接读缓存，返回 false；
-//   - 否则调用云函数 getCuration，成功则覆盖并缓存，失败则回退（本地/旧缓存）。
+//   - 否则读服务端 curation（Supabase 直读），成功则覆盖并缓存，失败则回退（本地/旧缓存）。
 //
-// 增量更新：客户端传 clientVersion，若与云端一致 → 云函数返回 { unchanged: true }，
+// 增量更新：客户端传 clientVersion，若与云端一致 → 服务端返回 { unchanged: true }，
 //   零数据传输，仅刷新缓存时间戳。
 // ★★ 2026-09-20（版本号改「内容指纹」）：原实现 `version: 'sb:' + events.length` **只取条数** ——
 //   「只改字段值」（如后台订正某赛事赛期 start/end、改状态/分级）**不改变条数** → 版本号不变 →
@@ -152,7 +152,7 @@ function _hash32(str) {
 }
 // @param {Array} events 远端事件数组
 // @param {string} prefix 版本号前缀 —— 全量用 'sb:'、近期子集用 'sb-recent:'（保持原有前缀语义，
-//        避免与云函数返回的 version 串前缀混淆导致误判「版本一致」）
+//        避免与服务端返回的 version 串前缀混淆导致误判「版本一致」）
 function _contentFingerprint(events, prefix) {
   var maxUpd = 0;
   var acc = 0;
@@ -178,7 +178,7 @@ function _contentFingerprint(events, prefix) {
  * ⚠️ 必须分页：PostgREST 单次有 max-rows 上限（默认 1000），超限静默截断 ——
  *    与云开发 .limit(500) 是同一类坑。此处每页 1000，用 Range 头翻页。
  *
- * 返回 { events, teams, tiContestantIds, version }；任何失败返回 null（调用方回落云函数）。
+ * 返回 { events, teams, tiContestantIds, version }；任何失败返回 null（调用方回落本地/旧缓存）。
  */
 function _sbLoadCuration() {
   var sb = require('./supabaseClient.js');

@@ -14,7 +14,7 @@
 // 故抽成纯函数模块：云函数与 GH Actions 脚本 require 同一份。
 //
 // ## 落位约束
-// 放在云函数目录内 —— 微信云函数只能 require 自己目录下的文件（同 index-builders.js）。
+// （原放在云函数目录内 —— 微信云函数只能 require 自己目录下的文件；现随退役迁至 utils/，同 index-builders.js）。
 // GH Actions 脚本反向 require 进来。
 //
 // ## 纯函数约束

@@ -124,7 +124,7 @@ module.exports = {
     //   降为 15 后最坏 33s（实际本地源命中后只查 0-3 个，秒级）。配合
     //   loadUpcomingSerial 的 rank>=2 或 isKnownEvent 候选过滤，B/C 级不再串行查询。
     upcomingQueryLimit: 15,
-    // 2026-08-13（「即将」加载优化 · P0）：云函数调用超时（ms）。云函数冷缓存现场预热
+    // 2026-08-13（「即将」加载优化 · P0）：服务端（EF）调用超时（ms）。EF 冷缓存现场预热
     // 可达 30-60s，超时后客户端降级本地快照 + curation 注入，保证 loading 必复位。
     upcomingTimeoutMs: 8000,
     // 2026-08-21 新增：赛事窗口最大合理跨度（秒）。
@@ -157,17 +157,17 @@ module.exports = {
   // 启用后，sources 将其作为 OpenDota 之外的真实第二来源参与分级与赛程聚合。
   //
   // ★★ 安全基线（见 OPTIMIZATION_PLAN.md T1）★★
-  //   apiKey 不再以明文存放在客户端！改为读取云函数环境变量 STRATZ_API_KEY。
-  //   客户端只声明「需要 key」，具体密钥由 cloudfunctions/aggregation 在 Node 端注入。
-  //   直连模式（开发调试 fallback）仍可在云函数不可用时回退——但此时需本地填 key，
+  //   apiKey 不再以明文存放在客户端！改由服务端（Supabase EF）以环境变量注入 STRATZ_API_KEY。
+  //   客户端只声明「需要 key」，具体密钥由 EF（supabase/functions/stratz-proxy）在服务端注入。
+  //   直连模式（开发调试 fallback）仍可在 EF 不可用时回退——但此时需本地填 key，
   //   且 key 仅用于本地调试，绝不上传到仓库/生产客户端。
   //
-  // 云代理模式（上线推荐，默认开启）：
+  // 服务端代理模式（上线推荐，默认开启）：
   //   1. enabled: true（apiKey 留空或不填）
   //   2. cloudProxy.enabled: true（见下方 cloudProxy）
-  //   3. 云函数环境变量配 STRATZ_API_KEY
-  //   4. 部署云函数，Console 查看 [stratz] ✓ cloud ...
-  //   → 所有 STRATZ 请求通过云函数中转，key 从环境变量读取，客户端零明文
+  //   3. EF 环境变量配 STRATZ_API_KEY
+  //   4. 部署 EF，Console 查看 [stratz] ✅ ...
+  //   → 所有 STRATZ 请求经 EF 中转，key 从环境变量读取，客户端零明文
   //
   // 常见错误：未重新编译不生效、Key 无效 → Console 看 [stratz] HTTP 401
   //
@@ -175,7 +175,7 @@ module.exports = {
   //   2026-07-30 因 STRATZ Cloudflare 反爬虫挑战页拦截而停用；
   //   2026-08-24 实测 Cloudflare 拦截已解除（返回标准 Kong API Gateway 401，
   //   不再是 "Just a moment..." 挑战页）。带有效 Bearer token 实测全部查询通过。
-  //   同步修复了 utils/stratz.js 与云函数的 GraphQL schema 变更：
+  //   同步修复了 utils/stratz.js 与服务端（EF）的 GraphQL schema 变更：
   //     - team(id:) → team(teamId:)
   //     - team.players → team.members，personaname → name
   //     - team.logoUrl → team.logo
@@ -186,7 +186,7 @@ module.exports = {
   stratz: {
     enabled: true,  // 2026-08-24 恢复（Cloudflare 拦截解除 + schema 适配完成）
     // 客户端不持有任何密钥（小程序运行时无 process 全局变量，不能读 process.env）。
-    // KEY 一律由云函数服务端环境变量 STRATZ_API_KEY 注入（见 cloudfunctions/aggregation）。
+    // KEY 一律由服务端（EF stratz-proxy）环境变量 STRATZ_API_KEY 注入。
     // 客户端走 cloudProxy 中转，apiKey 留空；本地调试直连时也不应在此填明文 key。
     apiKey: '',
     base: 'https://api.stratz.com/graphql'
@@ -198,12 +198,12 @@ module.exports = {
 
   // 第三网络数据源：Steam Web API（Valve 官方，免费 key，申请见 https://steamcommunity.com/dev/apikey）。
   // 提供赛事奖金池/战队官方信息/比赛详情等接口，作为 OpenDota/STRATZ 的交叉补充。
-  // ★ 安全：与 STRATZ 一样，Steam key 不再明文存放在客户端，改由云函数环境变量 STEAM_API_KEY 注入。
-  //   steam.js 在 cloudProxy 启用时走云函数 steamProxy action；直连模式仅作本地调试 fallback。
+  // ★ 安全：与 STRATZ 一样，Steam key 不再明文存放在客户端，改由服务端（EF）环境变量 STEAM_API_KEY 注入。
+  //   steam.js 在 cloudProxy 启用时走 EF steamProxy action；直连模式仅作本地调试 fallback。
   steam: {
     enabled: true,
-    // 同上：客户端不持有密钥，KEY 由云函数环境变量 STEAM_API_KEY 注入。
-    // 云代理启用时走 cloudProxy.steamProxy action；直连 fallback 仅本地调试用，不填明文 key。
+    // 同上：客户端不持有密钥，KEY 由服务端（EF steam-proxy）环境变量 STEAM_API_KEY 注入。
+    // 云代理启用时走 EF steamProxy action；直连 fallback 仅本地调试用，不填明文 key。
     apiKey: '',
     base: 'https://api.steampowered.com/IDOTA2Match_570'
   },
@@ -215,7 +215,7 @@ module.exports = {
   // 提供 OpenDota/STRATZ/Steam 均无的赛事元数据（规范名/日期/奖金池/地点/赛制/主办方），
   // 作为真正独立于 Valve 比赛数据的交叉验证来源。
   liquipedia: {
-    // 已恢复：通过云函数代理（cloudfunctions/aggregation）设置合规 User-Agent（微信端禁止
+    // 已恢复：通过服务端代理（Supabase EF liquipedia-proxy）设置合规 User-Agent（微信端禁止
     // wx.request 设置 UA），规避历史 IP 封禁问题。启用后作为独立于 Valve 比赛数据的交叉来源。
     enabled: true,
     base: 'https://liquipedia.net/dota2/api.php',
@@ -223,9 +223,9 @@ module.exports = {
     rateLimitMs: 2200,   // 官方要求 ≥ 2 秒，留 200ms 余量
     cacheTTL: 6 * 3600,
     // 赛程缓存 TTL（对阵 LIVE/UPCOMING/RECENT 用，2026-08-03 优化）：
-    // 原 30min 双层缓存（客户端 + 云函数）叠加最坏 60min 旧数据；
+    // 原 30min 双层缓存（客户端 + 服务端）叠加最坏 60min 旧数据；
     // 缩至 5min 提升及时性，配合详情页 30-60s 定时刷新（force）达到近实时。
-    // 注意：云函数 TTL.liquipediaSchedule 必须与此同步缩短，否则上层白做。
+    // 注意：EF 的 liquipediaSchedule TTL 必须与此同步缩短，否则上层白做。
     cacheTtlSchedule: 5 * 60,
     // ★ v8.12（S2）：赛程 stale 兜底窗口（写入侧硬过期 = 读取侧 stale 上限，同常量）。
     //   6h → 24h：每天第一次打开（距上次 >6h）也能秒出昨日排期快照，配合首页
@@ -246,18 +246,16 @@ module.exports = {
     ttlSec: 6 * 3600
   },
 
-  // CloudBase 云函数代理（上线推荐，默认开启）。
-  // 启用后：OpenDota 请求优先走云函数（国内加速 + 共享缓存 + 不暴露数据源），
-  // 云函数不可用时自动回退直连（api.js cloudFetch 已内置 .catch 回退，不会崩溃）。
-  // STRATZ/Steam 的 key 统一由云函数环境变量注入，客户端零明文（见 T1）。
-  // 前置条件：已开通云开发并部署 cloudfunctions/aggregation（含 STRATZ_API_KEY / STEAM_API_KEY 环境变量）。
-  // 未部署时：所有云调用会快速失败并回退直连，不影响基本功能，仅首次请求多一次失败开销。
+  // Supabase EF 数据代理（上线推荐，默认开启）。★ 2026-09-22：微信云开发已退役，本节由 EF 承接。
+  // 启用后：OpenDota 请求优先走 EF（经中转；国内加速 + 共享缓存 + 不暴露数据源），
+  // EF 不可用时自动回退直连（api.js cloudFetch 已内置 .catch 回退，不会崩溃）。
+  // STRATZ/Steam 的 key 统一由 EF 环境变量注入，客户端零明文（见 T1）。
+  // 前置条件：已部署 supabase/functions/ 下各 EF（含 STRATZ_API_KEY / STEAM_API_KEY 环境变量）。
+  // 不可用时：EF 调用快速失败并回退直连，不影响基本功能，仅首次请求多一次失败开销。
   cloudProxy: {
     enabled: true,
-    // 微信云开发环境 ID（开通云开发后在「云开发控制台 → 设置 → 环境」复制）。
-    // 留空时 wx.cloud.init() 走默认环境（仅当账号下只有一个云环境时有效）；
-    // 若账号下有多个环境，必须显式填写，否则真机会报 "env not found"。
-    // 填写后会传给 wx.cloud.init({ env })，保证真机/模拟器一致。
+    // ⚠️ 历史遗留字段（微信云开发环境 ID）：**云开发已退役（2026-09-22）⇒ 已无代码读取**，
+    //   保留仅为配置兼容。EF 路由由 `supabase.enabled` 决定，与本字段无关。
     envId: 'cloud1-d2g0wufv8f2ce3871',
     // ⚠️ 2026-10-12（P1-4）：原 cloudBreaker 全局熔断已删除 ⇒ 本字段**不再被任何代码读取**
     //   （保留仅为配置兼容）。EF 失败改由 supabaseClient 的 per-action 熔断负责（阈值 3 / 冷却 2min）。
@@ -265,14 +263,14 @@ module.exports = {
   },
 
   // ★ Supabase 单后端（方案 C+，2026-09-04 决策 / 2026-09-09 后端就绪）。
-  // enabled=false 时全部走微信云开发（现状，零行为变化）；
-  // enabled=true 时以下 3 条链路切 Supabase，失败自动回退云开发（灰度保命）：
+  // ★ 2026-09-22 起：**微信云开发已退役 ⇒ Supabase EF 是唯一后端**，「云开发回退」已整体移除。
+  // enabled=true（现状）：下列链路全部走 Supabase EF；失败**不再回退云开发**（由各自兜底）：
   //   ① 登录 openid      → auth.js ensureOpenId → Edge Function wechat-auth
   //   ② 订阅消息发送     → subscribe.js sendOnce → Edge Function subscribe-send
   //   ③ follow_profile   → cloudCache.js（follow_profile_ 前缀）→ Edge Function follow-profile（带 JWT）
-  // 赛事数据（OpenDota/Steam/LP 代理）仍走云开发——对应数据代理 EF 尚未开发（M2.4）。
+  // 赛事数据（OpenDota/Steam/LP 代理）**同样**走 Supabase EF（opendota/steam/liquipedia-proxy 等，M2.4 已就绪）。
   supabase: {
-    // ★ 灰度开关：true=微信能力走 Supabase（2026-09-09 联调开启）；false=全走云开发（回滚用）
+    // ★ 开关：true=走 Supabase EF（2026-09-09 联调开启，现状）；false 仅作历史回滚位（云开发已退役 ⇒ 无意义）
     enabled: true,
     // ★★ 2026-10-10（真机「数据无法更新」修复）：`*.supabase.co` 在国内被 **SNI 阻断**
     //   （DNS 正常解析、TLS 握手被 RST ⇒ 换 IP/DoH/hosts 全无效）⇒ 客户端改走**中转**。
@@ -336,7 +334,7 @@ module.exports = {
 
   // T6 A/B 实验框架配置。
   experiment: {
-    action: 'getExperiments',   // 云函数 aggregation 的 action 名
+    action: 'getExperiments',   // 历史字段（原云函数 action 名）；云开发已退役 ⇒ 现无 EF 承载（见 utils/experiment.js 已移除该调用）
     storageKey: 'ab_flags'      // 本地缓存 key
   },
 

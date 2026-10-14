@@ -2,9 +2,9 @@
 // 赛事展示名规范映射（精确归一匹配）。数据来自 curation-shared.js（CommonJS 模块，由
 // scripts/sync-canon-map.js 从 utils/curation.js 的 CURATED_EVENTS 生成），require 时不带扩展名。
 //
-// G4 单一数据源：小程序与云函数 aggregation 共用同一份生成产物
-// （cloudfunctions/aggregation/league-canon-map.js + curation-shared.js），
-// 消除此前「云函数内联手写 MAP」与「curation 别名」双源漂移。
+// G4 单一数据源：小程序与服务端（EF）共用同一份生成产物
+// （服务端 EF（原 cloudfunctions/aggregation）共用 league-canon-map.js + curation-shared.js），
+// 消除此前「服务端内联手写 MAP」与「curation 别名」双源漂移。
 //
 // ⚠️ 必须用 .js 模块而非 .json：微信小程序 require() 直接加载 .json 会报
 //   "module '...curation-shared.json.js' is not defined"（解析器补 .js 后缀）。

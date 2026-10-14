@@ -4,7 +4,7 @@
 //   - 提前量（leadSec）：赛前多久推送（15min / 30min / 1h / 1d / 2d）
 //   - 分级过滤（tiers）：只对 S/A 等高级别赛事推送，社区赛静默
 // 策略持久化在本地 Storage，赛前提醒触发（index.checkPreMatchReminders）与
-// 服务端策略引擎（云函数 saveFollowProfile / sendSmartReminders）共用同一份规则。
+// 服务端策略引擎（原云函数 saveFollowProfile / sendSmartReminders；云开发退役后由 EF 承接）共用同一份规则。
 //
 // 设计：避免与 sources 循环依赖时，evaluate 直接 require sources 计算分级
 // （sources 不依赖本模块，单向依赖安全）。

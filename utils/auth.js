@@ -64,9 +64,9 @@ function isLoggedIn() {
 
 /**
  * 确保有可用的 openid。优先本地缓存（零请求），未命中走登录链路（静默无感）。
- * 双分支（方案 C+ 灰度，2026-09-09）：
+ * 登录链路（2026-09-22 微信云开发退役后仅剩 EF 一条）：
  *   - config.supabase.enabled=true：wx.login → Edge Function wechat-auth（拿 openid + JWT）
- *   - 否则/失败回退：wx.cloud.callFunction getOpenId（云开发原链路，灰度期保命）
+ *   - 否则/失败：**云开发已退役 ⇒ 直接返回 null（未登录态）**（原 wx.cloud 回退已移除）
  * @param {boolean} [fresh=false] 强制刷新（忽略缓存）
  * @returns {Promise<string|null>} openid 或 null
  */
@@ -79,7 +79,7 @@ function ensureOpenId(fresh) {
 
     // ★ 2026-09-10（真机登录问题诊断）：补结构化日志。
     //   此前 ensureOpenId 全程静默——真机登录失败时无从判断卡在哪一步
-    //   （wx.login 失败 / EF 失败 / 云函数回退也失败）。加日志后可据 Console 定位。
+    //   （wx.login 失败 / EF 失败）。加日志后可据 Console 定位。
     var _t0 = Date.now();
     function _ok(oid, src) {
       console.log('[auth] openid ' + (oid ? 'OK' : 'NULL') + ' via=' + src +

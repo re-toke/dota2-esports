@@ -18,8 +18,8 @@
 // ★★ 微信小程序限制（重要）★★
 //   wx.request 禁止设置 "User-Agent" header（运行时会报 Refused to set unsafe header）。
 //   这与 Liquipedia 官方要求"必须设置描述性 User-Agent"存在根本冲突。
-//   解决方案：通过微信云函数（Node.js 环境，可自由设置 header）代理 Liquipedia 请求。
-//   云函数基础设施已就绪：cloudfunctions/aggregation/
+//   解决方案：通过服务端 EF（Node.js 环境，可自由设置 header）代理 Liquipedia 请求。
+//   （原「微信云函数 cloudfunctions/aggregation」已随云开发退役迁至 Supabase EF）
 //
 // 早期版本误用 action=parse + 1500ms 限流（违反 30 秒规则）→ IP 被封、返回 CAPTCHA 拦截页
 // 而非 JSON → 数据永远拿不到。本版本已修复：改用 revisions 端点 + 2 秒限流 + wikitext 模板解析。
@@ -33,8 +33,8 @@ var names = require('./names.js');   // ★ 2026-10-13（P1-17）：队名归一
 var cloudProxy = require('./cloudProxy.js');
 // ★ 2026-08-22 新增：haglund 兜底源（Liquipedia 云代理失败/空时的降级路径）
 var haglund = require('./haglund.js');
-// 纯 wikitext 解析层（零 wx 依赖）：客户端 / 云函数 aggregation 共用同一份拷贝。
-// 由 scripts/sync-liquipedia-parse.js 镜像到 cloudfunctions/aggregation/liquipedia-parse.js，
+// 纯 wikitext 解析层（零 wx 依赖）：客户端 / 服务端 EF 共用同一份拷贝。
+// 由 scripts/sync-liquipedia-parse.js 镜像到服务端 EF（原 cloudfunctions/aggregation），
 // 保证两侧解析逻辑一致（消除"客户端解析 / 云端解析"漂移）。
 var LiquiParse = require('./liquipedia-parse.js');
 
@@ -143,7 +143,7 @@ var BASE = (config.liquipedia && config.liquipedia.base) || 'https://liquipedia.
 // 官方要求普通端点 ≤ 1 次/2 秒；这里留余量用 2200ms
 var RATE_GAP_MS = (config.liquipedia && config.liquipedia.rateLimitMs) || 2200;
 var CACHE_TTL = (config.liquipedia && config.liquipedia.cacheTTL) || (6 * 3600);
-// 2026-07-29 差异化 TTL（Phase 1-②）：赛程变化敏感，30min 短缓存（与云函数对齐）
+// 2026-07-29 差异化 TTL（Phase 1-②）：赛程变化敏感，30min 短缓存（与服务端对齐）
 var CACHE_TTL_SCHEDULE = (config.liquipedia && config.liquipedia.cacheTtlSchedule) || (30 * 60);
 // ★ 2026-09-01（P1-1 SWR）：赛程 stale-while-revalidate 硬 TTL —— 30min 新鲜窗口内直接返回；
 //   30min ~ 6h 之间返回旧值（附加 _stale: true 标记）供页面秒开，调用方（详情页轮询首刷
@@ -192,7 +192,7 @@ function liquipediaMarkSuccess() {
 // 始终 resolve（失败时 resolve null），绝不 reject —— 优雅降级。
 // 注意：wx.request 禁止设置 "User-Agent"（微信运行时会报 Refused to set unsafe header），
 //       只保留 Accept-Encoding: gzip（官方要求 + 微信允许）。
-//       Liquipedia 官方要求描述性 UA → 需通过云函数代理（Node.js 可设 UA）。
+//       Liquipedia 官方要求描述性 UA → 需通过服务端代理（Node.js 可设 UA）。
 // O-5（2026-08-15）：_retryCount 内部参数 —— 重试走本函数重新排队（重新预留槽位），
 //   保证任意两次真实发出的请求间隔 ≥ RATE_GAP_MS，符合 Liquipedia ToS（1 次/2 秒）。
 //   旧实现：重试在 attempt() 内 setTimeout 直接再调 attempt()，绕过槽位预留 →
@@ -270,7 +270,7 @@ function attempt(params, retryCount) {
 }
 
 // ===== wikitext 解析（纯函数已抽到 liquipedia-parse.js 单一来源）=====
-// 解析逻辑零 wx / 云 / config 依赖，被客户端 liquipedia.js 与云函数 aggregation
+// 解析逻辑零 wx / 云 / config 依赖，被客户端 liquipedia.js 与服务端 EF
 // 共用同一份拷贝（scripts/sync-liquipedia-parse.js 镜像，保证双源一致）。
 // 本文件仅保留 wx 耦合的抓取层（request / fetchPageWikitext）。
 // getTeamRoster / getPlayerProfile 直接调用 LiquiParse 的纯函数；
@@ -281,7 +281,7 @@ function attempt(params, retryCount) {
 // ===== 底层抓取 =====
 // 从 Liquipedia 抓取页面的 raw wikitext（MediaWiki action=query & prop=revisions）。
 //
-// 2026-07-30 P1 改造：优先走云函数代理（Node.js 可设 User-Agent，规避 wx.request
+// 2026-07-30 P1 改造：优先走服务端代理（Node.js 可设 User-Agent，规避 wx.request
 // 禁设 UA 的限制），失败回退本地 wx.request。
 // 所有基于 fetchPageWikitext 的方法（getTeamRoster / getPlayerProfile / 等）自动受益。
 
@@ -315,25 +315,22 @@ function fetchPageWikitext(pageName) {
   if (memo && Date.now() - memo.ts < WT_MEMO_TTL) return Promise.resolve(memo.wikitext);
   var knownMiss = !!_efMissMemo[pageName];
 
-  // 云代理优先：通过云函数（got + UA + redirects:1）代理抓取 raw wikitext，
+  // 云代理优先：通过 EF（got + UA + redirects:1）代理抓取 raw wikitext，
   // 规避 wx.request 禁设 User-Agent 的限制（Liquipedia 要求合规 UA 才返回数据）。
-  // 仅当 wx.cloud 存在且熔断器放行时才走云代理；测试/纯本地环境下回退本地。
+  // 仅当 wx.cloud 存在且 EF 熔断器放行时才走云代理；测试/纯本地环境下回退本地。
   if (typeof wx !== 'undefined' && wx.cloud && cloudProxy.efAvailable()) {
-    // ★★ 2026-09-11（LP 服务迁 EF · 第一步）：原实现直接调 EF（非 cacheOnly）——
-    //   未命中时 EF 会去现抓 LP，而 Supabase 出口被持续 429 → **白等约 7s 才失败**。
-    //   现改为三级链路：
-    //     ① EF **cacheOnly**（命中 `lp:w:*` 表 → 立即返回，**零云开发调用**）
-    //     ② 未命中 → **云函数** raw 抓取（唯一能现抓 LP 的出口，可靠）
-    //     ③ 云函数也失败 → 本地 wx.request（开发态兜底；真机必被 LP 拦）
-    //   → 热门/已知赛事走快路径；冷门赛事由云函数兜底，且**整体比原来更快**
-    //     （原来无论命中与否都要先等 EF 的 7s 超时）。
-    // 已知未命中 → 跳过 EF，直接走云函数（省掉 0.7s）
-    // ★ 2026-09-22（云开发退役 · 决策 b）：无云函数现抓 → 直接走本地兜底
+    // ★★ 2026-09-11（LP 服务迁 EF · 第一步）：EF 非 cacheOnly 会去现抓 LP，
+    //   而 Supabase 出口被持续 429 → **白等约 7s 才失败**。故 EF 走 **cacheOnly**：
+    //     ① EF **cacheOnly**（命中 `lp:w:*` 表 → 立即返回，**零现抓**）
+    //     ② 未命中 → 本地 `fetchPageWikitextLocal` 兜底（开发态 wx.request；真机必被 LP 拦）
+    //   ★ 2026-09-22（云开发退役 · 决策 b）：原「未命中 → 云函数现抓」**已移除**
+    //     （云函数是唯一能现抓 LP 的出口，退役后无替代）；现未命中一律走本地兜底。
+    // 已知未命中 → 跳过 EF，直接走本地兜底（省掉 0.7s）
     if (knownMiss) return fetchPageWikitextLocal(pageName).then(function (w) { return _wtRemember(pageName, w); });
 
     return cloudProxy.liquipediaFetchRawWikitextProxy(pageName, true).then(function (remote) {
       if (remote && remote.wikitext) return _wtRemember(pageName, remote.wikitext);
-      // 记住这次未命中（会话内不再重试 EF），随后显式回落云函数
+      // 记住这次未命中（会话内不再重试 EF），随后回落到本地兜底
       if (Object.keys(_efMissMemo).length < EF_MISS_MEMO_MAX) _efMissMemo[pageName] = 1;
       return fetchPageWikitextLocal(pageName).then(function (w) { return _wtRemember(pageName, w); });
     }).catch(function () {
@@ -402,11 +399,10 @@ function getLeagueMetadata(name) {
   var cached = cache.get(cacheKey, CACHE_TTL);
   if (cached) return Promise.resolve(cached);
 
-  // ★ 2026-09-11（LP 服务迁 EF · 第三步）：**本地解析优先**，云函数降为兜底。
-  //   原顺序：云函数 liquipediaLeagueMeta（服务端抓+解析）→ 本地。
-  //   现 fetchPageWikitext 已是三级链路（EF 缓存命中 → 零云开发），且本地解析
-  //   已补齐 liquipediaTier（见 fetchAndParseLeague）→ 与云函数产出字段对齐。
-  //   本地无 wikitext / 解析失败时回落云函数，可靠性不变。
+  // ★ 2026-09-11（LP 服务迁 EF · 第三步）：**本地解析优先**（EF 取 raw + 客户端 LiquiParse）。
+  //   原顺序：云函数 liquipediaLeagueMeta（服务端抓+解析）→ 本地；云开发退役后**云函数兜底已移除**。
+  //   现 fetchPageWikitext 走 EF cacheOnly（命中即零现抓），本地解析已补齐 liquipediaTier
+  //   （见 fetchAndParseLeague）→ 与原云函数产出字段对齐；本地失败即返回 null（无回落）。
   if (typeof wx !== 'undefined' && wx.cloud && cloudProxy.efAvailable()) {
     return fetchAndParseLeague(slug, cacheKey, name).then(function (local) {
       if (local) {
@@ -431,8 +427,8 @@ function getLeagueMetadata(name) {
 // 本地抓取 + 解析（wx.request 路径，云代理不可用时兜底）
 // ★ 2026-09-11（LP 服务迁 EF · 第三步）：本地路径补齐 `liquipediaTier` ——
 //   原本地解析只有 parseLeagueMetadata（不含 tier），导致 getLeagueTier 必须依赖
-//   云函数返回的 meta.liquipediaTier。现用 parseLeagueTier 合并（注意其返回
-//   `{ tier: num }` 对象，需取 `.tier` 数字与云函数口径一致），
+//   服务端返回的 meta.liquipediaTier。现用 parseLeagueTier 合并（注意其返回
+//   `{ tier: num }` 对象，需取 `.tier` 数字与服务端口径一致），
 //   使「元数据 + 等级」都能走 EF 缓存 + 本地解析（零云开发）。
 function fetchAndParseLeague(slug, cacheKey, fallbackName) {
   return fetchPageWikitext(slug).then(function (wikitext) {
@@ -464,8 +460,8 @@ function fetchAndParseLeague(slug, cacheKey, fallbackName) {
 function getLeagueTier(name) {
   if (!ENABLED || !name) return Promise.resolve(null);
 
-  // 复用 getLeagueMetadata 已抓取的 wikitext + 云函数返回的 meta.liquipediaTier 字段
-  // （云函数 liquipediaLeagueMeta 在解析 wikitext 时同步解析 tier，零额外请求）
+  // 复用 getLeagueMetadata 已抓取的 wikitext + 服务端返回的 meta.liquipediaTier 字段
+  // （服务端在解析 wikitext 时同步解析 tier，零额外请求）
   return getLeagueMetadata(name).then(function (meta) {
     if (!meta || meta.liquipediaTier == null) return null;
     var tiers = require('./tiers.js');
@@ -576,15 +572,15 @@ function getTeamRoster(name) {
 // ★ 2026-07-28 修复 LOGO 不显示 BUG：
 //   原实现直接调 fetchPageWikitext（wx.request 路径，无 User-Agent），
 //   被 Liquipedia 反爬拦截 → 返回空 → UI 无进行中/未开赛对阵。
-//   修复：与 getLeagueMetadata 一致，优先走云代理路径（云函数可设 UA + gzip），
+//   修复：与 getLeagueMetadata 一致，优先走云代理路径（EF 可设 UA + gzip），
 //   云代理不可用/失败时回退本地 wx.request（兜底，一般走不到）。
 // 2026-08-03 优化（A3 force 链路）：新增 opts.force 支持。
-//   - force=true：跳过客户端缓存，并透传给云代理（云函数 force 也有 30s 最小间隔节流），
+//   - force=true：跳过客户端缓存，并透传给云代理（EF force 也有 30s 最小间隔节流），
 //     用于详情页对阵定时刷新（30-60s 一次），保证 LIVE/UPCOMING 近实时。
 //   - 对外调用形态不变：getScheduledMatches(name) / getScheduledMatches(name, { force: true })
 //   - ★ 2026-08-04 返回契约升级：resolve { matches: [...], boFormat: {...} }（BO 判定引擎 S2 信号）
-//     （兼容旧形状：旧云函数/旧缓存返回数组 → 归一化为 { matches: arr, boFormat: null }）
-//   - ★ 2026-08-21 新增 Steam 优先路径：opts.leagueId 有值且云函数可用时，
+//     （兼容旧形状：旧 EF / 旧缓存返回数组 → 归一化为 { matches: arr, boFormat: null }）
+//   - ★ 2026-08-21 新增 Steam 优先路径：opts.leagueId 有值且 EF 可用时，
 //     先调 Steam GetLiveLeagueGames（LIVE 主源，2026-08-21 实测存活）。
 //     注意：原计划同时覆盖 UPCOMING 的 GetScheduledLeagueGames 已被 Valve 删除，
 //     UPCOMING 段仍依赖 Liquipedia LPDB v3（申请中）或 curation 兜底。
@@ -635,8 +631,8 @@ function getScheduledMatches(name, opts) {
   }
 
   // ★ 2026-08-04：统一返回 { matches, boFormat }（BO 判定引擎 S2 信号）。
-  //   boFormat = parseBoFormat 的 Format 段赛制映射（云函数端解析，或本地兜底解析）。
-  //   兼容旧形状：旧云函数/旧缓存返回数组 → 归一化为 { matches: arr, boFormat: null }。
+  //   boFormat = parseBoFormat 的 Format 段赛制映射（服务端解析，或本地兜底解析）。
+  //   兼容旧形状：旧 EF / 旧缓存返回数组 → 归一化为 { matches: arr, boFormat: null }。
   function normalizeScheduled(res) {
     if (!res) return { matches: [], boFormat: null };
     if (Array.isArray(res)) return { matches: res, boFormat: null };
@@ -645,7 +641,7 @@ function getScheduledMatches(name, opts) {
   }
 
   // ★ 2026-08-21：Steam 优先路径（LIVE/UPCOMING 主源）
-  //   条件：opts.leagueId 有值 + 云函数可用 → 先查 Steam，命中即返回，未命中回退 Liquipedia。
+  //   条件：opts.leagueId 有值 + EF 可用 → 先查 Steam，命中即返回，未命中回退 Liquipedia。
   //   设计：Steam 与 Liquipedia 数据互补——Steam 专精 LIVE/UPCOMING（Valve 原生 series_id），
   //   Liquipedia 专精赛程元数据/小组赛对阵。两者都查会有冗余但不会冲突（客户端按 series_id 去重）。
   var leagueId = opts && (opts.leagueId || opts.league_id);
@@ -686,7 +682,7 @@ function getScheduledMatches(name, opts) {
   // 成本评估：`fetchScheduledLocal` 会把结果（含空）写入 6h 缓存 → 多余的 EF 往返
   //   **每个赛事每 6 小时最多一次**，可控。
   //
-  // 顺序：本地解析（EF raw + LiquiParse，表命中时**零云开发调用**）→ 云函数 → haglund。
+  // 顺序：本地解析（EF raw + LiquiParse，表命中时**零云开发调用**）→ haglund（原「云函数」兜底已随退役移除）。
   function fetchLiquipediaChain() {
     return fetchScheduledLocal(slug, cacheKey).then(function (local) {
       if (local && local.matches && local.matches.length) {
@@ -783,14 +779,14 @@ function getScheduledMatches(name, opts) {
       return combined;
     });
   }
-  // 云函数不可用：直接试 haglund 再回退本地
+  // EF 不可用：直接试 haglund 再回退本地
   return tryHaglundFallback(name, force, cacheKey).then(function (hf) {
     if (hf && hf.matches.length) return hf;
     return fetchScheduledLocal(slug, cacheKey);
   });
 }
 
-// ★ 2026-08-22 haglund 兜底：Liquipedia 云代理失败/空时的降级入口
+// ★ 2026-08-22 haglund 兜底：Liquipedia EF 代理失败/空时的降级入口
 //   返回 { matches, boFormat } 形状（与 normalizeScheduled 一致），失败返回 null
 //   - name：当前赛事名（用于按 leagueName 过滤 haglund 的全量对阵）
 //   - force：透传跳过缓存
@@ -839,7 +835,7 @@ function fetchScheduledLocal(slug, cacheKey) {
 //     （GroupTableLeague/Bracket）通常在**主页面**。故 slug 解析优先级：
 //     curation.structureSlug（新增可选字段）→ curation.scheduledMatchesSlug → 主 slug。
 //     curation 未配 structureSlug 且 scheduledMatchesSlug 是子页面时解析结果可能为空 —— 空即不展示，无副作用。
-// 解析在客户端本地进行（fetchPageWikitext 自带云代理抓取路径），不新增云函数端点。
+// 解析在客户端本地进行（fetchPageWikitext 自带 EF 抓取路径），不新增服务端端点。
 // 返回 { groups: [{ name, teams: [{rank,name,placement}] }], brackets: [{ id, type, section, rounds }] }
 function getLeagueStructure(name, opts) {
   if (!ENABLED || !name) return Promise.resolve({ groups: [], brackets: [] });
@@ -869,12 +865,12 @@ function getLeagueStructure(name, opts) {
 // §8.3 战队 Logo（2026-07-29）：OpenDota logo_url 为空 + STRATZ 无数据时的兜底源。
 // Liquipedia 是独立人工策展源，与 Valve 数据链路无关，可覆盖 OpenDota 无 logo 的队伍。
 //
-// 仅走云函数代理路径：Liquipedia 官方强制要求描述性 User-Agent，而 wx.request 禁止设置
-// 该 header，直连会被反爬虫层拦截。云函数 Node.js 环境可自由设 header。
-// 云函数内两步获取：wikitext → parseTeamLogo → imageinfo API → 缩略图 URL。
+// 仅走 EF 代理路径：Liquipedia 官方强制要求描述性 User-Agent，而 wx.request 禁止设置
+// 该 header，直连会被反爬虫层拦截。EF Node.js 环境可自由设 header。
+// EF 内两步获取：wikitext → parseTeamLogo → imageinfo API → 缩略图 URL。
 //
 // 返回 { logo: url, source: 'liquipedia' } 或 null。
-// 任何失败（云函数不可用 / 页面不存在 / 无 image 字段 / imageinfo 失败）均 resolve null，不影响其它源。
+// 任何失败（EF 不可用 / 页面不存在 / 无 image 字段 / imageinfo 失败）均 resolve null，不影响其它源。
 /** PostgREST 直读 aggregation_cache（队标专用；读不到/过期返回 null） */
 function _sbLogoGet(key) {
   try {
@@ -900,7 +896,7 @@ function getTeamLogo(name) {
   if (cached) return Promise.resolve(cached);
 
   // ★★ 2026-09-12（方案 B）：**Supabase 直读优先** —— 队标由 GH Actions 预抓写表（lp:logo:<slug>），
-  //   命中即不依赖云开发；未命中再回落云函数（云开发关停后该回落自动失效，返回 null → UI 默认图标）。
+  //   命中即不依赖云开发；未命中直接返回 null → UI 默认图标（原「再回落云函数」已随退役移除）。
   //   动机：保住 LP 队标这一跳，避免少数老/冷门队失去头像。
   var _sbLogoKey = 'lp:logo:' + liquipediaSlugFor(name);
   return _sbLogoGet(_sbLogoKey).then(function (row) {
@@ -919,23 +915,23 @@ function getTeamLogo(name) {
   }).catch(function () { return null; });
 
   // ★ 2026-09-12：原「云代理优先」分支已移除 —— 它在 SB 直读块之后，属不可达代码
-  //   （云函数回落逻辑已在 SB 直读块内部处理，见上方 _sbLogoGet 调用处）
+  //   （原云函数回落逻辑已随退役移除，见上方 SB 直读块）
 }
 
 // ===== §9 Liquipedia 赛事主动枚举（2026-07-30）=====
-// 通过云函数代理调用 MediaWiki categorymembers API，枚举 Category:Tournaments 下
+// 通过服务端代理（原云函数）调用 MediaWiki categorymembers API，枚举 Category:Tournaments 下
 // 全量赛事页面标题。Liquipedia 是独立人工策展 wiki，覆盖 OpenDota 未收录的未举办赛事。
 //
 // ★ 合规要点 ★
 //   1. 使用标准 API（action=query&list=categorymembers），不抓 HTML，符合 Liquipedia 条款
-//   2. 仅走云函数代理路径（wx.request 禁设 User-Agent，直连必被反爬虫层拦截）
+//   2. 仅走服务端代理路径（wx.request 禁设 User-Agent，直连必被反爬虫层拦截）
 //   3. 云端缓存 7 天 + 月度主动刷新，降频降低 Liquipedia 负载
-//   4. 客户端再叠加本地缓存（7 天），避免重复调用云函数
+//   4. 客户端再叠加本地缓存（7 天），避免重复调用服务端
 //
 // 返回 [{ slug, title }] 或 []。任何失败均 resolve 空数组，不影响其它功能。
 // slug 可直接传入 fetchPageWikitext 获取具体赛事页内容；title 用于展示/匹配。
 // O-11（2026-08-15）：listAllTournaments 已删（0 业务引用）；cloudProxy.liquipediaListTournamentsProxy
-//   与云函数 handler 防御性保留（未来恢复赛事枚举能力时成本低）。
+//   与服务端 handler 防御性保留（未来恢复赛事枚举能力时成本低）。
 
 module.exports = {
   ENABLED: ENABLED,

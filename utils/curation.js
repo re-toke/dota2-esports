@@ -795,7 +795,7 @@ const CURATED_EVENTS = [
   // ★ 2026-09-11：此处原有一条重复的「PGL Wallachia Season 9」条目
   //   （liquipediaSlug 误写为 'PGL/Wallachia/Season_9'，LP 上不存在该页 → 实测 MISS）。
   //   与上方 L341 正确条目（'PGL/Wallachia/9'）冲突，且重复注册 lookup 会让错误 slug 覆盖正确值
-  //   → 已删除，独有别名并入上方条目。这就是 PGL Wallachia 赛程走 EF 失败、只能云函数兜底的根因。
+  //   → 已删除，独有别名并入上方条目。（原注「赛程走 EF 失败、只能云函数兜底」的根因已随云开发退役不再适用。）
   // ── 2026-09-14 补收录（原缺失 → 首页/「即将」看不到对局）仍在下方继续 ──
   // ★ 2026-09-14 补收录（原缺失 → 首页/「即将」看不到对局）
   { canonical: 'EPL World Series: Southeast Asia Season 17', tier: { grade: 'B', rank: 1, label: 'B级' },

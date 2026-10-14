@@ -15,9 +15,9 @@
 const api = require('./api.js');
 const config = require('./config.js');
 
-// 通用云函数调用：返回 Promise<data>；失败（含熔断）reject，由调用方决定回退。
+// 通用 EF 调用：返回 Promise<data>；失败（含熔断）reject，由调用方决定回退。
 // 2026-08-03 优化（A3 force 链路）：call 增加可选 extra 参数，
-// 透传云函数顶层字段（如 { force: true }，云函数入口读 e.force）。
+// 透传 EF 顶层字段（如 { force: true }，EF 入口读 body.force）。★ 云开发已退役，无云函数回落。
 // 现有调用不传 extra，行为完全不变（向后兼容）。
 //
 // ⚠️ 2026-10-12（P1-5 清死代码）：原 `ACTION_TIMEOUT_MS` 与 `timeoutFor()` **已删除** —— 二者全仓无调用点，
@@ -25,17 +25,14 @@ const config = require('./config.js');
 //   `wx.request timeout=25000` 决定；直连路径由 api.js `REQUEST_TIMEOUT_MS=20000` 决定。
 //   详见 deliverables/优化方案-数据加载-后端-代码-2026-10-10.md v1.2.1 的 P1-5 / BUG-B。
 
-// ===== M2.4（2026-09-09）：Supabase 数据代理路由 =====
-// supabase.enabled=true 时，下列 action 走 Supabase Edge Function（香港，带 Postgres 缓存），
-// 失败自动回落云开发链路（callCloud）。EF 返回形状 {data, source} 与云函数一致。
-// ⚠️ **未列入的 action**（仍走云开发，属「分阶段迁移」的剩余项）：
-//    liquipediaLeagueMeta / liquipediaScheduledMatches / liquipediaTeamLogo /
-//    liquipediaListTournaments（LP 解析链 —— 云函数端含解析/聚合逻辑，
-//    EF 薄代理只回 raw wikitext，契约不兼容）、getUpcomingSchedule（云端含聚合逻辑）、health。
-//    ★ 2026-09-19 更正：本条注释原先还把 **haglundUpcoming / getLeagueDetailBundle**
-//      列为「未列入」，但二者**实际已在下方 EDGE_ACTIONS 中映射**（v8.25「M2.4 收尾」时迁入）
-//      —— 注释未同步会误导排查（本轮即差点据此误判 stratz/proxy 状态）。
-//      **核对该清单时请以 EDGE_ACTIONS 实体为准，不要采信本注释的历史描述。**
+// ===== M2.4（2026-09-09）：Supabase EF 数据代理路由 =====
+// supabase.enabled=true 时，下列 action 经中转走 Supabase Edge Function（EF 内含缓存）。
+// ★★ 2026-09-22（微信云开发退役）：**不再有任何云函数回落**（原 `callCloud` 已移除）——
+//   EF 是唯一后端；EF 失败即失败，由调用方各自兜底（api.js 直连 / 本地快照等）。
+// EF 返回信封 {data, source} / {error}。
+// ⚠️ **未登记的 action 一律「有意不经 EF」**（走 `api.js` 直连或本地）：判定**以本文件下方
+//   `EDGE_ACTIONS` 实体为准，不要采信任何历史清单** —— 本注释早期版本曾把
+//   haglundUpcoming / getLeagueDetailBundle / health 等**已登记**项误列为「未列入」，曾误导排查。
 var EDGE_ACTIONS = {
   // OpenDota 11+ action → opendota-proxy
   getLeagues: 'opendota-proxy',
@@ -79,7 +76,7 @@ function _sbEfAvailable() {
 //   - 热缓存命中 → **立即 resolve 旧值**（页面首屏 0 RTT），同时按新鲜度条件触发后台刷新；
 //   - 旧值 < HOT_TTL（5min）→ 视为新鲜，后台不刷新（省一次跨网，防切页抖动）；
 //   - 旧值 ≥ HOT_TTL → 后台静默刷新，下次进页面即最新（写回热缓存 + writeThrough 本地缓存）。
-//   - 命中过期/失败 → 静默丢弃，不影响主链路（保持现有 EF 失败 → 云开发回落语义）。
+//   - 命中过期/失败 → 静默丢弃，不影响主链路（EF 失败即失败，**无云开发回落**）。
 // 仅对**无参数/参数稳定**且 EF 提供缓存语义的 action 生效（getLeagues 带 windows 一并缓存）。
 var HOT_TTL_SEC = 5 * 60;
 var HOT_ACTIONS = {
@@ -103,7 +100,7 @@ var RAW_PAYLOAD_ACTIONS = { stratzGql: 1 };
 
 // ★ 2026-09-19（选项 C · 收录口径单一权威点）：下列 action **不再回落云函数**。
 //   原因：getLeagues 的「白名单准入」口径由 EF 的 trimLeagues 负责；云函数侧的同名
-//   trimLeagues 已停止维护（阶段6 云开发下线中），保留回落 = 维护两处口径，
+//   trimLeagues 随云开发退役一并废弃，保留回落 = 维护两处口径，
 //   一旦漏改就以旧口径服务（junk 复活）。
 //   ✅ 安全性：EF 失败后由 utils/api.js 的 filterCollectableLeagues 兜底
 //      （它按 utils/tiers.js 判一遍，与数据来源无关）→ 不会漏出未收录赛事。
@@ -112,7 +109,7 @@ var RAW_PAYLOAD_ACTIONS = { stratzGql: 1 };
 //   云开发回落整体移除后，所有 action 一律由 EF 唯一负责（失败即失败，由调用方各自兜底）。
 
 function call(action, params, extra) {
-  // ★ M2.4：Supabase 数据代理优先；EF 熔断打开或失败 → 回落云开发（NO_CLOUD_FALLBACK_ACTIONS 除外）
+  // ★ M2.4：Supabase EF 优先；EF 熔断打开或失败 → 视为失败（**无云开发回落**，已退役）
   var efName = EDGE_ACTIONS[action];
   if (efName && _sbEfAvailable()) {
     var sbPayload = RAW_PAYLOAD_ACTIONS[action]
@@ -120,7 +117,7 @@ function call(action, params, extra) {
       : { action: action, params: params || {} };
     if (extra && typeof extra === 'object' && extra.force != null) sbPayload.force = !!extra.force;
     // ★ 2026-09-11（LP 服务迁 EF）：cacheOnly 透传 —— 让 EF「未命中立即返回」，
-    //   客户端据此实现「EF 缓存优先 → 未命中回落云函数」而不用付 7s 的 429 超时。
+    //   客户端据此实现「EF 缓存优先 → 未命中立即返回」而不用白付 7s 的 429 超时（无云函数回落）。
     if (extra && typeof extra === 'object' && extra.cacheOnly != null) sbPayload.cacheOnly = !!extra.cacheOnly;
 
     // ★ v8.31：热缓存秒回（非 force 请求）
@@ -157,10 +154,10 @@ function call(action, params, extra) {
   return Promise.reject(new Error('action not mapped to any Edge Function: ' + action));
 }
 
-// EF 单次调用（含云开发回落 + 热缓存写回）
+// EF 单次调用（热缓存写回；无云开发回落）
 function _efCall(action, efName, sbPayload) {
   return require('./supabaseClient.js').edge(efName, sbPayload).then(function (r) {
-    // EF 形状 { data, source } / { error } —— 与云函数 res.result 对齐，取 .data
+    // EF 形状 { data, source } / { error } —— 取 .data
     if (r && r.data !== undefined) {
       if (HOT_ACTIONS[action]) _hotCache[action] = { data: r.data, ts: Date.now() };
       return r.data;
@@ -216,7 +213,7 @@ const PARAM_MAP = {
   getHeroes: function () { return {}; }
 };
 
-// 生成一个代理方法：优先走云函数，失败回退到 api.js
+// 生成一个代理方法：优先走 EF，失败回退到 api.js
 function wrap(methodName) {
   return function () {
     var args = arguments;
@@ -244,16 +241,16 @@ proxy.steamProxy = function (path, params) {
 // 云端调 GetLiveLeagueGames + GetScheduledLeagueGames 按 leagueId 过滤，归一化为
 // { matches: [...], boFormat: null }（与 liquipediaScheduledProxy 同契约）。
 // 用于 liquipedia.getScheduledMatches 前置优先路径——Steam 命中即返回，
-// 未命中 / 云函数未部署 / STEAM_API_KEY 未配 → 调用方回退到 Liquipedia 路径。
+// 未命中 / EF 不可用 / STEAM_API_KEY 未配 → 调用方回退到 Liquipedia 路径。
 proxy.steamLeagueScheduledProxy = function (leagueId, force) {
   return call('steamLeagueScheduled', { leagueId: leagueId }, force ? { force: true } : null);
 };
 
 // haglund 第三方兜底源云代理（P0-C1，2026-09-01）：
-// 云函数 aggregation 的 haglundUpcoming action 服务端拉取 dota.haglund.dev（10min 云端缓存），
+// EF haglund-proxy 的 haglundUpcoming action 服务端拉取 dota.haglund.dev（10min 云端缓存），
 // 返回**原始数组**（归一化在客户端 haglund.js 完成，单一实现零漂移）。
 // 背景：客户端 wx.request 直连该域在正式版必被域名白名单拦截（海外未备案不可配）。
-// 调用方（haglund.fetchUpcoming）已对 wx.cloud + 熔断器做前置守卫，此处仅封装 action。
+// 调用方（haglund.fetchUpcoming）对 EF 可用性做前置守卫，此处仅封装 action。
 proxy.haglundUpcomingProxy = function (force) {
   return call('haglundUpcoming', {}, force ? { force: true } : null);
 };
@@ -281,7 +278,7 @@ proxy.liquipediaFetchRawWikitextProxy = function (pageName, cacheOnly) {
               cacheOnly ? { cacheOnly: true } : null);
 };
 
-// P0-3③（2026-09-01）：赛事详情页聚合 bundle —— 一次 callFunction 返回
+// P0-3③（2026-09-01）：赛事详情页聚合 bundle —— 一次 EF 调用返回
 // { matches: [...], teamNames: { team_id: name } }（云端 OD matches + explorer 内网查询）。
 // 失败/超时 reject（isTimeout 不计熔断），调用方（league-detail.load）回退旧链
 // api.getLeagueMatches + 事后 getTeamNames。

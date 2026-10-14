@@ -513,15 +513,15 @@ Page({
     this._perfLoadStart = Date.now();   // ★ 2026-09-01（第0步埋点）：load 全链路计时起点
     // ★ 2026-08-13（首页推荐位跳转优化 · 修正版方案1）：骨架提前——先用本地 curation 渲染
     //   基础信息（名称/赛期/状态/奖金池/地点）并置 loading:false，用户立即看到赛事框架，
-    //   不再被最慢网络任务（Liquipedia 赛程云函数现抓 2-4s）阻塞首屏。
+    //   不再被最慢网络任务（Liquipedia 赛程服务端现抓 2-4s）阻塞首屏。
     //   复用既有 F3 分步渲染：本函数只渲染「纯 curation 骨架」（不依赖网络数据），
     //   网络数据（OD+LP）到达后 F3 步骤1/2 增量更新 eventWindow/计数/series。
     this._renderLocalSkeleton(hasValidId);
     // 并行拉取 OpenDota 比赛数据 + Liquipedia 赛程数据：
     // - OpenDota 只返回已结束的比赛（需有效 leagueId），Liquipedia 赛程进行中/未开赛用名称为准。
     // - Liquipedia 请求失败时静默降级，仅显示 OpenDota 数据；若两者均无，显示「暂无比赛数据」。
-    // ★ 2026-09-01（P0-3③）：OD matches + teamNames 优先走云端聚合 bundle（一次 callFunction，
-    //   消除原「raw 到达后才能发起的 explorer 直连」串行段）；失败/超时/旧版云函数未部署
+    // ★ 2026-09-01（P0-3③）：OD matches + teamNames 优先走云端聚合 bundle（一次 EF 调用，
+    //   消除原「raw 到达后才能发起的 explorer 直连」串行段）；失败/超时/旧版 EF 未部署
     //   → 回退旧链 api.getLeagueMatches（bundle 失败时 teamNames 由下方 direct 兜底补）。
     // ★ 2026-09-01（详情页 13s 修复 v2）：OD 数据链路改「缓存优先，bundle 后台刷新」。
     //   原实现：bundle（8s 超时）→ 失败才回退 getLeagueMatches —— 冷缓存时 bundle 现抓
@@ -586,7 +586,7 @@ Page({
         //   不能与 raw 并行（team_id 集合来自 raw）；失败 catch 降级不阻塞 load（R2）。
         // ★ 2026-09-01（P0-3③）：bundle 已带回 teamNames（_teamIdNameMap 非空）时跳过
         //   本段 direct explorer（省一次跨网 RTT + 客户端 60req/min 配额）；
-        //   bundle 失败（旧版云函数未部署 / 超时）→ 走原 direct 兜底，行为与旧版一致。
+        //   bundle 失败（旧版 EF 未部署 / 超时）→ 走原 direct 兜底，行为与旧版一致。
         const _idSet = new Set();
         (raw || []).forEach(function (m) {
           if (m && m.radiant_team_id && m.radiant_team_id > 0) _idSet.add(Number(m.radiant_team_id));
@@ -609,7 +609,7 @@ Page({
       .then(([list, scheduled]) => {
         const raw = list || [];
         // ★ 2026-08-04：getScheduledMatches 统一返回 { matches, boFormat }（BO 判定引擎 S2 信号）。
-        //   兼容旧形状（数组）归一化，保证旧云函数/旧缓存下不崩。
+        //   兼容旧形状（数组）归一化，保证旧 EF / 旧缓存下不崩。
         const scheduledObj = (scheduled && !Array.isArray(scheduled)) ? scheduled : { matches: scheduled || [], boFormat: null };
         const liqScheduled = scheduledObj.matches || [];
         const liqBoFormat = scheduledObj.boFormat || null;
@@ -847,7 +847,7 @@ Page({
   // 时间窗口过滤 → 分段排序 → 字段计算 → decorate）。
   // load() 与 refreshSchedule()（B4 定时刷新）共用，防止双份逻辑漂移。
   buildSeriesFromSources(raw, liqScheduled, liqBoFormat) {
-    // ★ 2026-08-04：liqBoFormat = 云函数 parseBoFormat 的 Format 段赛制映射（S2 信号），可为 null
+    // ★ 2026-08-04：liqBoFormat = 服务端 parseBoFormat 的 Format 段赛制映射（S2 信号），可为 null
         // BO3/BO5 中双方会换边，第 2/3 场 radiant 可能是首场的 dire（B 队），
         // 此时 radiant_win=true 反而代表 B 队赢，小圆点会显示错误颜色。
         // 此外 radiant_win=null（未结束）会走 else 分支显示红色，未结束比赛不应着色。
@@ -1155,7 +1155,7 @@ Page({
                 boLabel: m.boType === 'BO1' ? '单局制' : (m.boType === 'BO2' ? '双局积分' : (m.boType === 'BO3' ? '三局两胜' : '五局三胜')),
                 boTagCls: m.boType === 'BO2' ? 'bo-bo2' : (m.boType === 'BO3' ? 'bo-bo3' : (m.boType === 'BO5' ? 'bo-bo5' : '')),
                 // ★ 2026-08-04：BO 判定引擎信号 —— declaredBo=S1 每场声明（仅 bestof 显式时）；
-                //   seriesType：LPDB v3 路径有 series_type（云函数 normalizeV3Match 已映射，
+                //   seriesType：LPDB v3 路径有 series_type（服务端 normalizeV3Match 已映射，
                 //     OpenDota series_type 0/1/2/3），供 resolveBoType S3 信号判定 BO（如 series_type=1 → BO3）；
                 //     wikitext 路径无 series_type → null（由 S4.5 mapSlots 或 S5 比分约束兜底）。
                 //   最终 boType 由 buildSeriesFromSources 末尾的 sources.applyBo 统一覆盖。
@@ -1582,7 +1582,7 @@ Page({
 
 
   // B4 定时刷新（2026-08-03）：详情页对阵 LIVE/UPCOMING 近实时。
-  // 只重拉 Liquipedia 赛程（force 跳过缓存；云函数有 30s 最小间隔节流），
+  // 只重拉 Liquipedia 赛程（force 跳过缓存；服务端有 30s 最小间隔节流），
   // OpenDota 侧用 load() 缓存的 _rawMatches（比赛收录滞后 5-30min 是上游延迟，
   // 且 OpenDota 有 60req/min 限制，不应参与 30-60s 轮询）。
   // 复用 buildSeriesFromSources 完整重建（与 load 同源不漂移），
@@ -1606,7 +1606,7 @@ Page({
         //   修复：进行中 BO3 的新局在 load 后被 OpenDota 收录（滞后 5-30min）时，轮询也能吸收到新局 →
         //   LIVE 比分随局更新（fingerprint 已含 scoreA:scoreB，diff 自动 patch）。
         //   - R2：负 leagueId（Liquipedia 新增赛事）无 OpenDota 数据，跳过重拉
-        //   - R3：force 走云函数路径（云函数 leagueMatches TTL 已降 5min）；直连兜底不 force（防 NAT 429）
+        //   - R3：force 走 EF 路径（EF leagueMatches TTL 已降 5min）；直连兜底不 force（防 NAT 429）
         //   - R4：仅第二次 rebuild 的 built 用于 setData；失败静默降级不阻塞 LP 刷新
         var hasValidLid = !!(Number(self.data.leagueId) > 0);
         var nowSec = Math.floor(Date.now() / 1000);

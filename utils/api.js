@@ -5,7 +5,7 @@
 //  - request(): 带限流（约 60 次/分钟，最小间隔 + 429 退避）。
 //  - cached(): 带 TTL 的本地缓存，命中不计入限流，是降低请求量的核心手段。
 //  - 所有对外方法默认走 cached()，TTL 见 config.cacheTTL。
-//  - 可选云函数代理（config.cloudProxy.enabled）：优先走云函数，失败回退直连。
+//  - 可选 EF 代理（config.cloudProxy.enabled）：优先走 EF，失败回退直连。
 
 const cache = require('./cache.js');
 const config = require('./config.js');
@@ -19,7 +19,7 @@ const monitor = require('./monitor.js');
 // ★ 2026-09-20：队名「形状归一」单一实现（原为内联，与快照键 / 详情页 / 首页四处各写一份）
 const names = require('./names.js');
 // 2026-07-27：curation 数据版本戳。缓存 key 前缀，确保代码/curation 变更后旧缓存自动失效。
-// 由 scripts/sync-canon-map.js 生成 curation-shared.js 时填入（同云函数侧），仅作 fallback。
+// 由 scripts/sync-canon-map.js 生成 curation-shared.js 时填入（同服务端侧），仅作 fallback。
 let _dataVersion = '0';
 try { _dataVersion = (require('./curation-shared').dataVersion || '0'); } catch (e) { /* 离线兜底 */ }
 // 兼容测试环境无 curation-shared 的情况
@@ -362,13 +362,13 @@ function cachedFreshIncremental(resPath, resource, id, freshSec, ttlSec, opts) {
   return Promise.resolve(meta.value);
 }
 
-// ===== 云函数代理（可选）=====
-// 当 config.cloudProxy.enabled 时，优先走云函数（国内加速 + 共享缓存），
+// ===== EF 代理（可选）=====
+// 当 config.cloudProxy.enabled 时，优先走 EF（经中转；国内加速 + 共享缓存），
 // 失败时自动回退到直连逻辑（cached/cachedFresh），不产生循环依赖。
 // 注意：cloudProxy.js 顶部 require('./api.js') 用于回退，故 api.js 顶部不可
 // 反向 require('./cloudProxy.js')，否则循环依赖。cloudFetch 内联了相同逻辑。
-// 2026-08-04（LIVE 比分刷新 v1.1，R3）：新增 force 透传 —— 云函数入口解构 event.force，
-// 通用 OpenDota handler `if (!force)` 跳过缓存（云函数已支持，缺客户端通道）。
+// 2026-08-04（LIVE 比分刷新 v1.1，R3）：新增 force 透传 —— EF 入口解构 body.force，
+// 通用 OpenDota handler `if (!force)` 跳过缓存（EF 已支持，缺客户端通道）。
 // 仅透传 truthy，未传时保持原形状（向后兼容）。
 
 // ⚠️ 2026-10-12（P1-5 清死代码）：原 `CLOUD_ACTION_TIMEOUT` 表**已删除** —— 全仓无调用点。
@@ -380,7 +380,7 @@ function cachedFreshIncremental(resPath, resource, id, freshSec, ttlSec, opts) {
 //   getTeamPlayers / getTeamMatches / getHeroes / getProMatches / getLiveMatches …）
 //   **早已就绪** → 缺的只是接线。若不接，「删除云函数」后此处只能退化直连，
 //   失去 EF 的国内加速与云端共享缓存（见阶段6手册 §六 待确认项 ④）。
-//   cloudProxy.call 内部即为「EF 优先 → 云函数降级」，且自带超时守卫与熔断，
+//   cloudProxy.call 内部即为「EF 唯一后端」，且自带超时守卫与熔断，
 //   返回形状与原 cloudFetch 一致（均为 result.data / EF 的 r.data）。
 //   ⚠️ 必须用**函数内延迟 require**：cloudProxy 顶部 require 本模块（用于回退），
 //      若顶部互相 require 会成循环依赖 → 运行时加载时两模块均已就绪，安全。
@@ -433,7 +433,7 @@ const ACTION_MAP = {
 // 修复：提取为 tryCloudOrDirect(methodName, args, directFn, transform?)，
 // 消除重复代码，集中管理熔断/回退逻辑。
 // transform 可选：对云代理返回的数据做转换（与直连路径一致）。
-// 2026-08-04（v1.1，R3）：第 5 参 force 透传给 cloudFetch（仅云函数路径；直连兜底不经 force，
+// 2026-08-04（v1.1，R3）：第 5 参 force 透传给 cloudFetch（仅 EF 路径；直连兜底不经 force，
 // 本地缓存照常命中，防多用户 NAT 共享 IP 打爆 OpenDota 429）
 // O-4（2026-08-15）：云成功路径 writeThrough 写穿本地缓存——断网/云熔断时回退直连
 // 能命中本地缓存兜底（否则云路径拿到的数据从不落盘，断网即空）。
@@ -485,8 +485,8 @@ function tryCloudOrDirect(methodName, args, directFn, transform, force) {
 // ★ 2026-09-19（收录严谨化 · 白名单准入）：**赛事列表的客户端入口闸门**。
 //
 // 为什么必须在客户端也判一次：
-//   服务端 trimLeagues（EF 与云函数）已按同口径裁剪，但本函数的回退链是
-//   `EF → 云函数 → **直连 OpenDota**`（见 tryCloudOrDirect 的 .catch），
+//   服务端 trimLeagues（EF）已按同口径裁剪，但本函数的回退链是
+//   `EF → **直连 OpenDota**`（见 tryCloudOrDirect 的 .catch），
 //   而直连拿到的是 **未裁剪的全量**（10176 条，含 OpenDota 误标为 professional 的
 //   社区/娱乐赛，如「肛宝联赛-老婆杯」）。若不在此再判一次，任何一次回退都会让 junk 复活。
 //   → 本闸门让「收录口径」**与数据来源无关**：只有 utils/tiers.js 是唯一权威点，
@@ -507,12 +507,12 @@ function filterCollectableLeagues(list) {
 function getLeagues() {
   return tryCloudOrDirect('getLeagues', [],
     // ★ 2026-09-01（loadLeagues 12s 性能修复）：direct 兜底改用 cachedFresh（stale-while-revalidate）。
-    //   原 cached() 硬 TTL 6h 过期即删，云函数慢 + 缓存过期时只能干等（实测 12029ms）。
+    //   原 cached() 硬 TTL 6h 过期即删，服务端慢 + 缓存过期时只能干等（实测 12029ms）。
     //   cachedFresh：1h 新鲜直接返回；1h~6h 返回旧值 + 后台刷新（秒开，stale 语义）；
     //   超 6h 硬 TTL 才拉网络。云端 TTL 6h 不变（writeThrough 仍写本地）。
     //   赛事列表变化慢（S 级赛事排期以周计），1h 新鲜窗口足够，6h 硬 TTL 兜底。
     function () { return cachedFresh('/leagues', null, 60 * 60, config.cacheTTL.leagues); })
-    // ★ 2026-09-19：入口闸门 —— 与数据来源无关（EF / 云函数 / 直连 / 本地缓存都过这一道）
+    // ★ 2026-09-19：入口闸门 —— 与数据来源无关（EF / 直连 / 本地缓存都过这一道）
     .then(filterCollectableLeagues);
 }
 
@@ -623,7 +623,7 @@ function getLeagueWindows() {
 
 function getLeagueMatches(leagueId, force) {
   // 比赛结果频繁变动：较短新鲜窗口 + 较长硬 TTL；陈旧时后台按游标增量合并
-  // 2026-08-04（v1.1，R3）：force 透传云函数跳过缓存（进行中 BO3 低频刷新用）
+  // 2026-08-04（v1.1，R3）：force 透传 EF 跳过缓存（进行中 BO3 低频刷新用）
   return tryCloudOrDirect('getLeagueMatches', [leagueId],
     function () {
       return cachedFreshIncremental('/leagues/' + leagueId + '/matches', 'league', leagueId, 10 * 60, config.cacheTTL.leagueMatches);

@@ -1,9 +1,9 @@
 // utils/experiment.js
 // T6 A/B 实验框架（客户端骨架）。
-// 启动拉取实验分组（云函数 getExperiments），缓存到本地；无后端时回退到 DEFAULTS。
+// 启动拉取实验分组（原云函数 getExperiments，已随云开发退役移除），缓存到本地；无后端时回退到 DEFAULTS。
 // 关键功能通过 getVariant / isEnabled 灰度开关，track 记录转化（本地）。
 //
-// 后端契约：云函数 aggregation 的 getExperiments action 返回
+// 后端契约（历史）：原云函数 aggregation 的 getExperiments action 返回（云开发退役后**已无承载**）
 //   { experiments: { <expKey>: { variant: 'A'|'B', enabled: true } } }
 // 详见 README「A/B 实验后端契约」。
 

@@ -434,7 +434,7 @@ Page({
     this._armedMinScroll = 0;
     if (this.data.armedMore) this.setData({ armedMore: false });
     // 2026-08-13（「即将」加载优化 · P0）：离开页面递增 upcoming 代际 + 清超时 timer，
-    // 让挂起的云函数调用 / 超时回调在 gen 检查点自动放弃（防晚到结果写入 + setTimeout 泄漏）
+    // 让挂起的服务端（EF）调用 / 超时回调在 gen 检查点自动放弃（防晚到结果写入 + setTimeout 泄漏）
     this._upcomingGen = (this._upcomingGen || 0) + 1;
     if (this._upcomingTimer) { clearTimeout(this._upcomingTimer); this._upcomingTimer = null; }
     // 2026-08-13（焦点卡动态化 · P1）：页面隐藏时停止 30s 焦点刷新定时器
@@ -1094,7 +1094,7 @@ Page({
 
   // 即将到来：对知名 S 级赛事查赛程，筛未来两个月内开赛。
   // 赛程数据来源：curation 本地精选（部分赛事含日期）+ STRATZ（启用时）。
-  // ★ 优化：优先读云函数预热的赛程缓存（秒开），失败回退逐个串行查询。
+  // ★ 优化：优先读 EF/表预热的赛程缓存（秒开），失败回退逐个串行查询。
   // STRATZ 未启用且 curation 无日期时，结果为空 —— 由 wxml 提示用户启用 STRATZ。
   loadUpcoming() {
     if (this.data.upcomingLoading) return;
@@ -1103,17 +1103,17 @@ Page({
     //   2026-09-21 已改为 Supabase 直读（无冷启动），但**超时+gen 代际判活仍保留**
     //   —— 网络慢/表为空时同样需要及时放行本地快照与串行查询。原：
     //   upcomingLoading 永不复位，用户切走再切回 → loadUpcoming 短路 → 永远卡 spinner。
-    //   现在：8s 超时后走 finishUpcoming（本地快照兜底），gen 递增丢弃晚到云函数结果。
+    //   现在：8s 超时后走 finishUpcoming（本地快照兜底），gen 递增丢弃晚到服务端结果。
     this._upcomingGen = (this._upcomingGen || 0) + 1;
     const gen = this._upcomingGen;
     this.setData({ upcomingLoading: true, upcomingProgress: '准备查询赛程...' });
     if (this._upcomingTimer) { clearTimeout(this._upcomingTimer); }
     this._upcomingTimer = setTimeout(() => {
       if (gen !== this._upcomingGen) return;   // 已被新链路取代，放弃
-      this.finishUpcoming('云函数超时，使用本地赛程', gen);
+      this.finishUpcoming('服务端超时，使用本地赛程', gen);
     }, config.leagueWindow.upcomingTimeoutMs);
 
-    // 赛程数据源回退链：云函数预热缓存 → 本地预构建快照 → 串行查询（OpenDota + curation）
+    // 赛程数据源回退链：EF/表预热缓存 → 本地预构建快照 → 串行查询（OpenDota + curation）
     // 任一层命中即用其数据，无需后续层；保证「即将到来」在任意部署形态下都不为空。
     this.trySupabaseUpcoming(gen).then((hit) => {
       if (gen !== this._upcomingGen) return;   // 已被超时/新链路取代，丢弃
@@ -1193,15 +1193,15 @@ Page({
       .catch(() => false);
   },
 
-  // 本地预构建快照（不依赖云函数）：读取 build-time 生成的 utils/upcoming-local.json。
-  // 适用：未部署云函数 / 云函数不可用 / 想零服务端运行。
+  // 本地预构建快照（不依赖服务端）：读取 build-time 生成的 utils/upcoming-local.json。
+  // 适用：未部署 EF / 服务端不可用 / 想零服务端运行。
   // 数据为「运行抓取脚本那一刻」的快照，非实时；刷新需重跑脚本并重新构建发布：
   //   node scripts/fetch-liquipedia-upcoming.js
   // 与云端缓存共用 buildUpcomingCard，字段形状一致；同样经 mergeCurationUpcoming 去重/补充。
   // ★ 2026-08-31（快照过期降权，v8.1）：快照 generatedAt 距今 > SNAPSHOT_DECAY_AGE_SEC（7 天）时，
   //   不再作为「命中主源」直接 return true（旧快照仅剩 1 条有效数据也会屏蔽串行 OpenDota 路径，
   //   导致列表停在抓取当天的世界状态）。降权规则：
-  //     - 新鲜（≤7 天）：行为不变，命中即停（云函数与串行查询之间的高速通道）
+  //     - 新鲜（≤7 天）：行为不变，命中即停（服务端与串行查询之间的高速通道）
   //     - 过期（>7 天）：立即渲染快照+curation 数据（保首屏有内容），但返回 false
   //       放行串行查询，由 loadUpcomingSerial 的实时数据（OpenDota earliest）重排序覆盖；
   //       串行查询有结果时会整体替换 upcomingList，无结果时保留快照渲染不闪空。
@@ -1468,7 +1468,7 @@ Page({
         if (seen[k]) {
           // 2026-07-30 修复：云缓存已含同名赛事（来自 Liquipedia Ongoing 段）时，
           // 不再直接跳过——用 local 快照更完整的日期修正它。
-          // 根源：云函数 fetchLiquipediaUpcoming 抓 Portal:Tournaments 的 Ongoing 段，
+          // 根源：抓取脚本（原云函数）fetchLiquipediaUpcoming 抓 Portal:Tournaments 的 Ongoing 段，
           // 该段日期单元格仅显示开始日（如 "Jul 30, 2026"），parseLiquipediaDate
           // 无结束月/日 → 回退 end=start，导致 endDate 截断为 startDate。
           // local 快照（fetch-liquipedia-upcoming.js 生成）含完整 start+end，
@@ -1560,7 +1560,7 @@ Page({
 
   // ★ 2026-08-22 新增：从 haglund 第三方源聚合「即将到来」赛事到列表 tab。
   //
-  // 背景：Liquipedia 故障期间，云函数 preheatUpcoming 无法预热 upcoming_schedule 缓存，
+  // 背景：Liquipedia 故障期间，预热（原云函数 preheatUpcoming）无法写入 upcoming_schedule 缓存，
   // 导致「即将到来」tab 主要靠 curation + 本地快照兜底，遗漏 Liquipedia 独有的新增赛事。
   // haglund 源（dota.haglund.dev）实时返回全量对阵，可补充这部分缺失。
   //
@@ -1732,14 +1732,14 @@ Page({
       // 仅显示「即将到来」状态：已开赛的进行中赛事归入「进行中」tab，不在此重复出现
       const fromList = (this.upcomingList || []).filter((x) => gradeMatch(x) && x.status === 'upcoming').slice();
       // ★ 2026-09-09（三源 miss 兜底 · 口径脱节修复）：upcomingList 的回退链
-      //   （云函数预热缓存 → 本地快照 → 串行查询）全 miss 时（如 curation 未收录 9 月赛事、
+      //   （表预热缓存 → 本地快照 → 串行查询）全 miss 时（如 curation 未收录 9 月赛事、
       //   STRATZ schema 失效、LP slug 缺失），allLeagues 中 OpenDota earliest 在未来的赛事
       //   （status='upcoming'，真实排期数据）此前只出现在「全部」tab——「全部」能看到、
       //   「即将到来」却为空。修复：将 allLeagues 的 upcoming 赛事并入本 tab（按 leagueid 去重，
       //   与「进行中」分支合并模式一致）。
       // ★★ 2026-09-19 修复「即将开始 Tab 重复卡片」（真机截图复现）：
       //   原实现**只用 leagueid 判重**，但两个来源的 id **体系完全不同**：
-      //     · fromList（upcomingList：快照 / 云函数 / curation）→ **负数 fakeId**（如 -1632240）
+      //     · fromList（upcomingList：快照 / 表 / curation）→ **负数 fakeId**（如 -1632240）
       //     · fromAll（allLeagues：OpenDota）→ **真实 leagueid**（如 19102）
       //   同一赛事在两边 id 必然不同 → 判重**彻底失效** → 两张同名卡同时展示。
       //   实测复现（用户截图）：BLAST SLAM VIII / BLAST SLAM IX /
