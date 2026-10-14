@@ -45,32 +45,21 @@ const logoCache = require('./logoCache'); // P2-F：本地队标/头像缓存
 // G4 单一数据源：与云函数共用的精确归一映射（来自 curation-shared.js 模块，非 .json）
 const leagueCanon = require('./league-canon-map.js');
 
-// upcoming-local.json 快照（在主包中 require，避免分包直接 require JSON 的兼容性问题）
-// 分包（如 league-detail）通过 sources.getUpcomingLocalSnapshot() 间接获取，不直接 require JSON
-// ★ 2026-07-30 修复：微信小程序对 JSON 的 require 行为不稳定，
-//   改用 JS 包装模块（upcoming-local-data.js），JS 模块在主包/分包中 require 均稳定可靠
-var _upcomingLocalSnapshot = null;
-function loadUpcomingLocalSnapshot() {
-  if (_upcomingLocalSnapshot) return _upcomingLocalSnapshot;
-  // 优先用 JS 包装模块（稳定可靠），回退到 JSON（Node.js 环境兼容）
-  try {
-    _upcomingLocalSnapshot = require('./upcoming-local-data.js');
-    console.log('[sources] upcoming-local-data.js 加载成功, events:',
-      _upcomingLocalSnapshot && _upcomingLocalSnapshot.events ? _upcomingLocalSnapshot.events.length : 0);
-  } catch (e) {
-    console.error('[sources] upcoming-local-data.js require 失败:', e && e.message);
-    try {
-      _upcomingLocalSnapshot = require('./upcoming-local.json');
-      console.log('[sources] upcoming-local.json 兜底加载成功, events:',
-        _upcomingLocalSnapshot && _upcomingLocalSnapshot.events ? _upcomingLocalSnapshot.events.length : 0);
-    } catch (e2) {
-      console.error('[sources] upcoming-local.json require 也失败:', e2 && e2.message);
-      _upcomingLocalSnapshot = null;
-    }
-  }
-  return _upcomingLocalSnapshot;
-}
-function getUpcomingLocalSnapshot() { return loadUpcomingLocalSnapshot(); }
+// ★★ 2026-10-14（P2-24）：从本文件抽出的「无交叉引用纯函数层」与「即将到来快照装载器」。
+//   此处解构复用 + 在本文件 module.exports 中再导出 ⇒ 既有调用方（pages/subpackages/scripts）不变；
+//   BO 引擎等强耦合部分仍保留在本文件单体中（O-19：整文件拆分会产生循环依赖 ⇒ 禁止整文件拆分）。
+//   注意：`var _upcomingLocalSnapshot` 缓存变量随装载器一并移入 utils/upcomingSnapshot.js。
+const {
+  liquipediaDateToUnix,
+  stripYearTokens,
+  mergeEventPeriod,
+  classifyStage,
+  settledCountOf,
+  pendingCountOf,
+  boFromFreeText,
+  normalizeLpLivePhase
+} = require('./sourcesPure.js');
+const { getUpcomingLocalSnapshot } = require('./upcomingSnapshot.js');
 // G8 运行时监控（安全降级，无 wx 时不打点）
 const monitor = require('./monitor.js');
 
@@ -131,44 +120,8 @@ function joinedLabels(sources) {
   return (sources || []).map(labelOf).join('/') || labelOf('opendota');
 }
 
-// 将 Liquipedia 返回的日期文本（如 '2025-08-15' / 'August 15, 2025'）归一为 Unix 秒。
-// consensus.voteTime 只接受数值候选（normNum > 0），故 Liquipedia 的字符串日期必须先转换。
-// 解析失败返回 null（该候选被跳过，不影响其它源）。
-function liquipediaDateToUnix(text) {
-  if (!text) return null;
-  const s = String(text).trim();
-  // 优先匹配 yyyy-MM-dd / yyyy/M/d（Liquipedia infobox 最常见的纯数字日期）
-  const m = s.match(/(\d{4})[-/](\d{1,2})(?:[-/](\d{1,2}))?/);
-  if (m) {
-    const y = Number(m[1]);
-    const mo = Number(m[2]);
-    const d = m[3] ? Number(m[3]) : 1;
-    if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) {
-      return Math.floor(Date.UTC(y, mo - 1, d) / 1000);
-    }
-  }
-  // 回退：英文日期 'August 15, 2025'（2026-08-03 加固：原 Date.parse 按本地时区
-  // 解析无时间字符串，+8 时区会把日期偏移到前一天 16:00 UTC → 赛期 startDate 偏一天。
-  // 改为手工解析 + Date.UTC 固定，消除本地时区依赖）
-  const em = s.match(/^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})/);
-  if (em) {
-    const MONTHS2 = {
-      'january': 0, 'february': 1, 'march': 2, 'april': 3, 'may': 4, 'june': 5,
-      'july': 6, 'august': 7, 'september': 8, 'october': 9, 'november': 10, 'december': 11,
-      'jan': 0, 'feb': 1, 'mar': 2, 'apr': 3, 'jun': 5, 'jul': 6,
-      'aug': 7, 'sep': 8, 'oct': 9, 'nov': 10, 'dec': 11
-    };
-    const mIdx = MONTHS2[em[1].toLowerCase()];
-    const d = Number(em[2]);
-    const y = Number(em[3]);
-    if (mIdx != null && d >= 1 && d <= 31 && y >= 2000) {
-      return Math.floor(Date.UTC(y, mIdx, d) / 1000);
-    }
-  }
-  // 最后兜底：原生 Date.parse（含时分秒的复杂格式）
-  const t = Date.parse(s);
-  return isFinite(t) ? Math.floor(t / 1000) : null;
-}
+// liquipediaDateToUnix 已抽出（P2-24）→ utils/sourcesPure.js（文件顶部已解构复用）。
+// 口径：日期文本（'2025-08-15' / 'August 15, 2025'）归一为 Unix 秒；解析失败返回 null。
 
 // ===== 赛事分级：多源计票 =====
 // 候选来源：community(本地规则) -> curation(权威库) -> opendota(枚举) -> stratz(启用时) -> liquipedia(启用时)
@@ -816,12 +769,7 @@ function leagueKey(rawName) {
 // 与原始名不同则返回规范名（如 OpenDota 的 "EPL Masters 2026" → 权威库 "EPL Masters I"），
 // 否则原样返回原始名。避免各页面重复内联 curation 查找、降低回归风险，
 // 也保证「列表/详情/搜索/关注/对局/推送」所有展示位口径一致。
-// 剥离 4 位年份 token（如「PGL Wallachia **2026** Season 9」→「PGL Wallachia Season 9」）。
-// 单一出口：展示名（canonicalLeagueName）与去重键（leagueBaseName）共用同一口径，
-// **勿各自内联一份正则**（本项目「同一件事两套归一化」已反复成为 bug 温床）。
-function stripYearTokens(rawName) {
-  return String(rawName || '').replace(/\b(19|20)\d{2}\b/g, ' ').replace(/\s+/g, ' ').trim();
-}
+// stripYearTokens 已抽出（P2-24）→ utils/sourcesPure.js（文件顶部已解构复用）。
 
 // 单次 curation 查表，返回 { hit, name }。
 // ★ 必须区分「**命中但规范名与入参相同**」与「**完全未命中**」两种情形：
@@ -918,39 +866,8 @@ function leagueDisplayName(league, ctx) {
 }
 
 // ===== ⑤ 跨源赛期合并（2026-09-19 落地，口径经用户确认）=====
-//
-// 口径：**官方赛期源优先（Liquipedia 系：curation / upcoming-local 快照），缺口按字段回退** ——
-//   · 首个「起止都完整」的源           → 全取
-//   · 某源只有 start（LP endDate 不完整的常态）→ start 取该源，end 依次向下回退
-//   · 某源无数据                       → 整体继续向下回退（**字段级**，绝不因不完整而整条丢弃）
-//
-// 本项目的典型顺序：curation > LP 快照 > OpenDota 真实比赛窗口。
-// （haglund 赛程推得的窗口若可用，可插在 LP 快照与 OpenDota 之间 —— 接口形态相同。）
-//
-// ★ 修复的 bug 形态：原两处调用点（详情页 eventWindow / 列表页 dateRange）对快照回退都是
-//   `if (entry.start && entry.end)` 的 **all-or-nothing** —— LP「endDate 不完整」（只给 start）时
-//   整条官方赛期被丢弃，start 也被 OpenDota 比赛窗口覆盖（而 OpenDota 窗口常截断为已打场次），
-//   表现为赛期显示错误甚至为空。
-//
-// @param {Array<{name:string, start:number, end:number}>} list 按**权威性降序**排列
-// @returns {?{start:number, end:number, startFrom:string, endFrom:string}}
-//          start/end 为秒级 unix（0 = 该端缺失，调用方决定是否渲染）；三源全空返回 null。
-function mergeEventPeriod(list) {
-  const arr = Array.isArray(list) ? list : [];
-  const num = (v) => { const n = Number(v); return (isFinite(n) && n > 0) ? n : 0; };
-  const out = { start: 0, end: 0, startFrom: '', endFrom: '' };
-  for (let i = 0; i < arr.length; i++) {
-    const s = arr[i] || {};
-    const name = s.name || ('src' + i);
-    if (!out.start && num(s.start)) { out.start = num(s.start); out.startFrom = name; }
-    if (!out.end && num(s.end)) { out.end = num(s.end); out.endFrom = name; }
-  }
-  if (!out.start && !out.end) return null;
-  // 守卫：end 早于 start = 跨源拼出的脏区间（如 LP start 在未来、OpenDota 窗口是历史数据）
-  // → 丢弃 end（宁可只显示开始日，也不显示倒挂区间）
-  if (out.end && out.start && out.end < out.start) { out.end = 0; out.endFrom = ''; }
-  return out;
-}
+// mergeEventPeriod 已抽出（P2-24）→ utils/sourcesPure.js（文件顶部已解构复用；本文件 module.exports 再导出）。
+// 详情页 eventWindow / 列表页 dateRange 仍统一调用本函数（单一实现，防两页口径漂移）。
 
 // ===== 赛事排名聚合 =====
 // 由 api.getLeagueMatches 提供的已结束比赛聚合每支队伍的胜负，
@@ -1576,50 +1493,8 @@ const BO_MAX = { 'BO1': 1, 'BO2': 2, 'BO3': 3, 'BO5': 5 };
 const BO_WIN = { 'BO1': 1, 'BO2': 2, 'BO3': 2, 'BO5': 3 };
 const BO_LABEL = { 'BO1': '单局制', 'BO2': '双局积分', 'BO3': '三局两胜', 'BO5': '五局三胜' };
 
-// 阶段文本 → 阶段键（LP section / 赛制文本）
-function classifyStage(text) {
-  if (!text) return '';
-  const t = String(text).toLowerCase();
-  if (/grand\s*final|决赛/.test(t)) return 'grandFinal';
-  if (/group|round\s*[- ]?robin|小组|循环/.test(t)) return 'group';
-  if (/playoff|淘汰|quarter\s*final|semi|round\s*of|upper\s*bracket|lower\s*bracket/.test(t)) return 'playoff';
-  return '';
-}
-
-// 已结算局数（OpenDota 有 games；Liquipedia 无小场时用比分和估算）
-// ★ 兼容两种字段：groupSeries 原始字段 radiant_win，以及 league-detail fmt() 变换后的 radiantWin（驼峰）
-function settledCountOf(s) {
-  if (s && s.games && s.games.length) {
-    let n = 0;
-    for (let i = 0; i < s.games.length; i++) {
-      const g = s.games[i];
-      if (g.radiant_win != null || g.radiantWin != null) n++;
-    }
-    return n;
-  }
-  if (s && s.phase === 'recent' && (s.scoreA || s.scoreB)) {
-    return (s.scoreA || 0) + (s.scoreB || 0);
-  }
-  return 0;
-}
-
-// 未结算局数（LIVE「第 3 局 pending」判定用）
-function pendingCountOf(s) {
-  if (!s || !s.games || !s.games.length) return 0;
-  let n = 0;
-  for (let i = 0; i < s.games.length; i++) {
-    const g = s.games[i];
-    if (g.radiant_win == null && g.radiantWin == null) n++;
-  }
-  return n;
-}
-
-// S2a：从自由文本提取 BO 关键词（infobox format / 赛制描述，如 "Round robin (Bo2)"）
-function boFromFreeText(text) {
-  if (!text) return null;
-  const m = String(text).match(/(?:Abbr\/)?Bo\s*(\d)|best\s*of\s*(\d)/i);
-  return m ? ('BO' + (m[1] || m[2])) : null;
-}
+// classifyStage / settledCountOf / pendingCountOf / boFromFreeText 已抽出（P2-24）
+//   → utils/sourcesPure.js（文件顶部已解构复用）。BO 判定引擎仍用这些纯函数，但引擎本体留在本文件。
 
 // 构建 BO 判定上下文（审核 R3：S4 自证表预计算，先于系列循环）
 // ctx.stages[stageKey] = { draws, maxPlayed }；ctx.defaultBo = S6 联赛默认（RECENT 模式众数）
@@ -2907,42 +2782,9 @@ function buildLpLiveSeries(lpMatches, now) {
   });
 }
 
-// ★★ 2026-09-27（用户实测修复）：LP 排期条目的 phase 归一 —— 「**对阵未定**」不得视为 live。
-//
-// ## 背景（实测现象）
-// 赛事详情页出现一张「进行中」卡：`Team Yandex vs TBD`、比分 0:0、**无任何小场数据**，
-// 却显示 `● LIVE · 已进行 2h 19m`（`elapsedText` 由"计划开赛时间"估算：见 league-detail 的 `liqElapsedSec`）。
-//
-// ## 根因
-// LP 排期条目自带 `phase='live'`（计划时间已过），而详情页在构造 `liq-` 系列时**直接透传** `m.phase`
-// （`phase: m.phase` / `isLive: (m.phase === 'live') && ...`）；
-// 该页**唯一的"归一"闸门只处理「比分已达终局」**（`_decidedByScore`）⇒ **对 0:0 完全不生效** ⇒ 漏网。
-//
-// ## 判据（**刻意只取"绝对安全"的一条**）
-// **对阵任一方未定（TBD / TBA / 待定 / 待公布 / unknown / 空）⇒ 该场不可能正在打** ⇒ 归一为 `upcoming`。
-//   ★ **为什么不用更宽的判据**（如"零小场 / 零比分"）：OpenDota 对**刚开始**的比赛**收录滞后**
-//     （`games` 可能暂空）⇒ 用"零数据"会**误伤真-live**（页面会显示"即将开始"而比赛正在打）。
-//   ★ **为什么 TBD 这一条安全**：真在进行的比赛**双方队名必然已定** ⇒ 不会误伤。
-//   ⇒ 本函数**只做 TBD 这一条**：宁可漏归一，不可误伤。
-//
-// ## 效果（一处修好两个可见错误）
-// 归一为 `upcoming` 后：① 详情页 WXML 走 `upcoming` 分支 ⇒ **不再渲染 `● LIVE`**；
-// ② `league-detail` 的 `liqElapsedSec = m.phase === 'live' ? ... : 0` ⇒ 自动归 0 ⇒ **不再显示「已进行 X」**。
-//
-// ⚠️ 口径：TBD 正则与 `subpackages/detail/league-detail/league-detail.js` 的 `TBD_RE` **同口径**，
-//    如需修改请**两处同改**（本项目已有 3 处 TBD 正则，属已知的历史分散点）。
-//
-// @param {string} phase 原始 phase（'live' | 'upcoming' | 'recent'）
-// @param {string} team1Name A 方队名
-// @param {string} team2Name B 方队名
-// @returns {string} 归一后的 phase（非 live 一律原样返回）
-function normalizeLpLivePhase(phase, team1Name, team2Name) {
-  if (phase !== 'live') return phase;
-  const TBD_RE = /^(tbd|tba|待定|待公布|unknown|to\s+be\s+(determined|announced))$/i;
-  const isTbd = function (n) { const s = String(n || '').trim(); return !s || TBD_RE.test(s); };
-  if (isTbd(team1Name) || isTbd(team2Name)) return 'upcoming';
-  return phase;
-}
+// normalizeLpLivePhase 已抽出（P2-24）→ utils/sourcesPure.js（文件顶部已解构复用；本文件 module.exports 再导出）。
+// 判据：LP 排期条目「对阵任一方未定（TBD / TBA / 待定 / 待公布 / unknown / 空）」⇒ 不可能正在打 ⇒ 归一为 upcoming；
+//      非 live 一律原样返回（宁可漏归一，不可误伤真-live）。
 
 module.exports = {
   SOURCE_LABEL: SOURCE_LABEL,
