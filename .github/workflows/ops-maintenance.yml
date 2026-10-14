@@ -83,3 +83,30 @@ jobs:
         env:
           ALERT_WEBHOOK: ${{ secrets.ALERT_WEBHOOK }}
         run: node scripts/ops/notify-alert.js "构建期快照已超龄（check-snapshot-freshness 失败）—— 大概率是 sync-upcoming 调度没跑"
+
+  # ③ 存储配额：`aggregation_cache` 行数超阈值 → 告警（P2-16，2026-10-14）
+  #    只盯**可脚本化**的「存储行数」；EF 调用数 / 中转请求数仅在平台 Dashboard 可见（见方案 §P2-16）。
+  quota-alert:
+    runs-on: ubuntu-latest
+    continue-on-error: true          # 配额是"趋势风险"而非代码回归 ⇒ 可见不阻塞
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check aggregation_cache row quota
+        id: quota
+        continue-on-error: true
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          QUOTA_ROWS_MAX: '5000'
+        run: node scripts/ops/check-quota.js
+
+      - name: Notify on quota exceeded (webhook)
+        if: steps.quota.outcome == 'failure'
+        env:
+          ALERT_WEBHOOK: ${{ secrets.ALERT_WEBHOOK }}
+        run: node scripts/ops/notify-alert.js "aggregation_cache 行数超阈值（存储配额风险，见方案 §P2-16 降级预案）"
