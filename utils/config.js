@@ -103,6 +103,45 @@ module.exports = {
     liveMatches: LIVE_POLL_SEC   // 全部进行中比赛（LIVE 比分；= 首页轮询间隔，单一事实源见顶 LIVE_POLL_SEC）
   },
 
+  // ★★ 2026-10-14（P2-7 · 缓存层级收敛）：**「数据类 → 新鲜度预算」单一事实源**。
+  //   本项目数据经**多层缓存**（客户端 2 层 + 中转 1~2 层 + EF 2 层）。若各层各记时钟 ⇒
+  //   「总陈旧度」不可审计、易漂移（本项根因）。下表把**每类数据各层 TTL 钉在一处**，
+  //   并指明**对外陈旧度的主约束层（= 该类唯一新鲜度来源）**。
+  //
+  //   ▸ 层级（近用户 → 近源）：
+  //     T1 客户端**内存热缓存** utils/cloudProxy.js `HOT_TTL_SEC=5min`（会话级；仅 HOT_ACTIONS 命中）
+  //     T2 客户端**本地缓存**   utils/api.js（`cachedFresh(freshSec,ttlSec)` 或 `cached(ttl)`；ttlSec 见本对象）
+  //     T3 **中转层**           infra/proxy/worker.mjs —— GET 短路 `TTL`（仅 `/od/api` 直连 passthrough）
+  //                             + EF 白名单 `EF_CACHE_MS`（只缓 `bundle-aggregator|getLeagueDetailBundle` 60s）
+  //     T4 **EF 内存 L1**       supabase/functions（`_shared/l1cache`；opendota 等 10min / cap40）
+  //     T5 **EF Postgres**      supabase/functions/opendota-proxy `resolveTtl`（aggregation_cache）
+  //
+  //   ▸ 预算表（**改任一层 TTL 时必须同步本表**，否则本表失真）：
+  //     | 数据类                | T1   | T2 新鲜/硬     | T3 中转          | T4    | T5 EF-PG | 对外陈旧度主约束层   |
+  //     |-----------------------|------|----------------|------------------|-------|----------|----------------------|
+  //     | getLeagues            | 5min | 1h / 6h        | GET 30min        | 10min | 6h       | **EF 6h**（下注①）    |
+  //     | getLeagueWindows      | 5min | 2h / 2h        | GET default 120s | 10min | 30min*   | EF 30min*            |
+  //     | getLeagueMatches      | —    | 10min / 30min  | GET default 120s | 10min | 30min    | EF 30min             |
+  //     | proMatches            | 5min | 5min / 5min    | GET 60s          | 10min | 5min     | EF 5min              |
+  //     | liveMatches           | 5min | 2min / 2min    | GET 20s          | 10min | 60s      | EF 60s               |
+  //     | team                  | —    | 15min / 6h     | —                | 10min | 6h       | EF 6h（下注①）        |
+  //     | teamPlayers           | —    | 20min / 3h     | —                | 10min | 6h       | EF 6h（下注①；T2硬3h<T5）|
+  //     | teamMatches           | —    | 10min / 30min  | —                | 10min | 30min    | EF 30min             |
+  //     | heroes                | 5min | 24h / 24h      | GET default 120s | 10min | 24h      | EF 24h               |
+  //     | getLeagueDetailBundle | —    | —（无客户端缓存）| EF 白名单 60s    | 10min | —（聚合） | **中转 EF 白名单 60s** |
+  //      * `getLeagueWindows` 走 explorer SQL ⇒ EF 侧落 `resolveTtl` 的 `default`（30min）。
+  //
+  //   ▸ 一致性约束（改 TTL 时须同时守住）：
+  //     ⓐ T3 中转 **GET 短路 TTL 必须 ≤ 客户端轮询间隔**（worker.mjs 已注）；live 20s ≤ 120s ✓。
+  //     ⓑ T5 EF-PG TTL 必须 ≤ T2 硬 TTL，否则客户端过期后回源仍命中**更旧**的 EF 缓存。
+  //     ⓒ **SWR（cachedFresh）的「新鲜窗口」仅当 ≥ T5 EF-PG TTL 时才真正有效**；否则为**装饰性**
+  //        （到期回源拿到的是 EF 的旧缓存）——见下注①。
+  //
+  //   ▸ 下注①（2026-10-14 核对得出 · **已知取舍，不改 TTL**）：`getLeagues`（T2 新鲜 1h < EF 6h）、
+  //     `team`（15min < 6h）、`teamPlayers`（20min < 6h，且硬 TTL 3h < 6h）三类，**客户端新鲜窗口
+  //     < EF-PG TTL** ⇒ 其「新鲜窗口」**实际无效**，**有效新鲜度 = EF-PG TTL**（列表/详情页因此偏长效）。
+  //     这是**刻意取舍**：EF 长 TTL 为**省上游/省额度**；真要收紧须**下调 EF-PG TTL**（属产品取舍，另议）。
+
   // 赛事时间窗口判定（用于「正在进行 / 即将到来」筛选）
   leagueWindow: {
     // 「正在进行」缓冲：真实结束时间(last_end)之后再保留 N 秒仍判为进行中，
@@ -236,14 +275,17 @@ module.exports = {
     cacheStaleTtlSchedule: 24 * 3600
   },
 
-  // 远程 curation 配置（已启用，本地兜底 + 可选热更新）：
-  //   - url 为空：仅用内置 curation.js 本地库（离线/首启可用，零网络）。
-  //   - 填入 url：启动时自动拉取远端 JSON 覆盖/追加本地赛事/战队，实现不发版热更新。
-  // 机制始终生效（remoteCuration.curatedEventFor 与 curation.js 同名接口兼容），
-  // 本优化在此启用后用于承载「奖金池/主办方/region/defunct/valve」等扩展字段的热更新。
+  // 远端 curation 热更新配置。★ 2026-10-14（P2-14 核对）：**热更新通道 = Supabase PostgREST 直读**，
+  //   非下方 `url` 拉 JSON（`url` 为**历史遗留字段，全仓无代码读取**，仅为兼容保留）。
+  //   - 通道：`utils/remoteCuration.js` 启动时 `load()`（`app.js:75`）—— 首屏直读 `curation_events`
+  //     近期子集 + 后台补全量；`curation_meta.version` **廉价探针**（10min 节流）令后台改动
+  //     **≤10min 生效、免发版**。本地 `curation.js` 始终兜底（离线/首启/直读失败）。
+  //   - 生效集合：`remoteCuration.curatedEventFor` 与 `curation.js` 同名接口兼容，承载「奖金池/主办方/
+  //     region/defunct/valve」等扩展字段的热更新。
+  //   - ⚠️ 快照（upcoming-local / leagues-local / team-logo-map）只作**冷启动兜底**，非唯一来源。
   remoteCuration: {
-    url: '',
-    ttlSec: 6 * 3600
+    url: '',              // 历史遗留（无代码读取）；热更新走 Supabase 直读
+    ttlSec: 6 * 3600      // 直读结果缓存时长（与 PROBE_KEY 探针节流配合）
   },
 
   // Supabase EF 数据代理（上线推荐，默认开启）。★ 2026-09-22：微信云开发已退役，本节由 EF 承接。

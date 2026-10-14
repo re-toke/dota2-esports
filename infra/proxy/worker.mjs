@@ -50,7 +50,8 @@ const EF_ALLOW = new Set([
 
 // GET 短路缓存时长（ms）
 // ★ 约束：**必须 ≤ 客户端对该接口的轮询间隔**，否则会把"实时"数据缓存成过期数据
-//   —— 客户端对 `/live` 是 **30s 轮询**（直播态）⇒ 这里给 20s（宁可多打一次上游，也不让用户看到旧比分）
+//   —— 客户端对 `/live` 是 **120s 轮询**（`config.timeWindow.livePollSec` = `pages/index/index.js POLL_BASE_MS`；
+//     ★ 2026-10-13 由 60s 对齐为 120s）⇒ 这里给 20s（宁可多打一次上游，也不让用户看到旧比分）
 const TTL = { proMatches: 60e3, live: 20e3, leagues: 30 * 60e3, 'default': 120e3 };
 
 // ★★ 2026-10-10（详情页"慢"的修法）：**EF 路径的白名单式短缓存**（只缓只读、低频变化的 action）
