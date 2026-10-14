@@ -7,7 +7,7 @@
 // 刷新：npm run fetch:leagues
 
 module.exports = {
-  "generatedAt": 1791966461,
+  "generatedAt": 1792005134,
   "source": "opendota",
   "note": "build-time leagues snapshot (active 90d + curated 60d), refresh via scripts/sync/fetch-leagues-snapshot.js",
   "stats": {
@@ -17,14 +17,14 @@ module.exports = {
   },
   "leagues": [
     {
-      "leagueid": 10296,
-      "tier": "premium",
-      "name": "The Kuala Lumpur Major"
-    },
-    {
       "leagueid": 10810,
       "tier": "premium",
       "name": "MDL Disneyland® Paris Major"
+    },
+    {
+      "leagueid": 14268,
+      "tier": "premium",
+      "name": "The International 2022"
     },
     {
       "leagueid": 15728,
@@ -42,9 +42,14 @@ module.exports = {
       "name": "Riyadh Masters 2024 at Esports World Cup Qualifiers"
     },
     {
-      "leagueid": 14268,
-      "tier": "premium",
-      "name": "The International 2022"
+      "leagueid": 17795,
+      "tier": "professional",
+      "name": "ESL One Raleigh 2025"
+    },
+    {
+      "leagueid": 18111,
+      "tier": "professional",
+      "name": "DreamLeague Season 26"
     },
     {
       "leagueid": 18324,
@@ -52,9 +57,9 @@ module.exports = {
       "name": "The International 2025"
     },
     {
-      "leagueid": 17795,
+      "leagueid": 18359,
       "tier": "professional",
-      "name": "ESL One Raleigh 2025"
+      "name": "Clavision DOTA2 Masters 2025: Snow-Ruyi"
     },
     {
       "leagueid": 19066,
@@ -92,14 +97,9 @@ module.exports = {
       "name": "EPL Masters 2026 "
     },
     {
-      "leagueid": 20176,
+      "leagueid": 20009,
       "tier": "professional",
-      "name": "BETBOOM Streamers Battle Dota 15"
-    },
-    {
-      "leagueid": 18111,
-      "tier": "professional",
-      "name": "DreamLeague Season 26"
+      "name": "1win Essence II"
     },
     {
       "leagueid": 20169,
@@ -107,14 +107,14 @@ module.exports = {
       "name": "BLAST Slam VII China Qualifier"
     },
     {
+      "leagueid": 20176,
+      "tier": "professional",
+      "name": "BETBOOM Streamers Battle Dota 15"
+    },
+    {
       "leagueid": 20208,
       "tier": "professional",
       "name": "BLAST SLAM IX"
-    },
-    {
-      "leagueid": 18359,
-      "tier": "professional",
-      "name": "Clavision DOTA2 Masters 2025: Snow-Ruyi"
     },
     {
       "leagueid": 20279,
@@ -127,9 +127,9 @@ module.exports = {
       "name": "NEXUS SERIES II"
     },
     {
-      "leagueid": 20009,
-      "tier": "professional",
-      "name": "1win Essence II"
+      "leagueid": 10296,
+      "tier": "premium",
+      "name": "The Kuala Lumpur Major"
     },
     {
       "leagueid": 20359,
@@ -230,9 +230,9 @@ module.exports = {
     },
     "19944": {
       "earliest": 1784531358,
-      "latest": 1791959468,
-      "lastEnd": 1791962843,
-      "count": 361
+      "latest": 1791999413,
+      "lastEnd": 1792001901,
+      "count": 366
     },
     "20009": {
       "earliest": 1785402206,
@@ -296,9 +296,9 @@ module.exports = {
     },
     "20359": {
       "earliest": 1791533047,
-      "latest": 1791954073,
-      "lastEnd": 1791956130,
-      "count": 169
+      "latest": 1792001964,
+      "lastEnd": 1792004247,
+      "count": 197
     },
     "20393": {
       "earliest": 1791187532,
@@ -308,15 +308,15 @@ module.exports = {
     },
     "20406": {
       "earliest": 1791813665,
-      "latest": 1791930739,
-      "lastEnd": 1791933010,
-      "count": 15
+      "latest": 1792001290,
+      "lastEnd": 1792003168,
+      "count": 22
     },
     "20411": {
       "earliest": 1791721162,
-      "latest": 1791895133,
-      "lastEnd": 1791897373,
-      "count": 3
+      "latest": 1791985057,
+      "lastEnd": 1791986619,
+      "count": 5
     }
   }
 };

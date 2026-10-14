@@ -6,7 +6,7 @@
 // 数据来源：utils/upcoming-local.json（由本脚本生成）
 
 module.exports = {
-  "generatedAt": 1791923680,
+  "generatedAt": 1792005318,
   "source": "liquipedia",
   "note": "build-time snapshot (Upcoming+Ongoing, Tier1-3), refresh via scripts/sync/fetch-liquipedia-upcoming.js",
   "events": [
@@ -83,18 +83,6 @@ module.exports = {
       "source": "liquipedia"
     },
     {
-      "id": -1404221,
-      "name": "BLAST SLAM IX China Open Qualifier 2",
-      "grade": "S",
-      "rank": 3,
-      "label": "S级",
-      "tier": 1,
-      "start": 1791936000,
-      "end": 1791993599,
-      "date": "Oct 14, 2026",
-      "source": "liquipedia"
-    },
-    {
       "id": -1914730,
       "name": "NEXUS SERIES II",
       "grade": "B",
@@ -104,18 +92,6 @@ module.exports = {
       "start": 1792022400,
       "end": 1793548799,
       "date": "Oct 15 – Nov 01, 2026",
-      "source": "liquipedia"
-    },
-    {
-      "id": -1537037,
-      "name": "BLAST SLAM IX China Closed Qualifier",
-      "grade": "S",
-      "rank": 3,
-      "label": "S级",
-      "tier": 1,
-      "start": 1792022400,
-      "end": 1792166399,
-      "date": "Oct 15–16, 2026",
       "source": "liquipedia"
     },
     {
@@ -140,6 +116,18 @@ module.exports = {
       "start": 1792022400,
       "end": 1792252799,
       "date": "Oct 15–17, 2026",
+      "source": "liquipedia"
+    },
+    {
+      "id": -1537037,
+      "name": "BLAST SLAM IX China Closed Qualifier",
+      "grade": "S",
+      "rank": 3,
+      "label": "S级",
+      "tier": 1,
+      "start": 1792108800,
+      "end": 1792252799,
+      "date": "Oct 16–17, 2026",
       "source": "liquipedia"
     },
     {
