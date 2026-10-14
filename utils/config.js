@@ -195,7 +195,7 @@ module.exports = {
   // 第二网络数据源：STRATZ（GraphQL，免费 API key，申请见 https://stratz.com/api）。
   // 启用后，sources 将其作为 OpenDota 之外的真实第二来源参与分级与赛程聚合。
   //
-  // ★★ 安全基线（见 OPTIMIZATION_PLAN.md T1）★★
+  // ★★ 安全基线（见 archive/legacy-docs/OPTIMIZATION_PLAN.md T1；★ 2026-10-14 P2-22 后该文档已移入 archive/legacy-docs/）★★
   //   apiKey 不再以明文存放在客户端！改由服务端（Supabase EF）以环境变量注入 STRATZ_API_KEY。
   //   客户端只声明「需要 key」，具体密钥由 EF（supabase/functions/stratz-proxy）在服务端注入。
   //   直连模式（开发调试 fallback）仍可在 EF 不可用时回退——但此时需本地填 key，

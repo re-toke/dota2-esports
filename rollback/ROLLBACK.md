@@ -1,3 +1,5 @@
+> ⚠️ **2026-10-14（P2-22 仓库卫生）**：本目录下 **4 个 zip 备份**（`pre-p3-2026-08-15.zip` / `pre-spotlight-ui-2026-08-09.zip` / `rollback-pre-audit-fix-2026-09-17.zip` / `rollback-v8.1-stratz-haglund-2026-08-31.zip`，合计 **~29.5MB**）**已移出仓库**（git 历史仍留档）。如需恢复旧状态，请走**方式 A / B 的 git 分支 / tag**；**方式 C 的 zip 已不可用**。
+
 # 回滚说明 — rollback-pre-audit-fix-2026-09-17
 
 > **回滚点名称**：`rollback-pre-audit-fix-2026-09-17`
@@ -41,7 +43,7 @@ git reset --hard 800f7a6
 git checkout rollback-pre-audit-fix-2026-09-17
 ```
 
-### 方式 C：zip 解包恢复（node_modules 需重新构建）
+### 方式 C：zip 解包恢复（node_modules 需重新构建）—— ⚠️ zip 已于 2026-10-14 移出仓库（P2-22），需自备备份
 
 ```bash
 # 1. 备份当前损坏/不满意的目录
