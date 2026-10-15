@@ -6,7 +6,7 @@
 // 数据来源：utils/upcoming-local.json（由本脚本生成）
 
 module.exports = {
-  "generatedAt": 1792005318,
+  "generatedAt": 1792051630,
   "source": "liquipedia",
   "note": "build-time snapshot (Upcoming+Ongoing, Tier1-3), refresh via scripts/sync/fetch-liquipedia-upcoming.js",
   "events": [
@@ -284,6 +284,18 @@ module.exports = {
       "start": 1806796800,
       "end": 1807459199,
       "date": "Apr 04–11, 2027",
+      "source": "liquipedia"
+    },
+    {
+      "id": -1629773,
+      "name": "DreamLeague Division 2 Series 7",
+      "grade": "B",
+      "rank": 1,
+      "label": "B级",
+      "tier": 3,
+      "start": 1807574400,
+      "end": 1808582399,
+      "date": "Apr 13–24, 2027",
       "source": "liquipedia"
     }
   ]

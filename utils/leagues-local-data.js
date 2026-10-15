@@ -7,20 +7,15 @@
 // 刷新：npm run fetch:leagues
 
 module.exports = {
-  "generatedAt": 1792005134,
+  "generatedAt": 1792051379,
   "source": "opendota",
   "note": "build-time leagues snapshot (active 90d + curated 60d), refresh via scripts/sync/fetch-leagues-snapshot.js",
   "stats": {
-    "total": 10356,
+    "total": 10358,
     "kept": 36,
     "windows": 20
   },
   "leagues": [
-    {
-      "leagueid": 10810,
-      "tier": "premium",
-      "name": "MDL Disneyland® Paris Major"
-    },
     {
       "leagueid": 14268,
       "tier": "premium",
@@ -62,6 +57,11 @@ module.exports = {
       "name": "Clavision DOTA2 Masters 2025: Snow-Ruyi"
     },
     {
+      "leagueid": 10810,
+      "tier": "premium",
+      "name": "MDL Disneyland® Paris Major"
+    },
+    {
       "leagueid": 19066,
       "tier": "professional",
       "name": "肛宝联赛-老婆杯"
@@ -82,9 +82,24 @@ module.exports = {
       "name": "BLAST SLAM VIII"
     },
     {
+      "leagueid": 10296,
+      "tier": "premium",
+      "name": "The Kuala Lumpur Major"
+    },
+    {
       "leagueid": 19719,
       "tier": "premium",
       "name": "The International 2026"
+    },
+    {
+      "leagueid": 20208,
+      "tier": "professional",
+      "name": "BLAST SLAM IX"
+    },
+    {
+      "leagueid": 20279,
+      "tier": "professional",
+      "name": "PGL Wallachia 2026 Season 9"
     },
     {
       "leagueid": 19785,
@@ -112,24 +127,9 @@ module.exports = {
       "name": "BETBOOM Streamers Battle Dota 15"
     },
     {
-      "leagueid": 20208,
-      "tier": "professional",
-      "name": "BLAST SLAM IX"
-    },
-    {
-      "leagueid": 20279,
-      "tier": "professional",
-      "name": "PGL Wallachia 2026 Season 9"
-    },
-    {
       "leagueid": 20334,
       "tier": "professional",
       "name": "NEXUS SERIES II"
-    },
-    {
-      "leagueid": 10296,
-      "tier": "premium",
-      "name": "The Kuala Lumpur Major"
     },
     {
       "leagueid": 20359,
@@ -217,10 +217,10 @@ module.exports = {
       "count": 147
     },
     "19785": {
-      "earliest": 1784200005,
+      "earliest": 1784286301,
       "latest": 1784483341,
       "lastEnd": 1784485548,
-      "count": 19
+      "count": 15
     },
     "19917": {
       "earliest": 1785476004,
@@ -230,9 +230,9 @@ module.exports = {
     },
     "19944": {
       "earliest": 1784531358,
-      "latest": 1791999413,
-      "lastEnd": 1792001901,
-      "count": 366
+      "latest": 1792015470,
+      "lastEnd": 1792018117,
+      "count": 372
     },
     "20009": {
       "earliest": 1785402206,
@@ -296,9 +296,9 @@ module.exports = {
     },
     "20359": {
       "earliest": 1791533047,
-      "latest": 1792001964,
-      "lastEnd": 1792004247,
-      "count": 197
+      "latest": 1792040963,
+      "lastEnd": 1792044938,
+      "count": 216
     },
     "20393": {
       "earliest": 1791187532,
@@ -308,9 +308,9 @@ module.exports = {
     },
     "20406": {
       "earliest": 1791813665,
-      "latest": 1792001290,
-      "lastEnd": 1792003168,
-      "count": 22
+      "latest": 1792004773,
+      "lastEnd": 1792006775,
+      "count": 23
     },
     "20411": {
       "earliest": 1791721162,
