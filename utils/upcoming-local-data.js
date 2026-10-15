@@ -6,7 +6,7 @@
 // 数据来源：utils/upcoming-local.json（由本脚本生成）
 
 module.exports = {
-  "generatedAt": 1792051630,
+  "generatedAt": 1792090866,
   "source": "liquipedia",
   "note": "build-time snapshot (Upcoming+Ongoing, Tier1-3), refresh via scripts/sync/fetch-liquipedia-upcoming.js",
   "events": [
@@ -44,42 +44,6 @@ module.exports = {
       "start": 1791763200,
       "end": 1792252799,
       "date": "Oct 12–17, 2026",
-      "source": "liquipedia"
-    },
-    {
-      "id": -1029497,
-      "name": "DreamLeague Season 30: China Closed Qualifier",
-      "grade": "S",
-      "rank": 3,
-      "label": "S级",
-      "tier": 1,
-      "start": 1791849600,
-      "end": 1792079999,
-      "date": "Oct 13–15, 2026",
-      "source": "liquipedia"
-    },
-    {
-      "id": -1193333,
-      "name": "DreamLeague Season 30: South America Closed Qualifier",
-      "grade": "S",
-      "rank": 3,
-      "label": "S级",
-      "tier": 1,
-      "start": 1791849600,
-      "end": 1792079999,
-      "date": "Oct 13–15, 2026",
-      "source": "liquipedia"
-    },
-    {
-      "id": -1173302,
-      "name": "DreamLeague Season 30: Eastern Europe Closed Qualifier",
-      "grade": "S",
-      "rank": 3,
-      "label": "S级",
-      "tier": 1,
-      "start": 1791849600,
-      "end": 1792079999,
-      "date": "Oct 13–15, 2026",
       "source": "liquipedia"
     },
     {
