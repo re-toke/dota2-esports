@@ -2,19 +2,26 @@
 
 DOTA2 电竞小程序的 curation 数据管理后台，用于在 Web 端管理 Supabase 数据库中的赛事 / 战队 / TI 名单数据。与小程序共用同一个 Supabase 项目（`gkticzdaicpdtxheyxsd`）。
 
-## ⚠️ 网络要求（重要 · 2026-10-16 实测）
+## 网络 / 后端（★ 2026-10-16 方案③：**经中转**，不再直连）
 
-本后台的**读与写都走直连 `*.supabase.co`**（读 = PostgREST `${VITE_SUPABASE_URL}/rest/v1`；写 = EF `${VITE_SUPABASE_URL}/functions/v1/admin-write`）。
+本后台的**读与写都经「中转」**：`VITE_SUPABASE_URL = https://<中转host>/sb`
+- 读 = `${BASE}/rest/v1/*` → 中转 `/sb/rest/v1/*`（**仅 GET**）
+- 写 = `${BASE}/functions/v1/admin-write` → 中转 `/sb/functions/v1/admin-write`
 
-- 🔴 **`*.supabase.co` 在国内网络被 SNI 阻断** —— 2026-10-16 实测：`curl: (35) Recv failure: Connection was reset`（DNS 0.01s / TCP 0.26s 均成功，**TLS 阶段被 RST**）。
-- ⇒ **本后台必须在能直连 `*.supabase.co` 的网络下使用**（VPN / 非国内网络）；否则列表读不出、写操作也失败。
-- ✅ 开发机已确认可直连 ⇒ 本地 `npm run dev` 与已部署站点可用。
+### 为什么不再直连
+🔴 **`*.supabase.co` 在国内网络被 SNI 阻断** —— 2026-10-16 实测（**沙箱内、外均复现**）：`curl: (35) Recv failure: Connection was reset`（DNS/TCP 均通、**TLS 阶段被 RST**）。直连时浏览器报 `net::ERR_CONNECTION_RESET`，列表恒空。
 
-### 为什么**不能**改成走中转 `/sb`（已实测，两条路都堵住）
+### 经中转可行的三处配套（已实施）
+1. **分页改用 `limit`/`offset` 查询参数**（原用 `Range` 头 —— 实测中转**不转发 `Range`**：送 `Range: 1000-1001` 仍回 `content-range: 0-999/3683`）；query 参数会被中转按 `url.search` 原样转发 ✅。
+2. `worker.mjs` 的 **`EF_ALLOW` 放行 `admin-write`**（否则 POST 回 404 `ef not allowed`）。
+3. `worker.mjs` **转发 `x-admin-token`** + **CORS 允许 `X-Admin-Token`**（否则写恒 401 / 浏览器预检被拒）。
 
-- **读分页会拿错页**：中转 `/sb/rest/v1` **仅允许 GET**，且 **`Range` 头不生效** —— 实测送 `Range: 1000-1001` 仍返回 `content-range: 0-999/3683`（拿到的是第 0-999 行）。而本后台 `restAll` 用 **`Range` 分页** ⇒ 经中转会取到**重复/错误页**。（另：中转该 REST 路径的缓存键**不含 `Range`**。）
-- **写被白名单挡住**：`POST /sb/functions/v1/admin-write` → **404 `{"error":"ef not allowed","name":"admin-write"}`** ⇒ 中转的 EF 白名单（`infra/proxy/worker.mjs` 的 `EF_ALLOW`）**未放行 `admin-write`**。
-- 若将来确需脱离直连，须**同时改两处**：① `worker.mjs` 的 `EF_ALLOW` 放行 `admin-write`；② 本后台 `restAll` 改用 `limit`/`offset` 查询参数（**已验证 query 参数会被中转转发**）。
+### 已知限制
+- 🔴 **写路径需把新版 `worker.mjs` 重新部署到 `[0]`/`[1]`**（Deno 为手贴副本；`[2]` 随 push 自动部署）。在那之前经中转的**写**会 404/401（**读不受影响**）。
+- 🔴 **公开站点不建议开写**：GitHub Pages 在 public 仓库上**无访问控制**，而 `VITE_ADMIN_TOKEN` 会被**内联进公开 bundle** ⇒ 等于**公开写令牌**。**建议保持只读**（不配 `ADMIN_TOKEN`）。
+- ⚠️ **首屏偏慢**：events 全量 ≈1.3MB、单页 ~400KB，经中转（Deno 免费层）**冷缓存约 24s**；中转 REST 有 **120s 短缓存**，命中后 <1s。根治需「服务端分页 / 瘦投影」（另议）。
+- ⚠️ **中转单点 + 额度**：admin 流量计入 Deno 免费额度；`[0]` 挂则 admin 读也挂。
+- ℹ️ 经中转读取**不依赖** admin 的 anon key（中转用**它自己的** key 覆盖：`worker.mjs` 的 `Object.assign(headers, sbHeaders)`）⇒ `SUPABASE_ANON_KEY` 仅留作直连备用。
 
 ## 技术栈
 
@@ -130,7 +137,7 @@ npm run dev
 **前置（一次性）**：
 
 1. 仓库 **Settings → Pages → Source = "GitHub Actions"**（工作流已带 `enablement: true` 尝试自动启用；若首次部署报 Pages 未启用，则手动按此句打开）。
-2. `SUPABASE_ANON_KEY` secret —— **已配置**（公开安全、受 RLS 保护）。
+2. `SUPABASE_ANON_KEY` secret —— **已配置**（公开安全）。⚠️ 经中转读取时**实际不依赖它**（中转用自有 key 覆盖），仅留作**直连备用**；工作流仍要求它存在。
 3. `ADMIN_TOKEN` secret —— **可选**：写入口 EF 令牌（= 本地 `VITE_ADMIN_TOKEN` / EF secret `ADMIN_TOKEN` 同值）。🔴 **配它 = 把写令牌内联进公开 bundle** ⇒ **务必先给站点加访问限制再配**；不配则站点为**只读**（写操作报缺令牌，不泄露写权限）。
 
 本地构建（等价于 CI 构建步，可先自检）：
@@ -138,13 +145,15 @@ npm run dev
 ```bash
 cd admin
 npm ci
-npm run build        # 输出到 admin/dist/；CI 传 VITE_BASE=/dota2-esports/
+npm run build        # 输出到 admin/dist/；CI 传 VITE_BASE=/dota2-esports/ 且把 VITE_SUPABASE_URL 指向中转 /sb
 npm run preview      # 本地预览构建产物
 ```
 
-🔴 **访问前提**：见顶部「网络要求」—— 后台必须能直连 `*.supabase.co`（VPN / 非国内网络）。
+✅ **访问前提**：后台已改走**中转** ⇒ **国内网络即可访问（无需 VPN）**；详见顶部「网络 / 后端」。
 
-部署后冒烟：打开站点 → 三个列表能加载 →（若配了 `ADMIN_TOKEN`）任选一条编辑保存 → 控制台无 401 / 网络错误 → `curation_events` / `curation_teams` / `curation_meta` 数据实际更新。
+**冒烟**：
+- ✅ **读**：打开站点 → 三个列表应加载真实数据（实测 Events 总数 **3683** / Teams **23** / Meta count **57**）。
+- ⚠️ **写**：需「本仓库新版 `worker.mjs` 已部署到 `[0]`/`[1]`」**且**已配 `ADMIN_TOKEN`；否则写会 404/401 或提示缺令牌。**公开站点建议保持只读**（见顶部限制）。
 
 ## 目录结构
 
