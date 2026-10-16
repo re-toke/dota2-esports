@@ -19,7 +19,7 @@ DOTA2 电竞小程序的 curation 数据管理后台，用于在 Web 端管理 S
 ### 已知限制
 - 🔴 **写路径需把新版 `worker.mjs` 重新部署到 `[0]`/`[1]`**（Deno 为手贴副本；`[2]` 随 push 自动部署）。在那之前经中转的**写**会 404/401（**读不受影响**）。
 - 🔴 **公开站点不建议开写**：GitHub Pages 在 public 仓库上**无访问控制**，而 `VITE_ADMIN_TOKEN` 会被**内联进公开 bundle** ⇒ 等于**公开写令牌**。**建议保持只读**（不配 `ADMIN_TOKEN`）。
-- ✅ **首屏已优化（2026-10-16）**：Events 改为**服务端分页**（每页 20 行 ≈**6.6KB / ~1.9s**，原为全量 ≈1.3MB / ~24s）；搜索**同时覆盖规范名与别名**（服务端 `or`，见 `api/supabase.js#eventSearchFilter`）。**Meta 页**同步优化：挂载/刷新**只取 `curation_meta`**，全量 `events/teams` **仅在点「重新计算 version」时按需拉取**（该功能固有需全量 rows）。
+- ✅ **首屏已优化（2026-10-16）**：Events 改为**服务端分页**（每页 20 行 ≈**6.6KB / ~1.9s**，原为全量 ≈1.3MB / ~24s）；搜索**同时覆盖规范名与别名**（服务端 `or`，见 `api/supabase.js#eventSearchFilter`）。**Meta 页**同步优化：挂载/刷新**只发 2 个单行读**（`curation_meta` 的 `ti_contestant_ids` + `version`），**不再触碰 events/teams** —— version 改由**服务端计算、本页只读展示**，原「重新计算 version」按钮（含全量拉取 + 客户端 MD5）已**彻底移除**。
 - ⚠️ **中转单点 + 额度**：admin 流量计入 Deno 免费额度；`[0]` 挂则 admin 读也挂。
 - ℹ️ 经中转读取**不依赖** admin 的 anon key（中转用**它自己的** key 覆盖：`worker.mjs` 的 `Object.assign(headers, sbHeaders)`）⇒ `SUPABASE_ANON_KEY` 仅留作直连备用。
 
@@ -47,22 +47,24 @@ DOTA2 电竞小程序的 curation 数据管理后台，用于在 Web 端管理 S
 
 | 模块 | 查询（读） | 写操作（新增/编辑/删除） |
 | ---- | ---------- | ------------------------ |
-| 赛事管理（`/events`） | ✅ 真实查询 `curation_events`，按规范名 / 别名模糊搜索、前端分页（pageSize=20） | ✅ `writeEvent` / `deleteEvent` → EF `admin-write` |
+| 赛事管理（`/events`） | ✅ 真实查询 `curation_events`，**服务端分页**（每页 20 行）+ 服务端搜索（规范名 / 别名 `or` 双条件） | ✅ `writeEvent` / `deleteEvent` → EF `admin-write` |
 | 战队管理（`/teams`） | ✅ 真实查询 `curation_teams`，按名称 / 缩写 / 别名模糊搜索 | ✅ `writeTeam` / `deleteTeam` → EF `admin-write` |
-| TI 名单管理（`/meta`） | ✅ 真实查询 `curation_meta`，展示 version / count / updatedAt / ids | ✅ `updateMeta` → EF `admin-write`（key 已参数化，默认 `ti_contestant_ids`） |
+| TI 名单管理（`/meta`） | ✅ 真实查询 `curation_meta`（**2 个单行读**：`ti_contestant_ids` + `version`）；version 由**服务端计算、本页只读展示**，另展示 count / updatedAt / ids | ✅ `updateMeta` → EF `admin-write`（key 已参数化，默认 `ti_contestant_ids`） |
 
 ## 数据访问层
 
 `src/api/supabase.js` 是**真实实现**；`src/api/cloudbase.js` 仅为 `export * from './supabase.js'` 的兼容垫片（视图仍从 `@/api/cloudbase` import，文件名保留以兼容既有 import）。
 
-- **读**：`restAll(table, select)` 用 `Range` 头分页拉全量（绕过 PostgREST 单次 max-rows 上限）。
+- **读**：`restAll(table, select)` 用 `limit`/`offset` 查询参数**并行**分页拉全量（绕过 PostgREST 单次 max-rows 上限；⚠️ 经中转 `/sb` 时 `Range` 头**不被转发**，故改用 query 参数）。
   - `fetchEvents()` → `curation_events`（`canonical_key, league_id, data`）→ 统一转 `{ _id, ...data }`。
   - `fetchTeams()` → `curation_teams`（`team_id, data`）→ 统一转 `{ _id: String(team_id), team_id, ...data }`。
   - `fetchMeta()` → `curation_meta`（`key=eq.ti_contestant_ids`，取 `value`）。
+  - `fetchCurationVersion()` → `curation_meta`（`key=eq.version`，取 `value.v`；**服务端每次写入后 bump**）。
 - **写**：`callAdminWrite(operation, params)` POST 到 `${VITE_SUPABASE_URL}/functions/v1/admin-write`，头带 `x-admin-token`。
   - `writeEvent` / `deleteEvent` / `writeTeam` / `deleteTeam` / `updateMeta`。
   - 返回 `{ success, version, source }`（与云函数时期契约一致）。
-- **纯函数工具**：`normalizeEventName(name)`（与 `utils/consensus.js` 的 `normName` 一致）、`versionFromData(events, teams, tiIds)`（MD5 前 8 位数据指纹，浏览器端内嵌 RFC 1321 实现，与 Node `crypto.createHash('md5')` 输出一致）。
+- **纯函数工具**：`normalizeEventName(name)`（与 `utils/consensus.js` 的 `normName` 一致）。
+  - ⚠️ 原 `versionFromData(...)`（浏览器端 MD5 数据指纹）已于 **2026-10-16 移除** —— version 改由**服务端/CI 计算**、前端**只读展示**（见上 `fetchCurationVersion`）。
 
 ## 字段约定（Supabase 现行 schema）
 
