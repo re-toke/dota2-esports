@@ -70,6 +70,48 @@ async function restAll(table, select, extraQuery = '') {
 // ===== 查询操作（读）=====
 
 /**
+ * ★ 2026-10-16：**赛事列表服务端分页**（修「Events 首屏 ~24s」）。
+ *   原实现把**全部 3683 行**（含完整 `data`，≈1.3MB / 4 页）拉回前端再客户端搜索+分页
+ *   ⇒ 经中转冷缓存 ~24s。改为**服务端分页**：每次只取当前页（20 行 ≈6.6KB / ~1.9s）。
+ *
+ *   关键词搜索**在服务端做**，且**同时覆盖规范名与别名**（`or` 两条件）：
+ *     · 规范名：`canonical_key.ilike.*<规范化关键词>*`（与键同口径，走 `normalizeEventName`）；
+ *     · 别名：  `data->>aliases.ilike.*<原词小写>*` —— `aliases` 是 jsonb 数组，`->>` 取其 **JSON 文本**
+ *       （保留原始写法如 `["EPL Masters 2026"]`）⇒ 用**保留空格的原词**匹配（大小写不敏感）。
+ *
+ *   ★★ 关键坑（曾误判为「PostgREST 不支持 jsonb 路径」）：`->>` 中的 `>` **必须 URL 编码成 `%3E%3E`**；
+ *      裸 `>>` 会被 shell / URL 层吞掉 ⇒ 服务端报 400 或匹配不到。实测 `%3E%3E` 形式**完全可用**。
+ *   ⚠️ `or=(...)` 内不得出现 `,` `(` `)` `*`（`*` 是 PostgREST 通配符）⇒ 关键词统一剔除这些字符。
+ *   · `order=canonical_key.asc` **必需**：无序分页会漏行/重复行。
+ *
+ * @returns {Promise<{rows: Array, total: number}>} rows 形状同 fetchEvents（{ _id, ...业务字段 }）
+ */
+// 关键词 → PostgREST `or` 过滤串（规范名 + 别名两种口径）
+function eventSearchFilter(keyword) {
+  const raw = String(keyword || '').trim()
+  if (!raw) return ''
+  // 剔除 `or` 语法字符与通配符，再按 URL 编码（中文等会被编码，PostgREST 侧自动解码）
+  const esc = (s) => encodeURIComponent(String(s).replace(/[,()*]/g, '').trim())
+  const parts = []
+  const norm = normalizeEventName(raw)
+  if (norm) parts.push(`canonical_key.ilike.*${esc(norm)}*`)
+  const rawLower = raw.toLowerCase()
+  if (rawLower) parts.push(`data-%3E%3Ealiases.ilike.*${esc(rawLower)}*`)
+  return parts.length ? `&or=(${parts.join(',')})` : ''
+}
+
+export async function fetchEventsPage({ limit = 20, offset = 0, keyword = '' } = {}) {
+  const filter = eventSearchFilter(keyword)
+  const url = `${BASE}/rest/v1/curation_events?select=canonical_key,data&limit=${limit}&offset=${offset}&order=canonical_key.asc${filter}`
+  const res = await fetch(url, { headers: { ...authHeaders(), Prefer: 'count=exact' } })
+  if (!res.ok) throw new Error(`REST curation_events HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`)
+  const rows = (await res.json()) || []
+  // 总数取自 `Content-Range`（如 `0-19/3683` 的 3683）；`*` 时回 0（前端据此显示未知）
+  const total = Number(((res.headers.get('Content-Range') || '').split('/')[1] || '').trim()) || 0
+  return { rows: rows.map((r) => ({ _id: r.canonical_key, ...(r.data || {}) })), total }
+}
+
+/**
  * 查询全部赛事
  * @returns {Promise<Array>} 赛事数组（形状 { _id, ...业务字段 }）
  */

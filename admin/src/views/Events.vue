@@ -5,18 +5,18 @@
  * - 查询操作直接用 CloudBase JS SDK（读）。
  * - 写操作（新增/编辑/删除）经 aggregation 云函数 adminWriteCuration 中转。
  */
-import { ref, computed, onMounted } from 'vue'
-import { fetchEvents, writeEvent, deleteEvent } from '@/api/cloudbase'
+import { ref, watch, onMounted } from 'vue'
+import { fetchEventsPage, writeEvent, deleteEvent } from '@/api/cloudbase'
 import EventFormDialog from '@/components/EventFormDialog.vue'
 
-// ===== 数据状态 =====
-const allEvents = ref([])
+// ===== 数据状态（★ 2026-10-16：**服务端分页**，不再把 3683 行全量拉回前端）=====
+const rows = ref([])        // 当前页数据（元素形状 { _id, ...业务字段 }）
+const total = ref(0)        // 服务端返回的总数（Content-Range）
 const loading = ref(false)
-const keyword = ref('')
-
-// ===== 分页（前端分页）=====
+const keyword = ref('')     // 搜索关键词（服务端按规范化名称 ilike 匹配）
 const currentPage = ref(1)
 const pageSize = ref(20)
+let kwTimer = null
 
 // ===== 对话框状态 =====
 const dialogVisible = ref(false)
@@ -34,34 +34,41 @@ function formatUnix(seconds) {
   return `${y}-${m}-${day}`
 }
 
-// ===== 过滤 + 分页 =====
-const filteredEvents = computed(() => {
-  const kw = keyword.value.trim().toLowerCase()
-  if (!kw) return allEvents.value
-  return allEvents.value.filter((e) => {
-    const c = (e.canonical || '').toLowerCase()
-    const aliases = Array.isArray(e.aliases) ? e.aliases.join(' ').toLowerCase() : ''
-    return c.includes(kw) || aliases.includes(kw)
-  })
-})
+// ★ 2026-10-16：过滤与分页**全部下沉到服务端**（原为本文件内的 computed 客户端过滤/切片）。
+//   原因：全量 3683 行 ≈1.3MB，经中转冷缓存 ~24s；改服务端分页后每页仅 20 行 ≈6.6KB / ~1.9s。
+//   搜索**同时覆盖规范名与别名**（`or` 两条件，见 api/supabase.js 的 `eventSearchFilter`），
+//   ⇒ 与原先的客户端搜索口径一致（规范名 + aliases），**无能力回退**。
 
-const pagedEvents = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value
-  return filteredEvents.value.slice(start, start + pageSize.value)
-})
-
-// ===== 查询 =====
+// ===== 查询（服务端分页 + 服务端搜索）=====
 async function loadEvents() {
   loading.value = true
   try {
-    allEvents.value = await fetchEvents()
+    const { rows: r, total: t } = await fetchEventsPage({
+      limit: pageSize.value,
+      offset: (currentPage.value - 1) * pageSize.value,
+      keyword: keyword.value,
+    })
+    rows.value = r
+    total.value = t
   } catch (e) {
     ElMessage.error('查询赛事失败：' + (e.message || e))
-    allEvents.value = []
+    rows.value = []
+    total.value = 0
   } finally {
     loading.value = false
   }
 }
+
+// 页码 / 每页条数变化 ⇒ 重新取该页
+watch([currentPage, pageSize], () => loadEvents())
+// 关键词变化 ⇒ 防抖 300ms + 回到第 1 页（页码变则交由上面的 watch 触发加载）
+watch(keyword, () => {
+  if (kwTimer) clearTimeout(kwTimer)
+  kwTimer = setTimeout(() => {
+    if (currentPage.value !== 1) { currentPage.value = 1; return }
+    loadEvents()
+  }, 300)
+})
 
 // ===== 写操作（经云函数中转）=====
 function handleAdd() {
@@ -135,13 +142,13 @@ onMounted(loadEvents)
       title="写操作提示"
       type="info"
       :closable="false"
-      description="新增 / 编辑 / 删除 经云函数 adminWriteCuration 中转写入云数据库，每次写操作后自动重算 version 并记录 admin-logs。"
+      description="新增 / 编辑 / 删除 经 EF admin-write 中转写入 Supabase，每次写操作后自动重算 version 并记录 admin-logs。"
       show-icon
     />
 
     <el-table
       v-loading="loading"
-      :data="pagedEvents"
+      :data="rows"
       border
       stripe
       empty-text="暂无赛事数据"
@@ -189,7 +196,7 @@ onMounted(loadEvents)
       <el-pagination
         v-model:current-page="currentPage"
         v-model:page-size="pageSize"
-        :total="filteredEvents.length"
+        :total="total"
         :page-sizes="[20, 50, 100]"
         layout="total, sizes, prev, pager, next, jumper"
         background

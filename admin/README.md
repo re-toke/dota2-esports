@@ -19,7 +19,7 @@ DOTA2 电竞小程序的 curation 数据管理后台，用于在 Web 端管理 S
 ### 已知限制
 - 🔴 **写路径需把新版 `worker.mjs` 重新部署到 `[0]`/`[1]`**（Deno 为手贴副本；`[2]` 随 push 自动部署）。在那之前经中转的**写**会 404/401（**读不受影响**）。
 - 🔴 **公开站点不建议开写**：GitHub Pages 在 public 仓库上**无访问控制**，而 `VITE_ADMIN_TOKEN` 会被**内联进公开 bundle** ⇒ 等于**公开写令牌**。**建议保持只读**（不配 `ADMIN_TOKEN`）。
-- ⚠️ **首屏偏慢**：events 全量 ≈1.3MB、单页 ~400KB，经中转（Deno 免费层）**冷缓存约 24s**；中转 REST 有 **120s 短缓存**，命中后 <1s。根治需「服务端分页 / 瘦投影」（另议）。
+- ✅ **首屏已优化（2026-10-16）**：Events 改为**服务端分页**（每页 20 行 ≈**6.6KB / ~1.9s**，原为全量 ≈1.3MB / ~24s）；搜索**同时覆盖规范名与别名**（服务端 `or`，见 `api/supabase.js#eventSearchFilter`）。⏳ **Meta 页**仍用全量 `fetchEvents`（其 `versionFromData` 需全量 rows）⇒ 该页仍偏慢（另议）。
 - ⚠️ **中转单点 + 额度**：admin 流量计入 Deno 免费额度；`[0]` 挂则 admin 读也挂。
 - ℹ️ 经中转读取**不依赖** admin 的 anon key（中转用**它自己的** key 覆盖：`worker.mjs` 的 `Object.assign(headers, sbHeaders)`）⇒ `SUPABASE_ANON_KEY` 仅留作直连备用。
 
