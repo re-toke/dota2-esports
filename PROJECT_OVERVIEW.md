@@ -1,197 +1,159 @@
-# DOTA2 赛事小程序 · 项目全景
+# DOTA2 赛事通 · 项目全景（现行）
 
-<!-- ARCHIVED-BANNER -->
-> ⚠️ **本文档已归档**（最后更新 2026-08-01，项目此后已演进约 2 个月）。
-> **请勿以本文作为现状依据。** 证据优先级：**代码 / `git log` > `deliverables/` > 本文 > 整合版**。
-> 已核实的两处典型失真：
-> · 文中描述的**微信云函数链路（`aggregation` / `upcoming_schedule` 预热等）已彻底退役** —— 现为 **Supabase 单后端**；
-> · **「进行中 = 最近 7 天」已改为「2 小时」**（见 `utils/config.js` 的 `leagueWindow`）。
-> 权威入口（均在**本仓库内**且最新）：
-> · `deliverables/项目复核与优化方案-v2-2026-09-26.md`
-> · `deliverables/复核意见-优化方案v2-2026-09-26.md`
-> · `deliverables/P0-B-SLO口径与采集点-2026-09-26.md`
-> 完整技术文档：`../DOTA2赛事通-项目技术文档-整合版.md`（工作区外 · v8.93 · 2026-09-25）
-
-> 生成时间：2026-07-30 ｜ 用途：项目重新全面认知（架构 / 数据流 / 模块职责 / 已知坑）
-> 路径：`D:\WorkBuddy项目文档\2026-07-19-15-21-29\dota2-esports\`
+> **文档状态：现行有效** ｜ 最后更新 **2026-10-16** ｜ 代码基线 `14de946`
+> 与 `README.md` 同为本仓库的**权威文档**；`CODE_WIKI.md` / 根 `DEPLOY.md` / `DOMAIN-NAMING-REFERENCE.md` 为历史文档（已归档）。
+> 生成口径：**逐条以当前工作树源码为准**；证据优先级 **代码 / `git log` > `deliverables/` > 本文 > 历史归档文档**。
 
 ---
 
-## 1. 项目定位与技术栈
+## 1. 定位
 
-**一句话**：一个 DOTA2 电竞赛事数据小程序，聚焦 **S 级及以上赛事、战队成员与历史、双方对战胜负**，原生小程序 + TDesign 组件库，暗色电竞风 UI。
+一个 DOTA2 电竞赛事信息小程序：聚焦 **S 级及以上赛事**、**战队 / 队员资料**、**双方历史交锋**。
+原生小程序 + TDesign，暗色电竞风；**第三方非官方粉丝工具**，无付费 / 无广告 / 无用户生成内容。
 
-| 维度 | 内容 |
+**一句话架构**：`客户端 ──(全部流量)──> 中转（境外边缘，国内可达）──> Supabase 单后端 ──> 上游四源`。
+
+> 🔴 中转的**存在理由**（2026-10-10 定论）：`*.supabase.co` 在国内被 **SNI 阻断**（DNS/TCP 均可，**TLS 阶段被 RST**），而 `api.opendota.com` 亦有 DNS 劫持 ⇒ 客户端直连无法取数。中转部署在**境外边缘**（能连上 Supabase），其域名国内可达。
+
+---
+
+## 2. 端到端数据流
+
+### 2.1 首页首屏（`pages/index/index.js`）
+```
+① pro/live settle   getProMatches + getLiveMatches（api.js → 中转 /od/api/*；滑动窗口限流 + 429/5xx 退避）
+② 首批渲染          → 卡片（含量级彩条 / 直播脉冲）
+③ ⑥段将来赛程       **延迟发起**（首屏 settle 之后，并发上限 3）⇒ 不抢首屏并发
+④ logo/头像补全     explorer 批量（api.getTeamLogos）→ 未命中回落 findTeamByName（OpenDota 24h 缓存）
+⑤ 合并渲染窗口      ★ 减少渲染轮次（实测轮次减半）
+```
+
+### 2.2 详情页（分包 `subpackages/detail`）
+| 页面 | 关键链路 |
 |---|---|
-| 形态 | 微信小程序（appid `wx838148b512800a3a`，libVersion 3.0.0） |
-| 语言/框架 | 原生 WXML/WXSS/JS + TDesign 小程序组件库（`tdesign-miniprogram@^1.15.3`） |
-| 后端 | 单云函数 `aggregation`（CloudBase / wx-server-sdk + got），承担 OpenDota 代理、Liquipedia 抓取、STRATZ/Steam 直连、数据聚合、cron 预热 |
-| 数据源 | **OpenDota**（主，赛事/战队/英雄/物品/比赛）、**Liquipedia**（奖金池/阵容/赛程/logo 元数据）、**STRATZ**（GraphQL，已停用）、**Steam Web API**（奖金池/logo 兜底）、**本地 curation**（人工分级/收录/展示名） |
-| 状态管理 | 无 mobx/store，跨页共享靠 `app.globalData`（heroMap/itemMap 预加载）+ 各 util 的内存/Storage 缓存 |
-| 构建 | `packNpmManually: true`（手动构建 npm）；husky pre-commit 跑 ESLint + `npm test`（canonical 58 断言） |
-| 测试 | `npm test`（test-canonical）、`npm test:all`（sources+consensus+canonical）；含 G13/G14/G15 双源一致性闸门 |
+| `league-detail` | curation 命中（赛期/分级/展示名）→ explorer 补队伍与对阵 → LP 兜底；队标走**批量** explorer（≤12 次 → 1 次）|
+| `team-detail` | **两阶段**：`?recent=50` 先出「最近 50 场」（~0.7s）⇒ 后台全量覆盖（**必须带 `X-Trim: 0`** 豁免中转默认裁剪，否则被裁到 300）|
+| `h2h` | 中转 `?vs=<teamId>` **端点级过滤**（全历史交集的精确语义）|
+| `match-detail` | OpenDota 对局详情 |
 
----
-
-## 2. 总体架构（多源数据融合）
-
+### 2.3 curation 热更新（`utils/remoteCuration.js`）
 ```
-┌─────────────────────────── 微信小程序（前端） ───────────────────────────┐
-│  pages/ (5 tab) + subpackages/detail + subpackages/data                  │
-│        │ 所有数据请求经 utils/api.js 封装                                   │
-│        ▼                                                                 │
-│  utils/api.js  ──request()──► 滑动窗口限流 + 429/5xx 重试                  │
-│        │  config.cloudProxy.enabled ? 走云函数 : 直连 OpenDota            │
-│        ├──────────── cloudBreaker（连续失败3次熔断→回退直连）────────────┤
-└────────┼────────────────────────────────────────────────────────────────┘
-         ▼
-┌────────────────────── 云函数 aggregation（CloudBase） ──────────────────────┐
-│  exports.main 按 action 分发：                                            │
-│   • OpenDota 代理（got + safeFetch 指数退避，L1 内存 + L2 cloud DB 缓存）  │
-│     getLeagues / getLeagueMatches / getLeagueWindows / getTeam(s) /       │
-│     getPlayer(s) / getHeroes / searchTeams                               │
-│   • 专用 HANDLERS（Map 路由 O(1)）：                                       │
-│     liquipediaLeagueMeta / liquipediaScheduledMatches / liquipediaTeamLogo│
-│     / liquipediaListTournaments / liquipediaPrewarm / getLiquipediaUpcoming│
-│     / getUpcomingSchedule / stratzGql / steamProxy / 搜索+战队索引 /      │
-│     订阅消息 / 关注画像                                                    │
-│   • handleTimer(cron) 预热热端点                                          │
-└────────┬────────────────────────────────────────────────────────────────┘
-         ▼
-┌──────────────── 多源融合编排（utils/sources.js 为中枢） ────────────────────┐
-│  getLeagueMetadata：并行 Liquipedia(全量元数据) + Steam(奖金池兜底) → 合并  │
-│  getLeagueTier   ：community/curation/opendota/stratz/liquipedia 五候选    │
-│                    → consensus.consensusTier 加权投票 → SSS/S/A/B/C        │
-│  getLeagueWindow ：多源时间中位数比对                                       │
-│  leagueDisplayName / canonicalLeagueName：展示名单一出口（canonical 优先）  │
-└─────────────────────────────────────────────────────────────────────────┘
+读：curation_events(分页) + curation_teams + curation_meta(ti_contestant_ids)
+探针：curation_meta.key='version'（EF admin-write **每次成功写入后** bump {v:Date.now()}；10min 节流）
+      回退：curation_events 的最大 data.updatedAt（覆盖所有 upsert）
+⇒ 变了才重拉；缓存 6h（近期子集 30min）
 ```
 
-**关键设计**：Liquipedia 走云端而非 `wx.request`，根因是小程序**无法设置 User-Agent**，而 Liquipedia 强制要求 UA；云函数（Node）可以。
-
 ---
 
-## 3. 云后端 `cloudfunctions/aggregation/index.js`
-
-单文件单入口，按 action 分发。要点：
-- **OpenDota 代理**：`buildPath`/`resolveTtl` 路由；`safeFetch` 对 5xx/429 做指数退避；两级缓存（L1 内存 + L2 cloud DB），key 带 `dataVersion` 前缀（部署即失效）。
-- **专用 action** 走 `HANDLERS` Map（O(1) 分发），覆盖 Liquipedia 抓取/预热、STRATZ/Steam 直连、搜索索引、订阅消息、关注画像。
-- **不调用外部云函数**；STRATZ/Steam 均 HTTPS 直连（key 取环境变量）。
-- **改完后必须重新「上传并部署：所有文件」**——本地改 `index.js` / `liquipedia-parse.js` / `liquipedia-slugmap.json` 不会自动生效。
-
----
-
-## 4. 数据 API 编排 `utils/api.js` + `utils/sqlFragments.js`
-
-- `api.js` 封装 OpenDota，导出 `getLeagues/getLeagueWindows/getLeagueMatches/getMatch/getMatchPlayers/searchTeams/getTeam*/getHeroes/getHeroStats/getItems` 等。
-- `request()` 带滑动窗口限流 + 429/5xx 重试；`cached/cachedFresh/cachedFreshIncremental` 实现 TTL、stale-while-revalidate、增量游标合并（省流量）。
-- SQL 片段集中在 `sqlFragments.js`，云函数侧保留同步副本。**赛事列表窗口当前是 `interval '6 months'`（近半年，已收敛自原 1 年）**；`LEAGUE_WINDOWS_SQL` 按 leagueid 聚合 min/max/last_end/count。
-
----
-
-## 5. 多源数据融合（核心编排）
+## 3. 模块职责速查（`utils/`）
 
 | 模块 | 职责 |
 |---|---|
-| `utils/sources.js` | 编排中枢：合成赛事卡片（Liquipedia+Steam）、定级（五源共识）、时间窗、展示名 |
-| `utils/consensus.js` | `consensusTier` 加权投票（curation 权重 > opendota），输出 SSS/S/A/B/C |
-| `utils/curation.js` | `CURATED_EVENTS`(220 条)/`CURATED_TEAMS`，人工分级/收录/赛期权威；`remoteCuration` 远程覆盖 |
-| `utils/liquipedia-parse.js` | 纯函数解析 wikitext：`parseLeagueMetadata/parseScheduledMatches/parseLeagueTier/parseTeamLogo`（client/cloud 双源字节一致，G14 闸门） |
-| `utils/liquipedia.js` | 经云代理调云函数抓 wikitext；`liquipediaSlugFor` 走 slugmap |
-| `utils/liquipedia-slugmap.json` | **123 条** OpenDota 名→Liquipedia slug 映射（2026-07-28 收敛自原 146，剔除 23 条错配）。直查命中率仅 ~2.5%，映射后显著提升 |
-| `utils/stratz.js` | STRATZ GraphQL（**当前 `stratz.enabled=false`，Cloudflare 拦截已停用**） |
-| `utils/steam.js` | Steam Web API 奖金池/logo 兜底，走云代理，key 由环境变量注入 |
+| `config.js` | **唯一事实源**：`PROXY_HOSTS`、`endpoints`、`cacheTTL` 预算表、`timeWindow`、`debug.verboseLog` |
+| `endpoints.js` | 出口切换（主→备 + 会话粘滞 + 开机体检）；`count()===1` 时全部 no-op |
+| `api.js` | OpenDota 封装：滑动窗口限流、429/5xx 退避重试、TTL 缓存（SWR）、**透传 `X-Trim`/`X-Gzip-Ok`** |
+| `supabaseClient.js` | PostgREST 读 + EF 调用（`_efCall`）；EF 熔断按 `name\|action` 分桶 |
+| `cloudProxy.js` | EF action 路由白名单 `EDGE_ACTIONS`、热缓存、去重 |
+| `sources.js`（+ `sourcesPure.js`）| **多源融合中枢**：元数据合并、分级加权投票、赛期比对、展示名单一出口 |
+| `consensus.js` | 多源共识（分级投票 / 成员合并）|
+| `names.js` | 队名归一化**两族**（ASCII / 含 CJK·西里尔）|
+| `seriesStatus.js` | 系列赛终局判据**唯一纯实现**（3 处收敛；6 处刻意不收敛并在调用点注明）|
+| `remoteCuration.js` | 远端 curation 热更新 + 廉价版本探针 |
+| `curation.js` / `curation-shared.js` | 本地 curation 快照与查表记忆化（缓存键含 `game`）|
+| `image.js` | 图片 URL 规范化（http→https、死域剔除、**镜像收敛**：`avatars.steamstatic.com` → Akamai 镜像）|
+| `cache.js` / `cloudCache.js` / `logoCache.js` / `logoLocal.js` | 各层缓存（含负缓存 `markNegative`）|
+| `heroes.js` / `itemZh.js` / `neutralItems.js` | 英雄 / 物品（含中文名）|
+| `liquipedia.js` / `liquipedia-parse.js` / `lp-ua.js` | LP 解析与 UA 约束（云端抓取）|
+| `haglund.js` / `liveSources.js` | 备用数据源 / 直播源 |
+| `diagnostics.js` / `monitor.js` / `experiment.js` | 「我的」页数据健康、埋点上报、实验开关 |
+| `indexCardHelpers.js` / `index-builders.js` / `homeDedupe.js` | 首页卡片纯函数层 / 索引构建 / 去重 |
+| `incremental.js` / `follow.js` / `followBatch.js` / `reminderStrategy.js` | 增量更新、关注与提醒 |
+| `searchHistory.js` / `league-canon-map.js` / `discover-core.js` | 搜索历史 / 联赛规范映射 / 赛事发现 |
 
-**赛事收录与分级**：
-- S/A 判定：`communityTierFromName` 正则（排除预选/业余/慈善）+ curation 显式 tier；Liquipedia Tier1→S、2→A、3→B、4→C。
-- **收录条件**：`rank>=1` 门槛 + curation 数据；OpenDota 仅返已开赛赛事，**未开赛且未写 curation 的 S/A 会漏收**（需定期跑 `curation-coverage.js` 补）。
-- 展示名统一走 `canonicalLeagueName`（curation canonical → 共识 → 原始），全站禁用直接渲染 OpenDota `l.name`。
-
----
-
-## 6. 前端：页面与分包
-
-**主包（5 tab + 搜索）**：
-| 页面 | 职责 | 数据源 |
-|---|---|---|
-| `pages/index` 首页 | 关注战队「下一场」横向卡片流 + S/SSS 推荐位；每秒自绘倒计时 | `follow.list` + `api.getTeamMatches` |
-| `pages/leagues` 赛事 | 全部/进行中/已结束/即将到来 + 等级筛选 + 智能排序 + 战队筛选 + 列表/周轴视图 | `getLeagues/getLeagueWindows`，upcoming 三级回退（云缓存→`upcoming-local.json`→sources） |
-| `pages/teams` 战队 | 热门预设 + 本地模糊搜索 + OpenDota `/search` | `api.getTeam` 补 logo/rating |
-| `pages/follow` 关注 | 战队/赛事双 Tab，纯本地；订阅状态 + `reminderStrategy` 智能提醒 | 本地 `follow.list` |
-| `pages/data` 资料库 | 英雄/物品入口；`onShow` 预载 data 分包 | — |
-| `pages/search` 搜索 | 跨赛事/战队/物品分组结果 + 纠错 + 历史 | 本地 + OpenDota |
-
-**分包**：
-- `subpackages/detail`（league-detail / match-detail / team-detail / h2h / privacy）：详情页；league-detail 并行 OpenDota+Liquipedia 赛程，三段式 LIVE/UPCOMING/RECENT，Tab 赛程/战队/排名；match-detail 含经济/经验曲线 + `realtime` + F1 直播入口。
-- `subpackages/data`（hero / hero-detail / item / item-detail）：英雄/物品库，属性筛选 + 胜率排序 + 合成树。
-
-**preloadRule**：`index/leagues/teams` 预载 detail 包；`data` 预载 data 包；`search` 仅 wifi 预载 data 包（双重 `wx.preloadSubpackage` 保障）。
+> 生成物（**勿手改**）：`utils/*-local.json`（快照，CI 生成）、`subpackages/detail/team-logo-local-data.js`（队徽快照，CI 生成）。
 
 ---
 
-## 7. 前端：组件与自定义 tabBar
+## 4. curation 体系（人工运营面）
 
-- **自定义组件**（`components/`，均 `styleIsolation: isolated`）：`anchor-card`(KPI 卡)、`chart`(V4 自绘经济/经验双序列+事件标记)、`empty-state`、`image-fallback`(logo 失败回退首字母圆)、`live-card`(F1 直播聚合)、`onboarding`、`skeleton`。除 `empty-state` 外均不依赖 TDesign。
-- **自定义 tabBar**（`custom-tab-bar/`，对应 `app.json` `tabBar.custom:true`）：5 项（首页/赛事/战队/关注/资料库），`getTabBar().setData({selected})` 同步选中态，`env(safe-area-inset-bottom)` 安全区适配，低端机降级关 `backdrop-filter: blur`。
-
----
-
-## 8. 工具层与状态/缓存/关注/订阅
-
-**缓存**：`cache.js`（本地 Storage TTL，stale-while-revalidate，6MB 超阈值 LRU prune）；`cloudCache.js`（云端跨设备缓存，优先云端回退本地双写）；`cloudProxy.js`（云代理封装）；`cloudBreaker.js`（连续失败 3 次熔断，成功复位）。
-
-**关注与订阅**：`follow.js`（本地关注 teams/leagues，存 `dota2_follow`，无需登录）；`subscribe.js`（微信订阅消息，模板已配，24h 冷却 + 日限 5）；`reminderStrategy.js`（提前量+分级 SSS/S/A 过滤）；`searchHistory.js`（最多 10 条）。
-
-**实时与直播**：`realtime.js`（WebSocket 骨架，断线指数退避降级轮询）；`liveSources.js`（B站/虎牙/斗鱼深链聚合，不抓流）；赛事生命周期状态机在 `util.js` 的 `isOngoing`（三路径：OpenDota 真实结束 / curation 日期窗 / 未结算兜底，`ongoingBufferSec=2h`；`eventLifecycle.js` 已于 08-01 删除）。
-
-**A/B 与监控**：`experiment.js`（云端分组，失败回退本地 DEFAULTS）；`monitor.js`（`wx.reportAnalytics` 仅生产环境，同会话去重）。
-
-**图片/LOGO**：`image.js`(`optimizeImageUrl`/`toLogoUrl`)、`logoCache.js`(30天 TTL)、`logoPreload.js`(**因 `proxyBase` 未填整体 no-op**)、`steam.js`。
-
-**基础工具**：`util.js`(nowSec/formatTime/isOngoing/statusOf/validateLeagueWindow 等)、`heroes.js`/`items.js`/`neutralItems.js`/`itemZh.js`(英雄/物品中文名)。
-
----
-
-## 9. 设计系统（暗色电竞风）
-
-- `app.wxss` 导入 TDesign token 后**强制暗色覆盖**：主题色 **DOTA2 暗金 `#C8A951`**（替换 TDesign 默认蓝）；胜绿 `#5fd35f` / 负红 `#e8443b` 语义色；背景 `#0e1116`、卡片 `#161b22`。
-- Tier 五级色 Token（SSS 亮金 / S 暗金 / A 紫 / B 蓝 / C 灰）单一来源。
-- `.container.with-tab-bar` 预留 `160rpx + env(safe-area-inset-bottom)`；每个 tab 页根容器加 `with-tab-bar` 类。
-
----
-
-## 10. 关键特性与已知坑
-
-**✅ 已落地**：
-- Liquipedia 集成（云端抓取 + slugmap + 双源一致性闸门 G14/G15），命中率从直查 2.5% 提升到映射后显著水平。
-- 近半年窗口收敛（probe `inWindow` 182 天 + 列表 SQL `6 months` + 预热上限 50），缓解时间成本/影响范围。
-- 比赛收录优化（`6bfbce7`）：修复未收录（模糊匹配后缀）、收录错误（rank 误排/静默升 S/正则过宽/重复卡）。
-
-**⚠️ 已知坑 / TODO**：
-1. **LOGO 慢（P0 未落地）**：`config.images.proxyBase` 为空，无法走代理缩放；第三方 CDN `cdn.cloudflare.steamstatic.com` 须加入 downloadFile 合法域，否则 logo 404。
-2. **无集中式状态管理**：globalData 需页面自行守卫 `heroReady/itemReady`。
-3. **STRATZ 已停用**（`stratz.enabled=false`）。
-4. **赛事收录漏收风险**：未开赛且未写 curation 的 S/A 必漏，需定期跑 `coverage`。
-5. **部署纪律**：改云函数/parse/slugmap 后必须手动「上传并部署：所有文件」，sync 脚本只更新磁盘镜像不触达云端。
-6. **npm 构建**：`packNpmManually:true` + tdesign 被 gitignore；拉新代码须 `npm install` + 开发者工具「构建 npm」，否则 `t-*` 缺失初始化崩。
-
----
-
-## 11. 近期变更脉络（来自工作记忆）
-
-- **2026-07-28**：Liquipedia slugmap 接入 + 近半年窗口收敛 + 双源一致性修复，整包提交 `fd3ef36`（24 文件，58/0）；剔除 14 条 ESL One 等届次/年份错配（ESL One 系列系统性塌缩）；修复 `liquipedia-parse.js` 云/端漂移（G14）。
-- **2026-07-30**：比赛收录功能优化，提交 `6bfbce7`（4 文件，test:all 38/0 + 48/0 + 58/0），修复未收录与 4 类收录错误。
-
----
-
-## 12. 构建与部署要点速查
-
-| 动作 | 命令 / 位置 |
+| 项 | 说明 |
 |---|---|
-| 静态检查 + 测试 | `npm run check:syntax` / `npm test` / `npm test:all` |
-| 同步 slugmap 到云端镜像 | `npm run sync:slugmap`（改 slugmap 后必跑） |
-| 同步 parse / canon | `npm run sync:parse` / `npm run sync:canon` |
-| Liquipedia 预热 | `npm run prewarm:liquipedia` |
-| curation 覆盖检查 | `npm run coverage`（或 `--offline`） |
-| 部署云函数 | DevTools 右键 `cloudfunctions/aggregation` → **「上传并部署：所有文件」** |
-| 构建 npm | DevTools 工具栏「工具 → 构建 npm」（tdesign 手动打包） |
+| 表 | `curation_events`（主键 `canonical_key`）/ `curation_teams`（`team_id`）/ `curation_meta`（`key`，如 `ti_contestant_ids`、`version`）|
+| 写入口 | **EF `admin-write`**（服务端 service key + `x-admin-token` 鉴权；每次写入后 bump 版本探针 + 落 `admin_logs`）|
+| 后台 | `admin/`（Vue 3 + Element Plus）→ **GitHub Pages** `https://re-toke.github.io/dota2-esports/`（哈希路由）；**经中转 `/sb` 读写** |
+| 读策略 | anon + RLS（三表 anon 只读）|
+| 版本语义 | ① `curation_meta.key='version'` = 服务端写入时间戳（**探针**，唯一消费方是客户端的廉价比对）；② `ti_contestant_ids.value` = TI 名单（`ids/count/updatedAt`）|
+
+---
+
+## 5. 缓存 · 降级 · 安全
+
+- **缓存五层**：T1 客户端内存热缓存 → T2 客户端 Storage（SWR）→ T3 中转 GET 短路 → T4 EF 内存 L1 → T5 `aggregation_cache`（KV）。
+- **降级链**：中转主出口失败 → 切备出口（仅**传输层失败**触发；429/5xx 只退避重试）→ 直连 OpenDota → 本地快照 / 本地 curation。
+- **失败可见**：「我的」页数据健康卡（`diagnostics`）；EF/中转失败与卡片质量**事件上报**。
+- **安全**：客户端**不持有真实 Supabase key**（中转服务端注入）；写权限只在 EF；`007-security-hardening.sql` 加了 `keep_alive` 列约束 + 写入频率触发器；中转按 IP 限流（默认 120/min，取不到 IP 则 **fail-open**）。
+
+---
+
+## 6. 可观测性
+
+| 手段 | 内容 |
+|---|---|
+| 分段埋点 | 首页/详情页 `[perf]` 分段耗时（`config.debug.verboseLog` 门控热路径日志）|
+| 线上事件 | `ef_failure` / `relay_failover` / `card_quality_violation`（微信后台「自定义分析」）|
+| 探针脚本 | `scripts/ops/probe-ef.js`（EF 健康）、`check-quota.js`（配额）、`check-snapshot-freshness.js`（快照）、`diag-report.js` |
+| 中转自检 | `/healthz`（回显 `ipSource`/`rlMax`/`rlSrc`/`routes`）、`/healthz?deep=1`（深检 EF + Supabase 可达）|
+
+---
+
+## 7. CI / 运维
+
+| workflow | 触发 | 作用 |
+|---|---|---|
+| `ci.yml` | push / PR | 全量门禁（`test:all` 等）|
+| `deploy-admin.yml` | push `admin/**` / 手动 | 构建并发布 admin 到 GitHub Pages |
+| `sync-upcoming.yml` | 定时 | 刷新三份快照并 commit |
+| `sync-liquipedia.yml` | 定时 | LP slug / 解析产物同步 |
+| `discover-tournaments.yml` | 定时 | 赛事发现 |
+| `ops-maintenance.yml` | 每日 | 清 `aggregation_cache` 过期行 + 快照新鲜度 + 配额探针（失败 → Webhook 二级告警）|
+| `ef-health.yml` | 每 6h | 打 EF 健康检查（保活 + 失败告警）|
+
+---
+
+## 8. 工程纪律
+
+- **门禁**：`check:syntax` + `eslint --rulesdir scripts/eslint-rules` + `npm run test:all`（套件清单以 `package.json` 为准）+ `infra/proxy/test.mjs`。
+- **契约守卫**（防「改 A 影响 B」）：`check-edge-actions`（`ACTION_MAP ∪ PARAM_MAP ⊆ EDGE_ACTIONS` + `cloudProxy.call('x')` 字面量扫描）、`check-ef-contract`、`check-card-contract`、`check-token-overreach`。
+- **pre-commit**：husky 跑 `check:syntax + eslint + npm test`。
+- **提交规范**：`feat|fix|perf|refactor|docs|chore(scope): 说明`。
+- **成对改动坑**（本项目踩过）：改「中转主机名」必须同时改 `PROXY_HOSTS` 与微信后台白名单；改「出口」勿在别处再写字面量。
+
+---
+
+## 9. 决策记录与已知技术债（现行）
+
+| # | 项 | 状态 |
+|---|---|---|
+| 1 | 客户端全部流量收口到中转（弃直连 `*.supabase.co`）| ✅ 已实施，**待发版**（线上旧版仍直连 ⇒ 数据不更新）|
+| 2 | 中转「默认裁剪 300」（C）+ 客户端 `X-Trim: 0` | ✅ 已实施；**须同包发版**（纪律，当前无回归）|
+| 3 | 三出口容灾（`[0]`/`[1]` Deno + `[2]` Netlify）| ⚠️ 只防域名级阻断；**跨提供商未落地**（CF 全系被 RST）|
+| 4 | 中转按 IP 限流 120/min | ⚠️ CGNAT 共享出口下有误伤风险；建议阈值上调至 300 |
+| 5 | admin 公网站 | ⚠️ 写令牌会内联进公开 bundle ⇒ 建议保持只读 |
+| 6 | `BUG-C` 底层设计债（用 `wx.cloud` 真值 gate EF 可用性）| ⚠️ 保留改法待做 |
+| 7 | `P1-17` 赛事名 CJK/西里尔归一族 | ⚠️ 未统一（队名两族已收敛）|
+| 8 | `aggregation_cache` 配额 | ✅ 2026-10-16 实测 **259/5000**、过期 **0** |
+| 9 | P2-21 主包瘦身 | ✅ 结构已核（队徽快照 205KB 已出主包）；**压缩后体积待 DevTools 实测** |
+| 10 | 快照新鲜度 | ✅ 三快照 0.2 天前（每日 CI）|
+
+---
+
+## 10. 修订日志（近三版）
+
+| 版本 | 日期 | 要点 |
+|---|---|---|
+| **v1.3.0（待发版）** | 2026-10-16 | 客户端改走中转（修数据不更新）；批次 1~5 共 30 项修复收口；详情页/首页提速；主包瘦身 ~200KB；admin 上线（GitHub Pages + 经中转读写）；P2-8 队标/头像批量化；收口「真机验证 waived」。**发版材料**：`deliverables/提审版本描述_v1.3.0_2026-10-16.md` |
+| v1.2.1 | 2026-09-28 | 对局状态/重复卡修复、BO 赛制误判修正、赛程待补提示、加载提速 |
+| v1.2.0 | 2026-09-22 | 「后端单点收敛」（云开发退役 → Supabase 单后端）+ DB 迁移 |
+
+---
