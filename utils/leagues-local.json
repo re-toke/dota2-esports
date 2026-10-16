@@ -1,17 +1,17 @@
 {
-  "generatedAt": 1792051379,
+  "generatedAt": 1792137433,
   "source": "opendota",
   "note": "build-time leagues snapshot (active 90d + curated 60d), refresh via scripts/sync/fetch-leagues-snapshot.js",
   "stats": {
-    "total": 10358,
+    "total": 10363,
     "kept": 36,
     "windows": 20
   },
   "leagues": [
     {
-      "leagueid": 14268,
-      "tier": "premium",
-      "name": "The International 2022"
+      "leagueid": 18359,
+      "tier": "professional",
+      "name": "Clavision DOTA2 Masters 2025: Snow-Ruyi"
     },
     {
       "leagueid": 15728,
@@ -19,34 +19,19 @@
       "name": "The International 2023"
     },
     {
-      "leagueid": 15910,
+      "leagueid": 19944,
       "tier": "professional",
-      "name": "ESL One Kuala Lumpur powered by Intel"
+      "name": "EPL Masters 2026 "
     },
     {
-      "leagueid": 16740,
+      "leagueid": 20009,
       "tier": "professional",
-      "name": "Riyadh Masters 2024 at Esports World Cup Qualifiers"
+      "name": "1win Essence II"
     },
     {
-      "leagueid": 17795,
+      "leagueid": 19785,
       "tier": "professional",
-      "name": "ESL One Raleigh 2025"
-    },
-    {
-      "leagueid": 18111,
-      "tier": "professional",
-      "name": "DreamLeague Season 26"
-    },
-    {
-      "leagueid": 18324,
-      "tier": "premium",
-      "name": "The International 2025"
-    },
-    {
-      "leagueid": 18359,
-      "tier": "professional",
-      "name": "Clavision DOTA2 Masters 2025: Snow-Ruyi"
+      "name": "Esports World Cup 2026"
     },
     {
       "leagueid": 10810,
@@ -54,9 +39,59 @@
       "name": "MDL Disneyland® Paris Major"
     },
     {
+      "leagueid": 19719,
+      "tier": "premium",
+      "name": "The International 2026"
+    },
+    {
+      "leagueid": 17795,
+      "tier": "professional",
+      "name": "ESL One Raleigh 2025"
+    },
+    {
       "leagueid": 19066,
       "tier": "professional",
       "name": "肛宝联赛-老婆杯"
+    },
+    {
+      "leagueid": 15910,
+      "tier": "professional",
+      "name": "ESL One Kuala Lumpur powered by Intel"
+    },
+    {
+      "leagueid": 18324,
+      "tier": "premium",
+      "name": "The International 2025"
+    },
+    {
+      "leagueid": 20176,
+      "tier": "professional",
+      "name": "BETBOOM Streamers Battle Dota 15"
+    },
+    {
+      "leagueid": 16740,
+      "tier": "professional",
+      "name": "Riyadh Masters 2024 at Esports World Cup Qualifiers"
+    },
+    {
+      "leagueid": 10296,
+      "tier": "premium",
+      "name": "The Kuala Lumpur Major"
+    },
+    {
+      "leagueid": 14268,
+      "tier": "premium",
+      "name": "The International 2022"
+    },
+    {
+      "leagueid": 20169,
+      "tier": "professional",
+      "name": "BLAST Slam VII China Qualifier"
+    },
+    {
+      "leagueid": 18111,
+      "tier": "professional",
+      "name": "DreamLeague Season 26"
     },
     {
       "leagueid": 19099,
@@ -74,16 +109,6 @@
       "name": "BLAST SLAM VIII"
     },
     {
-      "leagueid": 10296,
-      "tier": "premium",
-      "name": "The Kuala Lumpur Major"
-    },
-    {
-      "leagueid": 19719,
-      "tier": "premium",
-      "name": "The International 2026"
-    },
-    {
       "leagueid": 20208,
       "tier": "professional",
       "name": "BLAST SLAM IX"
@@ -92,31 +117,6 @@
       "leagueid": 20279,
       "tier": "professional",
       "name": "PGL Wallachia 2026 Season 9"
-    },
-    {
-      "leagueid": 19785,
-      "tier": "professional",
-      "name": "Esports World Cup 2026"
-    },
-    {
-      "leagueid": 19944,
-      "tier": "professional",
-      "name": "EPL Masters 2026 "
-    },
-    {
-      "leagueid": 20009,
-      "tier": "professional",
-      "name": "1win Essence II"
-    },
-    {
-      "leagueid": 20169,
-      "tier": "professional",
-      "name": "BLAST Slam VII China Qualifier"
-    },
-    {
-      "leagueid": 20176,
-      "tier": "professional",
-      "name": "BETBOOM Streamers Battle Dota 15"
     },
     {
       "leagueid": 20334,
@@ -209,10 +209,10 @@
       "count": 147
     },
     "19785": {
-      "earliest": 1784286301,
+      "earliest": 1784372800,
       "latest": 1784483341,
       "lastEnd": 1784485548,
-      "count": 15
+      "count": 11
     },
     "19917": {
       "earliest": 1785476004,
@@ -222,9 +222,9 @@
     },
     "19944": {
       "earliest": 1784531358,
-      "latest": 1792015470,
-      "lastEnd": 1792018117,
-      "count": 372
+      "latest": 1792096294,
+      "lastEnd": 1792099674,
+      "count": 377
     },
     "20009": {
       "earliest": 1785402206,
@@ -282,15 +282,15 @@
     },
     "20334": {
       "earliest": 1791662674,
-      "latest": 1791665659,
-      "lastEnd": 1791667268,
-      "count": 2
+      "latest": 1792097095,
+      "lastEnd": 1792098826,
+      "count": 8
     },
     "20359": {
       "earliest": 1791533047,
-      "latest": 1792040963,
-      "lastEnd": 1792044938,
-      "count": 216
+      "latest": 1792132249,
+      "lastEnd": 1792134790,
+      "count": 258
     },
     "20393": {
       "earliest": 1791187532,
@@ -300,15 +300,15 @@
     },
     "20406": {
       "earliest": 1791813665,
-      "latest": 1792004773,
-      "lastEnd": 1792006775,
-      "count": 23
+      "latest": 1792100980,
+      "lastEnd": 1792103967,
+      "count": 34
     },
     "20411": {
       "earliest": 1791721162,
-      "latest": 1791985057,
-      "lastEnd": 1791986619,
-      "count": 5
+      "latest": 1792075234,
+      "lastEnd": 1792077875,
+      "count": 7
     }
   }
 }
