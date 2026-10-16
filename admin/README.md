@@ -2,6 +2,20 @@
 
 DOTA2 电竞小程序的 curation 数据管理后台，用于在 Web 端管理 Supabase 数据库中的赛事 / 战队 / TI 名单数据。与小程序共用同一个 Supabase 项目（`gkticzdaicpdtxheyxsd`）。
 
+## ⚠️ 网络要求（重要 · 2026-10-16 实测）
+
+本后台的**读与写都走直连 `*.supabase.co`**（读 = PostgREST `${VITE_SUPABASE_URL}/rest/v1`；写 = EF `${VITE_SUPABASE_URL}/functions/v1/admin-write`）。
+
+- 🔴 **`*.supabase.co` 在国内网络被 SNI 阻断** —— 2026-10-16 实测：`curl: (35) Recv failure: Connection was reset`（DNS 0.01s / TCP 0.26s 均成功，**TLS 阶段被 RST**）。
+- ⇒ **本后台必须在能直连 `*.supabase.co` 的网络下使用**（VPN / 非国内网络）；否则列表读不出、写操作也失败。
+- ✅ 开发机已确认可直连 ⇒ 本地 `npm run dev` 与已部署站点可用。
+
+### 为什么**不能**改成走中转 `/sb`（已实测，两条路都堵住）
+
+- **读分页会拿错页**：中转 `/sb/rest/v1` **仅允许 GET**，且 **`Range` 头不生效** —— 实测送 `Range: 1000-1001` 仍返回 `content-range: 0-999/3683`（拿到的是第 0-999 行）。而本后台 `restAll` 用 **`Range` 分页** ⇒ 经中转会取到**重复/错误页**。（另：中转该 REST 路径的缓存键**不含 `Range`**。）
+- **写被白名单挡住**：`POST /sb/functions/v1/admin-write` → **404 `{"error":"ef not allowed","name":"admin-write"}`** ⇒ 中转的 EF 白名单（`infra/proxy/worker.mjs` 的 `EF_ALLOW`）**未放行 `admin-write`**。
+- 若将来确需脱离直连，须**同时改两处**：① `worker.mjs` 的 `EF_ALLOW` 放行 `admin-write`；② 本后台 `restAll` 改用 `limit`/`offset` 查询参数（**已验证 query 参数会被中转转发**）。
+
 ## 技术栈
 
 - **Vue 3**（Composition API，`<script setup>`）
@@ -105,24 +119,32 @@ npm run dev
 
 读策略与迁移见 `supabase/migrations/`（anon 读 + `admin-write` 相关安全策略见 `007-security-hardening.sql`）。
 
-## 部署（P2-15 待办）
+## 部署（CI 静态托管 · GitHub Pages）
 
-> ⚠️ **本节为待办（P2-15），当前仅有本地 `npm run build`，尚未接入 CI 静态托管。**
+已接入 CI：`.github/workflows/deploy-admin.yml` —— `push admin/**`（或手工 `workflow_dispatch`）→ `npm ci && npm run build` → 发布到 **GitHub Pages**。
 
-构建产物：
+产物 URL：**`https://re-toke.github.io/dota2-esports/`**（路由为**哈希模式** `#/events`）。
+
+**为什么是 GitHub Pages（而非 Netlify）**：本仓库是 **public** ⇒ Pages 免费，且用内置 `GITHUB_TOKEN` ⇒ **零第三方账号、零新增 secret**。（原 Netlify 方案需 `NETLIFY_AUTH_TOKEN` + `NETLIFY_SITE_ID`，2026-10-16 因取不到这两个值而改方案。）
+
+**前置（一次性）**：
+
+1. 仓库 **Settings → Pages → Source = "GitHub Actions"**（工作流已带 `enablement: true` 尝试自动启用；若首次部署报 Pages 未启用，则手动按此句打开）。
+2. `SUPABASE_ANON_KEY` secret —— **已配置**（公开安全、受 RLS 保护）。
+3. `ADMIN_TOKEN` secret —— **可选**：写入口 EF 令牌（= 本地 `VITE_ADMIN_TOKEN` / EF secret `ADMIN_TOKEN` 同值）。🔴 **配它 = 把写令牌内联进公开 bundle** ⇒ **务必先给站点加访问限制再配**；不配则站点为**只读**（写操作报缺令牌，不泄露写权限）。
+
+本地构建（等价于 CI 构建步，可先自检）：
 
 ```bash
-npm run build        # 输出到 admin/dist/
+cd admin
+npm ci
+npm run build        # 输出到 admin/dist/；CI 传 VITE_BASE=/dota2-esports/
 npm run preview      # 本地预览构建产物
 ```
 
-静态托管选项（任选其一，需用户侧账号）：
+🔴 **访问前提**：见顶部「网络要求」—— 后台必须能直连 `*.supabase.co`（VPN / 非国内网络）。
 
-- **Vercel**：导入仓库 → Framework Preset = Vite → Root Directory = `admin` → Build Command `npm run build` → Output Directory `dist` → Environment Variables 填入上述三项。
-- **Netlify**：Base directory `admin` → Build command `npm run build` → Publish directory `dist` → 环境变量同上。
-- **Cloudflare Pages**：Build command `npm run build` → Build output directory `dist` → Root path `admin`。
-
-部署后冒烟：打开后台 → 三个列表能加载 → 任选一条做一次编辑保存 → 控制台无 401 / 网络错误 → `curation_events` / `curation_teams` / `curation_meta` 数据实际更新。
+部署后冒烟：打开站点 → 三个列表能加载 →（若配了 `ADMIN_TOKEN`）任选一条编辑保存 → 控制台无 401 / 网络错误 → `curation_events` / `curation_teams` / `curation_meta` 数据实际更新。
 
 ## 目录结构
 

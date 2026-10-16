@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHashHistory } from 'vue-router'
 
 const routes = [
   {
@@ -29,7 +29,11 @@ const routes = [
 ]
 
 const router = createRouter({
-  history: createWebHistory(),
+  // ★ P2-15（2026-10-16）：改用**哈希路由**。原 `createWebHistory()` 在 GitHub Pages
+  //   （纯静态、**无服务端 rewrite**）下，刷新/收藏深链（如 `/events`）会 **404**；
+  //   哈希路由（`/#/events`）**零 404、无需 404.html**，对内部工具足够。
+  //   入参用 `import.meta.env.BASE_URL`（= vite `base`）⇒ 与项目页子路径一致。
+  history: createWebHashHistory(import.meta.env.BASE_URL),
   routes,
 })
 
