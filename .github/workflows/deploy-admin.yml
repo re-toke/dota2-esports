@@ -1,0 +1,106 @@
+# ============================================================
+# admin 管理后台静态部署（P2-15，2026-10-14）
+#
+# ## 目标
+# `admin/`（Vue3 + Vite 的 curation 管理后台）此前**只有本地 `vite build`**，
+# 无任何 CI 静态托管 ⇒ 改完 curation 要人工在本地跑 dev server 才能写库。本工作流把
+# 「build + 部署」自动化：push 到 `admin/**` 时自动构建并发布到 **Netlify**（择定 A，2026-10-14）。
+#
+# ## 为什么选 Netlify
+# 本项目已用 Netlify 承载**中转备出口 `[2]`**（`netlify.toml` + `netlify/edge-functions/dota2-proxy.ts`，
+# 站点 `velvety-llama-a7700e.netlify.app`）⇒ 账号已就绪，**无需新注册第三方平台**。
+# ⚠️ admin 是**另一个 Netlify site**（与中转那个站点分开，勿混用 `NETLIFY_SITE_ID`）。
+#
+# ## 部署方式：Netlify CLI（`--dir` 显式指定，不走 Git 集成）
+#   · 用 `npx netlify-cli deploy --dir=admin/dist --prod`，**不**依赖 Netlify 的 Git 自动构建 ——
+#     Git 自动构建会在仓库根读到**中转用的** `netlify.toml`（`publish=infra/proxy/netlify-public`）
+#     而串味；`--dir` 显式覆盖 publish，且 `deploy` **不会**执行 `netlify.toml` 的 `command`（那属 `build`）。
+#   · 内联 `VITE_*` 环境变量在**构建期**由 Vite 注入（`import.meta.env`）；CI 用 `env:` 传给构建步。
+#
+# ## 🔴 安全取舍（务必先读）
+#   `VITE_ADMIN_TOKEN` 是**写入口 EF 的管理令牌**；Vite 会在**构建期把它内联进 JS bundle**
+#   ⇒ 站点一旦公开，任何能打开页面的人都能从 bundle 里读出该令牌，**进而写 curation**。
+#   本工作流的默认姿态是**安全优先**：
+#     · `VITE_ADMIN_TOKEN` 取 `secrets.ADMIN_TOKEN` —— **secret 未配置时为空** ⇒ 构建出的站点
+#       **只读**（列表可看，写操作会报「缺少 VITE_ADMIN_TOKEN」），**不泄露任何写权限**。
+#     · 只有在你确认「对该 Netlify 站点加了访问限制（Netlify 密码保护 / Identity / 内网）」之后，
+#       才把 `ADMIN_TOKEN` secret 配上，让写操作可用。
+#
+# ## 前置（一次性，由用户侧完成）
+#   1. 在 Netlify 新建一个**空站**（仅用于 admin；不要绑定 Git）→ 记下 **Site ID**。
+#   2. 生成 Personal Access Token：Netlify → User settings → Applications → Personal access tokens。
+#   3. GitHub 仓库 → Settings → Secrets and variables → Actions 新增：
+#        NETLIFY_AUTH_TOKEN  —— 上一步的 token（必需，缺则部署步直接失败并给出提示）
+#        NETLIFY_SITE_ID     —— admin 站点的 Site ID（必需）
+#        SUPABASE_ANON_KEY   —— Supabase anon/public key（必需；**公开安全**，受 RLS 保护）
+#        ADMIN_TOKEN         —— 写入口 EF 令牌（**可选**；见上方「安全取舍」，不加=只读站点）
+#      （`VITE_SUPABASE_URL` 不用 secret：它是公开 URL，已在 README/.env.example 明示，直接内联。）
+#
+# ## 未做（诚实声明）
+#   部署后的**冒烟**（打开后台 → 三个列表加载 → 编辑保存 → 数据实际更新）仍需**用户侧**在
+#   真实站点上跑一遍；本工作流只保证「构建成功 + 部署命令成功」。
+# ============================================================
+name: Deploy Admin
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'admin/**'
+      - '.github/workflows/deploy-admin.yml'
+  workflow_dispatch:
+
+# 同一分支的并发部署只保留最新一次（避免旧构建覆盖新站）
+concurrency:
+  group: deploy-admin-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: admin/package-lock.json
+
+      # 前置校验：缺关键 secret 时**尽早失败并给出可执行提示**（不要等到部署步才报平台错）
+      - name: Check required secrets
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          missing=""
+          [ -z "$NETLIFY_AUTH_TOKEN" ] && missing="$missing NETLIFY_AUTH_TOKEN"
+          [ -z "$NETLIFY_SITE_ID" ] && missing="$missing NETLIFY_SITE_ID"
+          [ -z "$SUPABASE_ANON_KEY" ] && missing="$missing SUPABASE_ANON_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::缺少必需 secrets:$missing —— 见本工作流头注「前置（一次性）」"
+            exit 1
+          fi
+
+      - name: Install admin deps
+        working-directory: admin
+        run: npm ci
+
+      - name: Build admin
+        working-directory: admin
+        env:
+          VITE_SUPABASE_URL: https://gkticzdaicpdtxheyxsd.supabase.co
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          VITE_ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}   # 空 ⇒ 只读站点（安全默认）
+        run: |
+          if [ -z "$VITE_ADMIN_TOKEN" ]; then
+            echo "::warning::未配置 ADMIN_TOKEN ⇒ 本次部署为**只读**后台（写操作会报缺失令牌）。见工作流头注「安全取舍」。"
+          fi
+          npm run build
+
+      - name: Deploy to Netlify (production)
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        run: npx --yes netlify-cli@17 deploy --dir=admin/dist --prod --message "CI ${GITHUB_SHA::7} (${GITHUB_REF_NAME})"

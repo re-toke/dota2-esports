@@ -377,6 +377,40 @@ function getPlayerAvatar(accountId) {
   }).catch(() => null);
 }
 
+// ★★ 2026-10-14（P2-8 N+1 合并）：**批量**查询多个玩家的 Steam 头像。
+//   背景：team-detail 逐成员调 getPlayerAvatar ⇒ N 个队员 N 次 GraphQL（且 Promise.all 无并发上限）。
+//   做法：用 GraphQL **alias** 把 N 个 player 合并进 **1 个 query**（`p0: player(...) p1: player(...)`），
+//        网络请求数 N → 1。返回 { [accountId]: avatarUrl }（仅含成功取到 http(s) 头像的项）。
+//   ⚠️ schema 与单发版一致：player(steamAccountId: Long!) { steamAccount { id avatar } }。
+//   ⚠️ 上限 25 个：队名单通常 ≤10，防极端名单产生超长 query（超出部分本次不查，下次补）。
+const BATCH_AVATAR_MAX = 25;
+function getPlayerAvatars(accountIds) {
+  if (!ENABLED) return Promise.resolve({});
+  const ids = (accountIds || []).map((x) => Number(x)).filter((x) => !isNaN(x) && x > 0);
+  if (!ids.length) return Promise.resolve({});
+  const use = ids.slice(0, BATCH_AVATAR_MAX);
+  const parts = [];
+  const vars = {};
+  const varDecls = [];
+  use.forEach((id, i) => {
+    parts.push('p' + i + ': player(steamAccountId: $id' + i + ') { steamAccount { id avatar } }');
+    varDecls.push('$id' + i + ': Long!');
+    vars['id' + i] = id;
+  });
+  const q = 'query (' + varDecls.join(', ') + ') { ' + parts.join(' ') + ' }';
+  return gql(q, vars).then((d) => {
+    const out = {};
+    if (!d) return out;
+    use.forEach((id, i) => {
+      const node = d['p' + i];
+      const a = node && node.steamAccount;
+      const avatar = (a && a.avatar) || '';
+      if (/^https?:\/\//i.test(avatar)) out[id] = avatar;
+    });
+    return out;
+  }).catch(() => ({}));
+}
+
 module.exports = {
   ENABLED: ENABLED,
   getLeagues: getLeagues,
@@ -386,5 +420,6 @@ module.exports = {
   getLeagueWindow: getLeagueWindow,
   getTeamRoster: getTeamRoster,
   getTeamLogo: getTeamLogo,
-  getPlayerAvatar: getPlayerAvatar
+  getPlayerAvatar: getPlayerAvatar,
+  getPlayerAvatars: getPlayerAvatars
 };

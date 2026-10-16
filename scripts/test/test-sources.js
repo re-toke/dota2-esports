@@ -166,6 +166,33 @@ check('enrichPlayerAvatar existing avatar -> return directly', async () => {
   assert(r !== null && r.avatar === 'https://existing.example/av.jpg', 'should return existing');
   assert(r.source === 'opendota', 'source should be opendota');
 });
+// ★ P2-8：批量版（N+1 合并）—— 语义与单发版等价，返回**等长**数组对齐下标。
+check('enrichPlayerAvatars 空数组 -> []', async () => {
+  const r = await sources.enrichPlayerAvatars([]);
+  assert(Array.isArray(r) && r.length === 0, '应返回空数组');
+});
+check('enrichPlayerAvatars existing 直达 + 无 accountId -> 等长且下标对齐', async () => {
+  const r = await sources.enrichPlayerAvatars([
+    { accountId: '123', avatar: 'https://existing.example/av.jpg' },
+    { accountId: '', avatar: '' }
+  ]);
+  assert(Array.isArray(r) && r.length === 2, '应等长返回');
+  assert(r[0] && r[0].avatar === 'https://existing.example/av.jpg' && r[0].source === 'opendota', '第 0 项应返回 existing');
+  assert(r[1] === null, '第 1 项无 accountId 且无 avatar 应为 null');
+});
+check('enrichPlayerAvatars 无头像 + STRATZ 无结果 -> [null]', async () => {
+  const r = await sources.enrichPlayerAvatars([{ accountId: '123456' }]);
+  assert(Array.isArray(r) && r.length === 1 && r[0] === null, '应为 [null]');
+});
+check('stratz.getPlayerAvatars 空/非法 id -> {}', async () => {
+  const r = await stratz.getPlayerAvatars([0, 'x', null, -5]);
+  assert(r && typeof r === 'object' && !Array.isArray(r), '应返回对象');
+  assert(Object.keys(r).length === 0, '非法 id 应被过滤 -> 空对象');
+});
+check('stratz.getPlayerAvatars 无结果 -> {}（不抛错，形状为对象）', async () => {
+  const r = await stratz.getPlayerAvatars([123, 456]);
+  assert(r && typeof r === 'object' && !Array.isArray(r), '应返回对象');
+});
 
 // ===== 9. 战队扩展信息 / 直播聚合 =====
 section('\n--- 战队扩展信息 / 直播聚合 ---');

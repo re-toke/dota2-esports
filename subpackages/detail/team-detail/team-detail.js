@@ -267,20 +267,25 @@ Page({
           .catch(() => { finalizeEnhance(); });
 
         // 4) 队员头像：路径更新避免整体 current setData
-        Promise.all(
-          this._curRef.map((p, idx) =>
-            sources.enrichPlayerAvatar({ accountId: p.account_id, avatar: '' })
-              .then((r) => {
-                if (r && r.avatar) {
-                  // 路径更新：仅设置单行 avatar，不拷贝整个 current 数组
-                  this.setData({ ['current[' + idx + '].avatar']: r.avatar, ['current[' + idx + '].avatarSource']: r.source });
-                }
-              })
-              .catch(() => {})
-          )
-        ).then(() => {
-          finalizeEnhance();
-        });
+        //    ★★ 2026-10-14（P2-8 N+1 合并）：原「逐成员 sources.enrichPlayerAvatar（N 次 STRATZ GraphQL）」
+        //      改为 **1 次批量** sources.enrichPlayerAvatars（内部走 stratz.getPlayerAvatars 的 alias 合并）。
+        //    ⚠️ 语义等价：仍传 avatar:''（强制走「本地缓存 → STRATZ」链，与原逐成员调用一致），
+        //      结果按 index 路径写入，不拷贝整个 current 数组。
+        sources.enrichPlayerAvatars(this._curRef.map((p) => ({ accountId: p.account_id, avatar: '' })))
+          .then((avatars) => {
+            const patch = {};
+            (avatars || []).forEach((r, idx) => {
+              if (r && r.avatar) {
+                patch['current[' + idx + '].avatar'] = r.avatar;
+                patch['current[' + idx + '].avatarSource'] = r.source;
+              }
+            });
+            if (Object.keys(patch).length) this.setData(patch);
+          })
+          .catch(() => { /* 隔离 */ })
+          .then(() => {
+            finalizeEnhance();
+          });
       })
       .catch(() => {
         this.setData({ loading: false, error: '加载失败，请检查网络或域名配置' });

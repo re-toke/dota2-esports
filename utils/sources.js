@@ -522,6 +522,52 @@ async function enrichPlayerAvatar(player) {
   return null;
 }
 
+// ★★ 2026-10-14（P2-8 N+1 合并）：**批量**版队员头像增强。
+//   与 enrichPlayerAvatar 语义等价（同一优先级链），但把「逐玩家 1 次 STRATZ」合并为「1 次 alias 批量」：
+//     ① 直连 existing（http(s)）→ 归一化 + 写 logoCache；
+//     ② 本地 logoCache 命中 → 直接用；
+//     ③ 其余（有 accountId 且未命中）→ 收集，一次性 stratz.getPlayerAvatars(ids) 批量取；
+//   返回**与入参等长**的数组：[{ avatar, source } | null]（对齐下标，便于调用方按 index 路径写入）。
+async function enrichPlayerAvatars(players) {
+  const list = players || [];
+  const out = new Array(list.length).fill(null);
+  const needIdx = [];     // 待 STRATZ 查询的原数组下标
+  const needIds = [];     // 对应 accountId（同一顺序）
+
+  list.forEach((p, i) => {
+    const accountId = (p && p.accountId);
+    const existing = (p && p.avatar) || '';
+    if (existing && /^https?:\/\//i.test(existing)) {
+      const avatar = imageUtil.toLogoUrl(existing);
+      logoCache.set(accountId, avatar, 'opendota');
+      out[i] = { avatar, source: 'opendota' };
+      return;
+    }
+    if (!existing && accountId) {
+      const cached = logoCache.get(accountId);
+      if (cached && cached.logo) { out[i] = { avatar: cached.logo, source: cached.source }; return; }
+    }
+    if (accountId) { needIdx.push(i); needIds.push(accountId); }
+  });
+
+  if (stratzHealthy() && needIds.length) {
+    try {
+      const map = await stratz.getPlayerAvatars(needIds);
+      markStratzResult(Object.keys(map).length > 0);
+      needIdx.forEach((i) => {
+        const accountId = list[i] && list[i].accountId;
+        const raw = map[Number(accountId)];
+        if (raw && /^https?:\/\//i.test(raw)) {
+          const avatar = imageUtil.toLogoUrl(raw);
+          logoCache.set(accountId, avatar, 'stratz');
+          out[i] = { avatar, source: 'stratz' };
+        }
+      });
+    } catch (e) { markStratzResult(false); /* 隔离 */ }
+  }
+  return out;
+}
+
 // 多源增强战队扩展信息（规范名/标签/国家/成立时间）：
 // curation(永远可用) -> steam(官方，需 key)。返回 { name, tag, country, logo, source, confidence }
 async function enrichTeamInfo(team) {
@@ -2821,6 +2867,7 @@ module.exports = {
   classifyStage: classifyStage,
   enrichTeamLogo: enrichTeamLogo,
   enrichPlayerAvatar: enrichPlayerAvatar,
+  enrichPlayerAvatars: enrichPlayerAvatars,
   enrichTeamInfo: enrichTeamInfo,
   crossTeamMembers: crossTeamMembers,
   validatePlayerId: validatePlayerId,

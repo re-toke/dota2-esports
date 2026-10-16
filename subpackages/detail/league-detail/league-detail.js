@@ -1872,7 +1872,8 @@ Page({
   },
 
   // 实际执行 logo 批量补全（由 enrichTeamLogos 调用，含 inflight 去重）
-  _doEnrichTeamLogos() {
+  // ★ P2-8：声明为 async —— 队标查询改用 await api.getTeamLogos 批量（见下方「2) 队标查询」）。
+  async _doEnrichTeamLogos() {
     // 1) 收集所有 team_id（去重）
     //    同时收集 participantsList 中的占位 id（与 enrichTeamNames 一致）
     const teamIds = {};
@@ -2088,33 +2089,36 @@ Page({
       if (!snapResults.length) return Promise.resolve(false);
     }
 
-    // 2) 并行批量查询（每个 .catch 隔离，任一失败不影响其他）
-    //    ★ 2026-07-28 修复 LOGO 不显示 BUG：
-    //    原 BUG：直接传 { id, name } 给 enrichTeamLogo，但 enrichTeamLogo 依赖 team.logo 字段
-    //           OpenDota /leagues/{id}/matches 不返回 team.logo_url，导致 existing='' → 走 STRATZ
-    //           STRATZ 限流/失败时返回 null，logo 永远为空
-    //    修复：先调 api.getTeam(id) 获取 logo_url，再传给 enrichTeamLogo
-    //         enrichTeamLogo 内部 existing 命中 → 直接返回，不走 STRATZ
-    //    参考：team-detail.js L250 也是先获取 team.logo 再传给 enrichTeamLogo
-    //    缓存：api.getTeam 内部有 15min 新鲜 + team TTL 缓存，跨赛事复用
+    // 2) 队标查询（★ P2-8：批量）
+    //    ★ 2026-07-28 修复 LOGO 不显示 BUG（保留其结论）：enrichTeamLogo 依赖 team.logo 字段，
+    //      而 OpenDota /leagues/{id}/matches 不返回 logo_url ⇒ 必须先取到 logo_url 再传进去。
+    //    ★★ 2026-10-14（P2-8 N+1 合并）：取 logo_url 的方式由「逐队 api.getTeam（每轮最多 12 次
+    //      /teams/{id} 单发）」改为 **1 次 explorer 批量** —— api.getTeamLogos(ids) 走
+    //      `SELECT team_id, name, logo_url FROM teams WHERE team_id IN (...)`（explorer teams 表含
+    //      logo_url，与 getTeam 同源；6h 缓存）。请求数 ≤12 → 1，避免撞 OpenDota 60 req/min。
+    //      ⚠️ 语义等价：批量未命中的 id 与原逐队「无 logo_url」分支一致 —— 写负缓存（防轮询重查）。
+    let idLogoMap = {};
+    if (needQueryIds.length) {
+      try {
+        idLogoMap = await api.getTeamLogos(needQueryIds.map(function (tid) { return Number(tid); }));
+      } catch (e) {
+        // 批量失败 ⇒ 本次全部按未命中处理（与原逐队路径「异常也写负缓存」一致，不阻塞其它管线）
+        console.warn('[detail] P2-8 getTeamLogos 批量失败，本次按未命中处理:', e && (e.message || e));
+        idLogoMap = {};
+      }
+    }
     const tasks = needQueryIds.map((tid) => {
       const team = teamIds[tid];
-      // 先调 api.getTeam 拿 logo_url（OpenDota /teams/{id} 端点返回 logo_url 字段）
-      return api.getTeam(team.id)
-        .then((teamInfo) => {
-          const logoUrl = (teamInfo && teamInfo.logo_url) || '';
-          // 方案C：OpenDota 有 logo_url 时走 enrichTeamLogo（仅第②步 existing 命中即返回），
-          // 无 logo_url 时不降级 Liquipedia（CDN 域名不在微信白名单，无法渲染），直接返回 null。
-          if (!logoUrl) {
-            // ★ 2026-08-04 优化：OpenDota 无 logo_url → 写负缓存（24h），
-            // 否则每次 refresh 轮询都重查该 id（api.getTeam 缓存命中但逻辑仍跑，
-            // 日志反复出现"失败ids=10207961"）。logoCache.markNegative 后
-            // sources.enrichTeamLogo 的 hasNegative 短路，不再重复查询。
-            try { logoCache.markNegative(team.id); } catch (e) { /* 隔离 */ }
-            return { id: team.id, logo: null, source: '' };
-          }
-          return sources.enrichTeamLogo({ id: team.id, name: team.name, logo: logoUrl });
-        })
+      const info = idLogoMap[Number(team.id)] || {};
+      const logoUrl = (info && info.logo_url) || '';
+      // 无 logo_url 时不降级 Liquipedia（CDN 域名不在微信白名单，无法渲染），直接返回 null + 负缓存。
+      if (!logoUrl) {
+        // ★ 2026-08-04 优化：无 logo_url → 写负缓存（24h），否则每次 refresh 轮询都重查该 id
+        // （日志反复出现"失败ids=..."）。logoCache.markNegative 后 enrichTeamLogo 的 hasNegative 短路。
+        try { logoCache.markNegative(team.id); } catch (e) { /* 隔离 */ }
+        return { id: team.id, logo: null, source: '' };
+      }
+      return sources.enrichTeamLogo({ id: team.id, name: team.name, logo: logoUrl })
         .then((r) => ({ id: team.id, logo: r && r.logo, source: r && r.source }))
         .catch(() => {
           // ★ 2026-08-04 优化：查询异常也写负缓存（防轮询反复重试同一失败 id）
