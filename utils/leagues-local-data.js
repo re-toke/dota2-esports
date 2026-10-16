@@ -7,7 +7,7 @@
 // 刷新：npm run fetch:leagues
 
 module.exports = {
-  "generatedAt": 1792137433,
+  "generatedAt": 1792175989,
   "source": "opendota",
   "note": "build-time leagues snapshot (active 90d + curated 60d), refresh via scripts/sync/fetch-leagues-snapshot.js",
   "stats": {
@@ -16,6 +16,11 @@ module.exports = {
     "windows": 20
   },
   "leagues": [
+    {
+      "leagueid": 19785,
+      "tier": "professional",
+      "name": "Esports World Cup 2026"
+    },
     {
       "leagueid": 18359,
       "tier": "professional",
@@ -35,11 +40,6 @@ module.exports = {
       "leagueid": 20009,
       "tier": "professional",
       "name": "1win Essence II"
-    },
-    {
-      "leagueid": 19785,
-      "tier": "professional",
-      "name": "Esports World Cup 2026"
     },
     {
       "leagueid": 10810,
@@ -230,9 +230,9 @@ module.exports = {
     },
     "19944": {
       "earliest": 1784531358,
-      "latest": 1792096294,
-      "lastEnd": 1792099674,
-      "count": 377
+      "latest": 1792171018,
+      "lastEnd": 1792174503,
+      "count": 387
     },
     "20009": {
       "earliest": 1785402206,
@@ -296,9 +296,9 @@ module.exports = {
     },
     "20359": {
       "earliest": 1791533047,
-      "latest": 1792132249,
-      "lastEnd": 1792134790,
-      "count": 258
+      "latest": 1792168395,
+      "lastEnd": 1792171502,
+      "count": 275
     },
     "20393": {
       "earliest": 1791187532,
@@ -308,15 +308,15 @@ module.exports = {
     },
     "20406": {
       "earliest": 1791813665,
-      "latest": 1792100980,
-      "lastEnd": 1792103967,
-      "count": 34
+      "latest": 1792169767,
+      "lastEnd": 1792172053,
+      "count": 39
     },
     "20411": {
       "earliest": 1791721162,
-      "latest": 1792075234,
-      "lastEnd": 1792077875,
-      "count": 7
+      "latest": 1792164454,
+      "lastEnd": 1792166383,
+      "count": 9
     }
   }
 };
