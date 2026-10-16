@@ -4,17 +4,26 @@
  *
  * - 展示 curation_meta 的 version / count / updatedAt。
  * - 展示 tiContestantIds 列表（可搜索、可删除单个 ID）。
- * - 添加 / 删除 team_id 经云函数 updateMeta（全量覆盖 ids）写入，version 由云函数自动重算。
+ * - 添加 / 删除 team_id 经 **EF admin-write** 的 `updateMeta`（全量覆盖 ids）写入，version 由 EF 自动重算。
  * - 「重新计算 version」按钮仅做本地校验计算（与云端比对），不写入。
+ *
+ * ★ 2026-10-16（性能）：本页**不再在挂载时拉全量 events/teams**
+ *   —— 原来 `loadAll` 会 `fetchEvents()`（全量 3683 行 ≈1.3MB / 经中转 ~10-14s）+ `fetchTeams()`
+ *   ⇒ 首屏被拖到十几秒。但这两份数据**只被「重新计算 version」用到**（`versionFromData`）。
+ *   ⇒ 现改为：挂载只取 `curation_meta`（极小）；events/teams **仅在该按钮点击时按需拉取**（有 loading）。
+ *   ⇒ 且增/删 ID 后只刷新 `curation_meta`，不再重拉全量。
  */
 import { ref, computed, onMounted } from 'vue'
 import { fetchMeta, fetchEvents, fetchTeams, versionFromData, updateMeta } from '@/api/cloudbase'
 
 // ===== 数据状态 =====
 const meta = ref(null)
+// ★ 2026-10-16：events/teams 改为**按需**填充（仅「重新计算 version」需要），挂载时不拉
 const events = ref([])
 const teams = ref([])
 const loading = ref(false)
+// 重算 version 进行中（点按钮时按需拉全量 events/teams，可能十几秒）
+const recomputing = ref(false)
 // ID 写操作进行中（控制添加按钮 loading，与页面 loading 区分）
 const idSaving = ref(false)
 
@@ -53,13 +62,11 @@ const filteredIds = computed(() => {
 })
 
 // ===== 查询 =====
-async function loadAll() {
+// ★ 2026-10-16：挂载/刷新只取 `curation_meta`（原 `loadAll` 还拉了全量 events/teams ⇒ 首屏十几秒）
+async function loadMeta() {
   loading.value = true
   try {
-    const [m, ev, tm] = await Promise.all([fetchMeta(), fetchEvents(), fetchTeams()])
-    meta.value = m
-    events.value = ev
-    teams.value = tm
+    meta.value = await fetchMeta()
   } catch (e) {
     ElMessage.error('查询 meta 数据失败：' + (e.message || e))
     meta.value = null
@@ -68,7 +75,7 @@ async function loadAll() {
   }
 }
 
-// ===== 写操作（经云函数中转）=====
+// ===== 写操作（经 EF admin-write 中转）=====
 // 添加 team_id：将新 ID 追加到当前 ids 后整体提交（updateMeta 为全量覆盖）
 async function handleAddId() {
   const v = newId.value.trim()
@@ -88,7 +95,7 @@ async function handleAddId() {
     await updateMeta(nextIds)
     ElMessage.success('已添加 team_id：' + num)
     newId.value = ''
-    await loadAll()
+    await loadMeta()
   } catch (e) {
     ElMessage.error('添加 team_id 失败：' + (e.message || e))
   } finally {
@@ -103,7 +110,7 @@ async function handleDeleteId(id) {
   try {
     await updateMeta(nextIds)
     ElMessage.success('已删除 team_id：' + id)
-    await loadAll()
+    await loadMeta()
   } catch (e) {
     ElMessage.error('删除 team_id 失败：' + (e.message || e))
   } finally {
@@ -112,13 +119,26 @@ async function handleDeleteId(id) {
 }
 
 // 本地重算 version（仅用于与云端 version 比对，不写入）
-function handleRecompute() {
-  const v = versionFromData(events.value, teams.value, tiIds.value)
-  computedVersion.value = v
-  ElMessage.success('本地重算 version：' + v + '（云端 version 由写操作自动重算）')
+// ★ 2026-10-16：全量 events/teams **在此按需拉取**（首屏不再承担这份开销）
+async function handleRecompute() {
+  recomputing.value = true
+  try {
+    if (!events.value.length || !teams.value.length) {
+      const [ev, tm] = await Promise.all([fetchEvents(), fetchTeams()])
+      events.value = ev
+      teams.value = tm
+    }
+    const v = versionFromData(events.value, teams.value, tiIds.value)
+    computedVersion.value = v
+    ElMessage.success('本地重算 version：' + v + '（云端 version 由写操作自动重算）')
+  } catch (e) {
+    ElMessage.error('重算 version 失败：' + (e.message || e))
+  } finally {
+    recomputing.value = false
+  }
 }
 
-onMounted(loadAll)
+onMounted(loadMeta)
 </script>
 
 <template>
@@ -126,7 +146,7 @@ onMounted(loadAll)
     <div class="page-header">
       <h2 class="page-title">TI 名单管理</h2>
       <div class="page-actions">
-        <el-button @click="loadAll" :loading="loading">
+        <el-button @click="loadMeta" :loading="loading">
           <el-icon><Refresh /></el-icon>
           刷新
         </el-button>
@@ -138,7 +158,7 @@ onMounted(loadAll)
       title="写操作提示"
       type="info"
       :closable="false"
-      description="新增 / 删除 team_id 经云函数 updateMeta 全量覆盖写入，version 由云函数自动重算并记录 admin-logs。"
+      description="新增 / 删除 team_id 经 EF admin-write 的 updateMeta 全量覆盖写入，version 由 EF 自动重算并记录 admin-logs。"
       show-icon
     />
 
@@ -167,7 +187,7 @@ onMounted(loadAll)
     </el-descriptions>
 
     <div class="action-bar">
-      <el-button type="primary" @click="handleRecompute">
+      <el-button type="primary" :loading="recomputing" @click="handleRecompute">
         <el-icon><Refresh /></el-icon>
         重新计算 version
       </el-button>
