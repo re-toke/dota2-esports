@@ -32,20 +32,38 @@ const authHeaders = () => ({
 /** 分页读全量（绕过 PostgREST 单次上限） */
 async function restAll(table, select, extraQuery = '') {
   const PAGE = 1000
-  const out = []
-  for (let offset = 0; offset < 50000; offset += PAGE) {
-    // ★ 2026-10-16：分页由 **`Range` 请求头** 改为 **`limit`/`offset` 查询参数**。
-    //   原因：admin 现可经**中转** `/sb`（国内可用）读取；实测中转 **不转发 `Range` 头**
-    //   （送 `Range: 1000-1001` 仍回 `content-range: 0-999/3683`）⇒ 用 Range 会拿到重复/错误页。
-    //   ✓ `limit`/`offset` 是 query 参数，中转按 `url.search` **原样转发**（已验证）；
-    //   ✓ 直连 `*.supabase.co` 时二者等价（PostgREST 均支持）。
-    const url = `${BASE}/rest/v1/${table}?select=${encodeURIComponent(select)}${extraQuery}&limit=${PAGE}&offset=${offset}`
-    const res = await fetch(url, { headers: authHeaders() })
-    if (!res.ok) throw new Error(`REST ${table} HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`)
-    const rows = await res.json()
-    out.push(...(rows || []))
-    if (!rows || rows.length < PAGE) break
+  const q = `${BASE}/rest/v1/${table}?select=${encodeURIComponent(select)}${extraQuery}`
+  const pageUrl = (off) => `${q}&limit=${PAGE}&offset=${off}`
+
+  // ★ 2026-10-16：分页由 **`Range` 请求头** 改为 **`limit`/`offset` 查询参数**。
+  //   原因：admin 可经**中转** `/sb` 读取（国内可用），而实测中转 **不转发 `Range` 头**
+  //   （送 `Range: 1000-1001` 仍回 `content-range: 0-999/3683`）⇒ 用 Range 会拿到重复/错误页。
+  //   ✓ `limit`/`offset` 是 query 参数，中转按 `url.search` 原样转发（已验证）。
+  //
+  // ★★ 2026-10-16（**并行化**，修「Events 首屏 ~30s」）：原实现**串行**翻页，
+  //   实测经中转 4 页各 2.4~13.6s ⇒ 合计 ~30s，用户会先看到「Total 0」（promise 未 resolve）。
+  //   改为：**第 1 页带 `Prefer: count=exact`** 拿总数（`Content-Range: 0-999/3683`，
+  //   中转会转发 `Prefer` 且 `Content-Range` 已在 CORS 暴露头里）⇒ 剩余页**并行**取，
+  //   总耗时 ≈ 单页最慢者（~14s 冷 / 缓存后 <1s），而非各页之和。
+  const first = await fetch(pageUrl(0), { headers: { ...authHeaders(), Prefer: 'count=exact' } })
+  if (!first.ok) throw new Error(`REST ${table} HTTP ${first.status}: ${(await first.text()).slice(0, 200)}`)
+  const firstRows = (await first.json()) || []
+  const out = [...firstRows]
+  // 总数未知（`*`）或首页未满 ⇒ 只有一页
+  const total = Number(((first.headers.get('Content-Range') || '').split('/')[1] || '').trim()) || 0
+  if (firstRows.length < PAGE || total <= PAGE) return out
+
+  const rest = []
+  for (let off = PAGE; off < Math.min(total, 50000); off += PAGE) {
+    rest.push(
+      fetch(pageUrl(off), { headers: authHeaders() }).then(async (res) => {
+        if (!res.ok) throw new Error(`REST ${table} HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`)
+        return (await res.json()) || []
+      })
+    )
   }
+  const pages = await Promise.all(rest)   // 保持顺序（Promise.all 按入参序）
+  pages.forEach((rows) => out.push(...rows))
   return out
 }
 
