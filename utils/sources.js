@@ -553,6 +553,10 @@ async function enrichPlayerAvatars(players) {
   if (stratzHealthy() && needIds.length) {
     try {
       const map = await stratz.getPlayerAvatars(needIds);
+      // ★ P2-8 可观测性：批量路径的正向证据（verboseLog 门控；无此日志真机无法确认 N 人 → 1 次）
+      if (config.debug && config.debug.verboseLog) {
+        console.info('[sources][perf] P2-8 头像批量：' + needIds.length + ' 人 → 1 次 STRATZ alias（原为逐人 getPlayerAvatar）');
+      }
       markStratzResult(Object.keys(map).length > 0);
       needIdx.forEach((i) => {
         const accountId = list[i] && list[i].accountId;

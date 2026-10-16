@@ -2052,7 +2052,8 @@ Page({
       });
       if (snapResults.length) {
         console.info('[detail][perf] P1-3 快照命中 logo ' + snapResults.length + ' 队（剩余网络查询 ' +
-          (needQueryIds.length + needQueryNames.length) + '）');
+          (needQueryIds.length + needQueryNames.length) + ' = id ' + needQueryIds.length +
+          ' + name ' + needQueryNames.length + '）');
       }
     }
 
@@ -2106,6 +2107,12 @@ Page({
         console.warn('[detail] P2-8 getTeamLogos 批量失败，本次按未命中处理:', e && (e.message || e));
         idLogoMap = {};
       }
+    }
+    // ★ P2-8 可观测性：批量路径的**正向**证据（走 config.debug.verboseLog 门控 —— 属"每轮 1 行"摘要，
+    //   但仅在开关打开时打印，避免生产噪声）。没有它时真机 Console 无法确认"≤12 次 → 1 次"
+    //   （api.cached 不打印网络请求，本处此前只有失败警告）。
+    if (needQueryIds.length && config.debug && config.debug.verboseLog) {
+      console.info('[detail][perf] P2-8 队标批量：' + needQueryIds.length + ' 队 → 1 次 explorer（原为逐队 api.getTeam）');
     }
     const tasks = needQueryIds.map((tid) => {
       const team = teamIds[tid];
