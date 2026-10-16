@@ -45,7 +45,10 @@ const SB_ANON_KEY_FALLBACK = '';
 // 客户端真正会调的 EF —— 不在名单内一律 404（名单由 `utils/cloudProxy.js` 的 EDGE_ACTIONS 核准）
 const EF_ALLOW = new Set([
   'opendota-proxy', 'liquipedia-proxy', 'steam-proxy', 'stratz-proxy', 'haglund-proxy', 'bundle-aggregator',
-  'wechat-auth', 'subscribe-send', 'follow-profile'
+  'wechat-auth', 'subscribe-send', 'follow-profile',
+  // ★ 2026-10-16（方案 ③）：放行 admin 后台的写入口 EF —— 使 admin **经中转**也能写（国内可用）。
+  //   ⚠️ 鉴权仍在 EF 侧（`x-admin-token` 必须匹配 EF secret `ADMIN_TOKEN`）；中转只做透传（见下方 x-admin-token 转发）。
+  'admin-write'
 ]);
 
 // GET 短路缓存时长（ms）
@@ -71,7 +74,7 @@ const RETRY_ON = (status) => status >= 500;
 const CORS = {
   'Access-Control-Allow-Origin': '*',            // 只读代理、不带凭据 ⇒ 放开便于浏览器自测
   'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type,Authorization,apikey,Prefer,Range,X-Trim',
+  'Access-Control-Allow-Headers': 'Content-Type,Authorization,apikey,Prefer,Range,X-Trim,X-Admin-Token',
   'Access-Control-Expose-Headers': 'Content-Range, X-Proxy-Cache, X-Proxy-Trim'
 };
 
@@ -311,9 +314,12 @@ async function _handle(request, env, ctx) {
           return textResponse(hit.body, hit.status, 'application/json', null, 'HIT');
         }
       }
+      // ★ 2026-10-16（方案 ③）：**转发 `x-admin-token`** —— 否则 admin 经中转写时，EF 收到空令牌 ⇒ 恒 401。
+      //   只转发这一个自定义头（不转发客户端 apikey/Authorization：那两者由 `sbHeaders` 覆盖为中转自己的 key）。
+      const adminFwd = passHeaders(request.headers, ['x-admin-token']);
       const r = await fetchUpstream('https://' + ref + '.supabase.co/functions/v1/' + m[1], {
         method: 'POST',
-        headers: Object.assign({ 'Content-Type': 'application/json' }, sbHeaders),
+        headers: Object.assign({ 'Content-Type': 'application/json' }, sbHeaders, adminFwd),
         body: rawBody
       }, 'EF ' + m[1] + (efAction ? '/' + efAction : ''));
       if (efKey && r.ok) {

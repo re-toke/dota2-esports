@@ -34,10 +34,13 @@ async function restAll(table, select, extraQuery = '') {
   const PAGE = 1000
   const out = []
   for (let offset = 0; offset < 50000; offset += PAGE) {
-    const url = `${BASE}/rest/v1/${table}?select=${encodeURIComponent(select)}${extraQuery}`
-    const res = await fetch(url, {
-      headers: { ...authHeaders(), Range: `${offset}-${offset + PAGE - 1}` },
-    })
+    // ★ 2026-10-16：分页由 **`Range` 请求头** 改为 **`limit`/`offset` 查询参数**。
+    //   原因：admin 现可经**中转** `/sb`（国内可用）读取；实测中转 **不转发 `Range` 头**
+    //   （送 `Range: 1000-1001` 仍回 `content-range: 0-999/3683`）⇒ 用 Range 会拿到重复/错误页。
+    //   ✓ `limit`/`offset` 是 query 参数，中转按 `url.search` **原样转发**（已验证）；
+    //   ✓ 直连 `*.supabase.co` 时二者等价（PostgREST 均支持）。
+    const url = `${BASE}/rest/v1/${table}?select=${encodeURIComponent(select)}${extraQuery}&limit=${PAGE}&offset=${offset}`
+    const res = await fetch(url, { headers: authHeaders() })
     if (!res.ok) throw new Error(`REST ${table} HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`)
     const rows = await res.json()
     out.push(...(rows || []))

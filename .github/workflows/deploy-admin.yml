@@ -12,10 +12,18 @@
 #   · 本仓库 **public**（API 实测 `"private": false`）⇒ **GitHub Pages 免费**；
 #   · Pages 用内置 **`GITHUB_TOKEN`** ⇒ **零第三方账号、零新增 secret**（仅复用已配好的 `SUPABASE_ANON_KEY`）。
 #
-# ## 为什么**不能**把 admin 指向中转 `/sb` 来规避直连（见 admin/README「网络要求」）
-#   · `/sb/rest/v1` **仅 GET** 且 **`Range` 不生效** ⇒ admin 的 `restAll`（Range 分页）会拿错页；
-#   · `admin-write` 不在中转 `EF_ALLOW` 白名单（POST 回 404 `ef not allowed`）。
-#   ⇒ admin 必须**直连 `*.supabase.co`**；使用者需在能直连的网络（VPN / 非国内网络）打开站点。
+# ## admin 改为**经中转读取**（★ 2026-10-16，方案 ③）
+#   实测本机/国内网络**直连 `*.supabase.co` 被 TLS RST 阻断**（沙箱内、沙箱外均复现）⇒ admin 直连读不出数据。
+#   改为把 `VITE_SUPABASE_URL` 指到中转的 `/sb`（`${BASE}/rest/v1/*` ≈ 中转 `/sb/rest/v1/*`）。
+#   配套改动（都在本次一起）：
+#     · admin `restAll` 分页由 **`Range` 头** 改 **`limit`/`offset` 查询参数** —— 实测中转**不转发 `Range`**；
+#     · `worker.mjs` 的 `EF_ALLOW` 放行 `admin-write`（写路径）；
+#     · `worker.mjs` EF 分支**转发 `x-admin-token`**（否则写必 401）；
+#     · `worker.mjs` CORS `Access-Control-Allow-Headers` 加 `X-Admin-Token`（否则浏览器预检被拒）。
+#     注：中转的 REST/EF 分支会用**它自己的** anon key（`Object.assign(headers, sbHeaders)`），
+#        故经中转读取**不依赖** admin 的 anon key；`SUPABASE_ANON_KEY` 仅作保留/直连备用。
+#   ⚠️ 中转对 REST GET 有 120s 短缓存（键含 `url.search`）⇒ 分页各页各自入缓存，读全量会被缓存放大到 120s。
+# ⚠️ 中转承载：admin 流量将计入 Deno 免费额度；`[0]` 挂则 admin 挂（单点，见 admin/README）。
 #
 # ## 前置（一次性，由用户侧完成）
 #   1. 仓库 **Settings → Pages → Source = "GitHub Actions"**（未启用时首次部署会失败并明确报错）。
@@ -86,7 +94,7 @@ jobs:
         working-directory: admin
         env:
           VITE_BASE: /dota2-esports/
-          VITE_SUPABASE_URL: https://gkticzdaicpdtxheyxsd.supabase.co
+          VITE_SUPABASE_URL: https://hungry-pike-9907.re-toke.deno.net/sb   # ★ 方案③：经中转（国内可直连）
           VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           VITE_ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}   # 空 ⇒ 只读站点（安全默认）
         run: |

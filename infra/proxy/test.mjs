@@ -68,6 +68,27 @@ const textOf = async (r) => { try { return await r.clone().text(); } catch (e) {
   ok('EF 响应透传（含 EF 的 {data,source} 形状）', (await textOf(r)).indexOf('"source":"ef"') >= 0);
 }
 
+// ── ②b 方案③（2026-10-16）：admin 写入口经中转（EF 放行 + 转发 x-admin-token + CORS 允许该头） ──
+{
+  calls.length = 0;
+  const r = await handle(req('/sb/functions/v1/admin-write', {
+    method: 'POST', body: '{"operation":"upsertTeam","params":{}}',
+    headers: { 'Content-Type': 'application/json', 'x-admin-token': 'tok-abc123' }
+  }), ENV);
+  const c = calls[0];
+  ok('★ 方案③：admin-write 已放行（不再 404 ef not allowed）', r.status === 200, String(r.status));
+  ok('★ 方案③：x-admin-token 被转发给 EF（否则写恒 401）',
+    c && c.headers['x-admin-token'] === 'tok-abc123', c && JSON.stringify(c.headers));
+  ok('★ 方案③：客户端错 key 仍被服务端真 key 覆盖（不透传）',
+    c && c.headers['apikey'] === REAL_KEY, c && c.headers['apikey']);
+}
+{
+  // CORS 预检：浏览器发写请求会带 x-admin-token ⇒ Allow-Headers 必须允许它，否则预检被拒、写无从发起
+  const r = await handle(req('/sb/functions/v1/admin-write', { method: 'OPTIONS' }), ENV);
+  const ah = r.headers.get('Access-Control-Allow-Headers') || '';
+  ok('★ 方案③：CORS Allow-Headers 含 X-Admin-Token（预检放行）', r.status === 204 && /x-admin-token/i.test(ah), r.status + ' | ' + ah);
+}
+
 // ── ③ PostgREST 路由（只读 + 保留 Range + 覆盖 key） ──────────────────────────
 {
   calls.length = 0;
@@ -201,6 +222,8 @@ const textOf = async (r) => { try { return await r.clone().text(); } catch (e) {
     'bundle-aggregator', 'wechat-auth', 'subscribe-send', 'follow-profile'];
   const missing = REQUIRED_EF.filter((n) => !EF_ALLOW.has(n));
   ok('★ 不变量：EF 白名单覆盖客户端会调的全部 9 个 EF', missing.length === 0, '缺: ' + missing.join(','));
+  // ★ 方案③（2026-10-16）：admin 后台写入口也必须放行（否则 admin 经中转写恒 404）
+  ok('★ 不变量：EF 白名单含 admin 写入口 admin-write（方案③）', EF_ALLOW.has('admin-write'), '缺 admin-write');
 }
 
 // ── ⑨ v3 新增：`/od/api/teams/<id>/matches` 的**按需裁剪**（默认不裁） ──────
