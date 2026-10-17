@@ -6,7 +6,7 @@
 // 数据来源：utils/upcoming-local.json（由本脚本生成）
 
 module.exports = {
-  "generatedAt": 1792222668,
+  "generatedAt": 1792259395,
   "source": "liquipedia",
   "note": "build-time snapshot (Upcoming+Ongoing, Tier1-3), refresh via scripts/sync/fetch-liquipedia-upcoming.js",
   "events": [
@@ -35,18 +35,6 @@ module.exports = {
       "source": "liquipedia"
     },
     {
-      "id": -1032366,
-      "name": "EPL Masters III: Play-In",
-      "grade": "B",
-      "rank": 1,
-      "label": "B级",
-      "tier": 3,
-      "start": 1791763200,
-      "end": 1792252799,
-      "date": "Oct 12–17, 2026",
-      "source": "liquipedia"
-    },
-    {
       "id": -1914730,
       "name": "NEXUS SERIES II",
       "grade": "B",
@@ -56,42 +44,6 @@ module.exports = {
       "start": 1792022400,
       "end": 1793548799,
       "date": "Oct 15 – Nov 01, 2026",
-      "source": "liquipedia"
-    },
-    {
-      "id": -1992252,
-      "name": "DreamLeague Season 30: Western Europe Closed Qualifier",
-      "grade": "S",
-      "rank": 3,
-      "label": "S级",
-      "tier": 1,
-      "start": 1792022400,
-      "end": 1792252799,
-      "date": "Oct 15–17, 2026",
-      "source": "liquipedia"
-    },
-    {
-      "id": -1441380,
-      "name": "DreamLeague Season 30: Southeast Asia Closed Qualifier",
-      "grade": "S",
-      "rank": 3,
-      "label": "S级",
-      "tier": 1,
-      "start": 1792022400,
-      "end": 1792252799,
-      "date": "Oct 15–17, 2026",
-      "source": "liquipedia"
-    },
-    {
-      "id": -1537037,
-      "name": "BLAST SLAM IX China Closed Qualifier",
-      "grade": "S",
-      "rank": 3,
-      "label": "S级",
-      "tier": 1,
-      "start": 1792108800,
-      "end": 1792252799,
-      "date": "Oct 16–17, 2026",
       "source": "liquipedia"
     },
     {
