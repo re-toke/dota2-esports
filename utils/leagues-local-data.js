@@ -7,24 +7,24 @@
 // 刷新：npm run fetch:leagues
 
 module.exports = {
-  "generatedAt": 1792175989,
+  "generatedAt": 1792222502,
   "source": "opendota",
   "note": "build-time leagues snapshot (active 90d + curated 60d), refresh via scripts/sync/fetch-leagues-snapshot.js",
   "stats": {
-    "total": 10363,
+    "total": 10368,
     "kept": 36,
     "windows": 20
   },
   "leagues": [
     {
-      "leagueid": 19785,
-      "tier": "professional",
-      "name": "Esports World Cup 2026"
-    },
-    {
       "leagueid": 18359,
       "tier": "professional",
       "name": "Clavision DOTA2 Masters 2025: Snow-Ruyi"
+    },
+    {
+      "leagueid": 19785,
+      "tier": "professional",
+      "name": "Esports World Cup 2026"
     },
     {
       "leagueid": 15728,
@@ -217,10 +217,10 @@ module.exports = {
       "count": 147
     },
     "19785": {
-      "earliest": 1784372800,
+      "earliest": 1784455780,
       "latest": 1784483341,
       "lastEnd": 1784485548,
-      "count": 11
+      "count": 6
     },
     "19917": {
       "earliest": 1785476004,
@@ -230,9 +230,9 @@ module.exports = {
     },
     "19944": {
       "earliest": 1784531358,
-      "latest": 1792171018,
-      "lastEnd": 1792174503,
-      "count": 387
+      "latest": 1792188783,
+      "lastEnd": 1792191955,
+      "count": 391
     },
     "20009": {
       "earliest": 1785402206,
@@ -290,15 +290,15 @@ module.exports = {
     },
     "20334": {
       "earliest": 1791662674,
-      "latest": 1792097095,
-      "lastEnd": 1792098826,
-      "count": 8
+      "latest": 1792188319,
+      "lastEnd": 1792190192,
+      "count": 10
     },
     "20359": {
       "earliest": 1791533047,
-      "latest": 1792168395,
-      "lastEnd": 1792171502,
-      "count": 275
+      "latest": 1792214120,
+      "lastEnd": 1792216437,
+      "count": 279
     },
     "20393": {
       "earliest": 1791187532,
@@ -308,9 +308,9 @@ module.exports = {
     },
     "20406": {
       "earliest": 1791813665,
-      "latest": 1792169767,
-      "lastEnd": 1792172053,
-      "count": 39
+      "latest": 1792178687,
+      "lastEnd": 1792180340,
+      "count": 41
     },
     "20411": {
       "earliest": 1791721162,

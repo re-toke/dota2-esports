@@ -6,7 +6,7 @@
 // 数据来源：utils/upcoming-local.json（由本脚本生成）
 
 module.exports = {
-  "generatedAt": 1792137593,
+  "generatedAt": 1792222668,
   "source": "liquipedia",
   "note": "build-time snapshot (Upcoming+Ongoing, Tier1-3), refresh via scripts/sync/fetch-liquipedia-upcoming.js",
   "events": [
@@ -116,6 +116,18 @@ module.exports = {
       "start": 1792627200,
       "end": 1793548799,
       "date": "Oct 22 – Nov 01, 2026",
+      "source": "liquipedia"
+    },
+    {
+      "id": -1322384,
+      "name": "Esports Pro Circuit Season 3",
+      "grade": "B",
+      "rank": 1,
+      "label": "B级",
+      "tier": 3,
+      "start": 1792886400,
+      "end": 1794844799,
+      "date": "Oct 25 – Nov 16, 2026",
       "source": "liquipedia"
     },
     {
