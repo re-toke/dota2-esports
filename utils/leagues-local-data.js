@@ -7,24 +7,19 @@
 // 刷新：npm run fetch:leagues
 
 module.exports = {
-  "generatedAt": 1792259225,
+  "generatedAt": 1792309797,
   "source": "opendota",
   "note": "build-time leagues snapshot (active 90d + curated 60d), refresh via scripts/sync/fetch-leagues-snapshot.js",
   "stats": {
-    "total": 10368,
-    "kept": 36,
-    "windows": 20
+    "total": 10374,
+    "kept": 35,
+    "windows": 19
   },
   "leagues": [
     {
       "leagueid": 18359,
       "tier": "professional",
       "name": "Clavision DOTA2 Masters 2025: Snow-Ruyi"
-    },
-    {
-      "leagueid": 19785,
-      "tier": "professional",
-      "name": "Esports World Cup 2026"
     },
     {
       "leagueid": 15728,
@@ -216,12 +211,6 @@ module.exports = {
       "lastEnd": 1787490780,
       "count": 147
     },
-    "19785": {
-      "earliest": 1784455780,
-      "latest": 1784483341,
-      "lastEnd": 1784485548,
-      "count": 6
-    },
     "19917": {
       "earliest": 1785476004,
       "latest": 1785941722,
@@ -230,9 +219,9 @@ module.exports = {
     },
     "19944": {
       "earliest": 1784531358,
-      "latest": 1792254590,
-      "lastEnd": 1792257066,
-      "count": 403
+      "latest": 1792274270,
+      "lastEnd": 1792276256,
+      "count": 410
     },
     "20009": {
       "earliest": 1785402206,
@@ -308,9 +297,9 @@ module.exports = {
     },
     "20406": {
       "earliest": 1791813665,
-      "latest": 1792254591,
-      "lastEnd": 1792257036,
-      "count": 48
+      "latest": 1792272112,
+      "lastEnd": 1792274519,
+      "count": 52
     },
     "20411": {
       "earliest": 1791721162,
