@@ -6,7 +6,7 @@
 // 数据来源：utils/upcoming-local.json（由本脚本生成）
 
 module.exports = {
-  "generatedAt": 1792309974,
+  "generatedAt": 1792346109,
   "source": "liquipedia",
   "note": "build-time snapshot (Upcoming+Ongoing, Tier1-3), refresh via scripts/sync/fetch-liquipedia-upcoming.js",
   "events": [
@@ -20,18 +20,6 @@ module.exports = {
       "start": 1791590400,
       "end": 1793548799,
       "date": "Oct 10 – Nov 01, 2026",
-      "source": "liquipedia"
-    },
-    {
-      "id": -1461193,
-      "name": "1win Streamers League #3",
-      "grade": "B",
-      "rank": 1,
-      "label": "B级",
-      "tier": 3,
-      "start": 1791763200,
-      "end": 1792339199,
-      "date": "Oct 12–18, 2026",
       "source": "liquipedia"
     },
     {
