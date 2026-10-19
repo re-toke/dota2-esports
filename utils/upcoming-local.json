@@ -1,5 +1,5 @@
 {
-  "generatedAt": 1792399001,
+  "generatedAt": 1792441659,
   "source": "liquipedia",
   "note": "build-time snapshot (Upcoming+Ongoing, Tier1-3), refresh via scripts/sync/fetch-liquipedia-upcoming.js",
   "events": [
@@ -37,6 +37,18 @@
       "start": 1792281600,
       "end": 1793894399,
       "date": "Oct 18 – Nov 05, 2026",
+      "source": "liquipedia"
+    },
+    {
+      "id": -1463657,
+      "name": "EPL World Series: Southeast Asia Season 19",
+      "grade": "B",
+      "rank": 1,
+      "label": "B级",
+      "tier": 3,
+      "start": 1792454400,
+      "end": 1793894399,
+      "date": "Oct 20 – Nov 05, 2026",
       "source": "liquipedia"
     },
     {
