@@ -7,34 +7,24 @@
 // 刷新：npm run fetch:leagues
 
 module.exports = {
-  "generatedAt": 1792522738,
+  "generatedAt": 1792570803,
   "source": "opendota",
   "note": "build-time leagues snapshot (active 90d + curated 60d), refresh via scripts/sync/fetch-leagues-snapshot.js",
   "stats": {
-    "total": 10379,
+    "total": 10383,
     "kept": 35,
     "windows": 19
   },
   "leagues": [
     {
-      "leagueid": 18359,
-      "tier": "professional",
-      "name": "Clavision DOTA2 Masters 2025: Snow-Ruyi"
-    },
-    {
-      "leagueid": 15728,
+      "leagueid": 10296,
       "tier": "premium",
-      "name": "The International 2023"
+      "name": "The Kuala Lumpur Major"
     },
     {
-      "leagueid": 19944,
-      "tier": "professional",
-      "name": "EPL Masters 2026 "
-    },
-    {
-      "leagueid": 20009,
-      "tier": "professional",
-      "name": "1win Essence II"
+      "leagueid": 10482,
+      "tier": "premium",
+      "name": "The Chongqing Major"
     },
     {
       "leagueid": 10810,
@@ -42,19 +32,14 @@ module.exports = {
       "name": "MDL Disneyland® Paris Major"
     },
     {
-      "leagueid": 19719,
+      "leagueid": 14268,
       "tier": "premium",
-      "name": "The International 2026"
+      "name": "The International 2022"
     },
     {
-      "leagueid": 17795,
-      "tier": "professional",
-      "name": "ESL One Raleigh 2025"
-    },
-    {
-      "leagueid": 19066,
-      "tier": "professional",
-      "name": "肛宝联赛-老婆杯"
+      "leagueid": 15728,
+      "tier": "premium",
+      "name": "The International 2023"
     },
     {
       "leagueid": 15910,
@@ -62,39 +47,39 @@ module.exports = {
       "name": "ESL One Kuala Lumpur powered by Intel"
     },
     {
-      "leagueid": 18324,
-      "tier": "premium",
-      "name": "The International 2025"
-    },
-    {
-      "leagueid": 20176,
-      "tier": "professional",
-      "name": "BETBOOM Streamers Battle Dota 15"
-    },
-    {
       "leagueid": 16740,
       "tier": "professional",
       "name": "Riyadh Masters 2024 at Esports World Cup Qualifiers"
     },
     {
-      "leagueid": 10296,
-      "tier": "premium",
-      "name": "The Kuala Lumpur Major"
-    },
-    {
-      "leagueid": 14268,
-      "tier": "premium",
-      "name": "The International 2022"
-    },
-    {
-      "leagueid": 20169,
+      "leagueid": 17795,
       "tier": "professional",
-      "name": "BLAST Slam VII China Qualifier"
+      "name": "ESL One Raleigh 2025"
     },
     {
       "leagueid": 18111,
       "tier": "professional",
       "name": "DreamLeague Season 26"
+    },
+    {
+      "leagueid": 18324,
+      "tier": "premium",
+      "name": "The International 2025"
+    },
+    {
+      "leagueid": 18359,
+      "tier": "professional",
+      "name": "Clavision DOTA2 Masters 2025: Snow-Ruyi"
+    },
+    {
+      "leagueid": 18375,
+      "tier": "professional",
+      "name": "Esports World Cup 2025"
+    },
+    {
+      "leagueid": 19066,
+      "tier": "professional",
+      "name": "肛宝联赛-老婆杯"
     },
     {
       "leagueid": 19099,
@@ -112,29 +97,9 @@ module.exports = {
       "name": "BLAST SLAM VIII"
     },
     {
-      "leagueid": 20208,
-      "tier": "professional",
-      "name": "BLAST SLAM IX"
-    },
-    {
-      "leagueid": 20279,
-      "tier": "professional",
-      "name": "PGL Wallachia 2026 Season 9"
-    },
-    {
-      "leagueid": 20334,
-      "tier": "professional",
-      "name": "NEXUS SERIES II"
-    },
-    {
-      "leagueid": 20359,
-      "tier": "professional",
-      "name": "DreamLeague Season 30 Qualifiers"
-    },
-    {
-      "leagueid": 18375,
-      "tier": "professional",
-      "name": "Esports World Cup 2025"
+      "leagueid": 19719,
+      "tier": "premium",
+      "name": "The International 2026"
     },
     {
       "leagueid": 19917,
@@ -142,9 +107,14 @@ module.exports = {
       "name": "The Games of the Future 2026"
     },
     {
-      "leagueid": 20159,
-      "tier": "excluded",
-      "name": "WINLINE Star Series Season 4"
+      "leagueid": 19944,
+      "tier": "professional",
+      "name": "EPL Masters 2026 "
+    },
+    {
+      "leagueid": 20009,
+      "tier": "professional",
+      "name": "1win Essence II"
     },
     {
       "leagueid": 20142,
@@ -167,6 +137,46 @@ module.exports = {
       "name": "RES Unchained - A Blast Dota Slam IX Qualifier EU"
     },
     {
+      "leagueid": 20159,
+      "tier": "excluded",
+      "name": "WINLINE Star Series Season 4"
+    },
+    {
+      "leagueid": 20169,
+      "tier": "professional",
+      "name": "BLAST Slam VII China Qualifier"
+    },
+    {
+      "leagueid": 20176,
+      "tier": "professional",
+      "name": "BETBOOM Streamers Battle Dota 15"
+    },
+    {
+      "leagueid": 20208,
+      "tier": "professional",
+      "name": "BLAST SLAM IX"
+    },
+    {
+      "leagueid": 20279,
+      "tier": "professional",
+      "name": "PGL Wallachia 2026 Season 9"
+    },
+    {
+      "leagueid": 20334,
+      "tier": "professional",
+      "name": "NEXUS SERIES II"
+    },
+    {
+      "leagueid": 20411,
+      "tier": "professional",
+      "name": "奇迹杯"
+    },
+    {
+      "leagueid": 20359,
+      "tier": "professional",
+      "name": "DreamLeague Season 30 Qualifiers"
+    },
+    {
       "leagueid": 20393,
       "tier": "professional",
       "name": "PARI Universe by FISSURE Closed Qualifiers "
@@ -175,16 +185,6 @@ module.exports = {
       "leagueid": 20406,
       "tier": "professional",
       "name": "1win Streamers League #3"
-    },
-    {
-      "leagueid": 20411,
-      "tier": "professional",
-      "name": "奇迹杯"
-    },
-    {
-      "leagueid": 10482,
-      "tier": "premium",
-      "name": "The Chongqing Major"
     },
     {
       "leagueid": 15638,
@@ -218,10 +218,10 @@ module.exports = {
       "count": 72
     },
     "19944": {
-      "earliest": 1784703847,
-      "latest": 1792513723,
-      "lastEnd": 1792515489,
-      "count": 410
+      "earliest": 1784790124,
+      "latest": 1792528306,
+      "lastEnd": 1792530924,
+      "count": 400
     },
     "20009": {
       "earliest": 1785402206,
@@ -279,9 +279,9 @@ module.exports = {
     },
     "20334": {
       "earliest": 1791662674,
-      "latest": 1792519998,
-      "lastEnd": 1792521413,
-      "count": 27
+      "latest": 1792535959,
+      "lastEnd": 1792538433,
+      "count": 30
     },
     "20359": {
       "earliest": 1791533047,
