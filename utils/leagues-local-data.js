@@ -7,13 +7,13 @@
 // 刷新：npm run fetch:leagues
 
 module.exports = {
-  "generatedAt": 1792570803,
+  "generatedAt": 1792609730,
   "source": "opendota",
   "note": "build-time leagues snapshot (active 90d + curated 60d), refresh via scripts/sync/fetch-leagues-snapshot.js",
   "stats": {
     "total": 10383,
-    "kept": 35,
-    "windows": 19
+    "kept": 36,
+    "windows": 20
   },
   "leagues": [
     {
@@ -22,14 +22,14 @@ module.exports = {
       "name": "The Kuala Lumpur Major"
     },
     {
-      "leagueid": 10482,
-      "tier": "premium",
-      "name": "The Chongqing Major"
-    },
-    {
       "leagueid": 10810,
       "tier": "premium",
       "name": "MDL Disneyland® Paris Major"
+    },
+    {
+      "leagueid": 10482,
+      "tier": "premium",
+      "name": "The Chongqing Major"
     },
     {
       "leagueid": 14268,
@@ -75,6 +75,11 @@ module.exports = {
       "leagueid": 18375,
       "tier": "professional",
       "name": "Esports World Cup 2025"
+    },
+    {
+      "leagueid": 18631,
+      "tier": "professional",
+      "name": "护鼠宝"
     },
     {
       "leagueid": 19066,
@@ -137,6 +142,21 @@ module.exports = {
       "name": "RES Unchained - A Blast Dota Slam IX Qualifier EU"
     },
     {
+      "leagueid": 20208,
+      "tier": "professional",
+      "name": "BLAST SLAM IX"
+    },
+    {
+      "leagueid": 20334,
+      "tier": "professional",
+      "name": "NEXUS SERIES II"
+    },
+    {
+      "leagueid": 20411,
+      "tier": "professional",
+      "name": "奇迹杯"
+    },
+    {
       "leagueid": 20159,
       "tier": "excluded",
       "name": "WINLINE Star Series Season 4"
@@ -152,24 +172,9 @@ module.exports = {
       "name": "BETBOOM Streamers Battle Dota 15"
     },
     {
-      "leagueid": 20208,
-      "tier": "professional",
-      "name": "BLAST SLAM IX"
-    },
-    {
       "leagueid": 20279,
       "tier": "professional",
       "name": "PGL Wallachia 2026 Season 9"
-    },
-    {
-      "leagueid": 20334,
-      "tier": "professional",
-      "name": "NEXUS SERIES II"
-    },
-    {
-      "leagueid": 20411,
-      "tier": "professional",
-      "name": "奇迹杯"
     },
     {
       "leagueid": 20359,
@@ -193,6 +198,12 @@ module.exports = {
     }
   ],
   "windows": {
+    "18631": {
+      "earliest": 1792584545,
+      "latest": 1792590894,
+      "lastEnd": 1792592936,
+      "count": 3
+    },
     "19066": {
       "earliest": 1789737034,
       "latest": 1789744526,
@@ -219,9 +230,9 @@ module.exports = {
     },
     "19944": {
       "earliest": 1784790124,
-      "latest": 1792528306,
-      "lastEnd": 1792530924,
-      "count": 400
+      "latest": 1792606226,
+      "lastEnd": 1792608806,
+      "count": 409
     },
     "20009": {
       "earliest": 1785402206,
@@ -279,9 +290,9 @@ module.exports = {
     },
     "20334": {
       "earliest": 1791662674,
-      "latest": 1792535959,
-      "lastEnd": 1792538433,
-      "count": 30
+      "latest": 1792605928,
+      "lastEnd": 1792607555,
+      "count": 33
     },
     "20359": {
       "earliest": 1791533047,
