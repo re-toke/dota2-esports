@@ -7,13 +7,13 @@
 // 刷新：npm run fetch:leagues
 
 module.exports = {
-  "generatedAt": 1792609730,
+  "generatedAt": 1792657322,
   "source": "opendota",
   "note": "build-time leagues snapshot (active 90d + curated 60d), refresh via scripts/sync/fetch-leagues-snapshot.js",
   "stats": {
-    "total": 10383,
-    "kept": 36,
-    "windows": 20
+    "total": 10390,
+    "kept": 34,
+    "windows": 18
   },
   "leagues": [
     {
@@ -27,19 +27,9 @@ module.exports = {
       "name": "MDL Disneyland® Paris Major"
     },
     {
-      "leagueid": 10482,
-      "tier": "premium",
-      "name": "The Chongqing Major"
-    },
-    {
       "leagueid": 14268,
       "tier": "premium",
       "name": "The International 2022"
-    },
-    {
-      "leagueid": 15728,
-      "tier": "premium",
-      "name": "The International 2023"
     },
     {
       "leagueid": 15910,
@@ -122,6 +112,16 @@ module.exports = {
       "name": "1win Essence II"
     },
     {
+      "leagueid": 10482,
+      "tier": "premium",
+      "name": "The Chongqing Major"
+    },
+    {
+      "leagueid": 15728,
+      "tier": "premium",
+      "name": "The International 2023"
+    },
+    {
       "leagueid": 20142,
       "tier": "professional",
       "name": "RES Unchained - A Blast Dota Slam VIII Qualifier EU"
@@ -142,21 +142,6 @@ module.exports = {
       "name": "RES Unchained - A Blast Dota Slam IX Qualifier EU"
     },
     {
-      "leagueid": 20208,
-      "tier": "professional",
-      "name": "BLAST SLAM IX"
-    },
-    {
-      "leagueid": 20334,
-      "tier": "professional",
-      "name": "NEXUS SERIES II"
-    },
-    {
-      "leagueid": 20411,
-      "tier": "professional",
-      "name": "奇迹杯"
-    },
-    {
       "leagueid": 20159,
       "tier": "excluded",
       "name": "WINLINE Star Series Season 4"
@@ -175,6 +160,11 @@ module.exports = {
       "leagueid": 20279,
       "tier": "professional",
       "name": "PGL Wallachia 2026 Season 9"
+    },
+    {
+      "leagueid": 20208,
+      "tier": "professional",
+      "name": "BLAST SLAM IX"
     },
     {
       "leagueid": 20359,
@@ -229,10 +219,10 @@ module.exports = {
       "count": 72
     },
     "19944": {
-      "earliest": 1784790124,
-      "latest": 1792606226,
-      "lastEnd": 1792608806,
-      "count": 409
+      "earliest": 1784852131,
+      "latest": 1792610675,
+      "lastEnd": 1792613323,
+      "count": 397
     },
     "20009": {
       "earliest": 1785402206,
@@ -288,12 +278,6 @@ module.exports = {
       "lastEnd": 1790522808,
       "count": 114
     },
-    "20334": {
-      "earliest": 1791662674,
-      "latest": 1792605928,
-      "lastEnd": 1792607555,
-      "count": 33
-    },
     "20359": {
       "earliest": 1791533047,
       "latest": 1792251642,
@@ -311,12 +295,6 @@ module.exports = {
       "latest": 1792362244,
       "lastEnd": 1792363992,
       "count": 60
-    },
-    "20411": {
-      "earliest": 1791721162,
-      "latest": 1792416345,
-      "lastEnd": 1792418467,
-      "count": 12
     }
   }
 };
