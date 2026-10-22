@@ -1,27 +1,22 @@
 {
-  "generatedAt": 1792657322,
+  "generatedAt": 1792695855,
   "source": "opendota",
   "note": "build-time leagues snapshot (active 90d + curated 60d), refresh via scripts/sync/fetch-leagues-snapshot.js",
   "stats": {
     "total": 10390,
-    "kept": 34,
-    "windows": 18
+    "kept": 35,
+    "windows": 19
   },
   "leagues": [
-    {
-      "leagueid": 10296,
-      "tier": "premium",
-      "name": "The Kuala Lumpur Major"
-    },
-    {
-      "leagueid": 10810,
-      "tier": "premium",
-      "name": "MDL Disneyland® Paris Major"
-    },
     {
       "leagueid": 14268,
       "tier": "premium",
       "name": "The International 2022"
+    },
+    {
+      "leagueid": 15728,
+      "tier": "premium",
+      "name": "The International 2023"
     },
     {
       "leagueid": 15910,
@@ -29,19 +24,9 @@
       "name": "ESL One Kuala Lumpur powered by Intel"
     },
     {
-      "leagueid": 16740,
-      "tier": "professional",
-      "name": "Riyadh Masters 2024 at Esports World Cup Qualifiers"
-    },
-    {
       "leagueid": 17795,
       "tier": "professional",
       "name": "ESL One Raleigh 2025"
-    },
-    {
-      "leagueid": 18111,
-      "tier": "professional",
-      "name": "DreamLeague Season 26"
     },
     {
       "leagueid": 18324,
@@ -62,6 +47,21 @@
       "leagueid": 18631,
       "tier": "professional",
       "name": "护鼠宝"
+    },
+    {
+      "leagueid": 10296,
+      "tier": "premium",
+      "name": "The Kuala Lumpur Major"
+    },
+    {
+      "leagueid": 10810,
+      "tier": "premium",
+      "name": "MDL Disneyland® Paris Major"
+    },
+    {
+      "leagueid": 10482,
+      "tier": "premium",
+      "name": "The Chongqing Major"
     },
     {
       "leagueid": 19066,
@@ -104,14 +104,24 @@
       "name": "1win Essence II"
     },
     {
-      "leagueid": 10482,
-      "tier": "premium",
-      "name": "The Chongqing Major"
+      "leagueid": 20279,
+      "tier": "professional",
+      "name": "PGL Wallachia 2026 Season 9"
     },
     {
-      "leagueid": 15728,
-      "tier": "premium",
-      "name": "The International 2023"
+      "leagueid": 16740,
+      "tier": "professional",
+      "name": "Riyadh Masters 2024 at Esports World Cup Qualifiers"
+    },
+    {
+      "leagueid": 18111,
+      "tier": "professional",
+      "name": "DreamLeague Season 26"
+    },
+    {
+      "leagueid": 20208,
+      "tier": "professional",
+      "name": "BLAST SLAM IX"
     },
     {
       "leagueid": 20142,
@@ -149,16 +159,6 @@
       "name": "BETBOOM Streamers Battle Dota 15"
     },
     {
-      "leagueid": 20279,
-      "tier": "professional",
-      "name": "PGL Wallachia 2026 Season 9"
-    },
-    {
-      "leagueid": 20208,
-      "tier": "professional",
-      "name": "BLAST SLAM IX"
-    },
-    {
       "leagueid": 20359,
       "tier": "professional",
       "name": "DreamLeague Season 30 Qualifiers"
@@ -167,6 +167,11 @@
       "leagueid": 20393,
       "tier": "professional",
       "name": "PARI Universe by FISSURE Closed Qualifiers "
+    },
+    {
+      "leagueid": 20395,
+      "tier": "professional",
+      "name": "PARI UNIVERSE by FISSURE"
     },
     {
       "leagueid": 20406,
@@ -212,9 +217,9 @@
     },
     "19944": {
       "earliest": 1784852131,
-      "latest": 1792610675,
-      "lastEnd": 1792613323,
-      "count": 397
+      "latest": 1792692706,
+      "lastEnd": 1792694576,
+      "count": 404
     },
     "20009": {
       "earliest": 1785402206,
@@ -281,6 +286,12 @@
       "latest": 1791489252,
       "lastEnd": 1791490855,
       "count": 34
+    },
+    "20395": {
+      "earliest": 1792656791,
+      "latest": 1792689217,
+      "lastEnd": 1792692962,
+      "count": 7
     },
     "20406": {
       "earliest": 1791813665,
