@@ -6,7 +6,7 @@
 // 数据来源：utils/upcoming-local.json（由本脚本生成）
 
 module.exports = {
-  "generatedAt": 1792743668,
+  "generatedAt": 1792781830,
   "source": "liquipedia",
   "note": "build-time snapshot (Upcoming+Ongoing, Tier1-3), refresh via scripts/sync/fetch-liquipedia-upcoming.js",
   "events": [
@@ -96,7 +96,7 @@ module.exports = {
     },
     {
       "id": -1962141,
-      "name": "1win Essence III Play-In",
+      "name": "1win Essence III: Play-In",
       "grade": "A",
       "rank": 2,
       "label": "A级",

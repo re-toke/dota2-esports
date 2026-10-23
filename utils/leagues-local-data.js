@@ -7,7 +7,7 @@
 // 刷新：npm run fetch:leagues
 
 module.exports = {
-  "generatedAt": 1792743508,
+  "generatedAt": 1792781662,
   "source": "opendota",
   "note": "build-time leagues snapshot (active 90d + curated 60d), refresh via scripts/sync/fetch-leagues-snapshot.js",
   "stats": {
@@ -16,26 +16,6 @@ module.exports = {
     "windows": 19
   },
   "leagues": [
-    {
-      "leagueid": 10482,
-      "tier": "premium",
-      "name": "The Chongqing Major"
-    },
-    {
-      "leagueid": 10810,
-      "tier": "premium",
-      "name": "MDL Disneyland® Paris Major"
-    },
-    {
-      "leagueid": 14268,
-      "tier": "premium",
-      "name": "The International 2022"
-    },
-    {
-      "leagueid": 10296,
-      "tier": "premium",
-      "name": "The Kuala Lumpur Major"
-    },
     {
       "leagueid": 15728,
       "tier": "premium",
@@ -47,9 +27,9 @@ module.exports = {
       "name": "ESL One Kuala Lumpur powered by Intel"
     },
     {
-      "leagueid": 17795,
-      "tier": "professional",
-      "name": "ESL One Raleigh 2025"
+      "leagueid": 10482,
+      "tier": "premium",
+      "name": "The Chongqing Major"
     },
     {
       "leagueid": 18375,
@@ -57,9 +37,9 @@ module.exports = {
       "name": "Esports World Cup 2025"
     },
     {
-      "leagueid": 18631,
-      "tier": "professional",
-      "name": "护鼠宝"
+      "leagueid": 10810,
+      "tier": "premium",
+      "name": "MDL Disneyland® Paris Major"
     },
     {
       "leagueid": 19066,
@@ -87,9 +67,9 @@ module.exports = {
       "name": "The International 2026"
     },
     {
-      "leagueid": 19917,
+      "leagueid": 19944,
       "tier": "professional",
-      "name": "The Games of the Future 2026"
+      "name": "EPL Masters 2026 "
     },
     {
       "leagueid": 20009,
@@ -97,14 +77,29 @@ module.exports = {
       "name": "1win Essence II"
     },
     {
-      "leagueid": 20279,
-      "tier": "professional",
-      "name": "PGL Wallachia 2026 Season 9"
+      "leagueid": 10296,
+      "tier": "premium",
+      "name": "The Kuala Lumpur Major"
     },
     {
-      "leagueid": 19944,
+      "leagueid": 14268,
+      "tier": "premium",
+      "name": "The International 2022"
+    },
+    {
+      "leagueid": 17795,
       "tier": "professional",
-      "name": "EPL Masters 2026 "
+      "name": "ESL One Raleigh 2025"
+    },
+    {
+      "leagueid": 19917,
+      "tier": "professional",
+      "name": "The Games of the Future 2026"
+    },
+    {
+      "leagueid": 18631,
+      "tier": "professional",
+      "name": "护鼠宝"
     },
     {
       "leagueid": 18359,
@@ -115,6 +110,11 @@ module.exports = {
       "leagueid": 18324,
       "tier": "premium",
       "name": "The International 2025"
+    },
+    {
+      "leagueid": 20279,
+      "tier": "professional",
+      "name": "PGL Wallachia 2026 Season 9"
     },
     {
       "leagueid": 16740,
@@ -195,9 +195,9 @@ module.exports = {
   "windows": {
     "18631": {
       "earliest": 1792584545,
-      "latest": 1792590894,
-      "lastEnd": 1792592936,
-      "count": 3
+      "latest": 1792767621,
+      "lastEnd": 1792769411,
+      "count": 7
     },
     "19066": {
       "earliest": 1789737034,
@@ -225,9 +225,9 @@ module.exports = {
     },
     "19944": {
       "earliest": 1784963175,
-      "latest": 1792696356,
-      "lastEnd": 1792698652,
-      "count": 391
+      "latest": 1792773790,
+      "lastEnd": 1792775841,
+      "count": 398
     },
     "20009": {
       "earliest": 1785402206,
@@ -297,9 +297,9 @@ module.exports = {
     },
     "20395": {
       "earliest": 1792656791,
-      "latest": 1792695220,
-      "lastEnd": 1792697093,
-      "count": 8
+      "latest": 1792776542,
+      "lastEnd": 1792778427,
+      "count": 15
     },
     "20406": {
       "earliest": 1791813665,
