@@ -7,19 +7,34 @@
 // 刷新：npm run fetch:leagues
 
 module.exports = {
-  "generatedAt": 1792695855,
+  "generatedAt": 1792743508,
   "source": "opendota",
   "note": "build-time leagues snapshot (active 90d + curated 60d), refresh via scripts/sync/fetch-leagues-snapshot.js",
   "stats": {
-    "total": 10390,
+    "total": 10396,
     "kept": 35,
     "windows": 19
   },
   "leagues": [
     {
+      "leagueid": 10482,
+      "tier": "premium",
+      "name": "The Chongqing Major"
+    },
+    {
+      "leagueid": 10810,
+      "tier": "premium",
+      "name": "MDL Disneyland® Paris Major"
+    },
+    {
       "leagueid": 14268,
       "tier": "premium",
       "name": "The International 2022"
+    },
+    {
+      "leagueid": 10296,
+      "tier": "premium",
+      "name": "The Kuala Lumpur Major"
     },
     {
       "leagueid": 15728,
@@ -37,16 +52,6 @@ module.exports = {
       "name": "ESL One Raleigh 2025"
     },
     {
-      "leagueid": 18324,
-      "tier": "premium",
-      "name": "The International 2025"
-    },
-    {
-      "leagueid": 18359,
-      "tier": "professional",
-      "name": "Clavision DOTA2 Masters 2025: Snow-Ruyi"
-    },
-    {
       "leagueid": 18375,
       "tier": "professional",
       "name": "Esports World Cup 2025"
@@ -55,21 +60,6 @@ module.exports = {
       "leagueid": 18631,
       "tier": "professional",
       "name": "护鼠宝"
-    },
-    {
-      "leagueid": 10296,
-      "tier": "premium",
-      "name": "The Kuala Lumpur Major"
-    },
-    {
-      "leagueid": 10810,
-      "tier": "premium",
-      "name": "MDL Disneyland® Paris Major"
-    },
-    {
-      "leagueid": 10482,
-      "tier": "premium",
-      "name": "The Chongqing Major"
     },
     {
       "leagueid": 19066,
@@ -102,11 +92,6 @@ module.exports = {
       "name": "The Games of the Future 2026"
     },
     {
-      "leagueid": 19944,
-      "tier": "professional",
-      "name": "EPL Masters 2026 "
-    },
-    {
       "leagueid": 20009,
       "tier": "professional",
       "name": "1win Essence II"
@@ -115,6 +100,21 @@ module.exports = {
       "leagueid": 20279,
       "tier": "professional",
       "name": "PGL Wallachia 2026 Season 9"
+    },
+    {
+      "leagueid": 19944,
+      "tier": "professional",
+      "name": "EPL Masters 2026 "
+    },
+    {
+      "leagueid": 18359,
+      "tier": "professional",
+      "name": "Clavision DOTA2 Masters 2025: Snow-Ruyi"
+    },
+    {
+      "leagueid": 18324,
+      "tier": "premium",
+      "name": "The International 2025"
     },
     {
       "leagueid": 16740,
@@ -224,10 +224,10 @@ module.exports = {
       "count": 72
     },
     "19944": {
-      "earliest": 1784852131,
-      "latest": 1792692706,
-      "lastEnd": 1792694576,
-      "count": 404
+      "earliest": 1784963175,
+      "latest": 1792696356,
+      "lastEnd": 1792698652,
+      "count": 391
     },
     "20009": {
       "earliest": 1785402206,
@@ -297,9 +297,9 @@ module.exports = {
     },
     "20395": {
       "earliest": 1792656791,
-      "latest": 1792689217,
-      "lastEnd": 1792692962,
-      "count": 7
+      "latest": 1792695220,
+      "lastEnd": 1792697093,
+      "count": 8
     },
     "20406": {
       "earliest": 1791813665,
