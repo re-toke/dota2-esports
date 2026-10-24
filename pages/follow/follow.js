@@ -8,7 +8,7 @@ const reminderStrategy = require('../../utils/reminderStrategy.js');
 const sources = require('../../utils/sources.js');
 // ★ 2026-08-07（审核 R1/R2）：账号登录态（ensureOpenId 上移单点实现 + 预登录前置）
 const auth = require('../../utils/auth.js');
-const diagnostics = require('../../utils/diagnostics.js');   // ★ P0-B 下半：数据健康展示
+// ★ 2026-10-24：内置快照移除后「数据健康」卡已下线（本页不再 require diagnostics）。
 // ★ 2026-09-10（账号体系重构）：云同步开关状态（替代原「隐式自动上云」）
 const cloudSync = require('../../utils/cloudSync.js');
 // ★ 2026-09-14（极简改造）：数据管理 3 项 + 资料重置已下沉到 /subpackages/detail/settings
@@ -49,10 +49,12 @@ Page({
     // 2.2 订阅状态
     subStatus: null,   // { subscribed, time } | null
     subReady: false,   // 是否已配置模板
-    // ★ P0-B 下半：数据健康（快照新鲜度 + 本机融合指标）—— 让"静默问题"可见
-    health: null,
     // #20 智能提醒策略（提前量/级别的编辑入口已下沉到「设置」页；本页只读展示提前量）
     reminder: { leadSec: 1800, tiers: ['S', 'A'] },
+    // ★ 2026-10-24（阶段 1）：关注列表「管理 → 多选 → 批量取消关注」编辑态
+    editing: false,
+    selectedCount: 0,
+    allSelected: false,
     // ★ 批次4（2026-08-30）· PRD §11.2：用户卡身份升级为 chooseAvatar + 昵称 input，
     //   仅存本地 storage（无服务端账号体系）。openid 登录保留（订阅前置），不再驱动用户卡 UI。
     profile: { avatarUrl: '', nickname: '' },
@@ -74,6 +76,8 @@ Page({
     if (typeof this.getTabBar === 'function' && this.getTabBar()) {
       this.getTabBar().setData({ selected: 2 });
     }
+    // ★ 2026-10-24：从详情/设置返回时退出编辑态，避免「编辑中再回来」留下半状态
+    if (this.data.editing) this._exitEditing();
     // 合并 4 次 setData 为 1 次：ctaVariant + items/counts + subStatus + reminder
     // 收集所有字段后一次性 setData，减少 onShow 切回时的渲染开销
     const active = this.data.activeTab;
@@ -105,22 +109,7 @@ Page({
     }
 
     const counts = follow.counts();
-    // ★★ 2026-09-26（P0-B 下半）：**数据健康**（让指标"有人消费"）
-    //   · 本机指标：首页融合后写入的最近一次快照（内存态；未访问首页/刚重启时为空 ⇒ 展示层须容忍）
-    // ★ 2026-10-24：内置快照已移除 ⇒ 卡片不再展示「内置快照更新于 X 前」；
-    //   新鲜度/停摆判定只由「云端调度心跳」（`diagnostics.buildRemoteHealth`）承载。
-    const _last = diagnostics.getLast();
-    const _lm = _last && _last.metrics;
-    const _health = {
-      hasMetrics: !!_lm,
-      metricHint: _lm
-        ? ('降级率 ' + diagnostics.formatPct(_lm.heuristicRate) +
-           ' · 结束无比分 ' + diagnostics.formatPct(_lm.endedNoScoreRate) +
-           ' · 状态误判 ' + _lm.statusMismatch + ' · 样本 ' + _lm.total)
-        : '打开一次「首页」后生成'
-    };
     const patch = {
-      health: _health,
       ctaVariant: ctaVariant,
       items: slice,
       counts: counts,
@@ -142,34 +131,6 @@ Page({
     this.setData(patch);
     this.syncProfile();
     this._loadProfile();
-    // ★ P0-C（2026-09-26）：读**云端心跳** —— 由 CI 的定时任务写 curation_meta['diag_report']。
-    //   为什么这一步不可省：本地快照年龄只能说明"这台设备上的包有多旧"，
-    //   而**调度是否还在跑**必须由"来源不同"的一方回答（CI 写 / 客户端读）——
-    //   这正是方案里"静默死亡是唯一系统性脆弱点"的落点（原 `ef-health` 只探 EF，不探调度）。
-    this._loadRemoteHeartbeat();
-  },
-
-  /** 读云端心跳（fire-and-forget；失败静默，不影响页面） */
-  _loadRemoteHeartbeat() {
-    try {
-      const sb = require('../../utils/supabaseClient.js');
-      if (!sb.enabled()) return;
-      sb.rest('curation_meta', { select: 'key,value', eq: { key: 'diag_report' }, limit: 1 })
-        .then((rows) => {
-          // ★★ 2026-09-26：查询**成功**时，无论有没有行都要落地展示态 ——
-          //   无行 ⇒ 「尚无记录（CI 未上报）」。
-          //   为什么必须显示：改造前它与「Supabase 连不上」（下方 catch 分支，保持静默）
-          //   在界面上**完全同形**，导致排查时误以为代码有 Bug、白跑一轮。
-          //   一个以「让静默失败可见」为目的的功能，**它自己的缺失不能也是静默的**。
-          //   三态语义（missing / invalid / ok|overdue）与文案均在**纯函数**里（可单测）。
-          this.setData({
-            'health.remote': diagnostics.buildRemoteHealth(rows && rows[0], Math.floor(Date.now() / 1000))
-          });
-        })
-        // ⚠️ 云端不可达 ⇒ **保持静默**：绝不可在此写 "CI 未上报" —— 那是把归因指错方向。
-        //    （保守：宁可不显示，也不给错误结论。差别由上面的 missing 态负责表达。）
-        .catch(() => { /* 云端不可达时静默：本地新鲜度仍可展示 */ });
-    } catch (e) { /* 同上 */ }
   },
 
   // ★ 批次4 §11.2：chooseAvatar 回调——持久化到用户目录（临时路径重启失效），
@@ -282,7 +243,11 @@ Page({
       activeLabel: LABELS[active],
       exploreText: this.buildExploreText(active),
       page: 0,
-      hasMore: all.length > slice.length
+      hasMore: all.length > slice.length,
+      // ★ 2026-10-24：重建列表时退出编辑态（选择基于索引，重建后索引会变）
+      editing: false,
+      selectedCount: 0,
+      allSelected: false
     });
     // ★ 2026-08-13（关注页头像区优化 · 1b）：老关注数据（无 logo）异步补全队标。
     //   放 refresh 而非仅 onShow：switchTab 切回战队 tab 也走 refresh，保证补全覆盖。
@@ -332,13 +297,16 @@ Page({
       items: slice,
       page: page,
       hasMore: this.allItems.length > slice.length,
-      loadingMore: false
+      loadingMore: false,
+      // ★ 2026-10-24：新加载的项默认未选中 ⇒ 编辑态下「全选」状态必然失效
+      allSelected: false
     });
   },
 
   decorate(it, type) {
     const out = Object.assign({}, it);
     out.type = type;
+    out.selected = false;   // ★ 2026-10-24：编辑态选中标记（与 items 索引一一对应）
     if (type === 'teams') {
       out.typeLabel = '战队';
       out.iconText = (it.name || '?').slice(0, 1).toUpperCase();
@@ -366,7 +334,8 @@ Page({
   switchTab(e) {
     const key = e.currentTarget.dataset.key;
     if (key === this.data.activeTab) return;
-    this.setData({ activeTab: key, items: [], page: 0, hasMore: false }, () => this.refresh());
+    // ★ 2026-10-24：切 Tab 退出编辑（选择集属于当前 Tab，不可跨 Tab 混用）
+    this.setData({ activeTab: key, items: [], page: 0, hasMore: false, editing: false, selectedCount: 0, allSelected: false }, () => this.refresh());
   },
 
   // ★ 2026-09-21：队标加载失败 → 先尝试本地化兜底（downloadFile 绕开 UGC 的 octet-stream MIME），
@@ -384,18 +353,77 @@ Page({
     );
   },
 
-  openItem(e) {
-    const url = e.currentTarget.dataset.url;
-    if (url) wx.navigateTo({ url: url });
+  // ★ 2026-10-24（阶段 1）：关注列表编辑态
+  //   常规态：整行跳详情；编辑态：整行切换选中（不导航）。
+  //   选择只对**当前已加载项**生效（分页未加载的项不可选），文案因此说「已选 n 项」。
+
+  /** 进入 / 退出编辑态 */
+  onToggleEdit() {
+    if (this.data.editing) return this._exitEditing();
+    const patch = { editing: true, selectedCount: 0, allSelected: false };
+    (this.data.items || []).forEach((_, i) => { patch['items[' + i + '].selected'] = false; });
+    this.setData(patch);
   },
 
-  removeItem(e) {
-    const id = e.currentTarget.dataset.id;
+  /** 退出编辑并清空选择（不改列表数据） */
+  _exitEditing() {
+    const patch = { editing: false, selectedCount: 0, allSelected: false };
+    (this.data.items || []).forEach((it, i) => {
+      if (it.selected) patch['items[' + i + '].selected'] = false;
+    });
+    this.setData(patch);
+  },
+
+  /** 行点击：编辑态=切换选中；常规态=跳详情 */
+  onRowTap(e) {
+    const ds = (e && e.currentTarget && e.currentTarget.dataset) || {};
+    if (this.data.editing) {
+      const idx = Number(ds.idx);
+      const items = this.data.items || [];
+      if (!Number.isFinite(idx) || idx < 0 || idx >= items.length) return;
+      const next = !items[idx].selected;
+      const count = items.filter((x, i) => (i === idx ? next : !!x.selected)).length;
+      // ★ 只更新被点的那一行（路径 setData），避免整表重绘
+      this.setData({
+        ['items[' + idx + '].selected']: next,
+        selectedCount: count,
+        allSelected: count === items.length && items.length > 0
+      });
+      return;
+    }
+    if (ds.url) wx.navigateTo({ url: ds.url });
+  },
+
+  /** 全选 / 取消全选（仅当前已加载项） */
+  onToggleSelectAll() {
+    const items = this.data.items || [];
+    if (!items.length) return;
+    const next = !this.data.allSelected;
+    const patch = { allSelected: next, selectedCount: next ? items.length : 0 };
+    items.forEach((_, i) => { patch['items[' + i + '].selected'] = next; });
+    this.setData(patch);
+  },
+
+  /** 批量取消关注（二次确认；成功后退回常规态） */
+  onBatchRemove() {
+    const items = this.data.items || [];
+    const sel = items.filter((x) => x.selected);
+    if (!sel.length) return;
     const type = this.data.activeTab;
-    follow.unfollow(type, id);
-    wx.showToast({ title: '已取消关注', icon: 'none' });
-    this.refresh();
-    if (type === 'teams') this.syncProfile();
+    const label = LABELS[type] || '项';
+    wx.showModal({
+      title: '取消关注',
+      content: '将取消关注 ' + sel.length + ' 个' + label + '，此操作不可撤销。',
+      confirmText: '取消关注',
+      confirmColor: '#E8443B',
+      success: (r) => {
+        if (!r.confirm) return;
+        sel.forEach((it) => follow.unfollow(type, it.id));
+        wx.showToast({ title: '已取消关注 ' + sel.length + ' 项', icon: 'none' });
+        this.refresh();   // refresh 内部会退出编辑态
+        if (type === 'teams') this.syncProfile();
+      }
+    });
   },
 
   // 空态「发现」CTA 文案：随当前 Tab + A/B 实验动态生成
@@ -416,6 +444,11 @@ Page({
       // 批次0（2026-08-30）：teams 已退出 tabBar，改 navigateTo
       wx.navigateTo({ url: '/pages/teams/teams' });
     }
+  },
+
+  // ★ 2026-10-24（阶段 2）：空态次级入口 —— 去看赛事页（默认「进行中 / 即将到来」）
+  goOngoing() {
+    wx.switchTab({ url: '/pages/leagues/leagues' });
   },
 
   onSubscribe() {

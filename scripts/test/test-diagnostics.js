@@ -203,25 +203,18 @@ assert('invalid 也不伪造年龄', rInv2.ageSec === undefined);
 const rFuture = diag.buildRemoteHealth({ value: { at: NOW + 5 * H } }, NOW);
 assert('时钟回拨（at 在未来）⇒ 年龄夹到 0，不出现负数', rFuture.ageSec === 0, 'ageSec=' + rFuture.ageSec);
 
-// ⑥ ★★ 源码级守卫：网络失败分支**必须保持静默**
-//    本组最关键的一条 —— 若有人在 catch 里补上"CI 未上报"，就会把"连不上"归因成"CI 没跑"（指错方向）。
+// ⑥ ★★ 源码级守卫：**「我的」页数据健康卡已于 2026-10-24 下线**
+//    背景：内置快照移除后该卡无消费方，卡片整体删除（含云端心跳读取）。
+//    守卫目的：防止有人只删模板、忘记删页面逻辑（或反之）留下半状态。
 const fsrc = fs.readFileSync(path.join(ROOT, 'pages/follow/follow.js'), 'utf8');
-// ★ 必须用 lastIndexOf：用 indexOf 只检查**第一处**，往 catch 里再补一处照样"通过"。
-//   实测（对源码做变异再跑同一判据）：indexOf 写法是**近永真断言**，已修正为 lastIndexOf。
-const idxSetLast = fsrc.lastIndexOf("'health.remote'");
-const idxCatch = fsrc.indexOf('.catch(', fsrc.indexOf("sb.rest('curation_meta'"));
-assert('★ follow.js：最后一处 health.remote 也在 .catch 之前（catch 内必须静默）',
-  idxSetLast >= 0 && idxCatch > 0 && idxSetLast < idxCatch,
-  'last setData idx=' + idxSetLast + ' catch idx=' + idxCatch);
-assert('★ follow.js：health.remote 只出现 1 处（防在 catch 里又补一处）',
-  fsrc.split("'health.remote'").length - 1 === 1,
-  '出现次数=' + (fsrc.split("'health.remote'").length - 1));
-assert('★ follow.js：心跳落地走纯函数（不得在页面层重新拼装三态）',
-  fsrc.indexOf('diagnostics.buildRemoteHealth(') >= 0);
-// WXML 同理：文案必须来自纯函数；模板里再拼一次的话页面层无测试，拼错没人拦
+assert('★ follow.js：数据健康卡已下线（不再读 diag_report 心跳）',
+  fsrc.indexOf("'health.remote'") < 0 && fsrc.indexOf('buildRemoteHealth(') < 0 &&
+  fsrc.indexOf("sb.rest('curation_meta'") < 0);
+assert('★ follow.js：不再 require diagnostics（防半删除）',
+  fsrc.indexOf("require('../../utils/diagnostics.js')") < 0);
 const wsrc = fs.readFileSync(path.join(ROOT, 'pages/follow/follow.wxml'), 'utf8');
-assert('★ follow.wxml：心跳文案直接取 .text（不在模板内拼）',
-  wsrc.indexOf('health.remote.text') >= 0 && wsrc.indexOf('health.remote.ageText') < 0);
+assert('★ follow.wxml：不再渲染「数据健康」卡',
+  wsrc.indexOf('数据健康') < 0 && wsrc.indexOf('health.') < 0);
 
 console.log('\n=== 结果 ===');
 console.log('通过: ' + pass + '  失败: ' + fail);

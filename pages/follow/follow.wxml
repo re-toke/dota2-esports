@@ -1,10 +1,11 @@
 <!-- 「我的」页 · 极简版（2026-09-14）
-     极简原则：只保留「身份 → 提醒 → 关注 → 设置」四段，其余全部下沉到 /subpackages/detail/settings。
-     移除：统计行（计数并入分段标签）、云同步内容明细、提醒策略 chips、今日推送计数、
-           推送记录、底部合规长 tip、「关于」独立卡、左侧图标与类型徽章。 -->
-<view class="container with-tab-bar">
+     ★ 2026-10-24 阶段 1（UI 优化）：
+       ① 设置入口上移到 Hero 右侧（齿轮，88rpx 触达），移除列表底部的设置卡；
+       ② 取消关注改为「管理 → 多选 → 二次确认」，常规态不再常驻 ×（防误触）；
+       ③ 同步状态独立成行内文案，失败时给「重试」文字链（整块 88rpx 触达）。 -->
+<view class="container with-tab-bar {{editing ? 'editing' : ''}}">
 
-  <!-- ===== ① 身份条（本机资料 + 云同步开关） ===== -->
+  <!-- ===== ① 身份条（本机资料 + 云同步开关 + 设置入口） ===== -->
   <view class="hero">
     <button class="hero-avatar-btn" open-type="chooseAvatar" bindchooseavatar="onChooseAvatar">
       <image wx:if="{{profile.avatarUrl}}" class="hero-avatar" src="{{profile.avatarUrl}}" mode="aspectFill" />
@@ -14,10 +15,19 @@
       <input class="hero-name" type="nickname" value="{{profile.nickname}}"
              placeholder="设置昵称" placeholder-class="hero-name-ph"
              maxlength="12" bindblur="onNicknameBlur" />
-      <text class="hero-sub">{{sync.enabled ? (sync.status === 'syncing' ? '正在同步…' : (sync.status === 'failed' ? '同步失败，点此重试' : '已同步 · ' + sync.lastSyncText)) : '未开启云同步'}}</text>
+      <view class="hero-status">
+        <view class="status-dot {{sync.status}}"></view>
+        <text class="hero-sub">{{sync.status === 'syncing' ? '正在同步…' : (sync.status === 'failed' ? '同步失败' : (sync.enabled ? '已同步 · ' + sync.lastSyncText : '未开启云同步'))}}</text>
+        <text wx:if="{{sync.status === 'failed'}}" class="hero-retry" catchtap="onSyncRetry">重试</text>
+      </view>
     </view>
-    <view class="switch {{sync.enabled ? 'on' : ''}} {{sync.status === 'syncing' ? 'busy' : ''}}" bindtap="onSyncToggle">
-      <view class="switch-knob"></view>
+    <view class="tap-88" bindtap="onSyncToggle" hover-class="tap-scale">
+      <view class="switch {{sync.enabled ? 'on' : ''}} {{sync.status === 'syncing' ? 'busy' : ''}}">
+        <view class="switch-knob"></view>
+      </view>
+    </view>
+    <view class="tap-88" bindtap="goSettings" hover-class="tap-scale" aria-role="button" aria-label="设置">
+      <image class="gear" src="/assets/icons/gear.png" mode="aspectFit" />
     </view>
   </view>
 
@@ -38,43 +48,50 @@
     </view>
   </view>
 
-  <!-- ===== ②b 数据健康（P0-B 下半）：把「静默问题」变成用户/开发者可见 =====
-       口径：本机最近一次首页融合指标 + 云端调度心跳（★ 2026-10-24 内置快照行已移除） -->
-  <view class="row-card" wx:if="{{health}}">
-    <view class="row-main">
-      <text class="row-title">数据健康</text>
-      <!-- ★ 文案由纯函数 diagnostics.buildRemoteHealth 拼好（页面层零测试是最大盲区）；
-           三态：正常「X 前（commit）」/ 超时「· ❌ 已超 24h 目标（疑似停摆）」/ 无行「尚无记录（CI 未上报）」 -->
-      <text class="row-sub" wx:if="{{health.remote}}">云端调度心跳：{{health.remote.text}}</text>
-      <text class="row-sub">{{health.metricHint}}</text>
+  <!-- ===== ③ 关注阵容（页面主体） ===== -->
+  <view class="section-head">
+    <view class="section-l">
+      <text class="section-title">我的关注</text>
+      <text class="section-count">{{counts[activeTab]}}</text>
+    </view>
+    <text wx:if="{{items.length > 0}}" class="section-action" bindtap="onToggleEdit">{{editing ? '完成' : '管理'}}</text>
+  </view>
+
+  <view class="seg-row">
+    <view class="seg">
+      <view
+        wx:for="{{tabs}}"
+        wx:key="key"
+        class="seg-item {{activeTab === item.key ? 'active' : ''}}"
+        bindtap="switchTab"
+        data-key="{{item.key}}"
+      >{{item.label}} {{item.count}}</view>
     </view>
   </view>
 
-  <!-- ===== ③ 关注阵容（页面主体） ===== -->
-  <view class="seg">
-    <view
-      wx:for="{{tabs}}"
-      wx:key="key"
-      class="seg-item {{activeTab === item.key ? 'active' : ''}}"
-      bindtap="switchTab"
-      data-key="{{item.key}}"
-    >{{item.label}} {{item.count}}</view>
-  </view>
-
   <empty-state wx:if="{{items.length === 0}}" type="{{activeTab === 'teams' ? 'team' : 'follow'}}" title="还没有关注任何{{activeLabel}}" desc="在战队 / 赛事列表页点击星标即可加入关注" actionText="{{exploreText}}" bind:action="goExplore" />
+  <text wx:if="{{items.length === 0}}" class="empty-extra" bindtap="goOngoing">看看正在进行的赛事 ›</text>
 
   <view wx:else class="list">
-    <view class="follow-row anim-fade-up" wx:for="{{items}}" wx:key="id" hover-class="follow-row-hover" style="animation-delay: {{ (index % 12) * 50 }}ms">
-      <view class="follow-main" bindtap="openItem" data-url="{{item.target}}">
+    <view
+      class="follow-row anim-fade-up {{editing ? 'follow-row--editing' : ''}}"
+      wx:for="{{items}}"
+      wx:key="id"
+      hover-class="follow-row-hover"
+      style="animation-delay: {{ (index % 12) * 50 }}ms"
+      bindtap="onRowTap"
+      data-idx="{{index}}"
+      data-url="{{item.target}}"
+    >
+      <view wx:if="{{editing}}" class="select-dot {{item.selected ? 'on' : ''}}"></view>
+      <view class="follow-main">
         <view class="follow-avatar">
           <image wx:if="{{item.type === 'teams' && item.logo}}" class="follow-avatar-img" src="{{item.logo}}" mode="aspectFill" lazy-load="{{true}}" binderror="onFollowLogoError" data-idx="{{index}}" />
           <text wx:elif="{{item.iconText}}">{{item.iconText}}</text>
         </view>
         <text class="follow-name">{{item.displayName || item.name}}</text>
       </view>
-      <view class="follow-remove" catchtap="removeItem" data-id="{{item.id}}" hover-class="tap-scale">
-        <view class="remove-x"></view>
-      </view>
+      <view wx:if="{{!editing}}" class="chev"></view>
     </view>
 
     <view class="loadmore" wx:if="{{hasMore}}">
@@ -83,11 +100,11 @@
     <view wx:elif="{{items.length > pageSize}}" class="center muted">— 已显示全部 {{items.length}} 项 —</view>
   </view>
 
-  <!-- ===== ④ 设置入口 ===== -->
-  <view class="row-card row-card--nav" bindtap="goSettings" hover-class="row-card-hover">
-    <text class="row-title">设置</text>
-    <view class="chev"></view>
-  </view>
-
   <view class="bottom-spacer"></view>
+
+  <!-- ===== ④ 编辑态底部操作条（固定于 tabBar 之上） ===== -->
+  <view wx:if="{{editing}}" class="edit-bar">
+    <text class="edit-all" bindtap="onToggleSelectAll">{{allSelected ? '取消全选' : '全选'}}</text>
+    <text class="edit-remove {{selectedCount ? '' : 'disabled'}}" bindtap="onBatchRemove">取消关注{{selectedCount ? ' (' + selectedCount + ')' : ''}}</text>
+  </view>
 </view>

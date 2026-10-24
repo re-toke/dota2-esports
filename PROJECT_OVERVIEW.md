@@ -66,7 +66,7 @@
 | `heroes.js` / `itemZh.js` / `neutralItems.js` | 英雄 / 物品（含中文名）|
 | `liquipedia.js` / `liquipedia-parse.js` / `lp-ua.js` | LP 解析与 UA 约束（云端抓取）|
 | `haglund.js` / `liveSources.js` | 备用数据源 / 直播源 |
-| `diagnostics.js` / `monitor.js` / `experiment.js` | 「我的」页数据健康、埋点上报、实验开关 |
+| `diagnostics.js` / `monitor.js` / `experiment.js` | 指标与埋点（`diagnostics` 仍供**联赛详情的数据源健康探测**与 CI 使用）、实验开关。★ 2026-10-24：「我的」页数据健康卡已下线 |
 | `indexCardHelpers.js` / `index-builders.js` / `homeDedupe.js` | 首页卡片纯函数层 / 索引构建 / 去重 |
 | `incremental.js` / `follow.js` / `followBatch.js` / `reminderStrategy.js` | 增量更新、关注与提醒 |
 | `searchHistory.js` / `league-canon-map.js` / `discover-core.js` | 搜索历史 / 联赛规范映射 / 赛事发现 |
@@ -93,7 +93,7 @@
 - **缓存五层**：T1 客户端内存热缓存 → T2 客户端 Storage（SWR）→ T3 中转 GET 短路 → T4 EF 内存 L1 → T5 `aggregation_cache`（KV）。
 - **降级链**：中转主出口失败 → 切备出口（仅**传输层失败**触发；429/5xx 只退避重试）→ 直连 OpenDota → curation。★ 中转侧另有**陈旧兜底**（见下）。
 - **★ 中转「陈旧兜底」（2026-10-24）**：同一 key 曾有成功缓存时，上游只试 **1 次**且超时收紧到 **4s**；失败 / 5xx / body 停滞 ⇒ 直接回上一次成功响应（`X-Proxy-Cache: STALE` + `X-Proxy-Cache-Age`）。无旧缓存时行为不变（12s × 2）。目的：消除上游「头快、body 卡」导致的首页 15s 空窗。
-- **失败可见**：「我的」页数据健康卡（`diagnostics`）；EF/中转失败与卡片质量**事件上报**。
+- **失败可见**：**联赛详情的数据源健康探测**（`subpackages/detail/dataHealth.js`，复用 EF `opendota-proxy` 的 health action）区分「数据源故障」与「确实无数据」；EF/中转失败与卡片质量**事件上报**。★ 2026-10-24：「我的」页数据健康卡已下线（快照移除后无消费方）。
 - **安全**：客户端**不持有真实 Supabase key**（中转服务端注入）；写权限只在 EF；`007-security-hardening.sql` 加了 `keep_alive` 列约束 + 写入频率触发器；中转按 IP 限流（默认 120/min，取不到 IP 则 **fail-open**）。
 
 ---

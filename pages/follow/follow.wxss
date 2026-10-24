@@ -4,20 +4,25 @@
 
 .container { padding: var(--space-3); }
 
-/* ===== ① 身份条（直接坐在页面底色上，不用卡片 —— 极简签名） ===== */
+/* ===== ① 身份条（★ 2026-10-24 阶段 2：卡片化，与下方卡片同一视觉语言） ===== */
 .hero {
   display: flex;
   align-items: center;
-  gap: var(--space-2-5);
-  padding: var(--space-2) var(--space-1) var(--space-3);
+  gap: var(--space-2);
+  padding: var(--space-2-5);
+  margin-bottom: var(--space-2-5);
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
 }
+/* 齿轮在最右：扣掉触达盒的视觉内缩，让图标与卡片右边距对齐 */
+.hero .tap-88:last-child { margin-right: -6rpx; }
 /* chooseAvatar 承载按钮：去原生样式 */
 .hero-avatar-btn {
   position: relative;
   padding: 0;
   margin: 0;
-  width: 96rpx;
-  height: 96rpx;
+  width: 112rpx;
+  height: 112rpx;
   background: transparent;
   border: none;
   border-radius: 50%;
@@ -26,19 +31,19 @@
 }
 .hero-avatar-btn::after { border: none; }
 .hero-avatar {
-  width: 96rpx;
-  height: 96rpx;
+  width: 112rpx;
+  height: 112rpx;
   border-radius: 50%;
   display: block;
   background: var(--card-bg-inset);
 }
-.hero-avatar--default { padding: 20rpx; box-sizing: border-box; }
+.hero-avatar--default { padding: 24rpx; box-sizing: border-box; }
 .hero-info {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 6rpx;
+  gap: var(--space-0-5);
 }
 .hero-name {
   height: 48rpx;
@@ -54,6 +59,50 @@
 .hero-sub {
   font-size: var(--fs-caption);
   color: var(--text-3);
+}
+/* ★ 2026-10-24：状态独立成行；圆点表达四态，失败时给「重试」文字链（88rpx 触达）
+   配色语义：已同步=成功绿（与品牌金区分，避免"金色=警告"的误读）；同步中=信息蓝；失败=红。 */
+.hero-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 40rpx;
+}
+.status-dot {
+  flex-shrink: 0;
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 50%;
+  background: var(--text-4);
+}
+.status-dot.synced { background: var(--td-success-color); }
+.status-dot.syncing { background: var(--tier-b); }
+.status-dot.failed { background: var(--dire); }
+.status-dot.off { background: var(--text-4); }
+.hero-retry {
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  color: var(--tier-s-text);
+  padding: 22rpx 12rpx;
+  margin: -22rpx -12rpx;
+}
+
+/* 统一 88rpx 触达区（齿轮 / 开关外壳） */
+.tap-88 {
+  flex-shrink: 0;
+  width: 88rpx;
+  height: 88rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tap-scale { opacity: 0.7; }
+
+/* 齿轮图标（192×192 透明 PNG，见 assets/icons/gear.png；CSS 绘制在小尺寸下易失真） */
+.gear {
+  display: block;
+  width: 44rpx;
+  height: 44rpx;
 }
 
 /* ===== 隐私未授权提示（可点击去同意） ===== */
@@ -134,12 +183,46 @@
 }
 .switch.on .switch-knob { transform: translateX(32rpx); }
 
-/* ===== ③ 分段（极简下划线 tab，计数并入标签） ===== */
-.seg {
+/* ===== ③ 分组头 + 分段（★ 2026-10-24 阶段 2：「管理」上移到分组头） ===== */
+.section-head {
   display: flex;
-  gap: var(--space-5);
+  align-items: center;
+  justify-content: space-between;
+  margin: var(--space-3) var(--space-1) var(--space-1);
+}
+.section-l {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+}
+.section-title {
+  font-size: var(--fs-subhead);
+  font-weight: 600;
+  color: var(--text-1);
+}
+.section-count {
+  font-size: var(--fs-caption);
+  color: var(--text-4);
+}
+.section-action {
+  flex-shrink: 0;
+  padding: 14rpx 8rpx;
+  margin: -14rpx 0;
+  font-size: var(--fs-label);
+  font-weight: 600;
+  color: var(--dota-gold);
+}
+.seg-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
   margin: var(--space-1) var(--space-1) 0;
   border-bottom: 1rpx solid var(--td-border-level-1-color);
+}
+.seg {
+  flex: 1;
+  display: flex;
+  gap: var(--space-5);
 }
 .seg-item {
   position: relative;
@@ -172,10 +255,11 @@
 .follow-row {
   display: flex;
   align-items: center;
-  min-height: 108rpx;
+  min-height: 112rpx;
   padding: var(--space-2) var(--space-3);
   transition: background var(--dur-fast) var(--ease-out);
 }
+.follow-row--editing { padding-left: var(--space-2); }
 .follow-row + .follow-row { border-top: 1rpx solid var(--td-border-level-1-color); }
 .follow-row-hover { background: var(--td-bg-color-component); }
 .follow-main {
@@ -186,8 +270,8 @@
   gap: var(--space-2);
 }
 .follow-avatar {
-  width: 72rpx;
-  height: 72rpx;
+  width: 80rpx;
+  height: 80rpx;
   border-radius: var(--radius-md);
   background: var(--card-bg-inset);
   color: var(--text-2);
@@ -214,34 +298,33 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.follow-remove {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 64rpx;
-  height: 64rpx;
-  margin-left: var(--space-1);
-}
-/* CSS 绘制 ×（避免引入图标组件 / 硬编码色） */
-.remove-x {
+/* ★ 2026-10-24：编辑态选择圈（44rpx 圆环；选中=金色实底 + 白勾） */
+.select-dot {
   position: relative;
-  width: 26rpx;
-  height: 26rpx;
+  flex-shrink: 0;
+  width: 44rpx;
+  height: 44rpx;
+  margin-right: var(--space-2);
+  border: 2rpx solid var(--text-4);
+  border-radius: 50%;
+  box-sizing: border-box;
+  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
 }
-.remove-x::before,
-.remove-x::after {
+.select-dot.on {
+  background: var(--dota-gold);
+  border-color: var(--dota-gold);
+}
+.select-dot.on::after {
   content: '';
   position: absolute;
-  left: 0;
-  top: 50%;
-  width: 26rpx;
-  height: 2rpx;
-  border-radius: 2rpx;
-  background: var(--text-4);
+  left: 14rpx;
+  top: 8rpx;
+  width: 10rpx;
+  height: 18rpx;
+  border-right: 3rpx solid #fff;
+  border-bottom: 3rpx solid #fff;
+  transform: rotate(45deg);
 }
-.remove-x::before { transform: translateY(-50%) rotate(45deg); }
-.remove-x::after { transform: translateY(-50%) rotate(-45deg); }
 
 /* ===== 加载更多 / 已显示全部 ===== */
 .loadmore {
@@ -254,6 +337,15 @@
   color: var(--text-4);
   font-size: var(--fs-caption);
   padding: var(--space-3) 0;
+}
+
+/* ★ 2026-10-24（阶段 2）：空态次级入口（文字链，不新增组件能力） */
+.empty-extra {
+  display: block;
+  text-align: center;
+  padding: var(--space-2) 0 var(--space-4);
+  font-size: var(--fs-caption);
+  color: var(--dota-gold);
 }
 
 /* ===== CSS 箭头（设置入口） ===== */
@@ -269,3 +361,40 @@
 
 /* 底部 spacer：配合 with-tab-bar 留出自定义 tabBar 区域 */
 .bottom-spacer { height: 24rpx; }
+
+/* ★ 2026-10-24：编辑态底部操作条（固定于自定义 tabBar 之上）
+   实测 tabBar 高度 = 10(padding-top) + 12(item padding-top) + 56(icon) + 8(text margin) + 22~24(text)
+                      + 8(item padding-bottom) + 12(padding-bottom) ≈ **130rpx + safe**
+   ⇒ 取 140rpx：让出 tabBar 后再留 ~10rpx 呼吸；真机如仍偏差，只调这一处。 */
+.edit-bar {
+  position: fixed;
+  left: var(--space-3);
+  right: var(--space-3);
+  bottom: calc(140rpx + env(safe-area-inset-bottom));
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 96rpx;
+  padding: 0 var(--space-3);
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 4rpx 24rpx var(--overlay-12);
+}
+.edit-all {
+  font-size: var(--fs-label);
+  color: var(--dota-gold);
+  padding: 24rpx 8rpx;
+}
+.edit-remove {
+  font-size: var(--fs-label);
+  font-weight: 600;
+  color: var(--dire);
+  padding: 24rpx 8rpx;
+}
+.edit-remove.disabled { color: var(--text-4); }
+
+/* 编辑态给底部操作条让出空间（tabBar 130 + 间隙 10 + 操作条 96 + 余量 32） */
+.container.with-tab-bar.editing {
+  padding-bottom: calc(268rpx + env(safe-area-inset-bottom));
+}
