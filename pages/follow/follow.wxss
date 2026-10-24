@@ -83,8 +83,9 @@
   font-size: var(--fs-caption);
   font-weight: 600;
   color: var(--tier-s-text);
-  padding: 22rpx 12rpx;
-  margin: -22rpx -12rpx;
+  /* ★ 2026-10-24 阶段 3：触达区 ≥88rpx（22 + 33×2） */
+  padding: 33rpx 12rpx;
+  margin: -33rpx -12rpx;
 }
 
 /* 统一 88rpx 触达区（齿轮 / 开关外壳） */
@@ -188,7 +189,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin: var(--space-3) var(--space-1) var(--space-1);
+  /* ★ 2026-10-24 阶段 3：整行 88rpx，既保证触达又不与下方分段 tab 的点击区重叠 */
+  min-height: 88rpx;
+  margin: var(--space-1) var(--space-1) 0;
 }
 .section-l {
   display: flex;
@@ -206,8 +209,9 @@
 }
 .section-action {
   flex-shrink: 0;
-  padding: 14rpx 8rpx;
-  margin: -14rpx 0;
+  display: flex;
+  align-items: center;
+  padding: 0 8rpx;
   font-size: var(--fs-label);
   font-weight: 600;
   color: var(--dota-gold);
@@ -339,11 +343,14 @@
   padding: var(--space-3) 0;
 }
 
-/* ★ 2026-10-24（阶段 2）：空态次级入口（文字链，不新增组件能力） */
+/* ★ 2026-10-24（阶段 2）：空态次级入口（文字链，不新增组件能力）
+   ★ 阶段 3：整块 88rpx 触达 */
 .empty-extra {
-  display: block;
-  text-align: center;
-  padding: var(--space-2) 0 var(--space-4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 88rpx;
+  padding: 0 0 var(--space-3);
   font-size: var(--fs-caption);
   color: var(--dota-gold);
 }
@@ -382,15 +389,21 @@
   box-shadow: 0 4rpx 24rpx var(--overlay-12);
 }
 .edit-all {
+  display: flex;
+  align-items: center;
+  min-height: 88rpx;
   font-size: var(--fs-label);
   color: var(--dota-gold);
-  padding: 24rpx 8rpx;
+  padding: 0 8rpx;
 }
 .edit-remove {
+  display: flex;
+  align-items: center;
+  min-height: 88rpx;
   font-size: var(--fs-label);
   font-weight: 600;
   color: var(--dire);
-  padding: 24rpx 8rpx;
+  padding: 0 8rpx;
 }
 .edit-remove.disabled { color: var(--text-4); }
 
