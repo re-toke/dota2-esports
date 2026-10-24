@@ -6,8 +6,9 @@
 #     —— 若不补这个 workflow，`upcoming_schedule` 表建好后**永远不会被刷新**，
 #     客户端切到直读就会读到空表（这正是"接线≠生效"的典型陷阱）。
 #
-#   职责：抓 Liquipedia → ① 更新三件套快照（提交回仓库，供客户端本地兜底）
+#   职责：抓 Liquipedia → ① 刷新队徽快照（提交回仓库，供客户端冷启动兜底）
 #                    ② 写 Supabase `upcoming_schedule`（服务端权威，客户端直读）
+#   ★ 2026-10-24：内置「即将赛程 / 联赛」快照已移除（改为纯联网）⇒ 不再生成/提交这两份本地快照。
 #
 #   凭据：复用 repo **已有** 的 SUPABASE_URL / SUPABASE_SERVICE_KEY
 #     （与 sync-liquipedia / discover-tournaments / ef-health 同一套，**无需新增 secret**）。
@@ -44,32 +45,20 @@ jobs:
         with:
           node-version: '20'
 
-      # ★★ 2026-09-28（A′ 配套）：**把两个「补接线」刷新步前置到 LP 抓取之前**。
-      #   原顺序把它们排在 LP 步之后 ⇒ 2026-09-28 那次 LP 被限流失败时，这两步被**连带 skipped**，
-      #   已能刷新的产物一个都没落地（"补强"实际被 LP 的抖动绑架）。
-      #   这两步分别只依赖 **OpenDota** / **Steam CDN**，与 LP 毫无依赖关系 ⇒ 没有理由排在 LP 后面。
+      # ★★ 2026-09-27（快照过期诊断/复核 · 缺口 A）：队徽快照的定时刷新（补接线）。
       #
-      # ★★ 2026-09-27（快照过期诊断/复核 · 缺口 A）：补齐**另两个** build-time 快照的定时刷新。
-      #
-      #   问题：有「鲜度要求」的自动产物共 3 个，此前**只有 upcoming** 接了 CI：
-      #     · upcoming-local      → 已接（见下）
-      #     · leagues-local       → **无接线** ⇒ 永远停在最后一次手工生成（实测 12.7 天）
-      #     · team-logo-local     → **无接线** ⇒ 实测 26 天未更新（140KB，且在包内）
-      #   两者脚本均**无需密钥、无副作用**（只 `fs.writeFileSync` 写各自产物）⇒ 与 upcoming 同形。
+      #   问题：队徽快照此前**无接线** ⇒ 实测 26 天未更新（140KB，且在包内）。
+      #   ★ 2026-10-24：赛程/联赛内置快照已移除 ⇒ 本 workflow 只剩队徽这一份 build-time 产物。
       #
       #   ⚠️ `continue-on-error: true` 是**刻意**的：
-      #     这两个脚本依赖 OpenDota；若其抖动/失败，**不能**让整个 job 失败 ——
-      #     否则会连带**阻断随后的 upcoming 快照回写**（把一个"补强"变成"新增单点故障"）。
+      #     该脚本依赖 OpenDota / Steam CDN；若其抖动/失败，**不能**让整个 job 失败 ——
+      #     否则会连带**阻断随后的 upcoming Supabase 回写**（把一个"补强"变成"新增单点故障"）。
       #     失败不会静默：① 该 step 在运行页显示为 failed；② 新鲜度守卫（check-snapshot-freshness）会报警。
-      - name: Refresh leagues snapshot (补接线)
-        continue-on-error: true
-        run: node scripts/sync/fetch-leagues-snapshot.js
-
       - name: Refresh team-logo snapshot (补接线)
         continue-on-error: true
         run: node scripts/sync/fetch-team-logos.js
 
-      - name: Run upcoming sync (snapshot + Supabase)
+      - name: Run upcoming sync (Liquipedia → Supabase)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
@@ -88,22 +77,19 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: node scripts/ops/diag-report.js --apply
 
-      # ★★ 2026-09-28（A′ 配套）：加 `if: always()` —— LP 步失败时**也要**把已刷新的**其它**产物提交回仓库。
-      #   原行为：LP 一红 ⇒ 本步 skipped ⇒ 上面两步已刷新的 leagues/team-logo 全部丢弃（补强变摆设）。
-      #   双重守卫：① `steps.checkout.outcome == 'success'`（否则工作区为空，`git add` 会二次报错、掩盖真因）；
+      # ★★ 2026-09-28（A′ 配套）：加 `if: always()` —— LP 步失败时**也要**把已刷新的队徽快照提交回仓库。
+      # 双重守卫：① `steps.checkout.outcome == 'success'`（否则工作区为空，`git add` 会二次报错、掩盖真因）；
       #            ② 保留原有「暂存区无差异则跳过」兜底 ⇒ 空跑不会产生空提交。
       - name: Commit refreshed snapshot artifacts
         if: always() && steps.checkout.outcome == 'success'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          # ★ 2026-09-27：回写范围扩到**全部有鲜度要求的产物**（此前只有 upcoming ⇒ leagues 停更 12.7 天）
-          git add utils/upcoming-local.json utils/upcoming-local-data.js \
-                  utils/leagues-local.json  utils/leagues-local-data.js \
-                  utils/team-logo-map.json  subpackages/detail/team-logo-local-data.js
+          # ★ 2026-10-24：内置赛程/联赛快照已移除 ⇒ 只提交队徽快照产物
+          git add utils/team-logo-map.json subpackages/detail/team-logo-local-data.js
           if git diff --quiet --cached; then
             echo "快照无变化，跳过提交"
           else
-            git commit -m "chore(snapshot): 定时刷新快照 upcoming/leagues/team-logo（CI，$(date -u +%Y-%m-%dT%H:%MZ)）"
+            git commit -m "chore(snapshot): 定时刷新队徽快照（CI，$(date -u +%Y-%m-%dT%H:%MZ)）"
             git push
           fi

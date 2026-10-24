@@ -1,23 +1,22 @@
 #!/usr/bin/env node
 /**
- * 本地预抓取 Liquipedia 即将到来赛事 → 生成 utils/upcoming-local.json
+ * 抓 Liquipedia「即将到来」赛事 → 写 Supabase `upcoming_schedule`（**不再生成包内快照**）
  *
- * 用途：在不依赖微信云函数 / CloudBase 的前提下，让「即将到来」tab
- *       也能跟随 Liquipedia 实时数据。代价是数据为「运行脚本那一刻」的快照，
- *       需要重新构建/发布小程序时才会更新（适合更新频率不高的个人项目）。
+ * 用途：客户端「即将到来」改为纯联网获取后，`upcoming_schedule` 表是**权威远程源**。
+ *       ★ 2026-10-24：原先同时生成包内赛程快照（JSON + JS 包装）作为本地兜底，
+ *       该内置快照已按用户决策移除；本脚本只保留「抓 LP → 写表」这一段。
  *
  * 为什么必须走脚本而非小程序前端直连：
  *   - Liquipedia API 强制要求描述性 User-Agent，否则 403；
  *   - 微信 wx.request 的 User-Agent 被平台强制覆盖，无法设置；
- *   - 所以只能在「能自由设 UA 的 Node 环境」抓取，再把结果打包进小程序。
+ *   - 所以只能在「能自由设 UA 的 Node 环境」抓取，再由 CI 写入 Supabase。
  *
- * 运行：node scripts/fetch-liquipedia-upcoming.js
+ * 运行：node scripts/sync/fetch-liquipedia-upcoming.js
  * 依赖：仅 Node 内置 https + zlib（无需 npm install）
  */
 
 const https = require('https');
 const zlib = require('zlib');
-const fs = require('fs');
 const path = require('path');
 // ★ 2026-09-20：赛事名「形状归一」单一实现（原为内联；全仓库 19 处收敛中）
 const names = require('../../utils/names.js');
@@ -40,14 +39,14 @@ function parseLiquipediaDate(text) {
   const ed = m[4] ? parseInt(m[4], 10) : sd;
   const year = parseInt(m[5], 10);
   if (sm == null || em == null || isNaN(sd) || isNaN(ed) || isNaN(year)) return null;
-  // ★★ 2026-09-20 修复「结束日在界面晚一天」（系统性，15 条快照赛事全部命中）：
+  // ★★ 2026-09-20 修复「结束日在界面晚一天」（系统性，15 条 LP 赛事全部命中）：
   //   本函数产出的是**日期边界**，而展示侧 `util.fmtShort()` 用 `getMonth()/getDate()`
   //   —— **设备本地时区**取日期。若把 end 存成「该日 **UTC** 23:59:59」，在 UTC+8 设备上
   //   换算为次日 07:59 → 结束日被显示成**次日**（实测 LP 原文 "Sep 19–27, 2026" 显示成 9/28）。
   //   故 end 对齐到**北京时间当日最后一秒**（= 该日 UTC 15:59:59），使 UTC+8 设备显示回 LP 原文。
   //   start 仍取「该日 UTC 00:00」不动 —— 换算到 UTC+8 是当天 08:00，不跨日、显示本就正确。
   //   ⚠️ 勿改回「UTC 日末」；若将来改为 UTC 展示口径，须同时改 util.fmtShort 与
-  //      scripts/test/test-sources.js 的「快照数据自洽」守卫，三者必须同步。
+  //      scripts/test/test-sources.js 的「LP 日期自洽」守卫，两者必须同步。
   const BJ_OFFSET_SEC = 8 * 3600;   // 与 config.time.bjOffsetSec 一致（北京时间单一来源）
   return {
     start: Math.floor(Date.UTC(year, sm, sd, 0, 0, 0) / 1000),
@@ -81,9 +80,9 @@ function gradeOf(t) {
 //
 //   ★★ 处置原则 = **按失败类型分流**（原实现把三类性质完全不同的失败混进同一个 exit(1)）：
 //     · **被拦截页（Rate Limited / CAPTCHA）** → 退避重试；**仍被拦 ⇒ 警告 + exit 0**
-//       （不写库、保留旧快照）。理由：被拦时**不产生错误数据**，只是"不更新"；"不更新"由
+//       （不写库、保留上次成功写入的旧数据）。理由：被拦时**不产生错误数据**，只是"不更新"；"不更新"由
 //       **心跳不前进**（客户端「我的」页可见）+ 鲜度守卫体现 ⇒ 不必再用"失败邮件"重复告知，
-//       否则就是**告警疲劳**（本项目已多次踩：24h 快照判定 ⇒ 永久红灯 ⇒ 疲劳）。
+//       否则就是**告警疲劳**（本项目已多次踩：快照年龄判定 ⇒ 永久红灯 ⇒ 疲劳）。
 //     · **上游 0 条** → 仍 **exit(1)**（见下方 EMPTY-UPSTREAM GUARD：可能解析失效/结构变化，必须人看）。
 //     · **写库失败 / 无法识别的响应** → 仍 **exit(1)**（我方或下游故障）。
 //   ★ 为什么**不是**"无脑重试"：唯一数据点（09:27Z 被限 → 09:44Z 恢复）⇒ 被拦窗口 ∈ (0, 17min)，
@@ -170,32 +169,27 @@ async function main() {
     html = await fetchParseWithRetry();
   } catch (e) {
     if (e && e.name === 'LpRateLimitedError') {
-      // ★★ A′ 分流：外部拦截 ⇒ 降级为**警告 + exit 0**（不写库、保留旧快照）。
+      // ★★ A′ 分流：外部拦截 ⇒ 降级为**警告 + exit 0**（不写库、保留旧数据）。
       //   依据见文件上方长注释：被拦时不产生错误数据（只是"不更新"），而"不更新"已由
       //   心跳不前进（客户端可见）+ 鲜度守卫体现 ⇒ 无需再用"失败邮件"重复告知。
-      console.warn('[upcoming] ⚠ 本次跳过（不写库、不改快照）：' + e.message);
+      console.warn('[upcoming] ⚠ 本次跳过（不写库）：' + e.message);
       console.warn('[upcoming]   这是 LP 侧的外部拦截（GitHub 共用 runner IP 被波及），非我方故障；');
-      console.warn('[upcoming]   快照保持上一次成功内容 ⇒「不更新」由心跳 + 鲜度守卫体现，故不判失败（避免告警疲劳）。');
+      console.warn('[upcoming]   Supabase upcoming_schedule 保持上次成功内容 ⇒「不更新」由心跳 + 鲜度守卫体现，故不判失败（避免告警疲劳）。');
       return;
     }
     throw e;   // 其它错误（超时/解压失败/非限流的 HTML）仍按失败处理
   }
 
   // ★ 2026-08-31 P1：双段抓取（Upcoming + Ongoing），对齐云函数 fetchLiquipediaUpcoming 行为。
-  //   此前只读 Upcoming 段：Liquipedia 把开赛赛事移入 Ongoing 段后，本地快照漏采进行中赛事
-  //   （云函数 2026-07-30 已修复同样的问题，本地脚本一直没跟上）。
+  //   此前只读 Upcoming 段：Liquipedia 把开赛赛事移入 Ongoing 段后会漏采进行中赛事。
   //   抓取顺序 Upcoming 在前：先把完整赛期记入内存，供 Ongoing 段同名条目（日期常被截断为
-  //   仅开始日）回填；回填不出时再查旧快照。同名 hashId 去重，两段重叠不重复输出。
+  //   仅开始日）回填。同名 hashId 去重，两段重叠不重复输出。
   //   ★ tier 过滤同步放宽：1/2 → 1/2/3（tier3=B级，如 EPL Masters II、ExitLag ChampZ。
   //   此前 tier3 全被滤掉，是 EPL Masters II 从「即将到来/进行中」消失的第二根因）。
   const nowSec = Math.floor(Date.now() / 1000);
   const out = [];
   const seen = {};               // hashId -> true（Upcoming/Ongoing 同名去重）
   const fullDateMem = {};        // hashId -> {start,end}（Upcoming 完整赛期，供 Ongoing 回填）
-  let prevSnap = null;           // 旧快照（Ongoing 截断日期的兜底回填源）
-  try {
-    prevSnap = require(path.join(__dirname, '..', '..', 'utils', 'upcoming-local.json'));
-  } catch (_e) { /* 首次生成无旧文件，跳过 */ }
 
   const rowRe = /<tr class="table2&#95;&#95;row--(body|highlighted)">(.*?)<\/tr>/gs;
   const SECTIONS = ['Upcoming', 'Ongoing'];
@@ -222,19 +216,11 @@ async function main() {
         // Upcoming 段通常含完整日期范围 → 记入内存，供同赛事 Ongoing 行回填
         if (dr.end > dr.start) fullDateMem[id] = { start: dr.start, end: dr.end };
       } else if (dr.end <= dr.start) {
-        // Ongoing 段日期单元格可能仅显示开始日（end==start 截断）→ 回填完整赛期
-        let full = fullDateMem[id];
-        if ((!full || full.end <= full.start) && prevSnap && prevSnap.events) {
-          const dn = names.normAsciiKey(name);
-          const hit = prevSnap.events.find((e) => {
-            const en = names.normAsciiKey(e.name);
-            return en && (en === dn || dn.indexOf(en) >= 0 || en.indexOf(dn) >= 0);
-          });
-          if (hit && hit.end > hit.start) full = { start: hit.start, end: hit.end };
-        }
+        // Ongoing 段日期单元格可能仅显示开始日（end==start 截断）→ 用 Upcoming 段内存回填
+        const full = fullDateMem[id];
         if (full && full.end > full.start) { dr.start = full.start; dr.end = full.end; }
       }
-      if (dr.end < nowSec) continue; // 已结束不进快照（回填后 end 为真实结束日）
+      if (dr.end < nowSec) continue; // 已结束不进本次结果（回填后 end 为真实结束日）
       if (seen[id]) return;          // 同名去重（Ongoing 与 Upcoming 重叠）
       seen[id] = true;
       const g = gradeOf(liqTier);
@@ -242,31 +228,8 @@ async function main() {
     }
   });
   out.sort((a, b) => a.start - b.start);
-
-  const payload = { generatedAt: Math.floor(Date.now() / 1000), source: 'liquipedia', note: 'build-time snapshot (Upcoming+Ongoing, Tier1-3), refresh via scripts/sync/fetch-liquipedia-upcoming.js', events: out };
-  const jsonPath = path.join(__dirname, '..', '..', 'utils', 'upcoming-local.json');
-  fs.writeFileSync(jsonPath, JSON.stringify(payload, null, 2), 'utf8');
-  console.log('Wrote', out.length, 'events (Upcoming+Ongoing) ->', jsonPath);
-
-  // ★ 2026-08-31 P1：镜像 JSON 到云函数目录（fetchLiquipediaUpcoming 的 Ongoing 回填兜底源）。
-  //   此前靠手动复制，云侧镜像曾陈旧到 07-25（8 条）而本地已 08-31（6 条）。
-  // ★ 2026-09-22：原镜像到 cloudfunctions/aggregation/upcoming-local.json —— 随微信云开发退役**已移除**
-  //   （保留会在此次同步时把已删除的 cloudfunctions/ 目录重新造出来）
-
-  // ★ 2026-07-30 同步生成 JS 包装模块（upcoming-local-data.js）
-  //   微信小程序分包对 require JSON 存在兼容性问题，JS 模块在主包/分包中 require 均稳定可靠。
-  //   本文件与 upcoming-local.json 内容完全一致，仅格式从 JSON 改为 module.exports。
-  //   严禁手动修改本文件，数据源以 upcoming-local.json 为准，由本脚本自动同步。
-  const jsPath = path.join(__dirname, '..', '..', 'utils', 'upcoming-local-data.js');
-  const jsContent = '// utils/upcoming-local-data.js\n' +
-    '// upcoming-local.json 的 JS 包装模块（由 scripts/fetch-liquipedia-upcoming.js 自动生成，请勿手动修改）\n' +
-    '//\n' +
-    '// 背景：微信小程序分包直接 require 主包 JSON 存在兼容性问题（返回 null），\n' +
-    '//   改为 JS 模块导出，在主包/分包中 require 均稳定可靠。\n' +
-    '// 数据来源：utils/upcoming-local.json（由本脚本生成）\n\n' +
-    'module.exports = ' + JSON.stringify(payload, null, 2) + ';\n';
-  fs.writeFileSync(jsPath, jsContent, 'utf8');
-  console.log('Synced JS wrapper ->', jsPath);
+  // ★ 2026-10-24：不再生成包内赛程快照（JSON / JS 包装，内置快照已移除）；
+  //   抓取结果仅用于下方 Supabase `upcoming_schedule` 写入。
 
   // ★ 2026-09-21：同步写 Supabase `upcoming_schedule`（**微信云开发脱离**前置）
   //   目的：替代云函数 getUpcomingSchedule 的「读云缓存」接口 → 客户端改为 PostgREST 直读本表。
@@ -341,7 +304,7 @@ async function main() {
   }
 
   if (!SERVICE_KEY && !adminToken) {
-    console.log('（未设 SUPABASE_SERVICE_KEY / ADMIN_TOKEN → 跳过 Supabase 同步；三件套 JSON 仍是主产物）');
+    console.log('（未设 SUPABASE_SERVICE_KEY / ADMIN_TOKEN → 跳过 Supabase 同步；本次仅打印抓取结果）');
   } else {
     const via = SERVICE_KEY ? 'service-key' : 'admin-write EF';
     try {
@@ -357,7 +320,7 @@ async function main() {
 
   out.forEach((e) => console.log(' -', e.name, '(' + e.grade + ')', new Date(e.start * 1000).toISOString().slice(0, 10) + ' ~ ' + new Date(e.end * 1000).toISOString().slice(0, 10)));
 
-  // ★ 2026-07-30 后置检查：扫描 upcoming-local 中未纳入 curation 的赛事
+  // ★ 2026-07-30 后置检查：扫描本次抓取结果中未纳入 curation 的赛事
   //   防止"新增赛事赛期截断"问题复发：未纳入 curation 的赛事若被 OpenDota 收录部分比赛，
   //   详情页会优先用 OpenDota 真实窗口（可能只有1天）而非完整赛期。
   //   提示开发者将高频赛事补入 CURATED_EVENTS。
@@ -375,7 +338,7 @@ async function main() {
     }
 
     // ★ 2026-09-20 新增：curation ↔ Liquipedia **日期一致性核对**
-    //   动机：curation 是**人工录入**（权威但易错），本快照是**脚本抓取**（每次自动刷新）。
+    //   动机：curation 是**人工录入**（权威但易错），本次抓取是**脚本自动刷新**。
     //   实测教训：PGL Wallachia Season 9 的 curation 起始日被录成 9/17（LP 实为 9/19）→
     //   合并时 curation 优先 → 界面显示错误的开始日（且详情页按此判 ongoing/ended）。
     //   此处每次生成都交叉核对并提示，把「人工数据漂移」变成**可见的构建期信号**。

@@ -109,22 +109,18 @@ assert('★ SLO 降级收敛延迟 == config LIVE_STALE_MAX_SEC（同源，' + l
   diag.SLO.statusConvergeDegradedSec.target === liveStale,
   'SLO=' + diag.SLO.statusConvergeDegradedSec.target + '  config=' + liveStale);
 const snapTarget = readConst(CFG, 'SNAPSHOT_TARGET_AGE_SEC');
-const snapDecay = readConst(CFG, 'SNAPSHOT_DECAY_AGE_SEC');
-assert('能读到 config.js 的 SNAPSHOT_TARGET_AGE_SEC / SNAPSHOT_DECAY_AGE_SEC（守卫前提）',
-  snapTarget !== null && snapDecay !== null, '未匹配到常量');
-assert('★ config 快照降权阈值 == 7d', snapDecay === 7 * 86400, '实际 ' + snapDecay);
+assert('能读到 config.js 的 SNAPSHOT_TARGET_AGE_SEC（守卫前提）', snapTarget !== null, '未匹配到常量');
 assert('★ SLO 快照目标 == config SNAPSHOT_TARGET_AGE_SEC（同源）',
   diag.SLO.snapshotAgeSec.target === snapTarget, 'target=' + diag.SLO.snapshotAgeSec.target + ' config=' + snapTarget);
-assert('★ 快照"目标 24h"必须**严于**"降权阈值 7d"（同名不同义，不可混用）',
-  diag.SLO.snapshotAgeSec.target === 24 * 3600 && diag.SLO.snapshotAgeSec.target < snapDecay,
-  'target=' + diag.SLO.snapshotAgeSec.target + '  threshold=' + snapDecay);
+assert('★ 快照"目标 24h"取自 config（内置赛程/联赛快照已移除，SLO 尺子仍保留）',
+  diag.SLO.snapshotAgeSec.target === 24 * 3600, 'target=' + diag.SLO.snapshotAgeSec.target);
 assert('★ 硬判据收敛目标 5min 必须**严于**降级路径（否则口径自相矛盾）',
   diag.SLO.statusConvergeHardSec.target < diag.SLO.statusConvergeDegradedSec.target,
   JSON.stringify({ hard: diag.SLO.statusConvergeHardSec.target, deg: diag.SLO.statusConvergeDegradedSec.target }));
 assert('重复卡率严格目标为 0', diag.SLO.dupCardRateStrict.target === 0);
 assert('启发式降级率"只建基线不设阈值"（target 为 null）', diag.SLO.heuristicRate.target === null);
 
-console.log('\n--- ④ P0-B 下半：消费方读取（recordLast / getLast / describeFreshness）---');
+console.log('\n--- ④ P0-B 下半：消费方读取（recordLast / getLast）---');
 assert('recordLast 前 getLast 为 null（内存态，重启即空）', diag.getLast() === null);
 diag.recordLast(m, { source: 'test' });
 const last = diag.getLast();
@@ -135,19 +131,6 @@ assert('recordLast(null) 不覆盖已有快照', (function () {
   return !!diag.getLast();
 })());
 
-const fresh = diag.describeFreshness();
-assert('新鲜度返回结构完整（items/oldest/ageText/targetSec）',
-  Array.isArray(fresh.items) && fresh.items.length > 0 &&
-  typeof fresh.ageText === 'string' && fresh.targetSec === 24 * 3600,
-  JSON.stringify({ n: fresh.items.length, age: fresh.ageText, t: fresh.targetSec }));
-assert('每项含各自年龄与超限判定', fresh.items.every((x) =>
-  typeof x.ageText === 'string' && typeof x.overTarget === 'boolean'));
-assert('★ overTarget 必须与 ageSec 的判定一致（关系断言，不写死具体值）',
-  fresh.overTarget === (fresh.ageSec != null && fresh.ageSec > fresh.targetSec),
-  JSON.stringify({ ageSec: fresh.ageSec, over: fresh.overTarget }));
-assert('★ 取**最旧**快照作口径（不被最新者掩盖）',
-  fresh.oldest === null || fresh.items.every((x) => (x.ts <= 0) || (fresh.oldest.ts <= x.ts)),
-  JSON.stringify(fresh.items.map((x) => ({ n: x.name, ts: x.ts }))));
 assert('formatPct：null → n/a，0.063 → 6.3%',
   diag.formatPct(null) === 'n/a' && diag.formatPct(0.063) === '6.3%',
   diag.formatPct(0.063));
@@ -174,45 +157,6 @@ assert('空/非法输入不抛错且比率为 null', (function () {
   return a.ageSec === null && a.overTarget === false && b.ageSec === null && c.ageSec === null;
 })());
 assert('count 缺省不参与汇总也不报错', diag.computePipelineMetrics([{ name: 'x', ts: NOW0 - 10 }], NOW0).totalCount === 0);
-assert('★ describeFreshness 必须委托同一实现（口径不两处）',
-  (function () {
-    const f = diag.describeFreshness(NOW0);
-    const same = diag.computePipelineMetrics(f.items, NOW0);
-    return f.ageSec === same.ageSec && f.overTarget === same.overTarget && f.ageText === same.ageText;
-  })());
-
-console.log('\n--- ⑤ ★ 真机约束守卫：小程序里不得直接 require 主包 JSON ---');
-// 背景（2026-09-26 真机实测抓到）：微信对「主包 JSON 被分包 require」有兼容问题 ⇒ **返回 null**，
-//   这是 `*-data.js` 包装存在的原因（见 utils/upcoming-local-data.js 头注释）。
-//   实测：`diagnostics.describeFreshness` 原写法在小程序里恒为空 ⇒「我的」页显示「快照更新于 未知前」。
-//   ⚠️ Node 侧测试**看不出**这个问题（Node 里 JSON normal）⇒ 必须用**源码级**守卫锁住写法。
-const dsrc = fs.readFileSync(path.join(ROOT, 'utils/diagnostics.js'), 'utf8');
-assert('★ diagnostics.js 必须使用 *-data.js 包装读取快照',
-  dsrc.indexOf("require('./upcoming-local-data.js')") >= 0 &&
-  dsrc.indexOf("require('./leagues-local-data.js')") >= 0,
-  '未找到包装 require');
-// 真正的不变量是「**包装优先**」：`.json` 允许出现（作 Node/CI 兜底），但**必须排在包装之后**。
-//   （首版守卫写成了"完全禁止 .json"，误伤了刻意的兜底写法 —— 判据要落在不变量上。）
-assert('★ 包装必须优先于 .json（.json 仅可作 Node/CI 兜底）',
-  dsrc.indexOf("require('./upcoming-local-data.js')") < dsrc.indexOf("require('./upcoming-local.json')") &&
-  dsrc.indexOf("require('./leagues-local-data.js')") < dsrc.indexOf("require('./leagues-local.json')"),
-  'upcoming 包装 idx=' + dsrc.indexOf("require('./upcoming-local-data.js')") +
-  ' json idx=' + dsrc.indexOf("require('./upcoming-local.json')"));
-// 包装与 JSON 的导出必须一致（包装由脚本生成；若生成漏了，客户端会读到旧值/空值）
-const wUp = require('../../utils/upcoming-local-data.js');
-const jUp = require('../../utils/upcoming-local.json');
-assert('upcoming 包装与 JSON 的 generatedAt 一致（防包装过期）',
-  wUp.generatedAt === jUp.generatedAt, 'wrapper=' + wUp.generatedAt + ' json=' + jUp.generatedAt);
-assert('upcoming 包装与 JSON 的 events 数一致',
-  (wUp.events || []).length === (jUp.events || []).length,
-  'wrapper=' + (wUp.events || []).length + ' json=' + (jUp.events || []).length);
-const wLg = require('../../utils/leagues-local-data.js');
-const jLg = require('../../utils/leagues-local.json');
-assert('leagues 包装与 JSON 的 generatedAt 一致（防包装过期）',
-  wLg.generatedAt === jLg.generatedAt, 'wrapper=' + wLg.generatedAt + ' json=' + jLg.generatedAt);
-assert('leagues 包装与 JSON 的 leagues 数一致',
-  (wLg.leagues || []).length === (jLg.leagues || []).length,
-  'wrapper=' + (wLg.leagues || []).length + ' json=' + (jLg.leagues || []).length);
 
 console.log('\n--- ⑥ ★ 云端心跳三态：buildRemoteHealth（「无行」≠「连不上」）---');
 // 背景（2026-09-26 一次真实误判）：改造前「CI 从未上报」与「Supabase 连不上」在界面上**完全同形**，

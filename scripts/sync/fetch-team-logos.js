@@ -209,14 +209,14 @@ function normName(s) {
   };
 
   fs.writeFileSync(OUT_JSON, JSON.stringify(out, null, 2));
-  // JS wrapper（分包 require 主包 JSON 有兼容性问题 —— 同 upcoming-local-data.js 模式）
+  // JS wrapper（分包 require 主包 JSON 有兼容性问题 —— 同 `*-data.js` 包装模式）
   const jsOut = '// subpackages/detail/team-logo-local-data.js\n' +
     '// team-logo-map.json 的 JS 包装模块（由 scripts/sync/fetch-team-logos.js 自动生成，请勿手动修改）\n' +
     '//\n' +
     '// ★ 2026-10-14（P2-21）：**下沉到 detail 分包**（原在主包 utils/）—— 微信规则「主包不可 require 分包模块」，\n' +
     '//   故仅 detail 分包内（league-detail）使用；主包不再 require（主包体积 -199KB）。\n' +
     '// 背景：微信小程序分包直接 require 主包 JSON 存在兼容性问题（返回 null），\n' +
-    '//   改为 JS 模块导出，在分包内 require 稳定可靠（同 upcoming-local-data.js 模式）。\n' +
+    '//   改为 JS 模块导出，在分包内 require 稳定可靠（同 `*-data.js` 包装模式）。\n' +
     '// 运行时用法：league-detail _doEnrichTeamLogos 快照命中 → 零网络；未命中走原查询链。\n' +
     '// 刷新：npm run fetch:logos\n\n' +
     'module.exports = ' + JSON.stringify(out, null, 2) + ';\n';

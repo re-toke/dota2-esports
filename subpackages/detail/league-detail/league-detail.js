@@ -19,13 +19,7 @@ const heroes = require('../../../utils/heroes.js');
 const logoCache = require('../../../utils/logoCache.js'); // Phase 1-⑦：persistNow onUnload
 // ★ 2026-08-11 长期架构改进落地：数据源健康检查（数据为空时区分「数据源暂不可用」与「确实无数据」）
 const dataHealth = require('../dataHealth.js');
-// 2026-07-30 修复赛期截断：详情页回退读取 upcoming-local.json 的日期窗口，
-// 覆盖不在 curation 中且无 OpenDota 比赛的赛事（如 1win Essence II，leagueId 为负数占位）。
-// ★ 通过主包 sources 模块间接获取 upcoming-local 快照，避免分包直接 require JSON 的兼容性问题。
-function getUpcomingLocalSnapshot() {
-  if (sources && sources.getUpcomingLocalSnapshot) return sources.getUpcomingLocalSnapshot();
-  return null;
-}
+// ★ 2026-10-24：内置「即将到来」赛程快照已移除（改为纯联网）⇒ 不再读取本地快照补赛期。
 
 // Steam CDN 英雄头像基址（_sb.png = 小横幅图，约 59x33，aspectFill 裁切填满方形框）
 const HERO_IMG_BASE = 'https://cdn.cloudflare.steamstatic.com/apps/dota2/images/heroes/';
@@ -301,7 +295,7 @@ Page({
       }
       // 元数据：Liquipedia/Steam 结果 与 curation 兜底合并，确保所有赛事都有完整 KPI 结构
       const mergedMeta = mergeMetadataWithFallback(p.meta, this.data.name, this.data.leagueId);
-      // 2026-07-30 修复赛期竞态：load() 已用 eventWindow（curation > 真实比赛窗口 > upcoming-local 快照）
+      // 2026-07-30 修复赛期竞态：load() 已用 eventWindow（curation > 真实比赛窗口）
       // 构建了权威赛期；finalize 的 mergedMeta 来自 Liquipedia 原始 tpl.edate（可能不完整/被截断为开始日期）。
       // 若 eventWindow 已存在且有效，保留其日期，避免异步合并时用 Liquipedia 脏数据覆盖正确赛期。
       const ew = this.data.eventWindow;
@@ -691,41 +685,15 @@ Page({
         }
         const badge = statusBadgeOf(status);
         // 赛期显示优先级（与列表页 leagues.js loadLeagueEntry 完全一致）：
-        //   ① curation 完整周期（mixed.startDate/endDate）—— 覆盖嘉年华全周期
-        //   ② 真实比赛窗口（mStart/mEnd）—— 非策展赛事兜底
-        //   ③ upcoming-local.json 快照（2026-07-30 新增）—— 不在 curation 中且无 OpenDota 比赛的赛事
-        //      （如 Liquipedia 即将到来/进行中赛事，leagueId 为负数占位，无真实比赛窗口）
-        // 赛期优先级（与列表页 leagues.js loadLeagueEntry 完全一致，2026-07-30 修正）：
-        //   ① curation 完整周期（人工策展，最高权威）
-        //   ② upcoming-local.json 官方赛期（Liquipedia 正确时间，主力）
-        //   ③ OpenDota 真实比赛窗口（仅当 curation/upcoming-local 均无对应赛事时兜底）
-        // ★ 修复 BUG：原优先级为 curation → OpenDota → upcoming-local，导致 OpenDota 已收录部分比赛
-        //   但比赛集中在同一天（如 1win Essence II 3 场均在 7/30）时，winStart/winEnd 均非空，
-        //   不触发 upcoming-local 回退，赛期显示 "7/30 ~ 7/30" 而非完整 "7/30 ~ 8/5"。
-        //   现修正为与列表页一致：upcoming-local 优先于 OpenDota 真实窗口，保证官方赛期不被截断。
+        //   ① curation 完整周期（mixed.startDate/endDate）—— 人工策展，最高权威
+        //   ② OpenDota 真实比赛窗口（mStart/mEnd）—— 非策展赛事兜底
+        // ★ 2026-10-24：内置「即将到来」赛程快照（原 ③）已移除，改为纯联网；
+        //   不在 curation 中且无 OpenDota 比赛的赛事不再有本地赛期兜底。
         // ★ 2026-09-19 ⑤ 跨源赛期合并落地（口径经用户确认）：
-        //   官方赛期（curation / LP 快照）优先，缺口**按字段**回退 OpenDota 真实比赛窗口。
-        //   修复：原快照回退要求 start&&end **同时存在**（all-or-nothing）——
-        //   LP「endDate 不完整」（只给 start）时整条官方赛期被丢弃 → start 也被 OpenDota
-        //   比赛窗口覆盖（OpenDota 窗口常截断为已打场次）→ 赛期显示错误甚至为空。
+        //   官方赛期（curation）优先，缺口**按字段**回退 OpenDota 真实比赛窗口。
         //   现统一走 `sources.mergeEventPeriod()`（与列表页 dateRange 同一实现，防止两页口径漂移）。
-        var snapEntry = null;
-        var _snap = getUpcomingLocalSnapshot();
-        if (_snap && _snap.events && _snap.events.length) {
-          // 名称归一化匹配：★ 2026-09-19 改用 `sources.leagueKey`（跨源赛事名归一统一出口），
-          //   与列表页快照匹配同口径；原"小写+去符号"内联实现与去重键各自演化，曾发生漏匹配
-          //   （leagues.js 同位置已先改，本处对齐 —— 凡跨源按名比对都应走统一归一化）。
-          var _nameKey = sources.leagueKey(this.data.name || '');
-          for (var _si = 0; _si < _snap.events.length; _si++) {
-            var _evKey = sources.leagueKey(_snap.events[_si].name || '');
-            if (_evKey && _nameKey && (_evKey === _nameKey || _nameKey.indexOf(_evKey) >= 0 || _evKey.indexOf(_nameKey) >= 0)) {
-              snapEntry = _snap.events[_si]; break;
-            }
-          }
-        }
         var _period = sources.mergeEventPeriod([
           { name: 'curation',   start: mixed.startDate, end: mixed.endDate },
-          { name: 'liquipedia', start: (snapEntry && snapEntry.start) || 0, end: (snapEntry && snapEntry.end) || 0 },
           { name: 'opendota',   start: hasRealWindow ? mStart : 0, end: hasRealWindow ? mEnd : 0 }
         ]);
         var winStart = _period ? _period.start : 0;

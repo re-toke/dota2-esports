@@ -926,7 +926,7 @@ module.exports = {
   peekLeagues: peekLeagues,
   peekLeagueWindows: peekLeagueWindows,
   // O-4 写穿（云成功路径）：导出供测试与诊断复用 —— 其 key 构造曾出错导致**静默失效**，
-  // 现有回归守卫 `scripts/test/test-snapshot-layers.js` 直接断言它的可读性。
+  // 现有回归守卫 `scripts/test/test-api-inflight.js` 直接断言它的可读性。
   writeThrough: writeThrough,
   fetchedAtOf: fetchedAtOf,
   getLeagues: getLeagues,

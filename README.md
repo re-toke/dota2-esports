@@ -79,7 +79,7 @@ dota2-esports/
 │   ├── functions/            12 个 Edge Function + _shared
 │   └── migrations/           001 ~ 007（索引 / 安全加固 / 限流触发器）
 ├── scripts/
-│   ├── sync/                 数据同步（canon 映射 / 快照 / curation 迁移 / LP 抓取）
+│   ├── sync/                 数据同步（canon 映射 / 队徽快照 / curation 迁移 / LP 抓取 → upcoming_schedule）
 │   ├── ops/                  运维与守卫（check-syntax / check-quota / cleanup-cache / alert / 4 个契约守卫）
 │   └── test/                 离线测试套件（由 `npm run test:all` 调度）
 ├── admin/                    curation 管理后台（Vue 3 + Element Plus；GitHub Pages 部署）
@@ -128,7 +128,7 @@ npm run check:syntax        # 全仓语法体检
 npm run lint                # ESLint（--rulesdir scripts/eslint-rules；含自定义规则）
 node infra/proxy/test.mjs   # 中转断言套件（已并入 test:all）
 node scripts/ops/check-quota.js            # 配额探针（需服务端凭据）
-node scripts/ops/check-snapshot-freshness.js  # 快照新鲜度
+node scripts/ops/check-snapshot-freshness.js  # 队徽快照新鲜度（★ 2026-10-24 起仅此一项）
 ```
 
 **契约守卫**（防「改 A 影响 B」）：`check-edge-actions`（映射 ⊆ EDGE_ACTIONS + call 字面量扫描）、`check-ef-contract`、`check-card-contract`、`check-token-overreach`。
@@ -144,7 +144,7 @@ node scripts/ops/check-snapshot-freshness.js  # 快照新鲜度
 | **中转**（`infra/proxy/worker.mjs`）| `[2]` 随 push 自动；`[0]`/`[1]` 为 **Deno 手贴副本**，改完须**同步重贴三台**（否则版本漂移）。步骤见 `infra/proxy/DEPLOY.md`。自检：`/healthz?deep=1` + 三台灰度和 |
 | **Edge Functions** | `supabase functions deploy <name> --project-ref gkticzdaicpdtxheyxsd --no-verify-jwt`，再用 `functions list` 核 VERSION（**命令不报错 ≠ 部署生效**）|
 | **admin 后台** | `.github/workflows/deploy-admin.yml` → **GitHub Pages**：`https://re-toke.github.io/dota2-esports/`（哈希路由 `#/events`）。详见 `admin/README.md` |
-| **快照** | `.github/workflows/sync-upcoming.yml` 定时刷新 `utils/upcoming-local.json` / `leagues-local.json` / `team-logo-map.json` 并 commit |
+| **快照** | `.github/workflows/sync-upcoming.yml` 定时刷新**队徽快照**（`utils/team-logo-map.json` + `subpackages/detail/team-logo-local-data.js`）并 commit；赛程写 Supabase `upcoming_schedule`。**★ 2026-10-24：内置「赛程 / 联赛」快照已移除**（改为纯联网） |
 | **运维** | `.github/workflows/ops-maintenance.yml` 每日：清 `aggregation_cache` 过期行 + 快照新鲜度 + 配额探针（超阈值推 Webhook）|
 
 ---
@@ -172,6 +172,7 @@ node scripts/ops/check-snapshot-freshness.js  # 快照新鲜度
 
 - ✅ **「数据不更新」已修复（v1.3.0 · 2026-10-17 发布）**：线上客户端已改走中转 + 携带 `X-Trim: 0` ⇒ 直连 `*.supabase.co` 的阻断不再影响用户；中转「默认裁剪 300」的约束亦**已满足**（与客户端**同包上线**，未出现中间态）。
 - 🔴 **发版纪律**：中转「默认裁剪 300」（C）与客户端 `X-Trim: 0` 必须**在同一个包里一起发**（本项目从未出现过中间态）。
+- ⚠️ **中转「陈旧兜底」需重贴才能生效**（2026-10-24 改动 `worker.mjs`）：`[2]` 随 push 自动，`[0]`/`[1]` 为 Deno 手贴副本，**三台都要重贴**。未重贴前行为与旧版一致（12s×2），不会出错但不享受提速。
 - ⚠️ **跨提供商冗余未落地**：`[0]`/`[1]` 同注册域同 IP（Deno），`[2]` 运行时同为 Deno ⇒ 只防「域名级」阻断，不防「Deno 系整体故障」。
 - ⚠️ **中转限流** 按 IP（120/min/IP，CGNAT 共享出口下有误伤风险；客户端对 429 只退避重试、不切出口）。
 - ⚠️ **admin 公网站写令牌风险**：`VITE_ADMIN_TOKEN` 会被内联进公开 bundle ⇒ **建议保持只读**（不配 `ADMIN_TOKEN`）。

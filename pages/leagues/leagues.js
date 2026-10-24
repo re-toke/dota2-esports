@@ -7,9 +7,8 @@ const sources = require('../../utils/sources.js');
 // ★★★ 2026-09-19：跨源赛事名**去重键统一** —— 一律走单点函数 `sources.leagueBaseName`。
 //
 //   背景（真机复现 + 用户指出「只修了一处，没有做全局修复」）：
-//     本文件原有 **4 处各自内联**的去重键 `norm`（仅去符号，**不归一赛季号/阶段后缀**）：
+//     本文件原有 **3 处各自内联**的去重键 `norm`（仅去符号，**不归一赛季号/阶段后缀**）：
 //       · `mergeAllWithUpcoming`  —— 跨「进行中 / 即将开始」Tab 合并去重
-//       · `mergeLocalSnapshot`    —— 本地快照合并
 //       · `mergeCurationUpcoming` —— curation 合并
 //       · `mergeHaglundUpcoming`  —— haglund 合并
 //     同一赛事在不同数据源里写法不同（curation 用 "PGL Wallachia Season 9"、
@@ -23,9 +22,8 @@ const sources = require('../../utils/sources.js');
 //   （单点定义在 utils/sources.js：剥阶段后缀 + 对齐 curation 权威名 + 保留 CJK/西里尔）
 //
 //   背景（真机复现 + 用户指出「只修了一处，没有做全局修复」）：
-//     本文件原有 **6 处各自内联**的去重键 `norm`（仅去符号，**不归一赛季号/阶段后缀**）：
+//     本文件原有 **5 处各自内联**的去重键 `norm`（仅去符号，**不归一赛季号/阶段后缀**）：
 //       · `mergeAllWithUpcoming`  —— 跨「进行中 / 即将开始」Tab 合并去重
-//       · `mergeLocalSnapshot`    —— 本地快照合并
 //       · `mergeCurationUpcoming` —— curation 合并
 //       · `mergeHaglundUpcoming`  —— haglund 合并
 //       · `dedupeByDisplayName`   —— 进行中 / 已结束 Tab
@@ -54,56 +52,8 @@ const VIEW_KEY = 'leagues_view_state';
 //   可能短暂过期（极端场景），但列表刷新会重建 allLeagues，可接受（30 天量级不敏感）。
 const _curatedEventCache = {};
 
-// ★★ 2026-09-27（"先测再改"·落地 A）：快照匹配的 `leagueKey` **记忆化**。
-//
-// ## 问题（实测定位）
-// `normalize` 里的 upcoming 快照匹配块，**每个联赛**都 `events.find(...)` 且内层
-// `leagueKey(e.name)` **每轮重算** ⇒ 典型 **O(N×M) 且内层键重算**：
-//   N=751 联赛 × M=17 事件 ≈ **10,047 次** `leagueKey`，而事件名在 N 轮里是**同一批**
-//   ⇒ **99.7% 是重复计算**。
-// 单价实测：`sources.leagueKey` = **3.88µs**（= `leagueBaseName`（含 curation 查表）+ 两次正则），
-//   并非廉价函数 ⇒ 裸调用在热循环里是真实浪费。
-//
-// ## 依据（消融实测，见 deliverables/阶段2-normalize成本构成实测-2026-09-27.md）
-//   语义等价地记忆化后：**150.8ms → 101.2ms（快 32.9%）**，且**与他版输出逐条一致**（591 条真实输入比对）；
-//   三轮实测增益区间 **33%~45%**（V0 运行间噪声 ±20%，故只保证方向与量级）。
-//
-// ## 为什么用"记忆化"而不是"预建索引"
-//   索引版实测 **98.5ms（34.7%）**，与记忆化**基本并列**，但结构变更更大；
-//   ⇒ 选**记忆化**：diff 最小、**保留原 `find` + `_en &&` 控制流**（回归风险最低），
-//     同样把昂贵的 `leagueKey` 从 O(N×M) 降到 **O(M) 一次**。
-//
-// ## 安全性
-//   · 快照是**静态 build-time 产物**（`upcoming-local-data.js` 由 CI/发版生成，运行期不变）
-//     ⇒ 不存在"热更新后缓存过期"的问题；且键的数量被事件数封顶（实测 17）。
-//   · **不改语义**：仍是"按原顺序取第一个命中"，且"空键事件跳过"的语义由调用点的 `_en &&` 保留。
-const _snapKeyCache = {};
-function _snapKeyCached(name) {
-  const k = String(name || '');
-  if (_snapKeyCache[k] !== undefined) return _snapKeyCache[k];
-  const v = leagueKey(k);
-  _snapKeyCache[k] = v;
-  return v;
-}
-
-// ★ v8.1（2026-08-31）：本地快照可用「主源」年龄（秒）。超过则降权为兜底渲染，
-//   放行串行实时查询（详见 tryLocalUpcoming 注释）。7 天对齐「即将到来」数据源的
-//   周级刷新节奏（fetch:upcoming SOP）。
-//   ★ 2026-10-13（P1-19）：值上收 `config.timeWindow.snapshotDecayAgeSec`（单一事实源）。
-//     命名由 `SNAPSHOT_MAX_AGE_SEC` 改为 `SNAPSHOT_DECAY_AGE_SEC` —— 原「MAX」含义模糊，
-//     且与 diagnostics SLO 的 24h 快照「目标」`SNAPSHOT_TARGET_AGE_SEC` 属**同名不同义**，改名区分。
-const SNAPSHOT_DECAY_AGE_SEC = config.timeWindow.snapshotDecayAgeSec;
-
-// ★ 2026-09-27（R9 硬门限）：快照**不可用**年龄（秒）。超过则**完全不用它渲染**（走骨架屏等网络）。
-//   与 SNAPSHOT_DECAY_AGE_SEC 的分工（两个量，语义不同，勿混用）：
-//     · SNAPSHOT_DECAY_AGE_SEC（7 天）= **降权/提示阈值**：超过则不当"主源"、并显示日期提示；
-//     · SNAPSHOT_UNUSABLE_AGE_SEC（30 天）= **可用性阈值**：超过则连"兜底渲染"都不做。
-//   为什么需要它：赛事列表的「进行中 / 即将到来」由快照 `windows` + curation 赛期**推导**，
-//   过旧快照给出的是**语义错误**（把早已开赛的标成"即将到来"），不只是"旧"。
-//   30 天取值依据：赛事列表按周/月变化（列表页注释自证"S 级赛事排期以周计"），
-//     超过一个月仍在使用，错误的概率已高于"骨架屏零信息"的代价。
-//   ★ 2026-10-13（P1-19）：值上收 `config.timeWindow.snapshotUnusableAgeSec`（单一事实源）。
-const SNAPSHOT_UNUSABLE_AGE_SEC = config.timeWindow.snapshotUnusableAgeSec;
+// ★ 2026-10-24：内置快照已移除（改为纯联网）—— 原「快照匹配 leagueKey 记忆化」随之删除，
+//   列表赛期只由 curation + OpenDota 合并。
 
 // 等级 -> TDesign Tag 主题/变体
 function tagThemeOf(grade) {
@@ -153,7 +103,7 @@ function mergeAllWithUpcoming(allLeagues, upcomingList) {
 
   // ★★ 2026-09-19「同名择优」（真机问题：留下来的恰是信息不全的那条）
   //   现象：`PGL Wallachia 2026 Season 9`（来自 allLeagues/OpenDota，**只有 name/tier/id**）
-  //        与 `PGL Wallachia Season 9`（来自 upcomingList/快照，**有赛期**）归一后同键；
+  //        与 `PGL Wallachia Season 9`（来自 upcomingList/远程源，**有赛期**）归一后同键；
   //        原实现「allLeagues 先入 → upcomingList 被 nameSeen 挡掉」→ **留下的信息不全** ✗
   //   修复：同 key 冲突时**按「数据完整度」择优替换**，而不是先入为主。
   //   评分维度（有赛期最关键 —— allLeagues 只有 name/tier/id，无赛期）：
@@ -225,10 +175,10 @@ function dedupeByDisplayName(arr) {
 }
 
 // 将「赛程原始条目」统一转换为渲染卡片对象。
-// 云端缓存（getUpcomingSchedule）与本地预构建快照（upcoming-local.json）共用此构造器，
-// 保证两路数据源渲染字段完全一致；后续增删字段只需改这一处（可维护性/可扩展性）。
+// 来源：Supabase `upcoming_schedule`（云端表）与 curation 注入共用此构造器，
+// 保证各路数据源渲染字段完全一致；后续增删字段只需改这一处（可维护性/可扩展性）。
 // entry: { id, name, grade, rank, label, tier, start, end, source, valve?, topThirdParty? }
-// ctx:   { now, allLeagues, lid }  lid 用于回查 allLeagues 复用分级/关注等；本地快照可传 entry.id
+// ctx:   { now, allLeagues, lid }  lid 用于回查 allLeagues 复用分级/关注等；远程条目可传 entry.id
 // 赛程卡片的真实状态：按日期窗口判定「进行中」还是「即将到来」，
 // 避免已开赛的 Liquipedia 赛事（如 1win Essence II）因 status 被硬编码为 'upcoming'
 // 而永远进不了「进行中」tab（end + 1天宽限，与 util.isOngoing 路径②口径一致）。
@@ -310,9 +260,7 @@ Page({
     armedMore: false,      // 2026-08-07（v1.4）：触底确认态（ARMED）——提示条高亮，点击才真正加载
     upcomingLoading: false,
     upcomingProgress: '',
-    // v8.1 P1-4：快照过期时的数据截至提示（''=不显示；格式「8月20日」）
-    upcomingDataAsOf: '',
-    // P2-2（2026-09-01）：列表快照提示条（''=不显示；快照秒开/刷新失败时设置，实时数据到位清除）
+    // P2-2（2026-09-01）：列表刷新失败提示条（''=不显示；仅「运行期缓存」首屏时设置，实时数据到位清除）
     leaguesAsOfText: '',
     // STRATZ 是否启用（赛程数据主要来源）：未启用且即将到来为空时，据此提示用户
     stratzEnabled: !!stratz.ENABLED,
@@ -484,8 +432,7 @@ Page({
 
   // 2026-08-07（v1.1，B 层渲染分阶段优化）：
   //   阶段 1 · normalizeLite —— 只算排序/筛选必需的「轻」字段（followed/rank/grade/latest/status/
-  //   name/displayName/leagueid），跳过最重的 remoteCuration.curatedEventFor() 和 upcoming-local
-  //   赛期查找。排序键与最终 sortSmart/时间排序完全对齐，零跳变。立即 setData 首屏可见。
+  //   name/displayName/leagueid），跳过最重的 remoteCuration.curatedEventFor() 和赛期查找。
   //   阶段 2 · normalizeFull —— setTimeout(0) 让出主线程后，对每条赛事跑完整 normalize 补齐
   //   奖金池/赛期/标签等剩余字段，完成后自动触发 applyAndSlice(true) 刷新视图。
   //   _normalizeGen 代际标记防竞态：onHide / 重拉 时递增，让阶段 2 旧链自动放弃。
@@ -545,8 +492,8 @@ Page({
   },
 
   loadLeagues(cb) {
-    // ★ 2026-09-01（P2-2）：loading 骨架置位移到快照判定之后 —— 快照命中时直接出列表，
-    //   跳过骨架闪帧；快照未命中/二次刷新时保持原行为（loading 骨架 + error 清零）。
+    // ★ 2026-09-01（P2-2）：loading 骨架置位移到运行期缓存判定之后 —— 缓存命中时直接出列表，
+    //   跳过骨架闪帧；未命中/二次刷新时保持原行为（loading 骨架 + error 清零）。
     let _skipSkeleton = false;
     //   新一轮拉取前递增代际，让上一轮阶段 2 的 setTimeout 链自动放弃。
     //   _normalizeDone 置 false 表示阶段 2 还未完成（守卫用）。
@@ -554,20 +501,11 @@ Page({
     const gen = this._normalizeGen;
     this._normalizeDone = false;
 
-    // ★ 2026-09-01（P2-2）：build-time 快照秒开 —— 网络数据到达前先渲染快照列表。
-    //   快照（utils/leagues-local-data.js，npm run fetch:leagues 产出，build-time 裁剪
-    //   近 90 天活跃 + curation 60 天赛事，~5KB）走与网络数据完全相同的阶段 1 lite 管线
-    //   （normalizeLite + updateGradeCounts + applyAndSlice），视觉零跳变；
-    //   网络数据到达后同代际 gen 全量替换（_leagueMap 重建 → 阶段 1/2 照常覆盖）。
-    //   网络失败且快照已渲染 → 保留快照列表 + 顶部「实时刷新失败」提示（见 catch 分支），
-    //   不再退回整页 error 骨架。快照未生成（require 失败）→ 行为与旧版完全一致。
-    //   不占 storage 配额（复核否决 storage 方案：同步 IO jank + 6MB LRU 挤占）。
-    // ===== 首屏三层（2026-09-27 · R9）：① 运行期缓存 → ② build-time 烘焙快照 → ③ 骨架屏 =====
-    //
-    // 为什么补第 ① 层：此前只有「烘焙快照 → 网络」两层，而烘焙快照是**发版时**的产物（天~周级），
-    //   运行期缓存（`cachedFresh` / 云路径 writeThrough 写入）才是**上次真实取到的数据**（分钟~小时级）。
-    //   缺这一层的实测后果：回访用户首屏看到的是发版那天的列表 + 「本地数据 9月14日」（实测 12.7 天），
-    //   而设备存储里其实躺着新得多的真实数据。
+    // ===== 首屏两层（2026-10-24 起）：① 运行期缓存 → ② 骨架屏 + 联网 =====
+    // ★ 2026-10-24：原中间层「build-time 烘焙快照」已移除（随版本发布才更新、实测常陈旧）；
+    //   现首屏只可能来自运行期缓存（上次真实取到的数据），否则直接走骨架屏等网络。
+    // 为什么保留第 ① 层：运行期缓存（`cachedFresh` / 云路径 writeThrough 写入）是**上次真实取到的数据**
+    //   （分钟~小时级），比任何包内静态兜底都新。
     // ★ 必须走 api 封装：本项目已因**页面层手拼缓存 key** 栽过（见 onPullDownRefresh 的 O-2 注释：
     //   `cache.remove('/leagues|{}')` 缺 `_v()` 版本前缀 + 手拼 SQL 缺 last_end ⇒ **静默失效**）。
     // ★ 与网络段同口径：`peekLeagues()` 内部已套 `filterCollectableLeagues`，避免首屏/网络集合不一致。
@@ -583,7 +521,6 @@ Page({
           if (this.allLeagues.length) {
             this.allLeagues.forEach((x) => { this._leagueMap[x.leagueid] = x; });
             this._preRendered = true;
-            this._firstPaintSource = 'cache';
             _skipSkeleton = true;
             this.updateGradeCounts();
             this.applyAndSlice(true);
@@ -599,65 +536,13 @@ Page({
               ' 个联赛先上（缓存于 ' + util.formatAgo(at) + '）');
           }
         } catch (e) {
-          // 缓存渲染失败静默：继续走 ② 快照 → ③ 骨架屏，无半状态残留
+          // 缓存渲染失败静默：继续走 ② 骨架屏，无半状态残留
           console.info('[leagues][perf] R9① 缓存渲染跳过：', (e && e.message) || e);
         }
       }
     }
 
-    if (!this._leaguesSnapChecked) {
-      this._leaguesSnapChecked = true;   // 只 require 一次（成功或失败均不重试）
-      try { this._leaguesSnap = require('../../utils/leagues-local-data.js'); }
-      catch (e) { this._leaguesSnap = null; }
-    }
-    const snap = this._leaguesSnap;
-    // ★ 2026-09-27（R9 硬门限）：快照**过旧**（> SNAPSHOT_UNUSABLE_AGE_SEC）时**完全不用**。
-    //   为什么不能只加一句提示：赛事列表的「进行中 / 即将到来」是由快照的 `windows` + curation 赛期
-    //   **推导**出来的 ⇒ 过期快照产出的是**语义错误**（把早已开赛的标成"即将到来"），**不只是"旧"**。
-    //   此时宁可走骨架屏等网络：骨架屏是**零信息**，但不会给出**错的**信息。
-    const snapTooOld = !!(snap && this._snapshotIsTooOld && this._snapshotIsTooOld(snap.generatedAt));
-    if (snapTooOld) {
-      console.info('[leagues][perf] R9② 烘焙快照过旧（' + this._formatSnapshotDate(snap.generatedAt) +
-        '），跳过不使用 → 走骨架屏等网络');
-    }
-    if (!snapTooOld && snap && Array.isArray(snap.leagues) && snap.leagues.length &&
-        !(this.allLeagues && this.allLeagues.length)) {
-      try {
-        this._leagueMap = {};
-        this.allLeagues = snap.leagues
-          .map((l) => this.normalizeLite(l, (snap.windows || {})[l.leagueid]))
-          .filter((x) => x && x.rank >= 1);
-        this.allLeagues.forEach((x) => { this._leagueMap[x.leagueid] = x; });
-        if (this.allLeagues.length) {
-          // ★ 2026-09-27（R9）：统一首屏标志 —— 层①（运行期缓存）与层②（烘焙快照）都会置位。
-          //   为什么必须统一：失败分支原判据是 `_snapshotRendered`，若首屏来自**层①**则该判据为假
-          //   ⇒ 网络一失败就会退化成**整页 error**（丢掉已经渲染好的缓存列表）= 回归。
-          this._preRendered = true;
-          this._firstPaintSource = 'snapshot';
-          _skipSkeleton = true;
-          this.updateGradeCounts();
-          this.applyAndSlice(true);
-          this.setData({
-            loading: false,
-            error: '',
-            // ★ 2026-09-16（问题3 修复）：快照未见旧时**不显示日期**。
-            //   原实现无条件带日期 → 用户看到「本地数据 9月14日」以为数据陈旧（其实才 2 天）。
-            //   与 v8.1 设计意图对齐（L1028：新快照不显示、过期(>7天)才提示日期）。
-            // ★★ 2026-09-27（R9 文案修正）：过旧时改为**诚实**表述 ——
-            //   旧文案「本地数据 X日 · **正在同步实时赛程**」会让人以为"马上会自动变新"，
-            //   但烘焙快照**只随版本发布更新**（不会自动变新）。改为明确说明来源与更新方式。
-            leaguesAsOfText: this._snapshotIsStale(snap.generatedAt)
-              ? '内置快照 ' + this._formatSnapshotDate(snap.generatedAt) + ' · 随版本发布更新'
-              : '正在同步实时赛程'
-          });
-          console.info('[leagues][perf] P2-2 快照秒开：' + this.allLeagues.length + ' 个联赛先上');
-        }
-      } catch (e) {
-        // 快照渲染失败静默：走原 loading → 网络链路，无半状态残留
-        console.info('[leagues][perf] P2-2 快照渲染跳过：', (e && e.message) || e);
-      }
-    }
-    // 快照未命中（无快照 / 二次刷新 / 快照渲染失败）→ 原行为：loading 骨架
+    // 缓存未命中（首访 / 二次刷新 / 缓存渲染失败）→ 原行为：loading 骨架
     if (!_skipSkeleton) this.setData({ loading: true, error: '' });
 
     // 并行拉赛事元数据 + 时间窗口（explorer 一条 SQL 拿全部）
@@ -692,7 +577,7 @@ Page({
         this.updateGradeCounts();
         this.applyAndSlice(true);
         const at = api.fetchedAtOf('leagueWindows') || api.fetchedAtOf('leagues');
-        // P2-2：网络数据已全量替换快照 → 清除「数据截至」提示条
+        // P2-2：网络数据已全量替换首屏态 → 清除「数据截至」提示条
         this.setData({ loading: false, updatedAt: at, updatedLabel: util.formatAgo(at), leaguesAsOfText: '' });
         cb && cb();
 
@@ -736,19 +621,13 @@ Page({
         console.info('[leagues][perf] loadLeagues 失败（leagues 主请求），总耗时 ' + (Date.now() - t0) + 'ms');
         // ★ 2026-09-01（P2-2）：首屏已渲染 → 保留列表 + 顶部「实时刷新失败」提示，
         //   不退回整页 error 骨架（用户仍有可用数据可浏览，下拉/重试可再触发网络刷新）。
-        // ★ 2026-09-27（R9）：判据由 `_snapshotRendered` 改为**统一标志** `_preRendered`
-        //   （首屏可能来自层①运行期缓存），文案按**来源**区分，避免把"本地缓存"误称"快照"。
+        // ★ 2026-10-24：首屏只剩「运行期缓存」一种来源（内置快照已移除），文案不再区分来源。
         if (this._preRendered && this.allLeagues && this.allLeagues.length) {
-          const _srcCache = this._firstPaintSource === 'cache';
-          const _asOf = _srcCache
-            ? util.formatAgo(this.data.updatedAt || 0)
-            : (this._formatSnapshotDate((this._leaguesSnap && this._leaguesSnap.generatedAt) || 0) || '本地');
+          const _asOf = util.formatAgo(this.data.updatedAt || 0);
           this.setData({
             loading: false,
             error: '',
-            leaguesAsOfText: _srcCache
-              ? '实时数据刷新失败，当前展示本地缓存（' + (_asOf || '时间未知') + '），可下拉重试'
-              : '实时数据刷新失败，当前展示 ' + _asOf + '快照，可下拉重试'
+            leaguesAsOfText: '实时数据刷新失败，当前展示本地缓存（' + (_asOf || '时间未知') + '），可下拉重试'
           });
           this._normalizeDone = true;
           cb && cb();
@@ -851,42 +730,15 @@ Page({
     } else if (cur && cur.status === '即将到来') {
       if (util.isUpcoming(mixed)) status = 'upcoming';
     }
-    // 展示名经 leagueDisplayName 单一出口解析（形状无关），与详情页口径一致；
-    // 提前在此声明，供下方赛期快照名称匹配复用（避免 TDZ 引用错误）。
+    // 展示名经 leagueDisplayName 单一出口解析（形状无关），与详情页口径一致。
     const displayName = sources.leagueDisplayName(l);
     // 赛期日期计算（提前到 return 外，避免对象字面量内 let 声明语法错误）
-    // 优先级（2026-07-30 修正「本末倒置」：以 Liquipedia 正确时间为准）：
-    //   ① curation 完整周期（人工策展，最高权威）
-    //   ② 🆕 upcoming-local.json 官方赛期（Liquipedia 正确时间，主力）
-    //   ③ OpenDota 比赛窗口（仅当 Liquipedia 也无对应赛事时兜底）
+    // 优先级：① curation 完整周期（人工策展，最高权威）→ ② OpenDota 真实比赛窗口（兜底）。
+    // ★ 2026-10-24：内置「即将到来」赛程快照（原 ②）已移除，改为纯联网；不再有本地赛期兜底。
     // ★ 2026-09-19 ⑤ 跨源赛期合并落地（口径经用户确认）：官方赛期优先、缺口**按字段**回退 ——
-    //   原实现对快照回退是 all-or-nothing（`_hit.start && _hit.end` 同时成立才用）：
-    //   LP「endDate 不完整」（只给 start）时整条官方赛期被丢弃 → dateRange 落到
-    //   OpenDota 比赛窗口（常截断为已打场次）→ 显示截断。统一走 `sources.mergeEventPeriod()`
-    //   （与详情页 eventWindow 同一实现，防止两页口径漂移）。
-    let _snapHit = null;
-    try {
-      // 2026-07-30 修复：优先用 JS 包装模块（稳定可靠），回退到 JSON
-      let _snap;
-      try { _snap = require('../../utils/upcoming-local-data.js'); }
-      catch (_e) { _snap = require('../../utils/upcoming-local.json'); }
-      if (_snap && _snap.events) {
-        // ★ 2026-09-19：统一走 `leagueKey`（跨源赛事名归一）。
-        //   原内联"小写 + 去符号"与列表去重键各自演化 —— 当 displayName 与快照名写法
-        //   不一致时（如 "PGL Wallachia S9" vs 快照的 "PGL Wallachia Season 9"），
-        //   双向 indexOf 都会落空 → 该赛事**取不到快照赛期**（信息不全的表现之一）。
-        const _dn = leagueKey(displayName || '');
-        _snapHit = _snap.events.find((e) => {
-          // ★★ 2026-09-27：走**记忆化**（同一批事件名在 751 轮里反复出现 ⇒ 见 `_snapKeyCached` 注释）。
-          //   ⚠️ 不得改回裸 `leagueKey(e.name)` —— 那会退回 O(N×M) 且内层键重算（实测慢 33%~45%）。
-          const _en = _snapKeyCached(e.name || '');
-          return _en && (_en === _dn || _dn.indexOf(_en) >= 0 || _en.indexOf(_dn) >= 0);
-        }) || null;
-      }
-    } catch (_e) { /* local snapshot 缺失时静默跳过 */ }
+    //   统一走 `sources.mergeEventPeriod()`（与详情页 eventWindow 同一实现，防止两页口径漂移）。
     const _period = sources.mergeEventPeriod([
       { name: 'curation',   start: mixed.startDate, end: mixed.endDate },
-      { name: 'liquipedia', start: (_snapHit && _snapHit.start) || 0, end: (_snapHit && _snapHit.end) || 0 },
       { name: 'opendota',   start: mixed.earliest, end: mixed.lastEnd || mixed.latest }
     ]);
     let _drStart = _period ? _period.start : 0;
@@ -917,13 +769,11 @@ Page({
       statusText: badge.text,
       statusColor: badge.color,
       // 赛期优先级（与详情页 league-detail.js load() eventWindow 构建一致）：
-      //   ① curation 完整周期 → ② 真实比赛窗口 → ③ upcoming-local.json 快照（_drStart/_drEnd 已预计算）
+      //   ① curation 完整周期 → ② OpenDota 真实比赛窗口（_drStart/_drEnd 已预计算）
+      // ★ 2026-10-24：内置快照层已移除，不再有本地源修正。
       // 2026-07-28：回退分支使用 lastEnd（最晚结束时间）而非 latest（最晚开赛时间），
       //   与详情页 load() 的 mEnd = max(start_time + duration) 一致。
       //   mixed 已由 validateLeagueWindow 校验，lastEnd >= latest >= earliest 单调性保证。
-      // 2026-07-30 修复列表页赛期截断：OpenDota 已收录赛事的比赛窗口可能集中在同一天
-      //   （如 1win Essence II 3 场均在 7/30），导致 formatDateRange 显示 "7/30 ~ 7/30"。
-      //   _drStart/_drEnd 在 return 前已通过 upcoming-local.json 快照回退修正。
       dateRange: (_drStart && _drEnd) ? util.formatDateRange(_drStart, _drEnd) : '',
       startDate: mixed.startDate,  // 保留原始 curation 日期供其他逻辑使用
       endDate: mixed.endDate,
@@ -1093,52 +943,28 @@ Page({
   noop() {},
 
   // 即将到来：对知名 S 级赛事查赛程，筛未来两个月内开赛。
-  // 赛程数据来源：curation 本地精选（部分赛事含日期）+ STRATZ（启用时）。
-  // ★ 优化：优先读 EF/表预热的赛程缓存（秒开），失败回退逐个串行查询。
-  // STRATZ 未启用且 curation 无日期时，结果为空 —— 由 wxml 提示用户启用 STRATZ。
+  // 赛程数据来源：Supabase `upcoming_schedule`（权威远程源）+ curation + 串行查询（STRATZ/OpenDota）。
+  // ★ 2026-10-24：内置本地快照已移除（改为纯联网）⇒ 服务端不可用时直接走串行查询。
   loadUpcoming() {
     if (this.data.upcomingLoading) return;
     // 2026-08-13（「即将」加载优化 · P0 防死锁）：代际标记 + 超时兜底。
-    //   之前：trySupabaseUpcoming 走云函数时，冷缓存会挂起 30-60s（现场预热）；
-    //   2026-09-21 已改为 Supabase 直读（无冷启动），但**超时+gen 代际判活仍保留**
-    //   —— 网络慢/表为空时同样需要及时放行本地快照与串行查询。原：
-    //   upcomingLoading 永不复位，用户切走再切回 → loadUpcoming 短路 → 永远卡 spinner。
-    //   现在：8s 超时后走 finishUpcoming（本地快照兜底），gen 递增丢弃晚到服务端结果。
+    //   upcomingLoading 永不复位会让用户切走再切回时永远卡 spinner；
+    //   现在：8s 超时后直接走串行查询兜底，gen 递增丢弃晚到服务端结果。
     this._upcomingGen = (this._upcomingGen || 0) + 1;
     const gen = this._upcomingGen;
     this.setData({ upcomingLoading: true, upcomingProgress: '准备查询赛程...' });
     if (this._upcomingTimer) { clearTimeout(this._upcomingTimer); }
     this._upcomingTimer = setTimeout(() => {
       if (gen !== this._upcomingGen) return;   // 已被新链路取代，放弃
-      this.finishUpcoming('服务端超时，使用本地赛程', gen);
+      this.loadUpcomingSerial();
     }, config.leagueWindow.upcomingTimeoutMs);
 
-    // 赛程数据源回退链：EF/表预热缓存 → 本地预构建快照 → 串行查询（OpenDota + curation）
-    // 任一层命中即用其数据，无需后续层；保证「即将到来」在任意部署形态下都不为空。
+    // 赛程数据源回退链：Supabase upcoming_schedule → 串行查询（OpenDota + curation + STRATZ）
     this.trySupabaseUpcoming(gen).then((hit) => {
       if (gen !== this._upcomingGen) return;   // 已被超时/新链路取代，丢弃
       if (this._upcomingTimer) { clearTimeout(this._upcomingTimer); this._upcomingTimer = null; }
       if (hit) return;
-      return this.tryLocalUpcoming().then((hit2) => {
-        if (gen !== this._upcomingGen) return;
-        if (hit2) return;
-        this.loadUpcomingSerial();
-      });
-    });
-  },
-
-  // 2026-08-13（「即将」加载优化 · P0 防死锁）：超时/降级兜底——本地快照 + curation 注入。
-  // 与 tryLocalUpcoming 复用同一数据源，但保证在任何路径下 upcomingLoading 都能复位
-  // （tryLocalUpcoming 的 events 为空时会 return false 且不复位，超时路径必须兜底）。
-  finishUpcoming(reason, gen) {
-    if (gen !== this._upcomingGen) return;
-    if (this._upcomingTimer) { clearTimeout(this._upcomingTimer); this._upcomingTimer = null; }
-    this.tryLocalUpcoming().then((hit) => {
-      if (gen !== this._upcomingGen) return;
-      if (!hit) {
-        // 本地快照为空：串行查询兜底（其内部各分支都会复位 upcomingLoading）
-        this.loadUpcomingSerial();
-      }
+      this.loadUpcomingSerial();
     });
   },
 
@@ -1148,7 +974,7 @@ Page({
   //   **Supabase 表 `upcoming_schedule` 直读**。条目形状已实测一致
   //   （id/name/grade/rank/label/tier/start/end/source **零缺失**）⇒ 下游逻辑**逐字不动**。
   //   保留原有两条契约：① gen 代际判活（超时/新链路后丢弃晚到结果）；② 空结果一律视为 miss
-  //   （空表是 truthy，若不显式判空会把空列表当命中 → 走本地快照兜底才正确）。
+  //   （空表是 truthy，若不显式判空会把空列表当命中）。
   trySupabaseUpcoming(gen) {
     let sb = null;
     try { sb = require('../../utils/supabaseClient.js'); } catch (e) { sb = null; }
@@ -1173,10 +999,6 @@ Page({
         });
         if (!results.length) return false;
         results.sort((a, b) => (a.startDate || 0) - (b.startDate || 0));
-        // 本地快照补充：服务端表可能未含已开赛的进行中赛事（Liquipedia 仅 Upcoming 段抓取，
-        // 赛事开赛后转到 Ongoing 段）。用 upcoming-local.json 兜底，确保进行中赛事一定能进入
-        // 赛程列表，再经 upcomingCardStatus 判定归入「进行中」tab。
-        this.mergeLocalSnapshot(results, now);
         // 合并 curation 库的未来赛事（服务端表可能未含未举办的重大赛事）
         this.mergeCurationUpcoming(results, null);
         // ★ 2026-08-22：异步合并 haglund 源赛事（Liquipedia 故障期间的核心补充）
@@ -1193,114 +1015,17 @@ Page({
       .catch(() => false);
   },
 
-  // 本地预构建快照（不依赖服务端）：读取 build-time 生成的 utils/upcoming-local.json。
-  // 适用：未部署 EF / 服务端不可用 / 想零服务端运行。
-  // 数据为「运行抓取脚本那一刻」的快照，非实时；刷新需重跑脚本并重新构建发布：
-  //   node scripts/fetch-liquipedia-upcoming.js
-  // 与云端缓存共用 buildUpcomingCard，字段形状一致；同样经 mergeCurationUpcoming 去重/补充。
-  // ★ 2026-08-31（快照过期降权，v8.1）：快照 generatedAt 距今 > SNAPSHOT_DECAY_AGE_SEC（7 天）时，
-  //   不再作为「命中主源」直接 return true（旧快照仅剩 1 条有效数据也会屏蔽串行 OpenDota 路径，
-  //   导致列表停在抓取当天的世界状态）。降权规则：
-  //     - 新鲜（≤7 天）：行为不变，命中即停（服务端与串行查询之间的高速通道）
-  //     - 过期（>7 天）：立即渲染快照+curation 数据（保首屏有内容），但返回 false
-  //       放行串行查询，由 loadUpcomingSerial 的实时数据（OpenDota earliest）重排序覆盖；
-  //       串行查询有结果时会整体替换 upcomingList，无结果时保留快照渲染不闪空。
-  tryLocalUpcoming() {
-    let data;
-    try {
-      // 2026-07-30 修复：优先用 JS 包装模块（稳定可靠），回退到 JSON
-      try { data = require('../../utils/upcoming-local-data.js'); }
-      catch (_e) { data = require('../../utils/upcoming-local.json'); }
-    } catch (e) {
-      return Promise.resolve(false);
-    }
-    const events = (data && data.events) || [];
-    if (!events.length) return Promise.resolve(false);
-
-    // 快照新鲜度判定（generatedAt 缺失按过期处理，倒逼快照携带时间戳）
-    const genAt = (data && data.generatedAt) || 0;
-    const snapshotAgeSec = genAt ? (util.nowSec() - genAt) : Infinity;
-    const isStale = snapshotAgeSec > SNAPSHOT_DECAY_AGE_SEC;
-
-    const now = util.nowSec();
-    const horizon = now + config.leagueWindow.upcomingRangeSec;
-    const results = events
-      .filter((e) => e.start && e.start <= horizon && (!e.end || e.end >= now))
-      .map((e) => buildUpcomingCard(e, { now: now, leagueMap: this._leagueMap, lid: e.id }));
-    if (!results.length) return Promise.resolve(false);
-
-    results.sort((a, b) => (a.startDate || 0) - (b.startDate || 0));
-    // 合并 curation 库的未来赛事（按归一名去重 + 补充本地快照未覆盖的重大赛事，如 TI 2026）
-    this.mergeCurationUpcoming(results, null);
-    results.sort((a, b) => (a.startDate || 0) - (b.startDate || 0));
-    this.upcomingList = results;
-    this.setData({
-      upcomingLoading: false,
-      upcomingProgress: '',
-      // P1-4：快照路径命中时透出数据截至日期（新快照不显示，过期快照提示用户数据陈旧）
-      upcomingDataAsOf: isStale ? this._formatSnapshotDate(genAt) : ''
-    });
-    this.applyAndSlice(true);
-    // ★ 2026-08-22：异步合并 haglund 源（本地快照可能过时，haglund 提供实时赛事补充）
-    //   先把已有数据立即渲染，haglund 合并完成后再次刷新列表
-    const gen = this._upcomingGen;
-    this.mergeHaglundUpcoming(results, now, gen).then(() => {
-      if (gen !== this._upcomingGen) return;
-      results.sort((a, b) => (a.startDate || 0) - (b.startDate || 0));
-      this.upcomingList = results;
-      this.applyAndSlice(true);
-    });
-    // 过期快照：渲染兜底内容后放行串行查询（返回 false 让 loadUpcoming 继续 loadUpcomingSerial）
-    return Promise.resolve(!isStale);
-  },
-
-  // P1-4：快照 generatedAt（unix 秒）→「MM-DD」显示用日期（本地时区）
-
-  // ★ 2026-09-16：快照是否已过期（与 tryLocalUpcoming 的判定同口径，单一来源）
-  _snapshotIsStale(genAt) {
-    const t = Number(genAt) || 0;
-    if (!t) return true;                       // 无时间戳按过期处理
-    return (util.nowSec() - t) > SNAPSHOT_DECAY_AGE_SEC;
-  },
-  // ★ 2026-09-27（R9）：快照是否**过旧到不该使用**（> SNAPSHOT_UNUSABLE_AGE_SEC）。
-  //   与 `_snapshotIsStale` 的区别：那个只决定"是否显示日期提示"，这个决定"是否还能用"。
-  _snapshotIsTooOld(genAt) {
-    const t = Number(genAt) || 0;
-    if (!t) return true;                       // 无时间戳 ⇒ 不可用
-    return (util.nowSec() - t) > SNAPSHOT_UNUSABLE_AGE_SEC;
-  },
-  _formatSnapshotDate(genAt) {
-    if (!genAt) return '';
-    const d = new Date(genAt * 1000);
-    const mo = d.getMonth() + 1;
-    const da = d.getDate();
-    return mo + '月' + da + '日';
-  },
-
-  // ★ 2026-09-09（快照空覆盖修复 · 补齐 v8.1 设计意图）：
-  //   写回 upcomingList 的统一入口——结果非空时整体替换（实时数据优先）；
-  //   结果为空时保留现有 upcomingList（过期快照降权渲染的数据），绝不闪空。
-  //   根因：tryLocalUpcoming 过期快照（>7 天）按 v8.1 设计「渲染后返回 false 放行串行查询」，
-  //   但串行查询三源全 miss（OpenDota 无未来记录 + curation 未收录 + STRATZ schema 失效）时
-  //   results=[] 无条件覆盖 → 快照渲染的 6 个真实即将赛事被抹掉 →「即将到来」tab 空白，
-  //   而「全部」tab（mergeAllWithUpcoming 引用的还是渲染期数据）仍有卡——口径脱节。
-  //   注释意图见 tryLocalUpcoming L990-991（「无结果时保留快照渲染不闪空」），本次补齐实现。
+  // ★ 2026-09-09：写回 upcomingList 的统一入口 —— 结果非空时整体替换（实时数据优先）；
+  //   结果为空时保留现有 upcomingList（前序链路已渲染的数据），绝不闪空。
   _writeUpcomingList(results) {
     const n = (results && results.length) || 0;
     if (n) {
       console.log('[leagues] upcoming 写回: 替换为', n, '个赛事（实时数据）');
       this.upcomingList = results;
-      // ★ 2026-09-09（v8.13 补刀）：实时数据落地 → 清除过期快照提示。
-      //   v8.1 遗漏：upcomingDataAsOf 只在 tryLocalUpcoming 设置，实时刷新完成后
-      //   无任何路径清除 →「本地赛程数据截至 X，正在后台刷新实时数据…」永远挂着。
-      if (this.data.upcomingDataAsOf) {
-        this.setData({ upcomingDataAsOf: '' });
-      }
     } else {
-      // results 为空：保留 this.upcomingList 现值（快照/云缓存/前序链路渲染的数据）
-      // 此时 upcomingDataAsOf 同步保留（快照仍是当前数据源，陈旧提示有效）
+      // results 为空：保留 this.upcomingList 现值（云缓存/前序链路渲染的数据）
       console.log('[leagues] upcoming 写回: 串行结果为空，保留现有',
-        (this.upcomingList || []).length, '个赛事（快照/缓存兜底）★v8.13');
+        (this.upcomingList || []).length, '个赛事（前序链路兜底）★v8.13');
     }
   },
 
@@ -1328,8 +1053,8 @@ Page({
         //   loadLeagueEntry 的回退分支一致，避免列表赛期少算最后一场 duration。
         //   数据校验：lastEnd 为 0 时回退 latest（纯未来赛未打 duration=0，lastEnd=latest）。
         const endT = (item._win && (item._win.lastEnd || item._win.latest)) || null;
-        // ★ 2026-09-01（B4）：状态判定改用 upcomingCardStatus（与 trySupabaseUpcoming /
-        //   mergeLocalSnapshot 口径一致）——原硬编码 'upcoming'，赛事实际已开赛时
+        // ★ 2026-09-01（B4）：状态判定改用 upcomingCardStatus（与 trySupabaseUpcoming
+        //   口径一致）——原硬编码 'upcoming'，赛事实际已开赛时
         //   （earliest 在未来窗口但比赛已开始）仍标「即将到来」，用户困惑。
         //   upcomingCardStatus：start<=now<=end+1天 → ongoing；否则 upcoming。
         const cardStatus = upcomingCardStatus({ start: er, end: endT }, nowSec);
@@ -1359,8 +1084,7 @@ Page({
     if (results.length > 0) {
       results.sort((a, b) => (a.startDate || 0) - (b.startDate || 0));
       this.upcomingList = results.slice();
-      // ★ v8.13：实时数据落地 → 清除过期快照提示
-      this.setData({ upcomingLoading: false, upcomingProgress: '', upcomingDataAsOf: '' });
+      this.setData({ upcomingLoading: false, upcomingProgress: '' });
       this.applyAndSlice(true);
     }
 
@@ -1377,7 +1101,7 @@ Page({
     //    优先查知名赛事；同优先级下按最近比赛时间倒序（近期活跃的优先）
     // ★ 2026-09-01（P0-L1）：候选过滤 + 降量——
     //   - 只保留 rank>=2（S/A 级）或 isKnownEvent（知名赛事关键词）的候选；
-    //     B/C 级赛事 curation/快照已覆盖大部分，不值得消耗 Liquipedia 串行限流配额。
+    //     B/C 级赛事 curation/远程源已覆盖大部分，不值得消耗 Liquipedia 串行限流配额。
     //   - 配合 config.upcomingQueryLimit 40→15，最坏等待 88s → 33s（本地源命中后 0-3 个）。
     const candidates = needQuery.filter((item) =>
       (item.rank != null && item.rank >= 2) || isKnownEvent(item.name || '')
@@ -1443,48 +1167,6 @@ Page({
         .catch(() => { next(); });
     };
     next();
-  },
-
-  // 本地快照补充：读取 build-time 生成的 utils/upcoming-local.json，
-  // 把云缓存可能遗漏的「进行中 / 即将到来」赛事并入 results（按归一名去重）。
-  // 用途：Liquipedia 仅抓取 Portal 的 Upcoming 段，已开赛赛事转到 Ongoing 段后云缓存会漏，
-  // 本地快照（含 1win Essence II 等）可兜底，确保进行中赛事一定能进入赛程列表。
-  mergeLocalSnapshot(results, now) {
-    let data;
-    // 2026-07-30 修复：优先用 JS 包装模块（稳定可靠），回退到 JSON
-    try { data = require('../../utils/upcoming-local-data.js'); }
-    catch (e) { try { data = require('../../utils/upcoming-local.json'); } catch (_e) { return; } }
-    const events = (data && data.events) || [];
-    if (!events.length) return;
-    const horizon = now + config.leagueWindow.upcomingRangeSec;
-    const seen = {};
-    const norm = leagueKey;   // ★ 2026-09-19 统一去重键（见文件顶部说明）
-    results.forEach((r) => { const k = norm(r.name); if (k) seen[k] = true; });
-    events
-      .filter((e) => e.start && e.start <= horizon && (!e.end || e.end >= now))
-      .forEach((e) => {
-        const k = norm(e.name);
-        if (!k) return;
-        if (seen[k]) {
-          // 2026-07-30 修复：云缓存已含同名赛事（来自 Liquipedia Ongoing 段）时，
-          // 不再直接跳过——用 local 快照更完整的日期修正它。
-          // 根源：抓取脚本（原云函数）fetchLiquipediaUpcoming 抓 Portal:Tournaments 的 Ongoing 段，
-          // 该段日期单元格仅显示开始日（如 "Jul 30, 2026"），parseLiquipediaDate
-          // 无结束月/日 → 回退 end=start，导致 endDate 截断为 startDate。
-          // local 快照（fetch-liquipedia-upcoming.js 生成）含完整 start+end，
-          // 仅当 local 的 end 比云缓存的 endDate 更晚时才覆盖，避免改错正确日期。
-          const existing = results.find((r) => norm(r.name) === k);
-          if (existing && e.end && e.end > (existing.endDate || 0)) {
-            existing.startDate = e.start;
-            existing.endDate = e.end;
-            existing.dateRange = util.formatDateRange(e.start, e.end);
-            existing._win = Object.assign({}, existing._win, { startDate: e.start, endDate: e.end });
-          }
-          return;
-        }
-        seen[k] = true;
-        results.push(buildUpcomingCard(e, { now: now, leagueMap: this._leagueMap, lid: e.id }));
-      });
   },
 
   // 把 curation 库中「有未来日期」的赛事合并到 results。
@@ -1561,7 +1243,7 @@ Page({
   // ★ 2026-08-22 新增：从 haglund 第三方源聚合「即将到来」赛事到列表 tab。
   //
   // 背景：Liquipedia 故障期间，预热（原云函数 preheatUpcoming）无法写入 upcoming_schedule 缓存，
-  // 导致「即将到来」tab 主要靠 curation + 本地快照兜底，遗漏 Liquipedia 独有的新增赛事。
+  // 导致「即将到来」tab 主要靠 curation 兜底，遗漏 Liquipedia 独有的新增赛事。
   // haglund 源（dota.haglund.dev）实时返回全量对阵，可补充这部分缺失。
   //
   // 实现：haglund 返回的是「对阵级」数据（每场一条），需聚合为「赛事级」
@@ -1569,11 +1251,11 @@ Page({
   // 聚合后用 buildUpcomingCard 转换为卡片，按归一名与已有 results 去重。
   //
   // 同步性：本方法是异步的（haglund.fetchUpcoming 返回 Promise），
-  // 调用方（trySupabaseUpcoming / tryLocalUpcoming / loadUpcomingSerial）须在
+  // 调用方（trySupabaseUpcoming / loadUpcomingSerial）须在
   // mergeCurationUpcoming 之后链式调用，完成后才会 setData 刷新列表。
   mergeHaglundUpcoming(results, now, gen) {
     // ★ 2026-09-01（P1-L3）：合并节流 —— haglund 数据 60min TTL 内不变（云端缓存），
-    //   但 loadUpcoming 的每条调用链（trySupabaseUpcoming / tryLocalUpcoming /
+    //   但 loadUpcoming 的每条调用链（trySupabaseUpcoming /
     //   loadUpcomingSerial）都会触发 mergeHaglundUpcoming → 重复跑「拉取+聚合」纯浪费。
     //   距上次成功合并 < 60s 直接跳过（数据不可能变，且上次结果已写入 results）。
     //   非会话级永久标记：超过 60s 仍会重跑（保下拉刷新拉新语义，与 haglund TTL 同量级）。
@@ -1607,7 +1289,7 @@ Page({
       //   它做两步归一：① 剥离已知阶段后缀（"… - Round 1" / "… - Playoffs" …）；
       //                ② 对齐 curation 权威名（统一「Season 9 ↔ S9」等异写法）。
       //   真机问题（本次）：haglund 侧用缩写 "PGL Wallachia S9 - Round 1"，而 curation /
-      //   快照侧用全称 "PGL Wallachia Season 9" → 列表页「进行中」与「即将开始」各显示一条，
+      //   远程源用全称 "PGL Wallachia Season 9" → 列表页「进行中」与「即将开始」各显示一条，
       //   被当成**两个赛事**（且缩写那条信息不全）。归一后两者**同键** →
       //   下方 `seen` 去重即可挡住，留下信息齐全的权威名。
       //   ⚠️ 铁律：凡「跨源按赛事名比对」的场景都要调用它，不要再各自内联 ——
@@ -1626,7 +1308,7 @@ Page({
         }
       });
 
-      // 2) 时间窗过滤（与 trySupabaseUpcoming / mergeLocalSnapshot 同口径）
+      // 2) 时间窗过滤（与 trySupabaseUpcoming 同口径）
       const horizon = now + config.leagueWindow.upcomingRangeSec;
       const norm = leagueKey;   // ★ 2026-09-19 统一去重键（见文件顶部说明）
       const seen = {};
@@ -1732,14 +1414,14 @@ Page({
       // 仅显示「即将到来」状态：已开赛的进行中赛事归入「进行中」tab，不在此重复出现
       const fromList = (this.upcomingList || []).filter((x) => gradeMatch(x) && x.status === 'upcoming').slice();
       // ★ 2026-09-09（三源 miss 兜底 · 口径脱节修复）：upcomingList 的回退链
-      //   （表预热缓存 → 本地快照 → 串行查询）全 miss 时（如 curation 未收录 9 月赛事、
+      //   （表预热缓存 → 串行查询）全 miss 时（如 curation 未收录 9 月赛事、
       //   STRATZ schema 失效、LP slug 缺失），allLeagues 中 OpenDota earliest 在未来的赛事
       //   （status='upcoming'，真实排期数据）此前只出现在「全部」tab——「全部」能看到、
       //   「即将到来」却为空。修复：将 allLeagues 的 upcoming 赛事并入本 tab（按 leagueid 去重，
       //   与「进行中」分支合并模式一致）。
       // ★★ 2026-09-19 修复「即将开始 Tab 重复卡片」（真机截图复现）：
       //   原实现**只用 leagueid 判重**，但两个来源的 id **体系完全不同**：
-      //     · fromList（upcomingList：快照 / 表 / curation）→ **负数 fakeId**（如 -1632240）
+      //     · fromList（upcomingList：表 / curation）→ **负数 fakeId**（如 -1632240）
       //     · fromAll（allLeagues：OpenDota）→ **真实 leagueid**（如 19102）
       //   同一赛事在两边 id 必然不同 → 判重**彻底失效** → 两张同名卡同时展示。
       //   实测复现（用户截图）：BLAST SLAM VIII / BLAST SLAM IX /
@@ -1753,7 +1435,7 @@ Page({
       const fromAll = (this.allLeagues || []).filter((x) =>
         x.status === 'upcoming' && gradeMatch(x) && !_seenUp[leagueKey(x.displayName || x.name)]);
       // ★ v8.13 诊断：upcoming tab 数据流透出（确认战队筛选豁免已生效）
-      console.log('[leagues] upcoming tab: 快照/实时卡', fromList.length,
+      console.log('[leagues] upcoming tab: 远程卡/实时卡', fromList.length,
         '+ allLeagues 兜底', fromAll.length, '| 战队筛选已豁免 ★v8.13');
       arr = fromList.concat(fromAll);
     } else if (f === 'ongoing') {
@@ -1761,7 +1443,7 @@ Page({
       const ong = (this.allLeagues || []).filter((x) => x.status === 'ongoing' && gradeMatch(x));
       const seen = {};
       ong.forEach((x) => { seen[String(x.leagueid)] = true; });
-      // 补充：Liquipedia/本地快照中「已开赛但 OpenDota 尚未收录」的赛事（如 1win Essence II）。
+      // 补充：远程源中「已开赛但 OpenDota 尚未收录」的赛事（如 1win Essence II）。
       // 这些赛事仅存在于 upcomingList（赛程数据源），按日期窗口判定为「进行中」，应在此展示。
       (this.upcomingList || []).forEach((u) => {
         if (seen[String(u.leagueid)]) return;

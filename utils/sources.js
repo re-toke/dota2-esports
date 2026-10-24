@@ -45,10 +45,10 @@ const logoCache = require('./logoCache'); // P2-F：本地队标/头像缓存
 // G4 单一数据源：与云函数共用的精确归一映射（来自 curation-shared.js 模块，非 .json）
 const leagueCanon = require('./league-canon-map.js');
 
-// ★★ 2026-10-14（P2-24）：从本文件抽出的「无交叉引用纯函数层」与「即将到来快照装载器」。
+// ★★ 2026-10-14（P2-24）：从本文件抽出的「无交叉引用纯函数层」。
 //   此处解构复用 + 在本文件 module.exports 中再导出 ⇒ 既有调用方（pages/subpackages/scripts）不变；
 //   BO 引擎等强耦合部分仍保留在本文件单体中（O-19：整文件拆分会产生循环依赖 ⇒ 禁止整文件拆分）。
-//   注意：`var _upcomingLocalSnapshot` 缓存变量随装载器一并移入 utils/upcomingSnapshot.js。
+// ★ 2026-10-24：内置「即将到来」赛程快照已移除（改为纯联网）⇒ 快照装载器与导出项一并删除。
 const {
   liquipediaDateToUnix,
   stripYearTokens,
@@ -59,7 +59,6 @@ const {
   boFromFreeText,
   normalizeLpLivePhase
 } = require('./sourcesPure.js');
-const { getUpcomingLocalSnapshot } = require('./upcomingSnapshot.js');
 // G8 运行时监控（安全降级，无 wx 时不打点）
 const monitor = require('./monitor.js');
 
@@ -2883,6 +2882,5 @@ module.exports = {
   canonicalLeagueName: canonicalLeagueName,
   leagueDisplayName: leagueDisplayName,
   // ★ 2026-09-19（⑤ 落地）：跨源赛期合并 —— 详情页 eventWindow 与列表页 dateRange 共用同一实现
-  mergeEventPeriod: mergeEventPeriod,
-  getUpcomingLocalSnapshot: getUpcomingLocalSnapshot
+  mergeEventPeriod: mergeEventPeriod
 };

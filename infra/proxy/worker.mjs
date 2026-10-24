@@ -71,15 +71,26 @@ const EF_CACHE_MS = {
 const UPSTREAM_TIMEOUT_MS = 12000;
 const RETRY_ON = (status) => status >= 500;
 
+// ★★ 2026-10-24：**陈旧兜底（stale-if-error / stale-if-slow）**
+//   问题（实测）：上游 OpenDota 偶发「首字节 1.4~2.8s、随后**传输长时间停滞**」（wall 2.9s / 11s / 30s+）。
+//     而本中转是 **12s 超时 × 2 次尝试 = 最坏 24s**，已超过客户端单请求 20s、首页首屏 15s
+//     ⇒ 用户侧表现就是「打开首页对局卡十几秒」。
+//   做法：只要该 key **曾成功缓存过**（哪怕已过期），就
+//     ① 只试 **1 次**，且超时收紧到 `STALE_TIMEOUT_MS`；
+//     ② 失败 / 5xx ⇒ 直接回上一次成功的响应体（`X-Proxy-Cache: STALE` + `X-Proxy-Cache-Age`）。
+//   ⇒ 有旧缓存时：**最多等 4s** 必有内容；**无旧缓存时行为完全不变**（仍 12s × 2）。
+//   ⚠️ 陈旧响应只是「比空窗好」，**不是"新鲜"** —— 客户端仍会按自己的 TTL 继续刷新。
+const STALE_TIMEOUT_MS = 4000;
+
 const CORS = {
   'Access-Control-Allow-Origin': '*',            // 只读代理、不带凭据 ⇒ 放开便于浏览器自测
   'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type,Authorization,apikey,Prefer,Range,X-Trim,X-Admin-Token',
-  'Access-Control-Expose-Headers': 'Content-Range, X-Proxy-Cache, X-Proxy-Trim'
+  'Access-Control-Expose-Headers': 'Content-Range, X-Proxy-Cache, X-Proxy-Trim, X-Proxy-Cache-Age'
 };
 
 // 模块级短路缓存（isolate 内有效）
-const _cache = new Map();          // key -> { exp, body, status, ct, cr }
+const _cache = new Map();          // key -> { at, exp, body, status, ct, cr }
 
 function json(body, status, extra) {
   return new Response(JSON.stringify(body), {
@@ -196,18 +207,23 @@ function trimInfo(request, url) {
 //   （避免未来新调用点重蹈"拉 480KB 全量 ⇒ 超时"覆辙）。需要全量的调用用 `X-Trim: 0` 显式豁免。
 const DEFAULT_TEAM_TRIM = 300;
 
-/** 带超时 + 1 次重试的上游请求（仅 5xx/网络异常重试） */
-async function fetchUpstream(url, init, label) {
+/**
+ * 带超时 + 1 次重试的上游请求（仅 5xx/网络异常重试）。
+ * @param {{attempts?:number,timeoutMs?:number}} [opts] 陈旧兜底场景传 `{attempts:1,timeoutMs:STALE_TIMEOUT_MS}`
+ */
+async function fetchUpstream(url, init, label, opts) {
+  const attempts = (opts && opts.attempts) || 2;
+  const timeoutMs = (opts && opts.timeoutMs) || UPSTREAM_TIMEOUT_MS;
   let lastErr = null;
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < attempts; attempt++) {
     const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), UPSTREAM_TIMEOUT_MS);
+    const timer = setTimeout(() => ac.abort(), timeoutMs);
     const t0 = Date.now();
     try {
       const r = await fetch(url, Object.assign({}, init, { signal: ac.signal }));
       clearTimeout(timer);
       const ms = Date.now() - t0;
-      if (attempt === 0 && RETRY_ON(r.status)) {
+      if (attempt === 0 && attempts > 1 && RETRY_ON(r.status)) {
         console.log('[proxy] ' + label + ' → ' + r.status + ' ' + ms + 'ms（5xx，重试一次）');
         try { r.body && r.body.cancel && await r.body.cancel(); } catch (e) { /* ignore */ }
         continue;
@@ -240,6 +256,30 @@ function textResponse(body, status, ct, cr, cacheState, extra) {
   if (cacheState) h['X-Proxy-Cache'] = cacheState;
   if (extra) Object.assign(h, extra);   // ★ P0-1：裁剪/过滤回执头（X-Proxy-Trim）
   return new Response(body, { status: status, headers: new Headers(h) });
+}
+
+/**
+ * 读响应体并**带超时**（★ 2026-10-24）。
+ * 为什么需要：`AbortController` 的超时只在 `fetch()` 返回**响应头**时被 clearTimeout 掉，
+ *   而实测的故障形态正是「头很快、**body 传输停滞**」⇒ 原先的 12s 超时管不到这一段，
+ *   一次卡住的 body 读取可以把首页拖到客户端超时。这里给 body 读也设上限。
+ */
+function readText(r, ms) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('body timeout')), ms);
+    r.text().then(
+      (v) => { clearTimeout(t); resolve(v); },
+      (e) => { clearTimeout(t); reject(e); }
+    );
+  });
+}
+
+/** 陈旧兜底响应：把上一次成功的响应体原样返回，并显式标记 STALE + 年龄 */
+function staleResponse(hit, label) {
+  const age = Math.max(0, Math.round((Date.now() - (hit.at || Date.now())) / 1000));
+  console.log('[proxy] ' + (label || '') + ' 上游失败 → 返回陈旧缓存（age ' + age + 's）');
+  return textResponse(hit.body, 200, hit.ct || 'application/json', hit.cr || null, 'STALE',
+    { 'X-Proxy-Cache-Age': String(age) });
 }
 
 // ★ 2026-10-13（方案 B）：原 `handle` 改名 `_handle`；对外仍导出 `handle`（= `_handle` + 按需 gzip 包装）。
@@ -325,7 +365,7 @@ async function _handle(request, env, ctx) {
       if (efKey && r.ok) {
         // 只缓存成功响应；读一次 body 再回放（避免把 Response 消费掉）
         const body = await r.text();
-        _cache.set(efKey, { exp: Date.now() + efTtl, body: body, status: r.status, ct: 'application/json', cr: null });
+        _cache.set(efKey, { at: Date.now(), exp: Date.now() + efTtl, body: body, status: r.status, ct: 'application/json', cr: null });
         return textResponse(body, r.status, 'application/json', null, 'MISS');
       }
       return forward(r);
@@ -343,12 +383,32 @@ async function _handle(request, env, ctx) {
       }
       const headers = passHeaders(request.headers, ['Range', 'Prefer']);   // ★ Range 必须保留（客户端分页依赖）
       Object.assign(headers, sbHeaders);
-      const r = await fetchUpstream('https://' + ref + '.supabase.co/rest/v1/' + m[1] + (url.search || ''),
-        { method: 'GET', headers: headers }, 'REST ' + m[1]);
-      const body = await r.text();
+      // ★ 2026-10-24：陈旧兜底（见 STALE_TIMEOUT_MS 注释）
+      const stale = (hit && hit.body) ? hit : null;
+      const label = 'REST ' + m[1];
+      let r;
+      try {
+        r = await fetchUpstream('https://' + ref + '.supabase.co/rest/v1/' + m[1] + (url.search || ''),
+          { method: 'GET', headers: headers }, label,
+          stale ? { attempts: 1, timeoutMs: STALE_TIMEOUT_MS } : undefined);
+      } catch (e) {
+        if (stale) return staleResponse(stale, label);
+        throw e;
+      }
+      if (stale && r.status >= 500) {
+        try { r.body && r.body.cancel && await r.body.cancel(); } catch (e) { /* ignore */ }
+        return staleResponse(stale, label);
+      }
+      let body = '';
+      try {
+        body = await readText(r, stale ? STALE_TIMEOUT_MS : UPSTREAM_TIMEOUT_MS);
+      } catch (e) {
+        if (stale) return staleResponse(stale, label);
+        throw e;
+      }
       const ct = r.headers.get('content-type') || 'application/json';
       const cr = r.headers.get('content-range');
-      if (r.ok) _cache.set(ck, { exp: Date.now() + TTL['default'], body: body, status: r.status, ct: ct, cr: cr });
+      if (r.ok) _cache.set(ck, { at: Date.now(), exp: Date.now() + TTL['default'], body: body, status: r.status, ct: ct, cr: cr });
       return textResponse(body, r.status, ct, cr, 'MISS');
     }
 
@@ -370,20 +430,38 @@ async function _handle(request, env, ctx) {
         console.log('[proxy] OD ' + rest + ' → 缓存命中');
         return textResponse(hit.body, hit.status, 'application/json', null, 'HIT');
       }
-      const r = await fetchUpstream('https://api.opendota.com/api/' + rest + (url.search || ''),
-        { method: 'GET', headers: { 'Accept-Encoding': 'gzip' } }, 'OD ' + rest);
+      // ★ 2026-10-24：陈旧兜底（见 STALE_TIMEOUT_MS 注释）—— 有旧缓存 ⇒ 单次尝试 + 4s 超时
+      const stale = (hit && hit.body) ? hit : null;
+      const label = 'OD ' + rest;
+      const bodyMs = stale ? STALE_TIMEOUT_MS : UPSTREAM_TIMEOUT_MS;
+      let r;
+      try {
+        r = await fetchUpstream('https://api.opendota.com/api/' + rest + (url.search || ''),
+          { method: 'GET', headers: { 'Accept-Encoding': 'gzip' } }, label,
+          stale ? { attempts: 1, timeoutMs: STALE_TIMEOUT_MS } : undefined);
+      } catch (e) {
+        if (stale) return staleResponse(stale, label);
+        throw e;
+      }
+      if (stale && r.status >= 500) {
+        try { r.body && r.body.cancel && await r.body.cancel(); } catch (e) { /* ignore */ }
+        return staleResponse(stale, label);
+      }
 
       // `/leagues` 轻量裁剪：丢 tier=excluded（形状不变）
       if (rest === 'leagues' && r.ok) {
+        let txt = '';
+        try { txt = await readText(r, bodyMs); } catch (e) { if (stale) return staleResponse(stale, label); throw e; }
         let data = null;
-        try { data = await r.json(); } catch (e) { data = null; }
+        try { data = JSON.parse(txt); } catch (e) { data = null; }
         if (Array.isArray(data)) {
           const kept = data.filter((x) => !x || x.tier !== 'excluded');
           const body = JSON.stringify({ kept: kept.length, dropped: data.length - kept.length, data: kept });
-          _cache.set(ck, { exp: Date.now() + ttl, body: body, status: 200, ct: 'application/json', cr: null });
+          _cache.set(ck, { at: Date.now(), exp: Date.now() + ttl, body: body, status: 200, ct: 'application/json', cr: null });
           return textResponse(body, 200, 'application/json', null, 'MISS');
         }
-        return forward(r);   // 非数组（异常响应）⇒ 原样透传，别自作主张
+        // 非数组（异常响应）⇒ 原样透传，别自作主张
+        return textResponse(txt, r.status, r.headers.get('content-type') || 'application/json', null, 'MISS');
       }
 
       // ★★ 2026-10-10（问题A 修法①·按需裁剪）／2026-10-12（P0-1 B′ + C）
@@ -392,8 +470,10 @@ async function _handle(request, env, ctx) {
       //   ★ P0-1 C：未声明（无 `recent`/`X-Trim`）且非 `vs` ⇒ **默认裁 DEFAULT_TEAM_TRIM(300)** 兜底；
       //     需要全量的调用（team-detail 后台补全量）用 `X-Trim: 0` **显式豁免**（`trimInfo.declared`）。
       if (isTeamMatches && r.ok && (effTrim > 0 || vs)) {
+        let txt = '';
+        try { txt = await readText(r, bodyMs); } catch (e) { if (stale) return staleResponse(stale, label); throw e; }
         let data = null;
-        try { data = await r.json(); } catch (e) { data = null; }
+        try { data = JSON.parse(txt); } catch (e) { data = null; }
         if (Array.isArray(data)) {
           let kept = data;
           let receipt = '';
@@ -408,17 +488,18 @@ async function _handle(request, env, ctx) {
             receipt = 'recent:' + kept.length;
           }
           const body = JSON.stringify(kept);
-          _cache.set(ck, { exp: Date.now() + ttl, body: body, status: 200, ct: 'application/json', cr: null });
+          _cache.set(ck, { at: Date.now(), exp: Date.now() + ttl, body: body, status: 200, ct: 'application/json', cr: null });
           console.log('[proxy] OD ' + rest + ' → ' + receipt + '（原 ' +
             Math.round(JSON.stringify(data).length / 1024) + 'KB）');
           return textResponse(body, 200, 'application/json', null, 'MISS', { 'X-Proxy-Trim': receipt });
         }
-        return forward(r);
+        return textResponse(txt, r.status, r.headers.get('content-type') || 'application/json', null, 'MISS');
       }
 
-      const body = await r.text();
+      let body = '';
+      try { body = await readText(r, bodyMs); } catch (e) { if (stale) return staleResponse(stale, label); throw e; }
       const ct = r.headers.get('content-type') || 'application/json';
-      if (r.ok) _cache.set(ck, { exp: Date.now() + ttl, body: body, status: r.status, ct: ct, cr: null });
+      if (r.ok) _cache.set(ck, { at: Date.now(), exp: Date.now() + ttl, body: body, status: r.status, ct: ct, cr: null });
       return textResponse(body, r.status, ct, null, 'MISS');
     }
 
@@ -512,4 +593,4 @@ export default {
 };
 
 // 供 Pages Functions / 本地测试复用
-export { handle, EF_ALLOW, TTL };
+export { handle, EF_ALLOW, TTL, _cache };

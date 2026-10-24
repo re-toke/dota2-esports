@@ -8,8 +8,9 @@
  * 且**调度是否还在跑**这件事完全不可观测（方案把这条列为"架构唯一的系统性脆弱点"：
  * `ef-health` 只探 EF 健康，**不探调度本身**）。
  * 本脚本在 CI 里跑，把「快照新鲜度 / 条目数 / 本次运行时间」写进 `curation_meta`：
- *   ① 客户端「我的」页读它 ⇒ **用户/开发者都能看见"数据多久没更新"**（消费方：来源不同，不是同一处自证）
+ *   ① 客户端「我的」页读它 ⇒ **用户/开发者都能看见"调度多久没跑"**（消费方：来源不同，不是同一处自证）
  *   ② 它本身就是**心跳**：定时任务若停摆，该行时间戳就不再前进
+ * ★ 2026-10-24：内置赛程/联赛快照已移除 ⇒ 快照维度只保留队徽快照（其余诊断项不变）。
  *
  * ## 口径
  * 指标计算走**纯函数** `utils/diagnostics.js` 的 `computePipelineMetrics`
@@ -50,9 +51,9 @@ function readSnapshot(rel, countOf) {
 }
 
 function buildReport() {
+  // ★ 2026-10-24：内置赛程/联赛快照已移除 ⇒ 管道指标只保留**队徽快照**（仍在包内的 build-time 产物）。
   const snaps = [
-    readSnapshot('utils/upcoming-local.json', (j) => (j.events || []).length),
-    readSnapshot('utils/leagues-local.json', (j) => (j.leagues || []).length),
+    readSnapshot('utils/team-logo-map.json', (j) => Object.keys(j.byName || {}).length),
   ];
   const pm = diag.computePipelineMetrics(snaps, Math.floor(Date.now() / 1000));
   // ★ 只上报**可核对**的事实；卡片级指标不臆造（那依赖客户端融合）

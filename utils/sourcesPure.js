@@ -63,13 +63,14 @@ function stripYearTokens(rawName) {
 
 // ===== ⑤ 跨源赛期合并（2026-09-19 落地，口径经用户确认）=====
 //
-// 口径：**官方赛期源优先（Liquipedia 系：curation / upcoming-local 快照），缺口按字段回退** ——
+// 口径：**官方赛期源优先（Liquipedia 系：curation / LP 抓取源），缺口按字段回退** ——
 //   · 首个「起止都完整」的源           → 全取
 //   · 某源只有 start（LP endDate 不完整的常态）→ start 取该源，end 依次向下回退
 //   · 某源无数据                       → 整体继续向下回退（**字段级**，绝不因不完整而整条丢弃）
 //
-// 本项目的典型顺序：curation > LP 快照 > OpenDota 真实比赛窗口。
-// （haglund 赛程推得的窗口若可用，可插在 LP 快照与 OpenDota 之间 —— 接口形态相同。）
+// 本项目的典型顺序：curation > OpenDota 真实比赛窗口。
+// ★ 2026-10-24：内置 LP 快照已移除，列表/详情页不再传该源。
+// （haglund 赛程推得的窗口若可用，可插在两者之间 —— 接口形态相同。）
 //
 // ★ 修复的 bug 形态：原两处调用点（详情页 eventWindow / 列表页 dateRange）对快照回退都是
 //   `if (entry.start && entry.end)` 的 **all-or-nothing** —— LP「endDate 不完整」（只给 start）时

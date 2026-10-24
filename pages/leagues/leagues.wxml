@@ -58,8 +58,8 @@
     </view>
   </view>
 
-  <!-- ★ v8.31（赛事页 4s 感知优化）：快照已渲染 + 网络仍在刷 → 顶部「同步中」脉冲条。
-       比骨架屏更有效：用户看到列表 + 明确的活动指示，感知等待时间显著下降。 -->
+  <!-- ★ v8.31（赛事页 4s 感知优化）：运行期缓存已渲染 + 网络刷新失败/进行中 → 顶部提示条。
+       比骨架屏更有效：用户看到列表 + 明确的来源指示，感知等待时间显著下降。 -->
   <view wx:if="{{leaguesAsOfText}}" class="sync-bar">
     <view class="sync-dot"></view>
     <text class="sync-text">{{leaguesAsOfText}}</text>
@@ -128,15 +128,6 @@
       <text class="progress-tip">首次查询赛程较慢，结果会缓存 24 小时</text>
     </view>
   </block>
-
-  <!-- P1-4（v8.1）：过期快照提示——数据截至日期（仅本地快照 >7 天时显示，串行实时数据到位前提醒）
-       ★ 2026-09-09（v8.13 修复·终极真凶）：此提示条原写法用 wx:if 开启了条件链，
-       下方的「空态/列表」成了它的 wx:elif/wx:else 互斥分支——快照一过期（>7 天）
-       upcomingDataAsOf 非空 → 提示条命中 → 列表被 elif 链整体屏蔽，出现「提示显示、
-       列表消失」。修复：提示条独立渲染，列表链以 wx:if 重新开链，两者并存。 -->
-  <view wx:if="{{filter==='upcoming' && !upcomingLoading && upcomingDataAsOf}}" class="upcoming-asof-bar">
-    <text class="asof-text">本地赛程数据截至 {{upcomingDataAsOf}}，正在后台刷新实时数据…</text>
-  </view>
 
   <!-- 即将到来为空：赛程来自 STRATZ / Liquipedia（云端代理），本地精选兜底 -->
   <view wx:if="{{filter==='upcoming' && !upcomingLoading && list.length === 0}}" class="empty-hint">

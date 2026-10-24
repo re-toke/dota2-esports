@@ -13,8 +13,9 @@
  *     —— 分类错了，"分流"就成了空话。
  *  ② **分流正确（A′ 契约）**：**只有"被拦截"才退避重试、才降级**；
  *     其它错误**立刻失败不重试**；且「上游 0 条」的 exit(1) **必须保留**（真故障不许被静默）。
- *  ③ **workflow 契约**：提交步带 `if: always()`；两个补接线步**前置**在 LP 抓取之前
- *     （它们只依赖 OpenDota/Steam，不该被 LP 的抖动连带跳过）。
+ *  ③ **workflow 契约**：提交步带 `if: always()`；队徽补接线步**前置**在 LP 抓取之前
+ *     （它只依赖 OpenDota/Steam，不该被 LP 的抖动连带跳过）。
+ *     ★ 2026-10-24：内置赛程/联赛快照已移除 ⇒ 只剩队徽这一个补接线步。
  *  ★ 每个源码级守卫都配**字符串变异证伪**（证明守卫非永真）。
  *
  * 运行：node scripts/test/test-lp-fetch-guard.js
@@ -46,7 +47,7 @@ const wf = read(WF_REL);
 
 // ============================================================================
 // 0) ★ 安全前置：`require.main` 守卫**必须**存在，否则 require 下面这个模块会
-//    直接执行 main()（发真实网络请求 + 写 utils/upcoming-local.json 产物！）
+//    直接执行 main()（发真实网络请求 + 写 Supabase `upcoming_schedule`！）
 //    ⇒ 守卫缺失时**立刻退出**，绝不 require（这是本测试自身的安全阀）。
 // ============================================================================
 const hasMainGuard = src.indexOf('if (require.main === module)') !== -1;
@@ -190,17 +191,17 @@ function mkFetch(seq) {
     assert('★ 变异3b：抽掉 0 条的 exit(1) ⇒ 契约必须判 false', !zeroRowsStillFails(mut));
   }
 
-  // 3c) ★ workflow：两个补接线步必须**前置**在 LP 抓取之前
+  // 3c) ★ workflow：队徽补接线步必须**前置**在 LP 抓取之前
+  //     ★ 2026-10-24：内置赛程/联赛快照已移除 ⇒ 只剩队徽这一个补接线步。
   function orderOk(text) {
-    const i11 = text.indexOf('Refresh leagues snapshot (补接线)');
-    const i12 = text.indexOf('Refresh team-logo snapshot (补接线)');
-    const iLp = text.indexOf('Run upcoming sync (snapshot + Supabase)');
-    return i11 > -1 && i12 > -1 && iLp > -1 && i11 < iLp && i12 < iLp;
+    const iLogo = text.indexOf('Refresh team-logo snapshot (补接线)');
+    const iLp = text.indexOf('Run upcoming sync (Liquipedia → Supabase)');
+    return iLogo > -1 && iLp > -1 && iLogo < iLp;
   }
-  assert('★ 3c: workflow 中「两个补接线步」必须在 LP 抓取**之前**（否则 LP 一红就带走它们）', orderOk(wf));
+  assert('★ 3c: workflow 中「队徽补接线步」必须在 LP 抓取**之前**（否则 LP 一红就带走它）', orderOk(wf));
   {
     // 变异：在文件最前插入一个 LP 步标记 ⇒ 首个 LP 出现位置早于补接线步 ⇒ 顺序被破坏
-    const mut = '- name: Run upcoming sync (snapshot + Supabase)\n' + wf;
+    const mut = '- name: Run upcoming sync (Liquipedia → Supabase)\n' + wf;
     assert('变异3c 确实改到了源码', mut !== wf);
     assert('★ 变异3c：顺序颠倒 ⇒ 契约必须判 false', !orderOk(mut));
   }

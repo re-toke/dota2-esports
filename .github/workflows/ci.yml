@@ -67,8 +67,9 @@ jobs:
   #   ⇒ 独立 job：**可见**（运行页一目了然是哪一类问题）但**不阻塞**代码门禁。
   #   详见 deliverables/快照过期问题-方案复核意见-2026-09-27.md 的 R4。
   #
-  # 背景：leagues-local 曾停更 12.7 天、team-logo-local 曾停更 ≈26 天，而全部门禁仍全绿
+  # 背景：队徽快照（team-logo）曾停更 ≈26 天，而全部门禁仍全绿
   #   ⇒ 典型的静默失效（只能等用户在界面上偶然看见）。本守卫让「过期」可见。
+  #   ★ 2026-10-24：内置赛程/联赛快照已移除 ⇒ 本 job 只检查队徽快照。
   snapshot-freshness:
     runs-on: ubuntu-latest
     continue-on-error: true

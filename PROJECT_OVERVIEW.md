@@ -71,7 +71,8 @@
 | `incremental.js` / `follow.js` / `followBatch.js` / `reminderStrategy.js` | 增量更新、关注与提醒 |
 | `searchHistory.js` / `league-canon-map.js` / `discover-core.js` | 搜索历史 / 联赛规范映射 / 赛事发现 |
 
-> 生成物（**勿手改**）：`utils/*-local.json`（快照，CI 生成）、`subpackages/detail/team-logo-local-data.js`（队徽快照，CI 生成）。
+> 生成物（**勿手改**）：`utils/team-logo-map.json` + `subpackages/detail/team-logo-local-data.js`（队徽快照，CI 生成）。
+> ★ 2026-10-24：原 `utils/upcoming-local*` / `utils/leagues-local*` 内置快照已移除（改为纯联网）。
 
 ---
 
@@ -90,7 +91,8 @@
 ## 5. 缓存 · 降级 · 安全
 
 - **缓存五层**：T1 客户端内存热缓存 → T2 客户端 Storage（SWR）→ T3 中转 GET 短路 → T4 EF 内存 L1 → T5 `aggregation_cache`（KV）。
-- **降级链**：中转主出口失败 → 切备出口（仅**传输层失败**触发；429/5xx 只退避重试）→ 直连 OpenDota → 本地快照 / 本地 curation。
+- **降级链**：中转主出口失败 → 切备出口（仅**传输层失败**触发；429/5xx 只退避重试）→ 直连 OpenDota → curation。★ 中转侧另有**陈旧兜底**（见下）。
+- **★ 中转「陈旧兜底」（2026-10-24）**：同一 key 曾有成功缓存时，上游只试 **1 次**且超时收紧到 **4s**；失败 / 5xx / body 停滞 ⇒ 直接回上一次成功响应（`X-Proxy-Cache: STALE` + `X-Proxy-Cache-Age`）。无旧缓存时行为不变（12s × 2）。目的：消除上游「头快、body 卡」导致的首页 15s 空窗。
 - **失败可见**：「我的」页数据健康卡（`diagnostics`）；EF/中转失败与卡片质量**事件上报**。
 - **安全**：客户端**不持有真实 Supabase key**（中转服务端注入）；写权限只在 EF；`007-security-hardening.sql` 加了 `keep_alive` 列约束 + 写入频率触发器；中转按 IP 限流（默认 120/min，取不到 IP 则 **fail-open**）。
 
@@ -102,7 +104,7 @@
 |---|---|
 | 分段埋点 | 首页/详情页 `[perf]` 分段耗时（`config.debug.verboseLog` 门控热路径日志）|
 | 线上事件 | `ef_failure` / `relay_failover` / `card_quality_violation`（微信后台「自定义分析」）|
-| 探针脚本 | `scripts/ops/probe-ef.js`（EF 健康）、`check-quota.js`（配额）、`check-snapshot-freshness.js`（快照）、`diag-report.js` |
+| 探针脚本 | `scripts/ops/probe-ef.js`（EF 健康）、`check-quota.js`（配额）、`check-snapshot-freshness.js`（**队徽**快照）、`diag-report.js` |
 | 中转自检 | `/healthz`（回显 `ipSource`/`rlMax`/`rlSrc`/`routes`）、`/healthz?deep=1`（深检 EF + Supabase 可达）|
 
 ---
@@ -113,7 +115,7 @@
 |---|---|---|
 | `ci.yml` | push / PR | 全量门禁（`test:all` 等）|
 | `deploy-admin.yml` | push `admin/**` / 手动 | 构建并发布 admin 到 GitHub Pages |
-| `sync-upcoming.yml` | 定时 | 刷新三份快照并 commit |
+| `sync-upcoming.yml` | 定时 | 刷新**队徽快照**并 commit；抓 LP 写 Supabase `upcoming_schedule`（★ 赛程/联赛内置快照已移除） |
 | `sync-liquipedia.yml` | 定时 | LP slug / 解析产物同步 |
 | `discover-tournaments.yml` | 定时 | 赛事发现 |
 | `ops-maintenance.yml` | 每日 | 清 `aggregation_cache` 过期行 + 快照新鲜度 + 配额探针（失败 → Webhook 二级告警）|
@@ -144,7 +146,9 @@
 | 7 | `P1-17` 赛事名 CJK/西里尔归一族 | ⚠️ 未统一（队名两族已收敛）|
 | 8 | `aggregation_cache` 配额 | ✅ 2026-10-16 实测 **259/5000**、过期 **0** |
 | 9 | P2-21 主包瘦身 | ✅ 结构已核（队徽快照 205KB 已出主包）；**压缩后体积待 DevTools 实测** |
-| 10 | 快照新鲜度 | ✅ 三快照 0.2 天前（每日 CI）|
+| 10 | 快照新鲜度 | ✅ 队徽快照 0.2 天前（每日 CI）；★ 赛程/联赛内置快照已于 2026-10-24 移除 |
+| 11 | 中转「陈旧兜底」（2026-10-24）| ✅ 已实施（有过期缓存时单次 4s + STALE 回退，并给 body 读加超时）；**待重贴 `[0]`/`[1]` 生效** |
+| 12 | 内置赛程/联赛快照（2026-10-24）| ✅ 已移除（改为纯联网；CI 只保留队徽快照 + Supabase `upcoming_schedule`）|
 
 ---
 

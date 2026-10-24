@@ -3,7 +3,7 @@
 // 【手工诊断工具 · 不接入 test:all】（需联网，跑一次约 60s，故不进 CI）
 //
 // 用途：**在 Node 里复现赛事列表页的真实渲染结果** —— 桩化 wx / Page，
-//       直接 require 页面模块并调用其真实方法（loadLeagues → tryLocalUpcoming
+//       直接 require 页面模块并调用其真实方法（loadLeagues → loadUpcomingSerial
 //       → applyAndSlice），然后用真实网络数据打印每个 Tab 的最终卡片列表。
 //
 // 为什么需要它：本项目的测试套件全是**纯函数**测试，而「列表去重 / 跨源合并 /
@@ -86,11 +86,11 @@ const util = require(ROOT + '/utils/util.js');
   }
   console.log('allLeagues = ' + (inst.allLeagues || []).length + ' 条  _normalizeDone=' + inst._normalizeDone);
 
-  // ---- 2) upcomingList（本地快照路径，真机 onShow 亦走此链）----
+  // ---- 2) upcomingList（纯联网路径：Supabase upcoming_schedule → 串行查询）----
   try {
-    await page.tryLocalUpcoming.call(inst);
+    await page.loadUpcomingSerial.call(inst);
   } catch (e) {
-    console.log('tryLocalUpcoming 失败: ' + e.message);
+    console.log('loadUpcomingSerial 失败: ' + e.message);
   }
   console.log('upcomingList = ' + ((inst.upcomingList || []).length) + ' 条');
 

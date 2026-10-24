@@ -6,7 +6,7 @@
 --   客户端 `pages/leagues/leagues.js` 的「即将到来」有两条来源：
 --     ① 云函数 `getUpcomingSchedule`（直接 wx.cloud.callFunction，不经 cloudProxy）
 --        —— 实为「读云缓存 upcoming_schedule（TTL 6h） + 触发 preheatUpcoming 预热」的薄接口；
---     ② 本地预构建快照 `utils/upcoming-local.json`（随版本发布，滞后）。
+--     ② 客户端「即将到来」tab 的纯联网来源（★ 2026-10-24 起：包内本地快照已移除）。
 --   两者**共用同一构造器** `buildUpcomingCard(entry, ctx)`，且条目字段集**完全一致**
 --   （id/name/grade/rank/label/tier/start/end/source，本地快照多一个 `date` 原文串）。
 --   ⇒ 把 ① 换成「Supabase 表 + PostgREST 直读」即可**等值替换**，客户端已有该能力。

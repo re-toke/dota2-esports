@@ -4,7 +4,7 @@
 // ★ 2026-10-14（P2-21）：**下沉到 detail 分包**（原在主包 utils/）—— 微信规则「主包不可 require 分包模块」，
 //   故仅 detail 分包内（league-detail）使用；主包不再 require（主包体积 -199KB）。
 // 背景：微信小程序分包直接 require 主包 JSON 存在兼容性问题（返回 null），
-//   改为 JS 模块导出，在分包内 require 稳定可靠（同 upcoming-local-data.js 模式）。
+//   改为 JS 模块导出，在分包内 require 稳定可靠（同 `*-data.js` 包装模式）。
 // 运行时用法：league-detail _doEnrichTeamLogos 快照命中 → 零网络；未命中走原查询链。
 // 刷新：npm run fetch:logos
 

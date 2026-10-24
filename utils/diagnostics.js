@@ -24,7 +24,8 @@ var config = require('./config.js');
 // ===== SLO（2026-09-26 修订口径）=====
 // ★ 与 v2 方案 §9.2 的差异（均为复核后修正，理由写在 note 里）：
 //   · 收敛延迟**拆两条**：硬判据路径 ≤5min（可达） / 降级路径 ≤3h（受 sources.js 阈值限制，物理上不可能 5min）
-//   · 快照年龄**拆三量**：目标 24h（尺子） / 7d（leagues 降权阈值） / 30d（leagues 可用性门限）—— 同名不同义曾致误判；现均取自 config.timeWindow（P1-19）
+//   · 快照年龄**目标 24h**（尺子）—— 取自 config.timeWindow（P1-19）；
+//     ★ 2026-10-24：内置赛程/联赛快照已移除 ⇒ 原 7d 降权 / 30d 可用性两个阈值一并删除。
 //   · 重复卡率目标 0 **原理不可达**（同日同队两场在"队名+时间窗"信号下不可区分）⇒ 改为「≤基线 + 例外可解释」
 var SLO = {
   // —— 准确性 ——
@@ -58,7 +59,7 @@ var SLO = {
   },
   snapshotAgeSec: {
     target: config.timeWindow.snapshotTargetAgeSec,   // = 24h（单一事实源，P1-19）
-    note: '快照"目标新鲜度"（尺子）；另有**降权阈值** 7d（config.timeWindow.snapshotDecayAgeSec）与**可用性硬门限** 30d（config.timeWindow.snapshotUnusableAgeSec），三者语义互斥、不可混用'
+    note: '快照"目标新鲜度"（尺子）；★ 2026-10-24 内置赛程/联赛快照已移除，此口径现用于队徽等其余 build-time 产物'
   }
 };
 
@@ -262,39 +263,6 @@ function computePipelineMetrics(snaps, nowSec) {
 }
 
 /**
- * 数据新鲜度（读本地快照的 generatedAt）。
- * ★ 取**最旧**的那个作为"数据更新时间" —— 保守口径：用户看到的是**最差**新鲜度，
- *   而不是被最新那个掩盖（两个快照的刷新周期不同，实测差可达十余天）。
- * ★ 实现委托给纯函数 `computePipelineMetrics`（同一口径，CI 侧也用它）。
- * @returns {{items:Array, oldest:Object|null, ageSec:number|null, ageText:string, overTarget:boolean, targetSec:number}}
- */
-function describeFreshness(nowSec) {
-  var snaps = [];
-  // ★★ 2026-09-26（**真机实测抓到**）：小程序里**不能直接 require 主包 JSON** ——
-  //   微信对"主包 JSON 被分包 require"存在兼容问题（**返回 null**），`*-data.js` 包装正是为此生成
-  //   （见 `utils/upcoming-local-data.js` 头注释）。实测：原写法在小程序里恒为空
-  //   ⇒ 「我的」页显示「快照更新于 **未知**前」（Node 侧测试看不出来，因为 Node 里 JSON 正常）。
-  //   ⇒ 优先 JS 包装；`.json` 仅作 Node/CI 侧兜底（两侧导出形状一致：generatedAt / events|leagues）。
-  function push(name, wrapLoader, jsonLoader, pickCount) {
-    var v = null;
-    try { v = wrapLoader(); } catch (e) { v = null; }
-    if (!v || !v.generatedAt) { try { v = jsonLoader(); } catch (e2) { v = null; } }
-    if (v && v.generatedAt) {
-      snaps.push({ name: name, ts: Number(v.generatedAt) || 0, count: pickCount(v) });
-    }
-  }
-  push('赛程快照',
-    function () { return require('./upcoming-local-data.js'); },
-    function () { return require('./upcoming-local.json'); },
-    function (v) { return (v.events || []).length; });
-  push('联赛快照',
-    function () { return require('./leagues-local-data.js'); },
-    function () { return require('./leagues-local.json'); },
-    function (v) { return (v.leagues || []).length; });
-  return computePipelineMetrics(snaps, nowSec);
-}
-
-/**
  * **云端心跳展示对象**（纯函数：输入 curation_meta 单行 → 输出可直接渲染的对象）。
  *
  * ★★ 2026-09-26 为什么加这个函数（一次真实误判换来的）：
@@ -354,7 +322,6 @@ module.exports = {
   recordLast: recordLast,
   getLast: getLast,
   computePipelineMetrics: computePipelineMetrics,
-  describeFreshness: describeFreshness,
   buildRemoteHealth: buildRemoteHealth,
   REMOTE_HEARTBEAT_OVERDUE_SEC: REMOTE_HEARTBEAT_OVERDUE_SEC
 };

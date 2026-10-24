@@ -6,6 +6,9 @@
 //   ② cachedFresh()            —— `getTeamPlayers(id)` 的 direct 兜底
 //   ③ cachedFreshIncremental() —— `getLeagueMatches(id)` / `getTeamMatches(id)` 的 direct 兜底
 //
+// ★ 2026-10-24：原 `scripts/test/test-snapshot-layers.js` 中的**非快照**用例（O-4 写穿 key +
+//   `peekLeagues` 三态）已迁入本文件（该文件其余用例专测已下线的内置快照，故整体删除）。
+//
 // 不联网：mock wx.request 并统计调用次数（EF 通道显式关闭 ⇒ 直接走 direct 兜底）。
 
 'use strict';
@@ -160,6 +163,38 @@ async function main() {
     assert(edgeCalls === 1, '首次应 1 次，实际 ' + edgeCalls);
     await cloudProxy.call('getLeagues', [], { force: true });
     assert(edgeCalls === 2, '完成后应能再次回源（inflight 已清理），实际 ' + edgeCalls);
+  });
+
+  // ── 迁移自 test-snapshot-layers.js（2026-10-24）：O-4 写穿 key 回归守卫 + peekLeagues 三态 ──
+  //   旧实现把「响应体」当参数拼进 key ⇒ 写穿条目**永远读不到**（静默失效 + 存储膨胀）。
+  const curationShared = require(path.join(SRC, 'curation-shared.js'));
+  const LEAGUES = [
+    { leagueid: 20279, name: 'PGL Wallachia Season 9', tier: 'premium' },
+    { leagueid: 19719, name: 'The International 2026', tier: 'excluded' },   // 靠名字白名单保留
+    { leagueid: 90001, name: '肛宝联赛-老婆杯', tier: 'professional' }        // 应被闸门剔除（真实案例）
+  ];
+
+  await check('O-4 写穿 key 回归：writeThrough 后 peekLeagues 必须命中（旧实现 key 含响应体 ⇒ 读不到）', function () {
+    clearCache();
+    api.writeThrough('/leagues', undefined, LEAGUES, 3600);
+    const keys = Object.keys(storage);
+    assert(keys.length === 1, '写穿只应产生 1 个 key，实际 ' + keys.length + '：' + keys.join(' , '));
+    assert(keys[0].indexOf('leagueid') < 0, 'key 不得包含响应内容（旧 bug 指纹）：' + keys[0]);
+    assert(keys[0].endsWith((curationShared.dataVersion + ':') + '/leagues|{}'),
+      'key 口径应与读侧一致（PREFIX + _v() + path + "|{}"），实际 ' + keys[0]);
+    const peeked = api.peekLeagues();
+    assert(!!peeked && !!peeked.leagues, 'peekLeagues 应命中写穿数据');
+    assert(typeof peeked.fetchedAt === 'number' && peeked.fetchedAt > 0,
+      'peekLeagues 应带回真实 fetchedAt，实际 ' + peeked.fetchedAt);
+  });
+
+  await check('peekLeagues 三态：过 filterCollectableLeagues / junk 剔除 / 白名单保留 / 空缓存返回 null', function () {
+    const peeked = api.peekLeagues();
+    assert(peeked && peeked.leagues.length === 2, '应与 getLeagues 同口径（2 条），实际 ' + (peeked && peeked.leagues.length));
+    assert(peeked.leagues.every(function (l) { return l.name !== '肛宝联赛-老婆杯'; }), 'junk 联赛应被剔除');
+    assert(peeked.leagues.some(function (l) { return l.leagueid === 19719; }), 'excluded 但白名单命中的 TI 应保留');
+    clearCache();
+    assert(api.peekLeagues() === null, '空缓存应返回 null（不抛错）');
   });
 
   console.log('\n=== 结果 ===');

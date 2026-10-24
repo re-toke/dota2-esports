@@ -69,13 +69,14 @@ function extractKeys(src, declName, fileLabel) {
 
 function uniq(arr) { return Array.from(new Set(arr)); }
 
-/** 递归收集目录下所有 .js 文件（跳过 node_modules / .git） */
+/** 递归收集目录下所有 .js 文件（跳过 node_modules / .git / tmp 备份区） */
 function walkJs(dir, out) {
   const arr = out || [];
   let ents;
   try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return arr; }
   ents.forEach(function (ent) {
-    if (ent.name === 'node_modules' || ent.name === '.git') return;
+    // ★ scripts/tmp 是本地备份区（.gitignore:37）⇒ 不参与契约扫描，避免备份里的旧调用污染门禁
+    if (ent.name === 'node_modules' || ent.name === '.git' || ent.name === 'tmp') return;
     const p = path.join(dir, ent.name);
     if (ent.isDirectory()) walkJs(p, arr);
     else if (/\.js$/.test(ent.name)) arr.push(p);

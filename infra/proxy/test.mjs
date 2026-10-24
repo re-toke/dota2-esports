@@ -2,7 +2,7 @@
 //   做法：mock 全局 fetch（拦截上游请求），把 worker 的 handle() 当成纯函数调用，
 //   逐条断言：① 路由命中 ② **服务端确实覆盖了客户端的错 key** ③ /leagues 裁剪 ④ 最小权限/健康检查
 // 运行：node infra/proxy/test.mjs
-import { handle, EF_ALLOW, TTL } from './worker.mjs';
+import { handle, EF_ALLOW, TTL, _cache } from './worker.mjs';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 
@@ -206,6 +206,51 @@ const textOf = async (r) => { try { return await r.clone().text(); } catch (e) {
   ok('v2 deep：supabase 判为可达', bd.deep.supabase.reachable === true, JSON.stringify(bd.deep.supabase));
   ok('v2 deep：opendota 判为可达', bd.deep.opendota.reachable === true, JSON.stringify(bd.deep.opendota));
   ok('v2 deep 响应不含凭据', JSON.stringify(bd).indexOf(REAL_KEY) < 0);
+}
+
+// ── ⑦c 陈旧兜底（2026-10-24）：上游失败/停滞时回上一次成功响应，而不是让首屏空窗 ──
+{
+  const saved = globalThis.fetch;
+  const u = '/od/api/staleProbe?case=stale';
+  const key = 'od|staleProbe?case=stale|t0';
+
+  // ① 先成功一次 ⇒ 写入缓存
+  globalThis.fetch = async () => new Response('[{"a":1}]', { status: 200, headers: { 'Content-Type': 'application/json' } });
+  const first = await handle(req(u), ENV);
+  const firstBody = await textOf(first);
+  ok('陈旧兜底：首次请求为 MISS（并写入缓存）', first.headers.get('X-Proxy-Cache') === 'MISS',
+    String(first.headers.get('X-Proxy-Cache')));
+
+  // ② 把该条缓存置为「已过期」（TTL 默认 120s，测试不能真等）
+  const ent = _cache.get(key);
+  ok('陈旧兜底：缓存键格式与实现一致（测试可定位该条）', !!ent, key);
+  if (ent) ent.exp = Date.now() - 1;
+
+  // ③ 上游网络异常 ⇒ 应回 200 + STALE，且**只尝试 1 次**（避免 12s×2 叠加）
+  let n = 0;
+  globalThis.fetch = async () => { n++; throw new Error('ECONNRESET'); };
+  const r2 = await handle(req(u), ENV);
+  const b2 = await textOf(r2);
+  ok('★ 陈旧兜底：上游异常 ⇒ 返回陈旧缓存（200 + STALE）',
+    r2.status === 200 && r2.headers.get('X-Proxy-Cache') === 'STALE',
+    r2.status + ' / ' + r2.headers.get('X-Proxy-Cache'));
+  ok('★ 陈旧兜底：只尝试 1 次（不再 12s×2）', n === 1, String(n));
+  ok('陈旧兜底：响应体与上次成功一致', b2 === firstBody, b2 + ' vs ' + firstBody);
+  ok('陈旧兜底：带 X-Proxy-Cache-Age 便于排查', r2.headers.get('X-Proxy-Cache-Age') !== null,
+    String(r2.headers.get('X-Proxy-Cache-Age')));
+
+  // ④ 上游 5xx ⇒ 同样回陈旧（不再把 5xx 暴露给客户端）
+  globalThis.fetch = async () => new Response('boom', { status: 503, headers: { 'Content-Type': 'text/plain' } });
+  const r3 = await handle(req(u), ENV);
+  ok('★ 陈旧兜底：上游 5xx ⇒ 也回陈旧缓存', r3.status === 200 && r3.headers.get('X-Proxy-Cache') === 'STALE',
+    r3.status + ' / ' + r3.headers.get('X-Proxy-Cache'));
+
+  // ⑤ 无旧缓存时必须保持原行为（502），不能被"降级"掩盖真实故障
+  globalThis.fetch = async () => { throw new Error('ECONNRESET'); };
+  const r4 = await handle(req('/od/api/staleProbe?case=nocache'), ENV);
+  ok('陈旧兜底：无旧缓存时仍按原行为报 502', r4.status === 502, String(r4.status));
+
+  globalThis.fetch = saved;
 }
 
 // ── ⑧ 不变量守卫（把"设计约束"写成断言，防后人改坏） ─────────────────────────

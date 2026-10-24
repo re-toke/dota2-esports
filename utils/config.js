@@ -34,16 +34,11 @@ const PROXY_HOSTS = [
 // ★★ 2026-10-13（P1-19 · 时间窗口**单一事实源**）：**跨模块共享**的时间窗口集中在此声明，
 //   各消费方一律引用（**勿再在别处内联字面量**，否则阈值会漂移）。模块内**私有**常量不在此列
 //   （如首页 POLL_BACKOFF_* / LIVE_WINDOW_SEC / *_FRESH_MS 仅在 pages/index/index.js 内使用，仍留在那里）。
-//   ⚠️ 「同名不同义」必须**不同名**：快照年龄存在三个语义互斥的量，历史上都含 "SNAPSHOT...AGE"
-//      ⇒ 极易被误改。现按下表区分命名（诊断 SLO 的 24h「目标」与列表的 7d「降权」曾同名不同义）：
-//        · SNAPSHOT_TARGET_AGE_SEC（24h）= diagnostics SLO 的**目标新鲜度（尺子）**；
-//        · SNAPSHOT_DECAY_AGE_SEC（7d）   = leagues 列表的**降权/提示阈值**（超此不当"主源"）；
-//        · SNAPSHOT_UNUSABLE_AGE_SEC（30d）= leagues 列表的**可用性硬门限**（超此完全不用它渲染）。
+//   ★ 2026-10-24：内置赛程/联赛快照已移除（改为纯联网）⇒ 原 7d 降权阈值与 30d 可用性阈值
+//     一并删除；仅保留 SNAPSHOT_TARGET_AGE_SEC（SLO 尺子）。
 const LIVE_POLL_SEC = 120;                     // 首页 LIVE 轮询基础间隔（秒）—— 同时定义 cacheTTL.liveMatches（TTL 与之对齐）
 const LIVE_STALE_MAX_SEC = 3 * 3600;           // 最后活动已过去仍判「进行中」的上限（sources 降级 + diagnostics SLO 降级收敛）
 const SNAPSHOT_TARGET_AGE_SEC = 24 * 3600;     // 快照目标新鲜度（diagnostics SLO 尺子）
-const SNAPSHOT_DECAY_AGE_SEC = 7 * 86400;      // 快照降权/提示阈值（leagues 列表）
-const SNAPSHOT_UNUSABLE_AGE_SEC = 30 * 86400;  // 快照可用性硬门限（leagues 列表）
 
 module.exports = {
   // ★ 2026-09-25: per-item diagnostic log switch (**default false**).
@@ -156,10 +151,11 @@ module.exports = {
     // 即将到来 tab 懒加载时，最多查询的赛事数量（串行补充层上限）。
     // 2026-08-13 复核修正：120 → 40。原因——Liquipedia 限流为模块级全局串行
     // （liquipedia.js lastCall 槽位共享），并发改造无效，只能降量提速；
-    // 40 已覆盖 S/A 级核心赛事（云缓存 + 本地快照 + curation 注入兜底其余）。
-    // ★ 2026-09-01（P0-L1 三维护核修订）：40 → 15。理由——curation + 本地快照
-    //   （upcoming-local.json）+ haglund 云代理已覆盖绝大部分 S/A 级赛事，串行查询只是
-    //   最后的兜底补漏；40 个候选 × Liquipedia 2.2s 限流最坏 88s，用户不可接受。
+    // 40 已覆盖 S/A 级核心赛事（Supabase upcoming_schedule + curation 注入兜底其余）。
+    // ★ 2026-09-01（P0-L1 三维护核修订）：40 → 15。理由——curation + Supabase `upcoming_schedule`
+    //   + haglund 云代理已覆盖绝大部分 S/A 级赛事，串行查询只是最后的兜底补漏；
+    //   40 个候选 × Liquipedia 2.2s 限流最坏 88s，用户不可接受。
+    //   ★ 2026-10-24：内置快照已移除（改为纯联网），串行查询仍按此上限降量。
     //   降为 15 后最坏 33s（实际本地源命中后只查 0-3 个，秒级）。配合
     //   loadUpcomingSerial 的 rank>=2 或 isKnownEvent 候选过滤，B/C 级不再串行查询。
     upcomingQueryLimit: 15,
@@ -282,7 +278,7 @@ module.exports = {
   //     **≤10min 生效、免发版**。本地 `curation.js` 始终兜底（离线/首启/直读失败）。
   //   - 生效集合：`remoteCuration.curatedEventFor` 与 `curation.js` 同名接口兼容，承载「奖金池/主办方/
   //     region/defunct/valve」等扩展字段的热更新。
-  //   - ⚠️ 快照（upcoming-local / leagues-local / team-logo-map）只作**冷启动兜底**，非唯一来源。
+  //   - ⚠️ 队徽快照（team-logo-map）只作**冷启动兜底**，非唯一来源；赛程/联赛已改为纯联网。
   remoteCuration: {
     url: '',              // 历史遗留（无代码读取）；热更新走 Supabase 直读
     ttlSec: 6 * 3600      // 直读结果缓存时长（与 PROBE_KEY 探针节流配合）
@@ -352,16 +348,14 @@ module.exports = {
     bjOffsetSec: 8 * 3600
   },
 
-  // ★ 2026-10-13（P1-19）：**跨模块共享时间窗口**的单一事实源（值见文件顶 `LIVE_*` / `SNAPSHOT_*` 常量）。
+  // ★ 2026-10-13（P1-19）：**跨模块共享时间窗口**的单一事实源（值见文件顶 `LIVE_*` / `SNAPSHOT_TARGET_*` 常量）。
   //   消费方：`utils/sources.js`（liveStaleMaxSec）、`pages/index/index.js`（livePollSec）、
-  //   `pages/leagues/leagues.js`（snapshotDecay/UnusableAgeSec）、`utils/diagnostics.js`（SLO 口径）。
+  //   `utils/diagnostics.js`（SLO 口径）。
   //   ⚠️ 需要时间窗口时请引用此对象，不要再在别处写字面量。
   timeWindow: {
     livePollSec: LIVE_POLL_SEC,
     liveStaleMaxSec: LIVE_STALE_MAX_SEC,
-    snapshotTargetAgeSec: SNAPSHOT_TARGET_AGE_SEC,
-    snapshotDecayAgeSec: SNAPSHOT_DECAY_AGE_SEC,
-    snapshotUnusableAgeSec: SNAPSHOT_UNUSABLE_AGE_SEC
+    snapshotTargetAgeSec: SNAPSHOT_TARGET_AGE_SEC
   },
 
   // T4 实时比分连接配置。
