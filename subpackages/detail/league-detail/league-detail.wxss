@@ -3,6 +3,98 @@
   padding-bottom: calc(24rpx + env(safe-area-inset-bottom));
 }
 
+/* ===== 赛事信息卡（P0：溯源 / KPI / 概述 / slug 合并为一张卡） ===== */
+.info-card {
+  background: var(--card-bg, #FFFFFF);
+  border: 1rpx solid var(--td-border-level-1-color);
+  border-radius: var(--radius-lg, 16rpx);
+  padding: var(--space-3);
+  margin-bottom: var(--space-2);
+  box-shadow: 0 2rpx 8rpx var(--overlay-06);
+}
+.info-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2-5);
+}
+.info-title {
+  font-size: var(--fs-body);
+  font-weight: 600;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 1rpx;
+  flex: 1;
+  min-width: 0;
+}
+.info-badges {
+  display: flex;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+.info-badges .status-tag {
+  font-size: var(--fs-micro);
+  padding: 2rpx 10rpx;
+  border-radius: var(--radius-sm);
+  border: 1rpx solid currentColor;
+  line-height: var(--lh-relaxed);
+}
+.tier-high { color: var(--status-ongoing); }
+.tier-other { color: var(--status-upcoming); }
+.status-ongoing { color: var(--status-ongoing); }
+.status-upcoming { color: var(--status-upcoming); }
+.status-ended { color: var(--text-3); }
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-2-5) var(--space-3);
+}
+.info-cell { display: flex; flex-direction: column; gap: var(--space-0-5); min-width: 0; }
+.info-cell-wide { grid-column: 1 / -1; }
+.info-label { font-size: var(--fs-caption); color: var(--text-3); }
+.info-value {
+  font-size: var(--fs-label);
+  font-weight: 600;
+  color: var(--text-1);
+  font-family: var(--font-numeric);
+  line-height: var(--lh-normal);
+  word-break: break-word;
+}
+.info-value.is-empty { color: var(--text-4); font-weight: 400; }
+.info-value-row { display: flex; align-items: baseline; gap: var(--space-0-5); flex-wrap: wrap; }
+.info-gold { color: var(--dota-gold); }
+.info-teams { color: var(--radiant); }
+.info-format { color: var(--text-2); font-weight: 500; }
+.info-unit { font-size: var(--fs-caption); color: var(--text-3); font-weight: 400; }
+
+.info-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1-5);
+  margin-top: var(--space-2-5);
+  padding-top: var(--space-1-5);
+  border-top: 1rpx solid var(--td-border-level-1-color);
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+}
+.info-source { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.info-fresh { color: var(--text-4); }
+.info-toggle {
+  margin-top: var(--space-1);
+  min-height: 64rpx;
+  display: flex;
+  align-items: center;
+  font-size: var(--fs-caption);
+  color: var(--text-2);
+}
+.info-more { display: flex; flex-direction: column; gap: var(--space-1-5); margin-top: var(--space-1); }
+.info-note { font-size: var(--fs-body); color: var(--text-2); line-height: var(--lh-relaxed); }
+
 /* ===== KPI Strip 三色语义（v11 聚光灯 Phase 6.4 映射） =====
    奖金池=金色 / 参赛队=天辉绿 / 赛制=灰色——三项数值用三种语义色区分 */
 .kpi-gold { color: var(--dota-gold, #C8A951); }

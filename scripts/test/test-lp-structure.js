@@ -66,6 +66,14 @@ if (brackets.length === 1) {
   assert(b.rounds[0].label === 'Round 1', `轮次标签取 HTML 注释（实际 ${b.rounds[0].label}）`);
 }
 
+// ===== P0（2026-10-25）：奖金币种映射（€/£/¥ 不再回落 USD）=====
+assert(LP.parsePrizePool('€500,000').currency === 'EUR', '€ 应映射 EUR（实际 ' + LP.parsePrizePool('€500,000').currency + '）');
+assert(LP.parsePrizePool('£250,000').currency === 'GBP', '£ 应映射 GBP（实际 ' + LP.parsePrizePool('£250,000').currency + '）');
+assert(LP.parsePrizePool('¥1,000,000').currency === 'CNY', '¥ 应映射 CNY（实际 ' + LP.parsePrizePool('¥1,000,000').currency + '）');
+assert(LP.parsePrizePool('$1,000,000 USD').currency === 'USD', '$ 应映射 USD');
+assert(LP.parsePrizePool('500000 EUR').currency === 'EUR', '纯数字 + 货币码应保留 EUR');
+assert(LP.parsePrizePool('5000000').currency === 'USD', '纯数字无币种线索 → USD 兜底');
+
 // ===== 边界：空输入 / 无结构页面 =====
 assert(LP.parseGroupStandings('').length === 0, '空输入 → 空组');
 assert(LP.parseBrackets(null).length === 0, 'null 输入 → 空 bracket');

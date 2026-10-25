@@ -1,29 +1,66 @@
 <view class="container">
-  <!-- 头部：赛事名 + 关注 + 比赛数 + 状态徽标 -->
+  <!-- 头部：赛事名 + 关注 + 对阵数（分级/状态统一到「赛事信息」卡，避免重复展示） -->
   <view class="head">
     <view class="head-info">
       <view class="title">{{displayName}}</view>
       <view class="head-meta">
         <text class="sub">共 {{totalSeries}} 组对阵{{hasMore ? '（持续加载）' : ''}}</text>
-        <text wx:if="{{eventWindow}}" class="sub">{{eventWindow.range}}</text>
-        <text wx:if="{{eventWindow}}" class="status-tag" style="color:{{eventWindow.statusColor}};border-color:{{eventWindow.statusColor}}">{{eventWindow.statusText}}</text>
-        <text wx:if="{{liqTier}}" class="status-tag" style="color:{{liqTier.confidence === 'high' ? '#5fd35f' : '#f0aa28'}};border-color:{{liqTier.confidence === 'high' ? '#5fd35f' : '#f0aa28'}}">{{liqTier.label}}</text>
       </view>
     </view>
-    <view class="star-btn" catchtap="toggleFollow">
-      <t-icon name="star" size="48rpx" color="{{followed ? '#C8A951' : '#6B7280'}}" />
+    <view class="star-btn {{followed ? 'followed' : ''}}" catchtap="toggleFollow">
+      <t-icon name="star" size="48rpx" color="{{followed ? 'var(--dota-gold)' : 'var(--text-3)'}}" />
     </view>
   </view>
 
-  <!-- 数据溯源合并区（C 风格 · 把 quality / name-fix / liq-banner / sources 收敛为一区） -->
-  <view class="source-section" wx:if="{{quality || (nameInfo && nameInfo.differs) || liqTier || sourceBadges.length}}">
-    <view class="source-section-head">
-      <text class="source-section-title">数据溯源</text>
-      <text wx:if="{{updatedLabel}}" class="fresh-label">{{updatedLabel}}</text>
-      <!-- D1 赛程更新时间（2026-08-03）：显示 Liquipedia 赛程最后刷新时刻，让用户感知数据新旧 -->
-      <text wx:if="{{scheduleUpdatedLabel}}" class="fresh-label schedule-fresh-label">{{scheduleUpdatedLabel}}</text>
+  <!-- 赛事信息（P0 合并：溯源 / KPI / 概述 / slug 为一张卡） -->
+  <view class="info-card">
+    <view class="info-head">
+      <text class="info-title">赛事信息</text>
+      <view class="info-badges">
+        <text wx:if="{{liqTier}}" class="status-tag tier-{{liqTier.confidence === 'high' ? 'high' : 'other'}}">{{liqTier.label}}</text>
+        <text wx:if="{{eventWindow}}" class="status-tag status-{{eventWindow.status}}">{{eventWindow.statusText}}</text>
+        <text wx:elif="{{metadata.status}}" class="status-tag status-ended">{{metadata.status}}</text>
+      </view>
     </view>
-    <view class="source-section-body">
+    <view class="info-grid">
+      <view class="info-cell info-cell-wide">
+        <text class="info-label">赛期</text>
+        <text class="info-value">{{periodText}}</text>
+      </view>
+      <view class="info-cell">
+        <text class="info-label">地点</text>
+        <text class="info-value {{metadata.location ? '' : 'is-empty'}}">{{metadata.location || '--'}}</text>
+      </view>
+      <view class="info-cell">
+        <text class="info-label">奖金池</text>
+        <view class="info-value-row">
+          <text class="info-value info-gold {{metadata.prizePool ? '' : 'is-empty'}}">{{metadata.prizePool || '--'}}</text>
+          <text wx:if="{{metadata.prizePool}}" class="info-unit">{{metadata.prizePoolCurrency || 'USD'}}</text>
+        </view>
+      </view>
+      <view class="info-cell">
+        <text class="info-label">参赛队</text>
+        <text class="info-value info-teams {{metadata.participantsCount ? '' : 'is-empty'}}">{{metadata.participantsCount ? metadata.participantsCount + ' 支' : '--'}}</text>
+      </view>
+      <view class="info-cell">
+        <text class="info-label">赛制</text>
+        <text class="info-value info-format {{metadata.format ? '' : 'is-empty'}}">{{metadata.format || '--'}}</text>
+      </view>
+      <view class="info-cell">
+        <text class="info-label">主办方</text>
+        <text class="info-value {{metadata.organizer ? '' : 'is-empty'}}">{{metadata.organizer || '--'}}</text>
+      </view>
+    </view>
+    <view class="info-foot">
+      <text class="info-source">{{sourcesText || '数据源待补'}}</text>
+      <text wx:if="{{updatedLabel}}" class="info-fresh">{{updatedLabel}}</text>
+      <text wx:if="{{scheduleUpdatedLabel}}" class="info-fresh">赛程 {{scheduleUpdatedLabel}}</text>
+    </view>
+    <view class="info-toggle" wx:if="{{formatNote || metadata.liquipediaSlug || quality || sourceBadges.length || (nameInfo && nameInfo.differs)}}" bindtap="toggleInfoMore">
+      <text>{{showInfoMore ? '收起 ▴' : '更多信息 ▾'}}</text>
+    </view>
+    <view class="info-more" wx:if="{{showInfoMore}}">
+      <text wx:if="{{formatNote}}" class="info-note">{{formatNote}}</text>
       <view wx:if="{{quality}}" class="quality-pill quality-{{quality.level}}">
         <text class="q-dot"></text>
         <text class="q-text">{{quality.text}}</text>
@@ -36,67 +73,11 @@
       <view class="source-grid" wx:if="{{sourceBadges.length}}">
         <text class="src-badge src-{{item.key}}" wx:for="{{sourceBadges}}" wx:key="key">{{item.label}}</text>
       </view>
-    </view>
-  </view>
-
-  <!-- F1 直播聚合入口（isLive 时高亮置顶） -->
-  <live-card wx:if="{{liveSources.length}}" sources="{{liveSources}}" live="{{isLive}}" event-name="{{name}}" />
-
-  <!-- 赛事元数据 KPI Strip：所有字段常驻，缺失时显示 '--'，确保各赛事信息结构统一
-       v11 聚光灯映射：奖金池=金色 / 参赛队=天辉绿 / 赛制=灰色（三色语义区分） -->
-  <view class="kpi-strip">
-    <view class="kpi-cell">
-      <text class="kpi-label">奖金池</text>
-      <view class="kpi-value-row">
-        <text class="kpi-value kpi-gold {{metadata.prizePool ? '' : 'is-empty'}}">{{metadata.prizePool || '--'}}</text>
-        <text wx:if="{{metadata.prizePool}}" class="kpi-unit">{{metadata.prizePoolCurrency || 'USD'}}</text>
+      <view wx:if="{{metadata.liquipediaSlug}}" class="meta-extra">
+        <text class="meta-extra-label">Liquipedia：</text>
+        <text class="meta-extra-link" bindtap="openLiquipedia" data-slug="{{metadata.liquipediaSlug}}">{{metadata.liquipediaSlug}}（点击复制链接）</text>
       </view>
     </view>
-    <view class="kpi-cell">
-      <text class="kpi-label">地点</text>
-      <text class="kpi-value {{metadata.location ? '' : 'is-empty'}}">{{metadata.location || '--'}}</text>
-    </view>
-    <view class="kpi-cell">
-      <text class="kpi-label">赛制</text>
-      <text class="kpi-value kpi-format {{metadata.format ? '' : 'is-empty'}}">{{metadata.format || '--'}}</text>
-    </view>
-    <view class="kpi-cell">
-      <text class="kpi-label">主办方</text>
-      <text class="kpi-value {{metadata.organizer ? '' : 'is-empty'}}">{{metadata.organizer || '--'}}</text>
-    </view>
-    <view class="kpi-cell">
-      <text class="kpi-label">参赛队</text>
-      <text class="kpi-value kpi-teams {{metadata.participants ? '' : 'is-empty'}}">{{metadata.participants || '--'}}</text>
-    </view>
-    <view class="kpi-cell">
-      <text class="kpi-label">状态</text>
-      <text class="kpi-value {{metadata.status ? '' : 'is-empty'}}">{{metadata.status || '--'}}</text>
-    </view>
-    <view class="kpi-cell" style="grid-column: 1 / -1;">
-      <text class="kpi-label">赛期</text>
-      <text class="kpi-value">{{eventWindow ? eventWindow.fullRange : (metadata.startDate && metadata.endDate) ? (metadata.startDate + ' ~ ' + metadata.endDate) : '? ~ ?'}}</text>
-    </view>
-  </view>
-
-  <!-- 赛事概述：自动摘要已有元数据，结构统一 -->
-  <view class="overview-card" wx:if="{{metadata}}">
-    <view class="overview-head">
-      <t-icon name="info-circle" size="28rpx" color="#4B5563" />
-      <text class="overview-title">赛事概述</text>
-    </view>
-    <view class="overview-body">
-      <text class="overview-name">{{displayName}}</text> 是 {{metadata.organizer || '主办方待定'}} 举办的 {{metadata.location ? '位于 ' + metadata.location + ' 的' : ''}} Dota 2 职业赛事。
-      赛事采用 <text class="overview-highlight">{{metadata.format || '待定赛制'}}</text>，
-      {{metadata.participants ? '共 ' + metadata.participants + ' 支参赛队伍' : '参赛队伍待定'}}。
-      {{metadata.prizePool ? '奖金池为 ' + metadata.prizePool + ' ' + (metadata.prizePoolCurrency || 'USD') + '。' : '奖金池待定。'}}
-      当前状态：<text class="overview-highlight">{{metadata.status || '未知'}}</text>。
-    </view>
-  </view>
-
-  <!-- 赛事信息补充（curation 兜底字段，Liquipedia 禁用时尤其有用） -->
-  <view class="meta-extra" wx:if="{{metadata && metadata.liquipediaSlug}}">
-    <text class="meta-extra-label">Liquipedia：</text>
-    <text class="meta-extra-link" bindtap="openLiquipedia" data-slug="{{metadata.liquipediaSlug}}">{{metadata.liquipediaSlug}}（点击复制链接）</text>
   </view>
 
   <!-- 三 Tab 切换（C 风格 Tournament Center） -->
@@ -307,7 +288,7 @@
                 </view>
                 <view class="report-link" catchtap="openMatch" data-id="{{g.match_id}}">
                   <text>查看完整战报（KDA 表 / GPM / XPM）</text>
-                  <t-icon name="chevron-right" size="32rpx" color="#5b9bff" />
+                  <t-icon name="chevron-right" size="32rpx" color="var(--link)" />
                 </view>
               </block>
               <view wx:else class="expand-empty">暂无英雄阵容数据</view>

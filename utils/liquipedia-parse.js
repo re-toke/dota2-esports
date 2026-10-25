@@ -154,10 +154,12 @@ function stripTags(html) {
 }
 
 // 解析奖金池文本，如 "$1,000,000 USD" 或 wikitext 中的 "5000000" → { amount, currency }
+// ★ 2026-10-25（P0）：币种符号映射 —— 原实现对 €/£/¥ 不识别，统一回落 USD，导致「€500,000 显示 500000 USD」。
+var PRIZE_CURRENCY_BY_SYMBOL = { '$': 'USD', '€': 'EUR', '£': 'GBP', '¥': 'CNY' };
 function parsePrizePool(text) {
   if (!text) return null;
   try {
-    // 纯数字（wikitext 模板参数常为纯数字）
+    // 纯数字（wikitext 模板参数常为纯数字）：无币种线索，保留 USD 兜底
     var numOnly = String(text).match(/^[\d,]+(\.\d+)?$/);
     if (numOnly) {
       return { amount: text.replace(/,/g, ''), currency: 'USD' };
@@ -165,7 +167,10 @@ function parsePrizePool(text) {
     // 带货币符号：$1,000,000 USD
     var m = String(text).match(/([\$€£¥])\s*([\d,]+(?:\.\d+)?)\s*([A-Za-z]{3})?/);
     if (m) {
-      return { amount: m[2].replace(/,/g, ''), currency: m[3] || 'USD' };
+      return {
+        amount: m[2].replace(/,/g, ''),
+        currency: m[3] || PRIZE_CURRENCY_BY_SYMBOL[m[1]] || 'USD'
+      };
     }
     // 纯数字 + 货币码
     var m2 = String(text).match(/([\d,]+(?:\.\d+)?)\s*([A-Za-z]{3})?/);

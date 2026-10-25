@@ -11,7 +11,6 @@ const subscribe = require('../../../utils/subscribe.js');
 // ★ 2026-08-07（审核 R2）：账号登录态（订阅授权手势红线——缓存命中才同步弹授权）
 const auth = require('../../../utils/auth.js');
 const config = require('../../../utils/config.js');
-const liveSources = require('../../../utils/liveSources.js');
 const remoteCuration = require('../../../utils/remoteCuration.js');
 const liquipedia = require('../../../utils/liquipedia.js');
 const cloudProxy = require('../../../utils/cloudProxy.js');   // ★ 2026-09-01 P0-3③：详情页 bundle 聚合
@@ -106,7 +105,8 @@ function buildMetadataSkeleton() {
     organizer: null,
     startDate: null,
     endDate: null,
-    participants: null,
+    participants: null,        // ★ P0：只存数组（LP/curation 原始列表），供队伍 Tab 重建
+    participantsCount: null,   // ★ P0：只存数字，供 KPI/赛事信息卡展示（禁止与数组混用）
     status: null,
     liquipediaSlug: null,
     sources: []
@@ -129,7 +129,11 @@ function buildCurationFallback(cur) {
     organizer: cur.organizer || null,
     startDate: fmt(cur.start) || cur.startDate || null,   // curation 历史字段为 unix 秒
     endDate: fmt(cur.end) || cur.endDate || null,
-    participants: cur.participants != null ? cur.participants : null,
+    // ★ P0：数组只进 participants，数字只进 participantsCount（原实现两者混用同一字段）
+    participants: Array.isArray(cur.participants) ? cur.participants : null,
+    participantsCount: Array.isArray(cur.participants)
+      ? cur.participants.length
+      : (cur.participants != null && cur.participants !== '' && isFinite(Number(cur.participants)) ? Number(cur.participants) : null),
     status: cur.status || null,
     liquipediaSlug: cur.liquipediaSlug || null
   };
@@ -146,11 +150,21 @@ function mergeMetadataWithFallback(meta, name, leagueId) {
   const cur = remoteCuration.curatedEventFor(name, { leagueId: leagueId, game: 'dota2' });
   const fb = cur ? buildCurationFallback(cur) : buildMetadataSkeleton();
   const merged = Object.assign({}, fb, meta || {});
-  // L2 修复：fb.participants 是数组（高可信度人工策展）+ merged.participants 不是数组（被 meta 数字/空覆盖）
-  //   → 恢复 fb.participants。两个都是数组时仍让 meta 覆盖（Liquipedia 数组可能更实时）。
-  if (Array.isArray(fb && fb.participants) && !Array.isArray(merged.participants)) {
-    merged.participants = fb.participants;
+  // ★ P0：participants 两字段归一 —— 数组只进 participants，数字只进 participantsCount。
+  //   兼容旧形状：若 participants 仍是数字，迁移到 participantsCount 后置空。
+  //   数组优先级：LP 数组（meta）> curation 数组（fb），与原 L2 修复口径一致。
+  let arr = Array.isArray(merged.participants) ? merged.participants : null;
+  if (!arr && Array.isArray(fb && fb.participants)) arr = fb.participants;
+  let count = (merged.participantsCount != null && merged.participantsCount !== '')
+    ? Number(merged.participantsCount) : null;
+  if ((count == null || !isFinite(count)) && merged.participants != null &&
+      !Array.isArray(merged.participants) && merged.participants !== '') {
+    const n = Number(merged.participants);
+    if (isFinite(n)) count = n;
   }
+  if ((count == null || !isFinite(count)) && arr) count = arr.length;
+  merged.participants = arr;
+  merged.participantsCount = (count != null && isFinite(count)) ? count : null;
   return merged;
 }
 
@@ -194,9 +208,10 @@ Page({
     metadata: buildMetadataSkeleton(),  // 赛事元数据（Liquipedia + Steam + curation 兜底）
     sourcesText: '',                    // 元数据来源中文名拼接（如 'Liquipedia / Steam'）
     sourceBadges: [],                   // 数据来源徽标列表（统一展示）
-    // F1 直播聚合入口
-    liveSources: [],   // 各平台直播搜索入口
-    isLive: false,     // 赛事是否正在进行（卡片高亮置顶）
+    // ===== 赛事信息卡（P0 合并：溯源 / KPI / 概述 / slug）=====
+    showInfoMore: false,   // 「更多信息」展开态（赛制说明 / 来源明细 / LP 链接）
+    periodText: '',        // 赛期展示文案：eventWindow 优先，缺失时「待公布」（不再出现 ? ~ ?）
+    formatNote: '',        // 可选摘要：仅当赛制文本足够长（>14 字）时生成，避免复述 KPI
     // ===== 三段式分段计数（2026-07-28 新增） =====
     // series[] 按 phase 分段：live(desc) → upcoming(asc) → recent(desc)
     // liveCount/upcomingCount/recentCount 供 wxml 渲染分段分隔符与计数
@@ -251,8 +266,7 @@ Page({
       name: name,
       displayName: name,
       followed: followedNow,
-      _legacyFakeId: legacyFake,  // 缓存供 toggleFollow 使用
-      liveSources: liveSources.buildSources(name)
+      _legacyFakeId: legacyFake  // 缓存供 toggleFollow 使用
     });
     wx.setNavigationBarTitle({ title: name || '赛事详情' });
     this.load();
@@ -635,7 +649,6 @@ Page({
         this.allSeries = built.allSeries;
         const liveList = built.liveList, upcomingList = built.upcomingList, recentList = built.recentList;
         const upcomingGroups = built.upcomingGroups, farFutureCount = built.farFutureCount;
-        const isLive = built.isLive;
 
         const pageSize = this.data.pageSize;
         const slice = this.allSeries.slice(0, pageSize);
@@ -724,7 +737,6 @@ Page({
           scheduleLoading: false,   // 2026-08-13：网络赛程已到达，关闭"赛程加载中"（若骨架提前则此处收尾）
           updatedAt: at,
           updatedLabel: util.formatAgo(at),
-          isLive: isLive,
           eventWindow: eventWindow,
           // D1 数据时间戳（2026-08-03）：Liquipedia 赛程最后更新时刻，refreshSchedule 刷新时更新
           scheduleUpdatedAt: Math.floor(Date.now() / 1000),
@@ -1530,12 +1542,6 @@ Page({
         // ★ 已结束对阵胜负标识：金色多层级强调（仅 recent），详见 decorateSeriesWinner
         allSeries = allSeries.map((s) => this.decorateSeriesWinner(s));
 
-
-    // F1：赛事进行中判定 —— 存在「未分胜负 + 近 12h 开赛」的比赛即视为直播中（raw 真实比赛）
-    var nowSec = Math.floor(Date.now() / 1000);
-    var isLive = (raw || []).some(function (m) {
-      return (m.radiant_win == null) && m.start_time && (nowSec - m.start_time) > 0 && (nowSec - m.start_time) < 12 * 3600;
-    });
     return {
       allSeries: allSeries,
       liveList: liveList,
@@ -1543,8 +1549,7 @@ Page({
       recentList: recentList,
       upcomingGroups: upcomingGroups,
       farFutureCount: farFutureCount,
-      hasFarFuture: farFutureCount > 0,
-      isLive: isLive
+      hasFarFuture: farFutureCount > 0
     };
   },
 
@@ -1684,7 +1689,6 @@ Page({
         patch.upcomingGroups = built.upcomingGroups;
         patch.farFutureCount = built.farFutureCount;
         patch.hasFarFuture = built.hasFarFuture;
-        patch.isLive = built.isLive;
         patch.scheduleUpdatedAt = Math.floor(Date.now() / 1000);   // D1 数据时间戳
         patch.scheduleUpdatedLabel = util.formatAgo(patch.scheduleUpdatedAt);
         self.setData(patch);
@@ -2469,7 +2473,12 @@ Page({
       } catch (e) { /* 隔离 */ }
     }
     const liqParticipantsArr = curParticipantsArr;
-    const metaParticipants = liqParticipantsArr ? liqParticipantsArr.length : (Number(meta.participants) || 0);
+    // ★ P0：计数只读 participantsCount；兼容旧数据里 participants 仍是数字的情况
+    const _legacyCount = (!Array.isArray(meta.participants) && meta.participants != null && meta.participants !== '' &&
+      isFinite(Number(meta.participants))) ? Number(meta.participants) : null;
+    const metaParticipants = liqParticipantsArr
+      ? liqParticipantsArr.length
+      : (Number(meta.participantsCount) || _legacyCount || 0);
     const actualCount = participantsList.length;
 
     // ★ 2026-09-01（v8.4 Fix-F）：策展数组优先重建 —— 一 ID 多届场景的参赛队「权威源」修正。
@@ -2530,8 +2539,8 @@ Page({
           group: (t && t.group) || null
         };
       });
-      // 策展数组为准 → meta 计数与列表长度对齐（KPI Strip 显示 16 而非 19）
-      meta.participants = participantsList.length;
+      // 策展数组为准 → 计数与列表长度对齐（KPI 显示 16 而非 19）
+      meta.participantsCount = participantsList.length;
       // 诊断日志：捕获「策展重建后仍比 meta 少」的场景（策展数组覆盖不全时提示）
       if (typeof console !== 'undefined' && console.info) {
         console.info('[league-detail] 参赛队伍以策展数组为准重建：' + participantsList.length +
@@ -2540,9 +2549,9 @@ Page({
     } else if (actualCount > 0 && actualCount > metaParticipants && metaParticipants > 0) {
       // ① 实际 > meta（且 meta > 0）：curation/Liquipedia 过时，以实际为准
       // 2026-07-28：增加 metaParticipants > 0 守卫，避免 meta=0（Liquipedia 尚未返回）
-      //   的加载中间态误报"curation 过时"。meta=0 时仅静默更新 meta.participants，
+      //   的加载中间态误报"curation 过时"。meta=0 时仅静默更新计数，
       //   不输出警告，等 finalize 后 Liquipedia 返回再做一致性校验。
-      meta.participants = actualCount;
+      meta.participantsCount = actualCount;
       if (typeof console !== 'undefined' && console.warn) {
         console.warn('[league-detail] 参赛队数实际 > metadata：curation 可能过时',
           'actual=' + actualCount, 'meta=' + metaParticipants,
@@ -2550,7 +2559,7 @@ Page({
       }
     } else if (actualCount > 0 && metaParticipants === 0) {
       // ①-bis meta=0：Liquipedia/curation 尚未加载，静默用实际数填充，不警告
-      meta.participants = actualCount;
+      meta.participantsCount = actualCount;
     } else if (metaParticipants > 0 && metaParticipants > actualCount) {
       // ② meta > 实际：赛事进行中尚有未登场队伍
       // 2026-07-28 修复 EPL Masters I BUG：Liquipedia 已公布 16 支队伍但比赛数据只有 7 支时，
@@ -2650,8 +2659,8 @@ Page({
           region: t.region || null,
           group: t.group || null
         }));
-        // 更新 meta.participants 为实际解析到的队伍数
-        meta.participants = participantsList.length;
+        // 更新参赛队数为实际解析到的队伍数
+        meta.participantsCount = participantsList.length;
       } else {
         participantsList = Array.from({ length: metaParticipants }, (_, i) => ({ id: -1 - i, name: '待定队伍 ' + (i + 1) }));
       }
@@ -2673,20 +2682,24 @@ Page({
       meta.startDate = util.formatTime(ew.start);
       meta.endDate = util.formatTime(ew.end);
     }
-    // 3) 参赛队数兜底：若 meta.participants 仍为空（curation/Liquipedia 均无数据），
+    // 3) 参赛队数兜底：若 participantsCount 仍为空（curation/Liquipedia 均无数据），
     //    用实际比赛数据推导的参赛队数填入。
-    //    注意：实际 > meta 的覆盖已在上方「参赛队数一致性策略①」处理，
-    //    这里仅处理 meta 为空的边缘场景，避免重复赋值。
-    if ((meta.participants == null || meta.participants === '') && participantsList.length) {
-      meta.participants = participantsList.length;
+    if ((meta.participantsCount == null || meta.participantsCount === '') && participantsList.length) {
+      meta.participantsCount = participantsList.length;
     }
-    // 2026-07-28：归一化 participants 为数字（KPI Strip 显示用）。
-    //   meta.participants 可能是数组（Liquipedia parseParticipants）或数字（curation/推导）。
-    //   WXML 直接显示 metadata.participants，若为数组会渲染为 [object Object]。
-    //   保留 liqParticipantsArr 供分支④兜底使用，最终 setData 前统一转为数字。
-    if (Array.isArray(meta.participants)) {
-      meta.participants = meta.participants.length;
-    }
+    // ★ P0：participants 只保留数组（供 participantsList 重建），UI 一律读 participantsCount，
+    //   不再把数组转数字写回（原 L2687 的 Array→length 归一已删除）。
+    if (!Array.isArray(meta.participants)) meta.participants = null;
+    // 4) 赛期展示文案（唯一展示口径）：eventWindow 优先；缺失时用 meta 日期兜底；再无则「待公布」。
+    //    不再输出 `? ~ ?`；LP 日期入链属 P1（改 mergeEventPeriod 入参）。
+    let periodText;
+    if (ew && ew.fullRange) periodText = ew.fullRange;
+    else if (meta.startDate && meta.endDate) periodText = meta.startDate + ' ~ ' + meta.endDate;
+    else if (meta.startDate) periodText = meta.startDate + ' 起';
+    else periodText = '待公布';
+    // 可选摘要：赛制文本足够长才生成（短词「双败淘汰」已在网格里，重复无意义）
+    const formatText = (meta.format == null) ? '' : String(meta.format).trim();
+    const formatNote = formatText.length > 14 ? ('赛制说明：' + formatText) : '';
 
     // 2026-07-29 修复 logo 丢失 BUG：refreshMetadataDerived 重建 participantsList 时
     // 丢失了 enrichTeamLogos 已填充的 logo 字段（竞态：finalize 后重建覆盖 logo）。
@@ -2767,7 +2780,7 @@ Page({
       return local !== t.logo ? Object.assign({}, t, { logo: local }) : t;
     });
 
-    this.setData({ metadata: meta, participantsList: participantsList });
+    this.setData({ metadata: meta, participantsList: participantsList, periodText: periodText, formatNote: formatNote });
 
     // ★★ 2026-09-21 修复「首次进入参赛队伍队名错误 / 退出再进却正确」：
     //
@@ -2867,6 +2880,11 @@ Page({
     if (!slug) return;
     const url = 'https://liquipedia.net/dota2/' + encodeURIComponent(slug);
     wx.setClipboardData({ data: url, success: () => wx.showToast({ title: '链接已复制', icon: 'none' }) });
+  },
+
+  // 赛事信息卡「更多信息」展开/收起（P0）：赛制说明 / 来源明细 / LP 链接
+  toggleInfoMore() {
+    this.setData({ showInfoMore: !this.data.showInfoMore });
   },
 
   // ===== 两 Tab 切换（C 风格） =====
