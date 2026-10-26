@@ -117,6 +117,13 @@ assert(LP.parsePrizePool('$1,000,000 USD').currency === 'USD', '$ 应映射 USD'
 assert(LP.parsePrizePool('500000 EUR').currency === 'EUR', '纯数字 + 货币码应保留 EUR');
 assert(LP.parsePrizePool('5000000').currency === 'USD', '纯数字无币种线索 → USD 兜底');
 
+// ===== 参赛队计数（2026-10-26）：扫描区域收窄到 TeamParticipants =====
+const ewcTeams = LP.parseParticipants(ewc);
+assert(ewcTeams && ewcTeams.length === 24, 'EWC 参赛队应为 24（实际 ' + (ewcTeams && ewcTeams.length) + '）');
+assert(!ewcTeams.some((t) => t.name === 'Noticed'), '不应把 AwardPrizePool 里的 Noticed 当成参赛队');
+assert(!ewcTeams.some((t) => /^flag=|^team=/.test(t.name)), '不应把模板命名参数当成队名');
+assert(ewcTeams.every((t) => t.name && t.name !== 'TBD'), 'EWC 参赛队不应有 TBD 槽位');
+
 // ===== 边界：空输入 / 无结构页面 =====
 assert(LP.parseGroupStandings('').length === 0, '空输入 → 空组');
 assert(LP.parseBrackets(null).length === 0, 'null 输入 → 空 bracket');

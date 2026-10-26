@@ -35,7 +35,7 @@
   justify-content: flex-end;
   flex-shrink: 0;
 }
-.info-badges .status-tag {
+.info-badge-tag {
   font-size: var(--fs-micro);
   padding: 2rpx 10rpx;
   border-radius: var(--radius-sm);
@@ -65,11 +65,9 @@
   word-break: break-word;
 }
 .info-value.is-empty { color: var(--text-4); font-weight: 400; }
-.info-value-row { display: flex; align-items: baseline; gap: var(--space-0-5); flex-wrap: wrap; }
 .info-gold { color: var(--dota-gold); }
 .info-teams { color: var(--radiant); }
 .info-format { color: var(--text-2); font-weight: 500; }
-.info-unit { font-size: var(--fs-caption); color: var(--text-3); font-weight: 400; }
 
 .info-foot {
   display: flex;
@@ -1398,3 +1396,64 @@
   color: var(--text-3);
   text-align: center;
 }
+
+/* ===== P3.1：对战表 ===== */
+.brk-wrap { margin-bottom: var(--space-2); }
+.brk-scroll {
+  width: 100%;
+  background: var(--card-bg, #FFFFFF);
+  border: 1rpx solid var(--td-border-level-1-color);
+  border-radius: var(--radius-lg, 16rpx);
+  box-sizing: border-box;
+}
+.brk-canvas { position: relative; padding: 0; }
+.brk-section-head {
+  position: absolute;
+  left: 0;
+  height: 24rpx;
+  line-height: 24rpx;
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 1rpx;
+}
+.brk-round-head {
+  position: absolute;
+  font-size: var(--fs-micro);
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.brk-line { position: absolute; background: var(--text-4); }
+.brk-card {
+  position: absolute;
+  width: 280rpx;
+  height: 132rpx;
+  box-sizing: border-box;
+  background: var(--card-bg, #FFFFFF);
+  border: 1rpx solid var(--td-border-level-1-color);
+  border-radius: var(--radius-md, 12rpx);
+  padding: 8rpx 12rpx;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2rpx;
+}
+.brk-card.is-empty { border-style: dashed; opacity: 0.75; }
+.brk-team {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8rpx;
+  font-size: var(--fs-label);
+  color: var(--text-1);
+  line-height: var(--lh-normal);
+}
+.brk-team.win { font-weight: 700; color: var(--dota-gold-strong); }
+.brk-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.brk-name.tbd { color: var(--text-4); font-style: italic; }
+.brk-score { font-family: var(--font-numeric); font-weight: 700; }
+.brk-meta { font-size: var(--fs-micro); color: var(--text-4); margin-top: 2rpx; }
+.brk-live { color: var(--status-live, #EF4444); }
+.brk-hint { text-align: center; font-size: var(--fs-caption); color: var(--text-4); margin-top: 8rpx; }
+.section-toggle { margin-left: var(--space-1); font-size: var(--fs-caption); color: var(--dota-gold-strong); font-weight: 400; }

@@ -147,6 +147,29 @@ check('isKnownEvent: "Riyadh Masters 2024" → true', () => assert(isKnownEvent(
 check('isKnownEvent: "Unknown Cup" → false', () => assert(!isKnownEvent('Unknown Cup')));
 check('isKnownEvent: null → false', () => assert(!isKnownEvent(null)));
 
+// ===== util.formatPrizePool（2026-10-26：赛事信息卡奖金紧凑格式化） =====
+check('formatPrizePool: 2000000 USD → $2M', () => assert(util.formatPrizePool(2000000, 'USD') === '$2M'));
+check('formatPrizePool: 12500000 USD → $12.5M', () => assert(util.formatPrizePool(12500000, 'USD') === '$12.5M'));
+check('formatPrizePool: 750000 USD → $750K', () => assert(util.formatPrizePool(750000, 'USD') === '$750K'));
+check('formatPrizePool: 750 USD → $750（不进 K）', () => assert(util.formatPrizePool(750, 'USD') === '$750'));
+check('formatPrizePool: 500000 EUR → €500K', () => assert(util.formatPrizePool(500000, 'EUR') === '€500K'));
+check('formatPrizePool: 1000000 GBP → £1M', () => assert(util.formatPrizePool(1000000, 'GBP') === '£1M'));
+check('formatPrizePool: 未配置符号的币种带码（BRL 有符号）', () => assert(util.formatPrizePool(300000, 'BRL') === 'R$300K'));
+check('formatPrizePool: 未知币种 → 码 + 空格', () => assert(util.formatPrizePool(300000, 'XYZ') === 'XYZ 300K'));
+check('formatPrizePool: 空/0/null → ""', () => {
+  assert(util.formatPrizePool(null, 'USD') === '');
+  assert(util.formatPrizePool(0, 'USD') === '');
+  assert(util.formatPrizePool('abc', 'USD') === '');
+});
+check('formatPrizePool: 缺省币种按 USD', () => assert(util.formatPrizePool(2000000) === '$2M'));
+
+// ===== util.formatPrizeRaw（展开区原始值） =====
+check('formatPrizeRaw: 2000000 → "2,000,000 USD"', () =>
+  assert(util.formatPrizeRaw(2000000, 'USD') === '2,000,000 USD'));
+check('formatPrizeRaw: 750 → "750 USD"', () =>
+  assert(util.formatPrizeRaw(750, 'USD') === '750 USD'));
+check('formatPrizeRaw: 空 → ""', () => assert(util.formatPrizeRaw(null) === ''));
+
 // ===== incremental.maxStart / mergeMatches (已有 test-incremental，补充边界) =====
 check('maxStart: 1条数据', () => assert(incremental.maxStart([{ start_time: 999 }]) === 999));
 check('mergeMatches: 全部去重', () => {

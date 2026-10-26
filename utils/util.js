@@ -237,8 +237,45 @@ function countdownTextOf(daysToStart, isOngoing) {
   return daysToStart + ' 天后开赛';
 }
 
+// 奖金池紧凑格式化（赛事信息卡 KPI 用）：
+//   2000000 → "$2M"，12500000 → "$12.5M"，750000 → "$750K"，750 → "$750"
+//   已知币种用符号（$ € £ ¥），未知币种用「币种码 + 空格」避免歧义；无法解析返回 ''。
+const PRIZE_SYMBOL = {
+  USD: '$', EUR: '€', GBP: '£', CNY: '¥', JPY: '¥',
+  KRW: '₩', RUB: '₽', BRL: 'R$', AUD: 'A$', CAD: 'C$'
+};
+function formatPrizePool(amount, currency) {
+  const n = Number(amount);
+  if (!isFinite(n) || n <= 0) return '';
+  const cur = String(currency || 'USD').toUpperCase();
+  const prefix = PRIZE_SYMBOL[cur] || (cur + ' ');
+  let scaled = n;
+  let unit = '';
+  if (n >= 1e9) { scaled = n / 1e9; unit = 'B'; }
+  else if (n >= 1e6) { scaled = n / 1e6; unit = 'M'; }
+  else if (n >= 1e3) { scaled = n / 1e3; unit = 'K'; }
+  let num;
+  if (unit) {
+    num = String(Math.round(scaled * 10) / 10);
+    if (num.indexOf('.') >= 0) num = num.replace(/\.0$/, '');
+  } else {
+    num = String(Math.round(n));
+  }
+  return prefix + num + unit;
+}
+
+// 奖金池原始值（展开区展示）：千分位 + 币种码，如 "2,000,000 USD"。
+function formatPrizeRaw(amount, currency) {
+  const n = Number(amount);
+  if (!isFinite(n) || n <= 0) return '';
+  const cur = String(currency || 'USD').toUpperCase();
+  return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + ' ' + cur;
+}
+
 module.exports = {
   formatDuration,
+  formatPrizePool,
+  formatPrizeRaw,
   formatTime,
   unifiedTier,
   winRate,

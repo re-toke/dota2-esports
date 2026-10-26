@@ -2,6 +2,7 @@ const api = require('../../../utils/api.js');
 const util = require('../../../utils/util.js');
 const sources = require('../../../utils/sources.js');
 const seriesNormalize = require('../../../utils/seriesNormalize.js');   // ★ P1：比分形状归一 + provenance
+const bracketLayout = require('../../../utils/bracketLayout.js');       // ★ P3.1：对战表布局纯函数
 // ★ 2026-09-20：队名「形状归一」单一实现（原先内联，须与快照 byName 键逐字一致）
 const names = require('../../../utils/names.js');
 // ★ 2026-09-21：队标本地化兜底（绕开 UGC 的 octet-stream MIME；见 utils/logoLocal.js）
@@ -95,6 +96,8 @@ function buildMetadataSkeleton() {
     canonical: null,
     prizePool: null,
     prizePoolCurrency: null,
+    prizeDisplay: '',          // ★ 2026-10-26：紧凑奖金（$2M / $750K），由 refreshMetadataDerived 派生
+    prizeRawText: '',          // ★ 2026-10-26：千分位原始值（展开区）
     location: null,
     format: null,
     organizer: null,
@@ -144,7 +147,14 @@ function buildCurationFallback(cur) {
 function mergeMetadataWithFallback(meta, name, leagueId) {
   const cur = remoteCuration.curatedEventFor(name, { leagueId: leagueId, game: 'dota2' });
   const fb = cur ? buildCurationFallback(cur) : buildMetadataSkeleton();
-  const merged = Object.assign({}, fb, meta || {});
+  const merged = Object.assign({}, fb);
+  // ★ 视觉验证发现：Object.assign 让 meta 的 null/空串覆盖 curation 兜底（主办方显示 --）。
+  //   改为「仅非空值覆盖」，保留 curation 的 organizer/location/format/prize 等。
+  Object.keys(meta || {}).forEach((k) => {
+    const v = meta[k];
+    if (v === null || v === undefined || v === '') return;
+    merged[k] = v;
+  });
   // ★ P0：participants 两字段归一 —— 数组只进 participants，数字只进 participantsCount。
   //   兼容旧形状：若 participants 仍是数字，迁移到 participantsCount 后置空。
   //   数组优先级：LP 数组（meta）> curation 数组（fb），与原 L2 修复口径一致。
@@ -194,6 +204,10 @@ Page({
     playoffOnly: false,        // 「仅看淘汰赛」筛选态
     hasPlayoffSeries: false,   // 是否出现 playoff/grandFinal 阶段（无则不显示筛选）
     pendingTeams: 0,           // 「另有 N 队待公布」汇总数
+    // ===== P3.1：对战表 =====
+    bracketView: null,         // bracketLayout 输出（sections/cards/lines 坐标）
+    bracketLoading: false,
+    showGroups: false,         // 小组积分折叠态
     // ===== 三段式分段计数（2026-07-28 新增） =====
     // series[] 按 phase 分段：live(desc) → upcoming(asc) → recent(desc)
     // liveCount/upcomingCount/recentCount 供 wxml 渲染分段分隔符与计数
@@ -203,7 +217,7 @@ Page({
     // 已结束段默认折叠（聚焦 LIVE/UPCOMING），点击分隔符展开
     recentCollapsed: false,
     // ===== 三 Tab 状态（C 风格 Tournament Center） =====
-    tab: 'matches',          // matches | teams | standings
+    tab: 'matches',          // matches | teams | playoffs
     expandedGame: '',        // 当前展开的小场 "seriesIdx-gameIdx"（A 风格就地展开英雄阵容）
     // 赛事排名
     standings: [],
@@ -722,7 +736,7 @@ Page({
           eventWindow: eventWindow,
           // D1 数据时间戳（2026-08-03）：Liquipedia 赛程最后更新时刻，refreshSchedule 刷新时更新
           scheduleUpdatedAt: Math.floor(Date.now() / 1000),
-          scheduleUpdatedLabel: util.formatAgo(Math.floor(Date.now() / 1000)),
+          scheduleUpdatedLabel: util.formatAgo(Date.now()),   // formatAgo 入参是毫秒（旧实现传秒 → “20731 天前”）
           // ★ 三段式分段计数（供 wxml 渲染分隔符与计数）
           liveCount: liveList.length,
           upcomingCount: upcomingList.length,
@@ -1404,8 +1418,8 @@ Page({
         patch.farFutureCount = built.farFutureCount;
         patch.hasFarFuture = built.hasFarFuture;
         patch.hasPlayoffSeries = !!built.hasPlayoffSeries;
-        patch.scheduleUpdatedAt = Math.floor(Date.now() / 1000);   // D1 数据时间戳
-        patch.scheduleUpdatedLabel = util.formatAgo(patch.scheduleUpdatedAt);
+        patch.scheduleUpdatedAt = Math.floor(Date.now() / 1000);   // D1 数据时间戳（秒）
+        patch.scheduleUpdatedLabel = util.formatAgo(Date.now());
         self.setData(patch);
         self.allSeries = all;   // 供后续 enrichTeamNames/Logos 与下一次 diff 使用
         // refresh 重建的 series 来自未 enrich 的 _rawMatches，队名/logo 可能回退为占位
@@ -2428,6 +2442,18 @@ Page({
     const formatText = (meta.format == null) ? '' : String(meta.format).trim();
     const formatNote = formatText.length > 14 ? ('赛制说明：' + formatText) : '';
 
+    // 奖金池展示口径：KPI 用紧凑值（$2M / $12.5M / $750K），展开区展示千分位原始值。
+    // 容错：prizePool 可能带千分位逗号或货币符号，先剥离非数字再判定。
+    const _ppRaw = (meta.prizePool == null) ? '' : String(meta.prizePool);
+    const _ppNum = Number(_ppRaw.replace(/[^0-9.]/g, ''));
+    if (isFinite(_ppNum) && _ppNum > 0) {
+      meta.prizeDisplay = util.formatPrizePool(_ppNum, meta.prizePoolCurrency);
+      meta.prizeRawText = util.formatPrizeRaw(_ppNum, meta.prizePoolCurrency);
+    } else {
+      meta.prizeDisplay = _ppRaw;
+      meta.prizeRawText = '';
+    }
+
     // 2026-07-29 修复 logo 丢失 BUG：refreshMetadataDerived 重建 participantsList 时
     // 丢失了 enrichTeamLogos 已填充的 logo 字段（竞态：finalize 后重建覆盖 logo）。
     // 修复：从 this.data.participantsList 构建 id→logo 映射，重建后统一回填。
@@ -2668,12 +2694,12 @@ Page({
     const key = e.currentTarget.dataset.key;
     if (key === this.data.tab) return;
     this.setData({ tab: key, expandedGame: '' });
-    // 懒加载赛事排名
-    if (key === 'standings' && !this.data.standingsLoaded) {
+    // P3.1：Tab 改名「淘汰赛」（原 standings）—— 懒加载聚合战绩 + LP 结构
+    if (key === 'playoffs' && !this.data.standingsLoaded) {
       this.loadStandings();
     }
     // P3（2026-08-31）：懒加载 Liquipedia 小组积分/淘汰赛对阵（与 OpenDota 聚合排名互补）
-    if (key === 'standings' && !this.data.lpStructureLoaded && !this.data.lpStructureLoading) {
+    if (key === 'playoffs' && !this.data.lpStructureLoaded && !this.data.lpStructureLoading) {
       this.loadStructure();
     }
     // P2：参赛队伍 Tab 也需要 LP 小组表做「分组反查」
@@ -2728,10 +2754,56 @@ Page({
       }, () => {
         // P2：结构到达后立刻回填参赛队伍分组
         try { this._applyParticipantGroups(groups); } catch (e) { /* 隔离 */ }
+        // P3.1：渲染对战表（缓存 JSON 优先，骨架兜底）
+        try { this.loadBracketDetail(brackets); } catch (e) { /* 隔离 */ }
       });
     }).catch(() => {
       this.setData({ lpStructureLoading: false, lpStructureLoaded: true });
     });
+  },
+
+  // P3.1：选主对战表 —— 优先 Playoffs，其次填充率最高，最后第一个
+  _pickPrimaryBracket(brackets) {
+    const list = (brackets || []).filter((b) => b && (b.slots || b.rounds));
+    if (!list.length) return null;
+    const playoff = list.find((b) => /playoff|淘汰/i.test(String(b.section || '')));
+    if (playoff) return playoff;
+    return list.slice().sort((a, b) => (b.filled || 0) - (a.filled || 0))[0];
+  },
+
+  _renderBracket(b) {
+    const view = bracketLayout.layoutBracket(b, { formatTime: (t) => util.formatTime(t) });
+    this.setData({ bracketView: view });
+  },
+
+  // P3.1：缓存 JSON（CI 生成的 Match 页内容）优先；缺失/失败回落 wikitext 骨架
+  loadBracketDetail(brackets) {
+    const primary = this._pickPrimaryBracket(brackets);
+    if (!primary) { this.setData({ bracketView: null, bracketLoading: false }); return; }
+    if (!primary.id) { this._renderBracket(primary); return; }
+    this.setData({ bracketLoading: true });
+    liquipedia.getLeagueBracket(primary.id).then((payload) => {
+      const b = (payload && payload.slots && payload.slots.length) ? payload : primary;
+      this._renderBracket(b);
+      this.setData({ bracketLoading: false });
+    }).catch(() => {
+      this._renderBracket(primary);
+      this.setData({ bracketLoading: false });
+    });
+  },
+
+  // P3.1：对战表卡片点击 → match-detail（无 matchId 则提示待定）
+  openBracketMatch(e) {
+    const id = e.currentTarget.dataset.id;
+    if (!id) {
+      wx.showToast({ title: '未开赛 / 对阵待定', icon: 'none' });
+      return;
+    }
+    wx.navigateTo({ url: '/subpackages/detail/match-detail/match-detail?id=' + id });
+  },
+
+  toggleGroups() {
+    this.setData({ showGroups: !this.data.showGroups });
   },
 
   // Tab 2: 赛事排名（按已结束比赛聚合队伍胜负）

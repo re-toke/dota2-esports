@@ -262,7 +262,21 @@ function extractLink(nameRaw) {
 function parseOpponentBlock(body) {
   var afterName = body.replace(/^Opponent\s*\|\s*/, '');
   var parts = splitTopLevel(afterName, '|');
-  var nameRaw = (parts[0] || '').trim();
+  // ★ 2026-10-26（视觉验证）：队名取值优先级 —— `team=` 命名参数 > 首个无名参数。
+  //   原实现取 parts[0]，遇到 `{{Opponent|flag=ru|Team Spirit|...}}` 会把 "flag=ru" 当成队名。
+  var nameRaw = '';
+  var teamParam = '';
+  for (var pi = 0; pi < parts.length; pi++) {
+    var p0 = (parts[pi] || '').trim();
+    if (!p0) continue;
+    if (p0.indexOf('=') >= 0) {
+      var kv = p0.match(/^team\s*=\s*(.*)$/i);
+      if (kv && !teamParam) teamParam = kv[1].trim();
+      continue;
+    }
+    if (!nameRaw) nameRaw = p0;
+  }
+  if (teamParam) nameRaw = teamParam;
   var linkInfo = extractLink(nameRaw);
   var name = linkInfo.name;
   var slug = linkInfo.slug;
@@ -323,20 +337,48 @@ function parseTeamCardBlock(body) {
   return { name: name, status: status, liquipediaSlug: slug };
 }
 
+// ★ 2026-10-26（视觉验证）：参赛队扫描区域收窄。
+//   原实现全页扫描 {{Opponent|...}}，会把「奖金分配 / 奖项（AwardPrizePool）」等区块里的
+//   opponent 模板也当成参赛队（EWC 的 `{{Opponent|flag=ru|Noticed|team=PVISION}}` → 25 队）。
+//   优先级：全部 {{TeamParticipants ...}} 模板块 > 「Participants」章节 > 全页兜底。
+//   注：一场赛事可能有多段 {{TeamParticipants}}（如 EPL 的 Playoff Seed / Group Stage Seed），
+//   必须取并集；`TeamParticipantsControls` 不是参赛队容器，用 `{{TeamParticipants|` 锚定排除。
+function participantsScanRegion(wikitext) {
+  var out = '';
+  var re = /\{\{TeamParticipants\s*\|/g;
+  var m;
+  while ((m = re.exec(wikitext)) !== null) {
+    var end = findTemplateEnd(wikitext, m.index);
+    if (end < 0) break;
+    out += wikitext.substring(m.index, end + 2) + '\n';
+    re.lastIndex = end + 2;
+  }
+  if (out) return out;
+  var hm = /^==+\s*(Participants|Participating [Tt]eams|Teams|Qualified [Tt]eams)\s*==+/m.exec(wikitext);
+  if (hm) {
+    var from = hm.index + hm[0].length;
+    var rest = wikitext.substring(from);
+    var nm = /^==[^=]/m.exec(rest);
+    return nm ? wikitext.substring(from, from + nm.index) : rest;
+  }
+  return wikitext;
+}
+
 function parseParticipants(wikitext) {
   if (!wikitext) return null;
   try {
     var teams = [];
+    var scanText = participantsScanRegion(wikitext);
     // 一次扫描同时识别 {{Opponent|...}} 和 {{TeamCard|...}}
     // 注意：{{TeamCardToggleButton}} 和 {{TeamCard columns start}} 不含 | 后跟 team=，故不会被误匹配
     var tplRegex = /\{\{(Opponent|TeamCard)\s*\|/g;
     var match;
-    while ((match = tplRegex.exec(wikitext)) !== null) {
+    while ((match = tplRegex.exec(scanText)) !== null) {
       var tplType = match[1];
       var startIdx = match.index + 2; // 跳过 {{
-      var endIdx = findTemplateEnd(wikitext, match.index);
+      var endIdx = findTemplateEnd(scanText, match.index);
       if (endIdx < 0) break;
-      var body = wikitext.substring(startIdx, endIdx);
+      var body = scanText.substring(startIdx, endIdx);
       var team = tplType === 'Opponent'
         ? parseOpponentBlock(body)
         : parseTeamCardBlock(body);
@@ -376,6 +418,15 @@ function parseParticipants(wikitext) {
         return !formerNames[(t.name || '').toLowerCase()];
       });
     }
+    // ★ 2026-10-26（视觉验证）：同名队伍去重（TBD 槽位允许多条，不参与去重）
+    var _seenNames = {};
+    teams = teams.filter(function (t) {
+      var n = String((t && t.name) || '').toLowerCase();
+      if (!n || n === 'tbd') return true;
+      if (_seenNames[n]) return false;
+      _seenNames[n] = 1;
+      return true;
+    });
     return teams.length ? teams : null;
   } catch (e) {
     return null;

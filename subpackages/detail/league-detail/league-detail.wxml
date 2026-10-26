@@ -17,9 +17,9 @@
     <view class="info-head">
       <text class="info-title">赛事信息</text>
       <view class="info-badges">
-        <text wx:if="{{liqTier}}" class="status-tag tier-{{liqTier.confidence === 'high' ? 'high' : 'other'}}">{{liqTier.label}}</text>
-        <text wx:if="{{eventWindow}}" class="status-tag status-{{eventWindow.status}}">{{eventWindow.statusText}}</text>
-        <text wx:elif="{{metadata.status}}" class="status-tag status-ended">{{metadata.status}}</text>
+        <text wx:if="{{liqTier}}" class="status-tag info-badge-tag tier-{{liqTier.confidence === 'high' ? 'high' : 'other'}}">{{liqTier.label}}</text>
+        <text wx:if="{{eventWindow}}" class="status-tag info-badge-tag status-{{eventWindow.status}}">{{eventWindow.statusText}}</text>
+        <text wx:elif="{{metadata.status}}" class="status-tag info-badge-tag status-ended">{{metadata.status}}</text>
       </view>
     </view>
     <view class="info-grid">
@@ -33,10 +33,7 @@
       </view>
       <view class="info-cell">
         <text class="info-label">奖金池</text>
-        <view class="info-value-row">
-          <text class="info-value info-gold {{metadata.prizePool ? '' : 'is-empty'}}">{{metadata.prizePool || '--'}}</text>
-          <text wx:if="{{metadata.prizePool}}" class="info-unit">{{metadata.prizePoolCurrency || 'USD'}}</text>
-        </view>
+        <text class="info-value info-gold {{metadata.prizeDisplay ? '' : 'is-empty'}}">{{metadata.prizeDisplay || '--'}}</text>
       </view>
       <view class="info-cell">
         <text class="info-label">参赛队</text>
@@ -56,11 +53,15 @@
       <text wx:if="{{updatedLabel}}" class="info-fresh">{{updatedLabel}}</text>
       <text wx:if="{{scheduleUpdatedLabel}}" class="info-fresh">赛程 {{scheduleUpdatedLabel}}</text>
     </view>
-    <view class="info-toggle" wx:if="{{formatNote || metadata.liquipediaSlug || quality || sourceBadges.length || (nameInfo && nameInfo.differs)}}" bindtap="toggleInfoMore">
+    <view class="info-toggle" wx:if="{{formatNote || metadata.prizeRawText || metadata.liquipediaSlug || quality || sourceBadges.length || (nameInfo && nameInfo.differs)}}" bindtap="toggleInfoMore">
       <text>{{showInfoMore ? '收起 ▴' : '更多信息 ▾'}}</text>
     </view>
     <view class="info-more" wx:if="{{showInfoMore}}">
       <text wx:if="{{formatNote}}" class="info-note">{{formatNote}}</text>
+      <view wx:if="{{metadata.prizeRawText}}" class="meta-extra">
+        <text class="meta-extra-label">奖金池原始值：</text>
+        <text class="info-value info-gold">{{metadata.prizeRawText}}</text>
+      </view>
       <view wx:if="{{quality}}" class="quality-pill quality-{{quality.level}}">
         <text class="q-dot"></text>
         <text class="q-text">{{quality.text}}</text>
@@ -88,7 +89,7 @@
     <view class="seg-item {{tab === 'teams' ? 'active' : ''}}" bindtap="switchTab" data-key="teams">
       参赛队伍<text class="seg-count" wx:if="{{participantsList.length}}">{{participantsList.length}}</text>
     </view>
-    <view class="seg-item {{tab === 'standings' ? 'active' : ''}}" bindtap="switchTab" data-key="standings">赛事排名</view>
+    <view class="seg-item {{tab === 'playoffs' ? 'active' : ''}}" bindtap="switchTab" data-key="playoffs">淘汰赛</view>
   </view>
 
   <skeleton wx:if="{{loading}}" type="detail" />
@@ -352,78 +353,93 @@
     </view>
   </block>
 
-  <!-- ===== Tab 3: 赛事排名（C 风格 · 仅已结束赛事展示） ===== -->
-  <block wx:elif="{{tab === 'standings'}}">
-    <view wx:if="{{standingsLoading}}" class="loading-row">聚合队伍排名中…</view>
-    <view wx:elif="{{standings.length === 0}}" class="hint-card-enhanced">
-      <view class="hint-title">暂无排名数据</view>
-      <view class="hint-desc">赛事进行中或尚未结束，排名需比赛完成后聚合</view>
-    </view>
-    <view wx:else class="standings-card">
-      <view class="stand-head">
-        <text class="col-rank">名次</text>
-        <text class="col-name">队伍</text>
-        <text class="col-num">胜</text>
-        <text class="col-num">负</text>
-        <text class="col-num">胜率</text>
-      </view>
-      <view class="stand-row" wx:for="{{standings}}" wx:key="team_id" bindtap="openTeam" data-id="{{item.team_id}}">
-        <text class="col-rank rank-{{index < 3 ? index + 1 : 'n'}}">
-          <text wx:if="{{index === 0}}">🥇</text>
-          <text wx:elif="{{index === 1}}">🥈</text>
-          <text wx:elif="{{index === 2}}">🥉</text>
-          <text wx:else>{{index + 1}}</text>
-        </text>
-        <text class="col-name">{{item.name}}</text>
-        <text class="col-num kda">{{item.wins}}</text>
-        <text class="col-num">{{item.losses}}</text>
-        <text class="col-num {{item.winRate >= 60 ? 'wr-high' : (item.winRate >= 40 ? 'wr-mid' : 'wr-low')}}">{{item.winRate}}%</text>
-      </view>
-    </view>
-
-    <!-- ===== P3（2026-08-31）：Liquipedia 小组积分（排名+晋级状态） ===== -->
-    <block wx:if="{{lpGroups.length > 0}}">
-      <view class="lp-section-title">小组积分（Liquipedia）</view>
-      <view class="lp-group-card" wx:for="{{lpGroups}}" wx:for-item="grp" wx:key="name">
-        <view class="lp-group-name">{{grp.name}}</view>
-        <view class="lp-team-row" wx:for="{{grp.teams}}" wx:for-item="t" wx:key="rank">
-          <text class="lp-team-rank">{{t.rank}}</text>
-          <text class="lp-team-name">{{t.name}}</text>
-          <text class="lp-team-placement {{t.placement === '晋级' ? 'up' : (t.placement === '淘汰' ? 'down' : '')}}" wx:if="{{t.placement}}">{{t.placement}}</text>
+  <!-- ===== Tab 3: 淘汰赛（P3.1：对战表 + 小组积分 / 小组赛战绩） ===== -->
+  <block wx:elif="{{tab === 'playoffs'}}">
+    <view wx:if="{{bracketLoading}}" class="loading-row">对战表加载中…</view>
+    <view wx:elif="{{bracketView && bracketView.sections.length}}" class="brk-wrap">
+      <scroll-view scroll-x class="brk-scroll" enhanced show-scrollbar="{{false}}">
+        <view class="brk-canvas" style="width:{{bracketView.width}}rpx;height:{{bracketView.height}}rpx">
+          <block wx:for="{{bracketView.sections}}" wx:for-item="sec" wx:key="side">
+            <view class="brk-section-head" style="top:{{sec.y}}rpx">{{sec.label}}</view>
+            <view class="brk-round-head" wx:for="{{sec.rounds}}" wx:for-item="rd" wx:key="label" style="left:{{rd.x}}rpx;top:{{sec.y + 24}}rpx">{{rd.label}}</view>
+            <view class="brk-line" wx:for="{{sec.lines}}" wx:for-item="ln" wx:key="index" style="left:{{ln.left}}rpx;top:{{ln.top}}rpx;width:{{ln.width}}rpx;height:{{ln.height}}rpx"></view>
+            <view class="brk-card {{item.empty ? 'is-empty' : ''}}"
+                  wx:for="{{sec.cards}}" wx:for-item="item" wx:key="key"
+                  style="left:{{item.x}}rpx;top:{{item.y}}rpx"
+                  catchtap="openBracketMatch" data-id="{{item.matchId}}">
+              <view class="brk-team {{item.winner === 'A' ? 'win' : ''}}">
+                <text class="brk-name {{item.tbd1 ? 'tbd' : ''}}">{{item.team1}}</text>
+                <text class="brk-score">{{item.score1}}</text>
+              </view>
+              <view class="brk-team {{item.winner === 'B' ? 'win' : ''}}">
+                <text class="brk-name {{item.tbd2 ? 'tbd' : ''}}">{{item.team2}}</text>
+                <text class="brk-score">{{item.score2}}</text>
+              </view>
+              <view class="brk-meta">
+                <text wx:if="{{item.live}}" class="brk-live">● LIVE</text>
+                <text wx:elif="{{item.boType}}" class="brk-bo">{{item.boType}}<text wx:if="{{item.timeLabel}}"> · {{item.timeLabel}}</text></text>
+              </view>
+            </view>
+          </block>
         </view>
-      </view>
-    </block>
+      </scroll-view>
+      <view class="brk-hint" wx:if="{{bracketView.width > 700}}">左右滑动查看后续轮次</view>
+    </view>
+    <view wx:else class="hint-card-enhanced">
+      <view class="hint-title">暂无淘汰赛数据</view>
+      <view class="hint-desc">该赛事在 Liquipedia 暂无淘汰赛对阵结构</view>
+    </view>
 
-    <!-- ===== P3（2026-08-31）：Liquipedia 淘汰赛对阵树 ===== -->
-    <block wx:if="{{lpBrackets.length > 0}}">
-      <view class="lp-section-title">淘汰赛对阵（Liquipedia）</view>
-      <view class="lp-bracket-card" wx:for="{{lpBrackets}}" wx:for-item="bk" wx:for-index="bi" wx:key="bi">
-        <view class="lp-round" wx:for="{{bk.rounds}}" wx:for-item="rd" wx:for-index="ri" wx:key="ri">
-          <view class="lp-round-label">{{rd.label}}</view>
-          <view class="lp-match" wx:for="{{rd.matches}}" wx:for-item="m" wx:for-index="mi" wx:key="mi">
-            <view class="lp-match-teams">
-              <view class="lp-match-team {{m.finished && m.score1 > m.score2 ? 'winner' : ''}}">
-                <text class="lp-match-team-name">{{m.team1Name}}</text>
-                <text class="lp-match-score {{m.finished && m.score1 > m.score2 ? 'winner' : ''}}">{{m.score1}}</text>
-              </view>
-              <view class="lp-match-team {{m.finished && m.score2 > m.score1 ? 'winner' : ''}}">
-                <text class="lp-match-team-name">{{m.team2Name}}</text>
-                <text class="lp-match-score {{m.finished && m.score2 > m.score1 ? 'winner' : ''}}">{{m.score2}}</text>
-              </view>
-            </view>
-            <view class="lp-match-meta">
-              <text wx:if="{{m.boType}}">{{m.boType}}</text>
-              <text wx:if="{{m.timeLabel}}"> · {{m.timeLabel}}</text>
-              <text wx:if="{{m.finished}}"> · 已结束</text>
-            </view>
+    <!-- 小组积分（Liquipedia，默认折叠） -->
+    <block wx:if="{{lpGroups.length > 0}}">
+      <view class="lp-section-title" bindtap="toggleGroups">
+        小组积分（Liquipedia）<text class="section-toggle">{{showGroups ? '收起 ▴' : '展开 ▾'}}</text>
+      </view>
+      <block wx:if="{{showGroups}}">
+        <view class="lp-group-card" wx:for="{{lpGroups}}" wx:for-item="grp" wx:key="name">
+          <view class="lp-group-name">{{grp.name}}</view>
+          <view class="lp-team-row" wx:for="{{grp.teams}}" wx:for-item="t" wx:key="rank">
+            <text class="lp-team-rank">{{t.rank}}</text>
+            <text class="lp-team-name">{{t.name}}</text>
+            <text class="lp-team-placement {{t.placement === '晋级' ? 'up' : (t.placement === '淘汰' ? 'down' : '')}}" wx:if="{{t.placement}}">{{t.placement}}</text>
           </view>
         </view>
+      </block>
+    </block>
+
+    <!-- 小组赛战绩（原 OpenDota 聚合；仅无 LP 分组时启用） -->
+    <block wx:if="{{lpGroups.length === 0}}">
+      <view class="lp-section-title">小组赛战绩</view>
+      <view wx:if="{{standingsLoading}}" class="loading-row">聚合队伍战绩中…</view>
+      <view wx:elif="{{standings.length === 0}}" class="hint-card-enhanced">
+        <view class="hint-title">暂无小组赛战绩</view>
+        <view class="hint-desc">赛事进行中或尚未结束，战绩需比赛完成后聚合</view>
+      </view>
+      <view wx:else class="standings-card">
+        <view class="stand-head">
+          <text class="col-rank">名次</text>
+          <text class="col-name">队伍</text>
+          <text class="col-num">胜</text>
+          <text class="col-num">负</text>
+          <text class="col-num">胜率</text>
+        </view>
+        <view class="stand-row" wx:for="{{standings}}" wx:key="team_id" bindtap="openTeam" data-id="{{item.team_id}}">
+          <text class="col-rank rank-{{index < 3 ? index + 1 : 'n'}}">
+            <text wx:if="{{index === 0}}">🥇</text>
+            <text wx:elif="{{index === 1}}">🥈</text>
+            <text wx:elif="{{index === 2}}">🥉</text>
+            <text wx:else>{{index + 1}}</text>
+          </text>
+          <text class="col-name">{{item.name}}</text>
+          <text class="col-num kda">{{item.wins}}</text>
+          <text class="col-num">{{item.losses}}</text>
+          <text class="col-num {{item.winRate >= 60 ? 'wr-high' : (item.winRate >= 40 ? 'wr-mid' : 'wr-low')}}">{{item.winRate}}%</text>
+        </view>
       </view>
     </block>
 
-    <!-- P3 结构加载中 / 结构与聚合排名皆空时的说明 -->
     <view wx:if="{{lpStructureLoading}}" class="loading-row">Liquipedia 小组/对阵解析中…</view>
-    <view wx:if="{{!lpStructureLoading && lpStructureLoaded && lpGroups.length === 0 && lpBrackets.length === 0 && standings.length === 0}}" class="hint-card-enhanced">
+    <view wx:if="{{!lpStructureLoading && lpStructureLoaded && lpGroups.length === 0 && (!bracketView || bracketView.sections.length === 0) && standings.length === 0}}" class="hint-card-enhanced">
       <view class="hint-desc">该赛事在 Liquipedia 上暂无结构化小组/对阵数据</view>
     </view>
   </block>
