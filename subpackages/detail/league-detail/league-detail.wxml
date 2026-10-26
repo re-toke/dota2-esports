@@ -359,6 +359,8 @@
     <view wx:elif="{{bracketView && bracketView.sections.length}}" class="brk-wrap">
       <scroll-view scroll-x class="brk-scroll" enhanced show-scrollbar="{{false}}">
         <view class="brk-canvas" style="width:{{bracketView.width}}rpx;height:{{bracketView.height}}rpx">
+          <!-- P4：Upper→Lower 降级线（画在卡片之下） -->
+          <view class="brk-cross" wx:for="{{bracketView.crossLines}}" wx:for-item="cl" wx:key="index" style="left:{{cl.left}}rpx;top:{{cl.top}}rpx;width:{{cl.width}}rpx;height:{{cl.height}}rpx"></view>
           <block wx:for="{{bracketView.sections}}" wx:for-item="sec" wx:key="side">
             <view class="brk-section-head" style="top:{{sec.y}}rpx">{{sec.label}}</view>
             <view class="brk-round-head" wx:for="{{sec.rounds}}" wx:for-item="rd" wx:key="label" style="left:{{rd.x}}rpx;top:{{sec.y + 24}}rpx">{{rd.label}}</view>

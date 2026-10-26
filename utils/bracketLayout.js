@@ -1,8 +1,10 @@
 // utils/bracketLayout.js
 // P3.1（2026-10-26）：对战表布局纯函数（不含 wx / DOM），输出 rpx 坐标与连线。
-// 输入：bracket（parseBrackets / CI payload：{ slots, rounds }）
-// 输出：{ width, height, sections: [{ side, label, y, height, rounds:[{label,x}], cards, lines }] }
-// 约束：MVP 只画「同 section 内相邻轮」的连线；Upper→Lower 降级线留 P4。
+// 输入：bracket（parseBrackets / CI payload：{ type, slots, rounds }）
+// 输出：{ width, height, sections: [...], crossLines: [...] }
+// 连线：① section 内相邻轮（lines）；② P4 Upper→Lower 降级线（crossLines，按 bracket type 映射表）。
+//   ⚠️ wikitext 不写「败者来自哪场」（无 Loser of… 文本）⇒ 降级拓扑只能按 type 码查表；
+//   未知 type 一律不画（不臆测），保持结构完整。
 'use strict';
 
 const CARD_W = 280;
@@ -11,6 +13,42 @@ const H = 132;
 const G = 24;
 const SECTION_GAP = 24;
 const HEADER_H = 56;   // 分区标题 24 + 轮次表头 24 + 间距（视觉验证修正：原 44 导致标题重叠）
+
+// ===== P4：Upper→Lower 降级线映射（match 级：from 场败者 → to 场）=====
+// 8U4L2DSL1D（8 队标准双败，PGL Wallachia S9 / TI 2026 Main Event 同构）：
+//   Upper QF(4) 败者 → Lower R1(2)；Upper SF(2) 败者 → Lower QF(2)；
+//   Upper Final 败者 → Lower Final。槽位号取自 wikitext 的 R#M##（R1M1-4 / R1M5-6 / R2M3-4 / R4M2）。
+const _PGL_DROPS = [
+  { from: { side: 'upper', roundNo: 1, slotNo: 1 }, to: { side: 'lower', roundNo: 1, slotNo: 5 } },
+  { from: { side: 'upper', roundNo: 1, slotNo: 2 }, to: { side: 'lower', roundNo: 1, slotNo: 5 } },
+  { from: { side: 'upper', roundNo: 1, slotNo: 3 }, to: { side: 'lower', roundNo: 1, slotNo: 6 } },
+  { from: { side: 'upper', roundNo: 1, slotNo: 4 }, to: { side: 'lower', roundNo: 1, slotNo: 6 } },
+  { from: { side: 'upper', roundNo: 2, slotNo: 1 }, to: { side: 'lower', roundNo: 2, slotNo: 3 } },
+  { from: { side: 'upper', roundNo: 2, slotNo: 2 }, to: { side: 'lower', roundNo: 2, slotNo: 4 } },
+  { from: { side: 'upper', roundNo: 4, slotNo: 1 }, to: { side: 'lower', roundNo: 4, slotNo: 2 } }
+];
+
+const DROP_MAP = {
+  'Bracket/8U4L2DSL1D': _PGL_DROPS,
+  // EWC Playoffs Bracket/8、Survival Bracket/8L4D-4Q 均为单败/短赛制 ⇒ 无降级线
+  'Bracket/8': [],
+  'Bracket/8L4D-4Q': []
+};
+
+function _normType(t) {
+  const s = String(t || '');
+  const i = s.lastIndexOf('/');
+  return i >= 0 ? s.slice(i + 1) : s;
+}
+
+function _dropsOf(type) {
+  const kinds = Object.keys(DROP_MAP);
+  const key = _normType(type);
+  for (let i = 0; i < kinds.length; i++) {
+    if (_normType(kinds[i]) === key) return DROP_MAP[kinds[i]];
+  }
+  return [];
+}
 
 const SIDE_ORDER = { upper: 0, main: 1, lower: 2, final: 3, third: 4, qualifier: 5 };
 const SIDE_LABEL = {
@@ -47,6 +85,32 @@ function _placeRound(cards, prevCards, roundIndex) {
   });
 }
 
+/** P4 降级线：源卡右中 → 竖向通道 → 目标卡左中（三段折线；坐标已含 section/列偏移） */
+function _crossLines(drops, sections) {
+  if (!drops || !drops.length) return [];
+  const idx = {};
+  sections.forEach((sec) => {
+    (sec.cards || []).forEach((c) => {
+      idx[(c.side || 'main') + '|' + c.roundNo + '|' + c.slotNo] = c;
+    });
+  });
+  const out = [];
+  drops.forEach((e) => {
+    const a = idx[e.from.side + '|' + e.from.roundNo + '|' + e.from.slotNo];
+    const b = idx[e.to.side + '|' + e.to.roundNo + '|' + e.to.slotNo];
+    if (!a || !b) return;   // 结构不完整（缺槽/未渲染）⇒ 不画，避免悬空线
+    const ax = a.x + CARD_W;
+    const ay = a.y + H / 2;
+    const bx = b.x;
+    const by = b.y + H / 2;
+    const laneX = ax + COL_GAP / 2;
+    out.push({ left: ax, top: ay - 1, width: Math.max(1, laneX - ax), height: 2 });
+    out.push({ left: laneX - 1, top: Math.min(ay, by), width: 2, height: Math.max(1, Math.abs(by - ay)) });
+    out.push({ left: Math.min(laneX, bx), top: by - 1, width: Math.max(1, Math.abs(bx - laneX)), height: 2 });
+  });
+  return out;
+}
+
 /** 连线：子卡右中 → 父卡左中，两段折线（水平 + 垂直） */
 function _linesFor(prev, cur) {
   const lines = [];
@@ -77,6 +141,9 @@ function _cardFromSlot(s, formatTime) {
   const winner = finished && s.score1 !== s.score2 ? (s.score1 > s.score2 ? 'A' : 'B') : '';
   return {
     key: s.key || ('R' + s.roundNo + 'M' + s.slotNo),
+    side: s.side || 'main',
+    roundNo: s.roundNo,
+    slotNo: s.slotNo,
     empty: empty,
     team1: tbd1 ? '待定' : t1,
     team2: tbd2 ? '待定' : t2,
@@ -100,7 +167,12 @@ function layoutBracket(bracket, opts) {
   const o = opts || {};
   const slots = (bracket && bracket.slots) || [];
   const rounds = (bracket && bracket.rounds) || [];
-  if (!slots.length && !rounds.length) return { width: 0, height: 0, sections: [] };
+  if (!slots.length && !rounds.length) return { width: 0, height: 0, sections: [], crossLines: [] };
+
+  // 有降级线时，lower/final 分区整体右移一列 —— 腾出 source 右侧的竖向走线通道，
+  // 否则降级竖线会直接穿过 upper 同列的其他卡片。
+  const drops = _dropsOf(bracket && bracket.type);
+  const shiftX = drops.length ? (CARD_W + COL_GAP) : 0;
 
   // 以 rounds 为准分组（含 side），slots 兜底
   let groups = rounds.map((r) => ({ side: _sideOfRound(r), no: r.no, label: r.label, matches: r.matches || [] }));
@@ -125,6 +197,7 @@ function layoutBracket(bracket, opts) {
   const sections = [];
   sides.forEach((side) => {
     const rs = groups.filter((g) => g.side === side).sort((a, b) => a.no - b.no);
+    const xOff = (shiftX && side !== 'upper') ? shiftX : 0;
     const placedRounds = [];
     let prev = [];
     let sectionHeight = 0;
@@ -135,20 +208,20 @@ function layoutBracket(bracket, opts) {
       const cards = _placeRound(list.map((s) => _cardFromSlot(s, o.formatTime)), prev, idx);
       if (prev.length) lines.push.apply(lines, _linesFor(prev, cards));
       placedRounds.push(cards);
-      roundHeaders.push({ label: r.label || ('R' + r.no), x: idx * (CARD_W + COL_GAP) });
+      roundHeaders.push({ label: r.label || ('R' + r.no), x: xOff + idx * (CARD_W + COL_GAP) });
       cards.forEach((c) => { sectionHeight = Math.max(sectionHeight, c.y + H); });
       prev = cards;
     });
-    const width = Math.max(0, (rs.length - 1) * (CARD_W + COL_GAP) + CARD_W);
+    const width = xOff + Math.max(0, (rs.length - 1) * (CARD_W + COL_GAP) + CARD_W);
     const sectionY = yOffset + HEADER_H;
     const cards = [];
     placedRounds.forEach((list, idx) => {
       list.forEach((c) => {
-        cards.push(Object.assign({}, c, { y: c.y + sectionY }));
+        cards.push(Object.assign({}, c, { x: c.x + xOff, y: c.y + sectionY }));
       });
     });
-    // 连线坐标同样平移到 sectionY
-    const shiftedLines = lines.map((l) => Object.assign({}, l, { top: l.top + sectionY }));
+    // 连线坐标同样平移（x 因分区右移，y 因 section 头）
+    const shiftedLines = lines.map((l) => Object.assign({}, l, { left: l.left + xOff, top: l.top + sectionY }));
     sections.push({
       side: side,
       label: SIDE_LABEL[side] || side,
@@ -162,7 +235,14 @@ function layoutBracket(bracket, opts) {
     yOffset += HEADER_H + sectionHeight + SECTION_GAP;
   });
 
-  return { width: maxWidth, height: yOffset, sections: sections, cardW: CARD_W, cardH: H };
+  return {
+    width: maxWidth,
+    height: yOffset,
+    sections: sections,
+    crossLines: _crossLines(drops, sections),
+    cardW: CARD_W,
+    cardH: H
+  };
 }
 
 module.exports = {

@@ -1425,6 +1425,8 @@
   white-space: nowrap;
 }
 .brk-line { position: absolute; background: var(--text-4); }
+/* P4：Upper→Lower 降级线（弱化色 + 半透明，区别于同分区实线） */
+.brk-cross { position: absolute; background: var(--text-3); opacity: 0.55; }
 .brk-card {
   position: absolute;
   width: 280rpx;

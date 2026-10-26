@@ -64,6 +64,39 @@ assert(d.sections.map((x) => x.side).join(',') === 'upper,lower,final', '双败�
 assert(d.sections[1].y > d.sections[0].y + d.sections[0].height - 1, 'lower 分区在 upper 下方');
 assert(d.sections[2].y > d.sections[1].y, 'final 分区在 lower 下方');
 
+// ===== P4：Upper→Lower 降级线（Bracket/8U4L2DSL1D，与 PGL S9 / TI 2026 同构）=====
+function pglRounds() {
+  return [
+    { no: 1, side: 'upper', label: 'Upper Quarterfinals', matches: [slot(1, 1, 'upper'), slot(1, 2, 'upper'), slot(1, 3, 'upper'), slot(1, 4, 'upper')] },
+    { no: 2, side: 'upper', label: 'Upper Semifinals', matches: [slot(2, 1, 'upper'), slot(2, 2, 'upper')] },
+    { no: 4, side: 'upper', label: 'Upper Final', matches: [slot(4, 1, 'upper')] },
+    { no: 1, side: 'lower', label: 'Lower Round 1', matches: [slot(1, 5, 'lower'), slot(1, 6, 'lower')] },
+    { no: 2, side: 'lower', label: 'Lower Quarterfinals', matches: [slot(2, 3, 'lower'), slot(2, 4, 'lower')] },
+    { no: 3, side: 'lower', label: 'Lower Semifinal', matches: [slot(3, 1, 'lower')] },
+    { no: 4, side: 'lower', label: 'Lower Final', matches: [slot(4, 2, 'lower')] },
+    { no: 5, side: 'final', label: 'Grand Final', matches: [slot(5, 1, 'final')] }
+  ];
+}
+const pgl = bl.layoutBracket({ type: 'Bracket/8U4L2DSL1D', rounds: pglRounds() }, { formatTime: () => '' });
+assert(pgl.sections.map((x) => x.side).join(',') === 'upper,lower,final', 'P4：upper/lower/final 三分区');
+assert(pgl.crossLines.length === 7 * 3, `P4：7 条降级边 × 3 段折线（实际 ${pgl.crossLines.length}）`);
+const lowerR1 = pgl.sections[1].cards.filter((c) => c.key === 'R1M5')[0];
+assert(lowerR1 && lowerR1.x === 344, `P4：lower 分区右移一列（R1M5 x 实际 ${lowerR1 && lowerR1.x}）`);
+const upperR1 = pgl.sections[0].cards.filter((c) => c.key === 'R1M1')[0];
+assert(upperR1 && upperR1.x === 0, 'P4：upper 分区不位移');
+const lane = pgl.crossLines.filter((l) => l.width === 2 && l.left === 311)[0];
+assert(!!lane, 'P4：降级竖线走 source 右侧通道（left=311）');
+assert(pgl.crossLines.some((l) => l.left === 280), 'P4：降级线起点为 upper 卡右边缘（280）');
+const pglNoFinal = bl.layoutBracket({ type: 'Bracket/8U4L2DSL1D', rounds: pglRounds().filter((r) => !(r.side === 'lower' && r.no === 4)) });
+assert(pglNoFinal.crossLines.length === 6 * 3, `P4：缺目标槽 ⇒ 少一条边（实际 ${pglNoFinal.crossLines.length}）`);
+
+// 单败 / 未知 type ⇒ 无降级线，且分区不位移
+const se8 = bl.layoutBracket({ type: 'Bracket/8', rounds: single.rounds });
+assert(se8.crossLines.length === 0, 'P4：单败 Bracket/8 无降级线');
+const unknown = bl.layoutBracket({ type: 'Bracket/16U8L4D', rounds: pglRounds() });
+assert(unknown.crossLines.length === 0, 'P4：未知 type 不画降级线（不臆测）');
+assert(unknown.sections[1].cards[0].x === 0, 'P4：无降级线时 lower 分区不位移');
+
 // ===== 空槽 =====
 const empty = bl.layoutBracket({
   rounds: [{ no: 1, side: 'main', label: 'R1', matches: [slot(1, 1, 'main', '', '')] }]
