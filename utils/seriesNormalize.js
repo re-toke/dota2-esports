@@ -216,6 +216,17 @@ function filterLiquipediaCardsByWindow(cards, nowSec, bjOffsetSec) {
   });
 }
 
+/** 来源 chip 文案（P2）：od / lp / od+lp */
+function sourceTagOf(series) {
+  const arr = Array.isArray(series && series.sources) ? series.sources : [];
+  const hasOd = arr.indexOf('od') >= 0;
+  const hasLp = arr.indexOf('lp') >= 0;
+  if (hasOd && hasLp) return { label: 'OD+LP', cls: 'odlp' };
+  if (hasLp) return { label: 'LP', cls: 'lp' };
+  if (hasOd) return { label: 'OD', cls: 'od' };
+  return { label: '', cls: '' };
+}
+
 /**
  * OD 侧归一（原详情页 buildSeriesFromSources 开头块，P1b-2）：
  * groupSeries → 逐局 fmt（注入）→ upcoming 展示字段。
@@ -404,6 +415,7 @@ module.exports = {
   filterLiquipediaCardsByWindow,
   normalizeOpenDotaSeries,
   mapLiquipediaCards,
+  sourceTagOf,
   scoresOf,
   isDecided,
   normalizeTerminal,

@@ -190,6 +190,10 @@ Page({
     showInfoMore: false,   // 「更多信息」展开态（赛制说明 / 来源明细 / LP 链接）
     periodText: '',        // 赛期展示文案：eventWindow 优先，缺失时「待公布」（不再出现 ? ~ ?）
     formatNote: '',        // 可选摘要：仅当赛制文本足够长（>14 字）时生成，避免复述 KPI
+    // ===== P2：对阵筛选 / 队伍待公布 =====
+    playoffOnly: false,        // 「仅看淘汰赛」筛选态
+    hasPlayoffSeries: false,   // 是否出现 playoff/grandFinal 阶段（无则不显示筛选）
+    pendingTeams: 0,           // 「另有 N 队待公布」汇总数
     // ===== 三段式分段计数（2026-07-28 新增） =====
     // series[] 按 phase 分段：live(desc) → upcoming(asc) → recent(desc)
     // liveCount/upcomingCount/recentCount 供 wxml 渲染分段分隔符与计数
@@ -728,6 +732,7 @@ Page({
           upcomingGroups: upcomingGroups,
           farFutureCount: farFutureCount,
           hasFarFuture: farFutureCount > 0,
+          hasPlayoffSeries: !!built.hasPlayoffSeries,
           showFarFuture: false   // 默认折叠远期赛程
         });
         // 步骤2：明细（series 数组体积大，独立 setData 避免阻塞骨架渲染）
@@ -805,6 +810,8 @@ Page({
   // 时间窗口过滤 → 分段排序 → 字段计算 → decorate）。
   // load() 与 refreshSchedule()（B4 定时刷新）共用，防止双份逻辑漂移。
   buildSeriesFromSources(raw, liqScheduled, liqBoFormat) {
+    // ★ P2：缓存构建入参，供「全部 / 淘汰赛」切换时本地重算（零网络）
+    this._buildArgs = { raw: raw, liqScheduled: liqScheduled, liqBoFormat: liqBoFormat };
     // ★ 2026-08-04：liqBoFormat = 服务端 parseBoFormat 的 Format 段赛制映射（S2 信号），可为 null
         // BO3/BO5 中双方会换边，第 2/3 场 radiant 可能是首场的 dire（B 队），
         // 此时 radiant_win=true 反而代表 B 队赢，小圆点会显示错误颜色。
@@ -1069,6 +1076,24 @@ Page({
         //   v8.8c：逻辑已上移 sources.filterMisattributedRecentSeries（首页共用），此处仅调用。
         allSeries = sources.filterMisattributedRecentSeries(allSeries, this.data.leagueId);
 
+        // ===== P2：来源 chip / TBD 标记 / 仅看淘汰赛 =====
+        allSeries.forEach((s) => {
+          const tag = seriesNormalize.sourceTagOf(s);
+          s.sourceTag = tag.label;
+          s.sourceTagCls = tag.cls;
+          if (s.radiantTbd === undefined) s.radiantTbd = isTBD(s.radiantName);
+          if (s.direTbd === undefined) s.direTbd = isTBD(s.direName);
+        });
+        // 「淘汰赛」筛选可用性 + 过滤（P2）
+        // 未过滤集合仅供「未登场」判定（顺序无关），过滤后再做分段排序
+        this._allSeriesFull = allSeries;
+        const hasPlayoffSeries = allSeries.some((s) =>
+          s.stageKey === 'playoff' || s.stageKey === 'grandFinal');
+        if (this.data.playoffOnly) {
+          allSeries = allSeries.filter((s) =>
+            s.stageKey === 'playoff' || s.stageKey === 'grandFinal');
+        }
+
         // ★ 三段式分段排序（2026-07-28 新增，v3 增强）
         //   LIVE：进行中，按 lastTime desc —— 最近开赛的在前
         //   UPCOMING：未开赛，按 dateGroup asc → lastTime asc —— 最早开赛的在前，按日期分组
@@ -1237,7 +1262,8 @@ Page({
       recentList: recentList,
       upcomingGroups: upcomingGroups,
       farFutureCount: farFutureCount,
-      hasFarFuture: farFutureCount > 0
+      hasFarFuture: farFutureCount > 0,
+      hasPlayoffSeries: hasPlayoffSeries
     };
   },
 
@@ -1377,6 +1403,7 @@ Page({
         patch.upcomingGroups = built.upcomingGroups;
         patch.farFutureCount = built.farFutureCount;
         patch.hasFarFuture = built.hasFarFuture;
+        patch.hasPlayoffSeries = !!built.hasPlayoffSeries;
         patch.scheduleUpdatedAt = Math.floor(Date.now() / 1000);   // D1 数据时间戳
         patch.scheduleUpdatedLabel = util.formatAgo(patch.scheduleUpdatedAt);
         self.setData(patch);
@@ -2378,6 +2405,18 @@ Page({
     // ★ P0：participants 只保留数组（供 participantsList 重建），UI 一律读 participantsCount，
     //   不再把数组转数字写回（原 L2687 的 Array→length 归一已删除）。
     if (!Array.isArray(meta.participants)) meta.participants = null;
+
+    // ===== P2：待公布汇总（替代逐条「待定队伍 N / 待公布」）=====
+    // 计数已在各分支写入 participantsCount（含待公布），这里只把占位条目从列表移除并汇总。
+    let pendingTeams = 0;
+    {
+      const kept = [];
+      (participantsList || []).forEach((t) => {
+        if (t && /^(待公布|TBD|待定队伍 \d+)$/i.test(String(t.name || '').trim())) pendingTeams++;
+        else kept.push(t);
+      });
+      participantsList = kept;
+    }
     // 4) 赛期展示文案（唯一展示口径）：eventWindow 优先；缺失时用 meta 日期兜底；再无则「待公布」。
     //    不再输出 `? ~ ?`；LP 日期入链属 P1（改 mergeEventPeriod 入参）。
     let periodText;
@@ -2468,7 +2507,28 @@ Page({
       return local !== t.logo ? Object.assign({}, t, { logo: local }) : t;
     });
 
-    this.setData({ metadata: meta, participantsList: participantsList, periodText: periodText, formatNote: formatNote });
+    // ===== P2：未登场标记 + 分组反查 =====
+    const _full = this._allSeriesFull || this.allSeries || [];
+    const _seenIds = {}, _seenNames = {};
+    _full.forEach((s) => {
+      if (s.radiantTeamId) _seenIds[s.radiantTeamId] = 1;
+      if (s.direTeamId) _seenIds[s.direTeamId] = 1;
+      if (s.radiantName) _seenNames[names.normTeamNameCjk(s.radiantName)] = 1;
+      if (s.direName) _seenNames[names.normTeamNameCjk(s.direName)] = 1;
+    });
+    const _hasMatches = _full.length > 0;
+    const _groupMap = this._groupMapFrom(this.data.lpGroups);
+    participantsList = participantsList.map((t) => {
+      if (!t) return t;
+      const norm = names.normTeamNameCjk(t.name || '');
+      const played = !!((t.id != null && _seenIds[t.id]) || (norm && _seenNames[norm]));
+      const patch = {};
+      if (_hasMatches) patch.played = played;
+      if (!t.group && norm && _groupMap[norm]) patch.group = _groupMap[norm];
+      return Object.keys(patch).length ? Object.assign({}, t, patch) : t;
+    });
+
+    this.setData({ metadata: meta, participantsList: participantsList, periodText: periodText, formatNote: formatNote, pendingTeams: pendingTeams });
 
     // ★★ 2026-09-21 修复「首次进入参赛队伍队名错误 / 退出再进却正确」：
     //
@@ -2575,6 +2635,34 @@ Page({
     this.setData({ showInfoMore: !this.data.showInfoMore });
   },
 
+  // P2：「全部 / 淘汰赛」切换 —— 用缓存的构建入参本地重算（零网络）
+  setPlayoffFilter(e) {
+    const on = String(e.currentTarget.dataset.on) === '1';
+    if (on === !!this.data.playoffOnly) return;
+    this.setData({ playoffOnly: on }, () => {
+      const a = this._buildArgs;
+      if (!a) return;
+      const built = this.buildSeriesFromSources(a.raw, a.liqScheduled, a.liqBoFormat);
+      this.allSeries = built.allSeries;
+      const pageSize = this.data.pageSize;
+      this.setData({
+        series: built.allSeries.slice(0, pageSize),
+        totalSeries: built.allSeries.length,
+        page: 0,
+        hasMore: built.allSeries.length > pageSize,
+        liveCount: built.liveList.length,
+        upcomingCount: built.upcomingList.length,
+        recentCount: built.recentList.length,
+        hasFarFuture: built.hasFarFuture,
+        farFutureCount: built.farFutureCount,
+        hasPlayoffSeries: built.hasPlayoffSeries,
+        recentCollapsed: false,
+        expandedGame: ''
+      });
+      try { this.enrichTeamLogos(); } catch (err) { /* 隔离 */ }
+    });
+  },
+
   // ===== 两 Tab 切换（C 风格） =====
   switchTab(e) {
     const key = e.currentTarget.dataset.key;
@@ -2588,6 +2676,33 @@ Page({
     if (key === 'standings' && !this.data.lpStructureLoaded && !this.data.lpStructureLoading) {
       this.loadStructure();
     }
+    // P2：参赛队伍 Tab 也需要 LP 小组表做「分组反查」
+    if (key === 'teams' && !this.data.lpStructureLoaded && !this.data.lpStructureLoading) {
+      this.loadStructure();
+    }
+  },
+
+  // P2：LP 小组表 → 归一化队名 → 组名（供参赛队伍分组反查）
+  _groupMapFrom(groups) {
+    const map = {};
+    (groups || []).forEach((g) => {
+      (g.teams || []).forEach((t) => {
+        if (t && t.name) map[names.normTeamNameCjk(t.name)] = g.name;
+      });
+    });
+    return map;
+  },
+
+  // P2：把组名回填到参赛队伍列表（已有 group 不覆盖）
+  _applyParticipantGroups(groups) {
+    const map = this._groupMapFrom(groups);
+    if (!Object.keys(map).length) return;
+    const list = (this.data.participantsList || []).map((t) => {
+      if (!t || t.group) return t;
+      const g = map[names.normTeamNameCjk(t.name || '')];
+      return g ? Object.assign({}, t, { group: g }) : t;
+    });
+    this.setData({ participantsList: list });
   },
 
   // P3：拉取 Liquipedia 结构页（小组积分 + 淘汰赛对阵），失败静默（排名 Tab 仍有 OpenDota 聚合）
@@ -2610,6 +2725,9 @@ Page({
         lpBrackets: brackets,
         lpStructureLoading: false,
         lpStructureLoaded: true
+      }, () => {
+        // P2：结构到达后立刻回填参赛队伍分组
+        try { this._applyParticipantGroups(groups); } catch (e) { /* 隔离 */ }
       });
     }).catch(() => {
       this.setData({ lpStructureLoading: false, lpStructureLoaded: true });

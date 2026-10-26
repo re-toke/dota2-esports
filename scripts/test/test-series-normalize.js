@@ -146,6 +146,12 @@ const _lpTbd = sn.mapLiquipediaCards([{
 assert(_lpTbd[0].phase === 'upcoming' && _lpTbd[0].isLive === false,
   'LP 映射：TBD 对阵不得判 live → upcoming');
 
+// ===== 4f. P2：来源 chip =====
+assert(sn.sourceTagOf({ sources: ['od'] }).label === 'OD', '来源 chip：OD');
+assert(sn.sourceTagOf({ sources: ['lp'] }).label === 'LP', '来源 chip：LP');
+assert(sn.sourceTagOf({ sources: ['lp', 'od'] }).label === 'OD+LP', '来源 chip：OD+LP');
+assert(sn.sourceTagOf({}).label === '', '来源 chip：无来源 → 空');
+
 // ===== 4. provenance：标签去重 / 并集 =====
 const s1 = { sources: ['od'] };
 sn.addSource(s1, 'od');
