@@ -10,6 +10,7 @@
     "sync:canon": "node scripts/sync/sync-canon-map.js",
     "sync:parse": "node scripts/sync/sync-liquipedia-parse.js",
     "sync:slugmap": "node scripts/sync/sync-slugmap.js",
+    "sync:brackets": "node scripts/sync/sync-liquipedia-brackets.js",
     "prewarm:liquipedia": "node scripts/sync/prewarm-liquipedia.js",
     "fetch:upcoming": "node scripts/sync/fetch-liquipedia-upcoming.js",
     "fetch:logos": "node scripts/sync/fetch-team-logos.js",

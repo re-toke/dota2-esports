@@ -56,7 +56,7 @@ const baseSlugs = Object.values(slugmap.mappings || {});
 const curatedSlugs = [];
 (curation.CURATED_EVENTS || []).forEach((ev) => {
   if (!ev) return;
-  ['scheduledMatchesSlug', 'structureSlug', 'liquipediaSlug'].forEach((f) => {
+  ['scheduledMatchesSlug', 'structureSlug', 'bracketSlug', 'liquipediaSlug'].forEach((f) => {
     if (typeof ev[f] === 'string' && ev[f]) curatedSlugs.push(ev[f]);
   });
 });

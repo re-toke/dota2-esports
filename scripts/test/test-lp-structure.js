@@ -47,23 +47,66 @@ if (swiss.length === 1) {
   assert(g.teams[15].name === 'HULIGANI', `第 16 名 HULIGANI（实际 ${g.teams[15].name}）`);
 }
 
-// ===== parseBrackets：EWC Survival 淘汰赛 =====
+// ===== parseBrackets（P3.0）：结构骨架 + 侧区 =====
 const brackets = LP.parseBrackets(ewc);
-assert(brackets.length === 1, `EWC 解析出 1 个有内容的 Bracket（实际 ${brackets.length}）`);
-if (brackets.length === 1) {
-  const b = brackets[0];
-  assert(b.section === 'Survival', `H2 section 解析（实际 ${b.section}）`);
-  assert(b.type === 'Bracket/8L4D-4Q', `Bracket 类型（实际 ${b.type}）`);
-  const allMatches = b.rounds.reduce((acc, r) => acc.concat(r.matches), []);
-  assert(allMatches.length === 1, `仅 1 场已填充对局（其余空壳 {{Match}} 跳过；实际 ${allMatches.length}）`);
-  if (allMatches.length === 1) {
-    const m = allMatches[0];
-    assert(m.team1Name === 'Vici Gaming' && m.team2Name === 'PTime',
-      `对局双方 Vici Gaming vs PTime（实际 ${m.team1Name} vs ${m.team2Name}）`);
-    assert(m.finished === true, 'score=W/FF 字母比分 → finished=true');
-    assert(m.startTime > 0, '对局有时间戳');
-  }
-  assert(b.rounds[0].label === 'Round 1', `轮次标签取 HTML 注释（实际 ${b.rounds[0].label}）`);
+assert(brackets.length === 2, `EWC 解析出 2 个 Bracket（Survival + Playoffs；实际 ${brackets.length}）`);
+const survival = brackets.find((b) => b.section === 'Survival');
+const playoffs = brackets.find((b) => b.section === 'Playoffs');
+assert(!!survival && survival.type === 'Bracket/8L4D-4Q', `Survival 类型（实际 ${survival && survival.type}）`);
+assert(!!playoffs && playoffs.type === 'Bracket/8', `Playoffs 类型（实际 ${playoffs && playoffs.type}）`);
+
+if (survival) {
+  assert(survival.total === 8, `Survival 槽位 8（实际 ${survival.total}）`);
+  assert(survival.filled === 1, `Survival 已填充 1 场（实际 ${survival.filled}）`);
+  const filled = survival.slots.filter((s) => !s.empty);
+  assert(filled.length === 1 && filled[0].team1Name === 'Vici Gaming' && filled[0].team2Name === 'PTime',
+    `填充对局 Vici Gaming vs PTime（实际 ${filled[0] && filled[0].team1Name} vs ${filled[0] && filled[0].team2Name}）`);
+  assert(filled[0].finished === true && filled[0].startTime > 0, '填充对局 finished / startTime');
+  assert(survival.rounds.length === 2, `Survival 两轮（实际 ${survival.rounds.length}）`);
+  assert(survival.rounds[0].label === 'Round 1', `轮次标签取 HTML 注释（实际 ${survival.rounds[0].label}）`);
+  assert(survival.rounds[0].matches.length === 4, 'Round 1 四个槽位（空槽保留）');
+}
+
+if (playoffs) {
+  assert(playoffs.total === 8, `Playoffs 槽位 8（实际 ${playoffs.total}）`);
+  assert(playoffs.filled === 0, `Playoffs 全部空槽（实际填充 ${playoffs.filled}）`);
+  const labels = playoffs.rounds.map((r) => r.label);
+  assert(labels.indexOf('Quarterfinals') >= 0 && labels.indexOf('Grand Final') >= 0,
+    `Playoffs 轮名（实际 ${labels.join('/')}）`);
+  const third = playoffs.rounds.find((r) => r.side === 'third');
+  assert(!!third && third.no === 99, '季军赛独立成轮（no=99, side=third）');
+}
+
+// ===== parseBrackets（P3.0）：PGL Wallachia S9 双败 =====
+const pgl = LP.parseBrackets(fs.readFileSync(path.join(__dirname, 'pgl-wallachia9-wikitext.txt'), 'utf8'));
+assert(pgl.length === 1, `PGL S9 解析出 1 个 Bracket（实际 ${pgl.length}）`);
+if (pgl.length === 1) {
+  const b = pgl[0];
+  assert(b.type === 'Bracket/8U4L2DSL1D', `PGL 类型（实际 ${b.type}）`);
+  assert(b.total === 14 && b.filled === 0, `PGL 14 槽全空（实际 ${b.total}/${b.filled}）`);
+  assert(b.rounds.some((r) => r.side === 'upper') && b.rounds.some((r) => r.side === 'lower') &&
+    b.rounds.some((r) => r.side === 'final'), 'PGL 同时存在 upper / lower / final 侧区');
+  assert(b.slots.some((s) => s.side === 'lower' && s.roundNo === 1 && s.slotNo === 5),
+    'Lower R1 从 M5 起（与 Upper 共用 R# 不合并）');
+  assert(b.slots.some((s) => s.side === 'upper' && s.roundNo === 4 && s.slotNo === 1),
+    'Upper Final = R4M1');
+  assert(b.slots.some((s) => s.side === 'lower' && s.roundNo === 4 && s.slotNo === 2),
+    'Lower Final = R4M2');
+  assert(b.slots.some((s) => s.side === 'final' && s.roundNo === 5 && s.slotNo === 1),
+    'Grand Final = R5M1');
+}
+
+// ===== parseBrackets（P3.0）：TI 2026 Main Event 部分填充 =====
+const tiMain = LP.parseBrackets(fs.readFileSync(path.join(__dirname, 'ti2026-main-event-wikitext.txt'), 'utf8'));
+assert(tiMain.length === 1, `TI 2026 Main Event 解析出 1 个 Bracket（实际 ${tiMain.length}）`);
+if (tiMain.length === 1) {
+  const b = tiMain[0];
+  assert(b.id === 'TI2026Main', `TI bracket id（实际 ${b.id}）`);
+  assert(b.total === 14 && b.filled === 1, `TI 14 槽 / 填充 1（实际 ${b.total}/${b.filled}）`);
+  const f = b.slots.find((s) => !s.empty);
+  assert(f && f.team1Name === 'BoomBoys' && f.team2Name === 'Team Spirit',
+    `TI 填充对局 BoomBoys vs Team Spirit（实际 ${f && f.team1Name} vs ${f && f.team2Name}）`);
+  assert(f.side === 'lower' && f.roundNo === 3 && f.slotNo === 1, '填充槽位 = Lower Semifinal R3M1');
 }
 
 // ===== P0（2026-10-25）：奖金币种映射（€/£/¥ 不再回落 USD）=====

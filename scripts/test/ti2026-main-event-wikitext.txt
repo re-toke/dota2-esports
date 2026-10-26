@@ -1,0 +1,82 @@
+﻿{{DISPLAYTITLE:The International 2026: Main Event}}
+{{TI2026Tabs|mt}}
+{{HiddenDataBox|sdate=2026-08-20|edate=2026-08-23}}
+
+==Main Event==
+{{Toggle bracket start}}
+{{Bracket|Bracket/8U4L2DSL1D|id=TI2026Main|matchsection=Playoffs
+
+<!-- Upper Bracket Quarterfinals -->
+|R1M1={{Match}}
+|R1M2={{Match}}
+|R1M3={{Match}}
+|R1M4={{Match}}
+
+<!-- Upper Bracket Semifinals -->
+|R2M1={{Match}}
+|R2M2={{Match}}
+
+<!-- Upper Bracket Final -->
+|R4M1={{Match}}
+
+<!-- Lower Bracket Round 1 -->
+|R1M5={{Match}}
+|R1M6={{Match}}
+
+<!-- Lower Bracket Quarterfinals -->
+|R2M3={{Match}}
+|R2M4={{Match}}
+
+<!-- Lower Bracket Semifinal -->
+|R3M1={{Match
+|opponent1={{TeamOpponent|BoomBoys}}
+|opponent2={{TeamOpponent|Team Spirit}}
+|date=August 22, 2026 - 21:10 {{Abbr/CST}}
+|twitch=dota2ti|youtube=dota2/ve-SDrwS4_s
+|caster1=Cap|caster2=Trent
+|comment=Observers: {{Player|flag=se|Weppas}}, {{Player|flag=se|PTP}}
+|vodgame1=https://youtu.be/jxXiIkzBaB8
+|vodgame2=https://youtu.be/OeDgJcVFlHE
+|matchid1=8959222564
+|matchid2=8959362208
+|map1={{Map
+|team1side=radiant
+|t1h1=lina|t1h2=kotl|t1h3=cent|t1h4=hw|t1h5=ta
+|t1b1=tp|t1b2=sf|t1b3=np|t1b4=esp|t1b5=ld|t1b6=kez|t1b7=ls
+|team2side=dire
+|t2h1=ww|t2h2=emb|t2h3=rub|t2h4=sld|t2h5=tiny
+|t2b1=largo|t2b2=io|t2b3=nec|t2b4=bane|t2b5=dw|t2b6=tb|t2b7=naga
+|length=35m28s|winner=2
+}}
+|map2={{Map
+|team1side=dire
+|t1h1=ww|t1h2=inv|t1h3=hw|t1h4=cent|t1h5=jug
+|t1b1=esp|t1b2=sf|t1b3=np|t1b4=bane|t1b5=dw|t1b6=ld|t1b7=mor
+|team2side=radiant
+|t2h1=emb|t2h2=rub|t2h3=ul|t2h4=cw|t2h5=ta
+|t2b1=largo|t2b2=tp|t2b3=io|t2b4=kotl|t2b5=slk|t2b6=nec|t2b7=ls
+|length=30m12s|winner=2
+}}
+|map3={{ApiMap|winner=skip}}
+}}
+
+<!-- Lower Bracket Final -->
+|R4M2={{Match}}
+
+<!-- Grand Final -->
+|R5M1={{Match}}
+}}
+{{Toggle bracket end}}
+
+==Streams==
+{{#section:The_International/2026|PrimaryStreams}}
+
+==Hero Statistics==
+{{Hero statistics
+|statspage={{#var:home}}/Statistics/Main Event
+|tournament={{PAGENAME}}
+}}
+
+==References==
+{{reflist}}
+{{The International Navbox}}

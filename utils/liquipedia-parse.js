@@ -566,7 +566,8 @@ function parseScheduledMatches(wikitext, nowSec) {
 }
 
 // 解析 {{Match}} 模板参数，提取对阵信息
-function parseMatchFields(body) {
+// ★ 2026-10-26（P3.0）：`allowNoDate` —— bracket 槽位常无 date，传 true 时保留（startTime=0）。
+function parseMatchFields(body, allowNoDate) {
   // 去掉开头的 'Match|'
   var afterName = body.replace(/^Match\s*\|\s*/, '');
   var parts = splitTopLevel(afterName, '|');
@@ -593,7 +594,7 @@ function parseMatchFields(body) {
   if (missing2) team2Name = 'TBD';
   // 解析日期
   var startTime = parseLiquipediaDate(fields.date || '');
-  if (!startTime) return null;  // 日期解析失败，跳过
+  if (!startTime && !allowNoDate) return null;  // 日期解析失败，跳过（bracket 骨架模式除外）
   // bestof
   var bo = fields.bestof ? parseInt(fields.bestof, 10) : 1;
   var boType = 'BO' + (isNaN(bo) || bo < 1 ? 1 : bo);
@@ -1049,9 +1050,20 @@ function _orderedPlacementTeams(params) {
 }
 
 // 解析 {{Bracket|<类型>|id=..|R#M#header=..|R#M#={{Match...}}}} 淘汰赛对阵树。
-// 复用 parseMatchFields 解析每个 {{Match}}（返回元素与 parseScheduledMatches 同构，
-// 额外注入 matchHeader / roundNo）。轮次标签取 HTML 注释（<!-- Quarterfinals -->），
-// 缺失时用 'R#'；RxMTP（季军赛）单列。返回 [{ id, type, section, rounds: [{ label, matches }] }]。
+// ★ P3.0（2026-10-26）：改为「结构骨架」解析 —— 每个 R#M# / RxMTP 槽位都输出（空槽也保留），
+//   保留 slotNo / comment / side；按 (side, roundNo) 分组，避免 Upper/Lower 共用 R# 被合并。
+//   输出 [{ id, type, section, slots, total, filled, rounds: [{ no, side, label, matches }] }]
+// 侧区分类（P3.0）：由 HTML 注释 / 表头文本决定，不依赖 type 编码
+function classifyBracketSide(text) {
+  var t = String(text || '').toLowerCase();
+  if (/grand\s*final/.test(t)) return 'final';
+  if (/third\s*place|季军/.test(t)) return 'third';
+  if (/lower\s*bracket/.test(t)) return 'lower';
+  if (/upper\s*bracket/.test(t)) return 'upper';
+  if (/qualif|play-?in|survival/.test(t)) return 'qualifier';
+  return 'main';
+}
+
 function parseBrackets(wikitext) {
   if (!wikitext) return [];
   var brackets = [];
@@ -1059,79 +1071,82 @@ function parseBrackets(wikitext) {
   while (idx >= 0) {
     var end = findTemplateEnd(wikitext, idx);
     if (end < 0) break;
-    var body = wikitext.substring(idx + 2, end);   // 'Bracket|Bracket/8|id=..|R1M1=...'
-    // 真实类型（如 Bracket/8L4D-4Q）是首个**位置参数**（无 '='），不在模板名位置
+    var body = wikitext.substring(idx + 2, end);
     var type = '';
     var pipe = body.indexOf('|');
     if (pipe < 0) { body = ''; }
     else {
-      body = body.substring(pipe + 1);   // 去掉模板名 token
+      body = body.substring(pipe + 1);
       var eqPos = body.indexOf('=');
       var pipePos = body.indexOf('|');
       if (pipePos < 0) type = eqPos < 0 ? body.trim() : '';
       else if (eqPos < 0 || pipePos < eqPos) type = body.substring(0, pipePos).trim();
     }
-
-    // 所在 H2 段（整行正则回溯，{{Stage|X}} 解析为参数文本）
     var section = _lastHeader(wikitext.substring(0, idx), 2);
 
-    // 扫描 body：顶层 | 参数，抓 R#M#header / R#M# / RxMTP / HTML 注释（轮次标签）
-    var headers = {};      // 'R1M1' -> header 文本
-    var comments = [];     // [{ pos, text }]（注释在 body 中的位置）
-    var roundsMap = {};    // roundNo -> [{ matchFields, header, pos }]
-    var mtpMatch = null;   // 季军赛
+    var headers = {};
+    var slots = [];
     var depth = 0;
     var i = 0;
     var lastComment = '';
-    var commentEndPos = 0;
     while (i < body.length - 1) {
-      // HTML 注释捕获（作轮次标签）
       if (body.substr(i, 4) === '<!--') {
         var cEnd = body.indexOf('-->', i);
         if (cEnd < 0) break;
-        lastComment = body.substring(i + 4, cEnd).trim();
-        commentEndPos = cEnd + 3;
+        lastComment = stripTags(body.substring(i + 4, cEnd)).trim();
         i = cEnd + 3;
         continue;
       }
       if (body[i] === '{' && body[i + 1] === '{') { depth++; i += 2; continue; }
       if (body[i] === '}' && body[i + 1] === '}') { depth = Math.max(0, depth - 1); i += 2; continue; }
       if (body[i] === '|' && depth === 0) {
-        // 读参数 key
         var eq = body.indexOf('=', i);
         var nextPipe = body.indexOf('|', i + 1);
         if (eq < 0 || (nextPipe >= 0 && nextPipe < eq)) { i++; continue; }
         var key = body.substring(i + 1, eq).trim().toLowerCase();
         var valStart = eq + 1;
-        // 跳过值前空白
         while (valStart < body.length && /\s/.test(body[valStart])) valStart++;
         var mh = key.match(/^r(\d+)m(\d+)header$/);
         if (mh) {
-          var hEnd2 = body.indexOf('\n', valStart);
-          headers['R' + mh[1] + 'M' + mh[2]] = stripTags(body.substring(valStart, hEnd2 < 0 ? body.length : hEnd2)).trim();
+          var hEnd = body.indexOf('\n', valStart);
+          headers['R' + mh[1] + 'M' + mh[2]] = stripTags(body.substring(valStart, hEnd < 0 ? body.length : hEnd)).trim();
           i = valStart;
           continue;
         }
         var mm = key.match(/^r(\d+)m(\d+)$/);
         var isMtp = key === 'rxmtp';
         if (mm || isMtp) {
-          if (body.substr(valStart, 2) !== '{{') { i = valStart; continue; }
-          var mEnd = findTemplateEnd(body, valStart);
-          if (mEnd < 0) break;
-          var mBody = body.substring(valStart + 2, mEnd);
-          var fields = parseMatchFields(mBody);
-          if (fields) {
-            fields._slotNo = isMtp ? 'TP' : mm[2];
-            fields._comment = lastComment;
-            if (isMtp) {
-              mtpMatch = fields;
-            } else {
-              var rno = parseInt(mm[1], 10);
-              if (!roundsMap[rno]) roundsMap[rno] = [];
-              roundsMap[rno].push({ fields: fields, pos: valStart });
-            }
+          var roundNo = isMtp ? 99 : parseInt(mm[1], 10);
+          var slotNo = isMtp ? 0 : parseInt(mm[2], 10);
+          var slotKey = isMtp ? 'RxMTP' : ('R' + roundNo + 'M' + slotNo);
+          var header = headers[slotKey] || '';
+          var fields = null;
+          if (body.substr(valStart, 2) === '{{') {
+            var mEnd = findTemplateEnd(body, valStart);
+            if (mEnd < 0) break;
+            var mBody = body.substring(valStart + 2, mEnd);
+            if (mBody.replace(/^Match\s*\|?\s*/, '').trim()) fields = parseMatchFields(mBody, true);
+            i = mEnd;
+          } else {
+            i = valStart;
           }
-          i = mEnd;
+          var side = classifyBracketSide(lastComment || header);
+          slots.push({
+            slotNo: slotNo, roundNo: roundNo, key: slotKey,
+            header: header, comment: lastComment, side: side, empty: !fields,
+            team1Name: fields ? fields.team1Name : 'TBD',
+            team2Name: fields ? fields.team2Name : 'TBD',
+            score1: fields ? fields.score1 : 0,
+            score2: fields ? fields.score2 : 0,
+            walkover: fields ? fields.walkover : 0,
+            startTime: fields ? fields.startTime : 0,
+            boType: fields ? fields.boType : 'BO1',
+            boDeclared: fields ? fields.boDeclared : false,
+            finished: fields ? fields.finished : false,
+            phase: fields ? fields.phase : 'upcoming',
+            matchIds: fields ? fields.matchIds : [],
+            mapSlots: fields ? fields.mapSlots : 0
+          });
           continue;
         }
         i = valStart;
@@ -1139,49 +1154,44 @@ function parseBrackets(wikitext) {
       }
       i++;
     }
-    // 组装 rounds：每轮标签 = 该轮第一个 match 的 header（去轮次前缀）→ 最近注释 → '第N轮'
-    var roundNos = Object.keys(roundsMap).map(Number).sort(function (a, b) { return a - b; });
-    var rounds = [];
-    for (var r = 0; r < roundNos.length; r++) {
-      var no = roundNos[r];
-      var list = roundsMap[no].sort(function (a, b) { return a.pos - b.pos; });
-      // 轮标签：本轮首个 match 的显式 header（R#M#header=）→ match 前最近的注释 → '第N轮'
+    var groups = {};
+    var order = [];
+    slots.forEach(function (s) {
+      var gk = s.side + '|' + s.roundNo;
+      if (!groups[gk]) { groups[gk] = []; order.push(gk); }
+      groups[gk].push(s);
+    });
+    var SIDE_ORDER = { upper: 0, main: 1, lower: 2, final: 3, third: 4, qualifier: 5 };
+    order.sort(function (a, b) {
+      var pa = a.split('|');
+      var pb = b.split('|');
+      var da = (SIDE_ORDER[pa[0]] == null ? 9 : SIDE_ORDER[pa[0]]) - (SIDE_ORDER[pb[0]] == null ? 9 : SIDE_ORDER[pb[0]]);
+      if (da !== 0) return da;
+      return Number(pa[1]) - Number(pb[1]);
+    });
+    var rounds = order.map(function (gk) {
+      var list = groups[gk].slice().sort(function (a, b) { return a.slotNo - b.slotNo; });
       var label = '';
-      for (var mi = 0; mi < list.length; mi++) {
-        var h = headers['R' + no + 'M' + list[mi].fields._slotNo] || '';
-        if (h) { label = h; break; }
+      for (var li = 0; li < list.length; li++) { if (list[li].comment) { label = list[li].comment; break; } }
+      if (!label) {
+        for (var hi = 0; hi < list.length; hi++) { if (list[hi].header) { label = list[hi].header; break; } }
       }
-      // 退化：用 match 前最近的注释（扫描时同步记录每个 match pos 前的 lastComment）
-      if (!label && list.length && list[0].fields._comment) label = list[0].fields._comment;
-      if (!label) label = '第' + no + '轮';
-      rounds.push({
-        label: label,
-        matches: list.map(function (it) {
-          var f = Object.assign({}, it.fields);
-          delete f._slotNo;      // 内部簿记字段不外泄
-          delete f._comment;
-          f.roundNo = no;
-          f.bracketType = type;
-          return f;
-        })
+      if (!label) label = '第' + list[0].roundNo + '轮';
+      return { no: list[0].roundNo, side: list[0].side, label: label, matches: list };
+    });
+    var filled = slots.filter(function (s) { return !s.empty; }).length;
+    if (slots.length) {
+      brackets.push({
+        id: (body.match(/id=([A-Za-z0-9]+)/) || [])[1] || '',
+        type: type, section: section,
+        slots: slots, total: slots.length, filled: filled, rounds: rounds
       });
-    }
-    // 季军赛单列一轮
-    if (mtpMatch) {
-      var mtp = Object.assign({}, mtpMatch);
-      delete mtp._slotNo;
-      delete mtp._comment;
-      mtp.roundNo = 99;
-      mtp.bracketType = type;
-      rounds.push({ label: '季军赛', matches: [mtp] });
-    }
-    if (rounds.length) {
-      brackets.push({ id: (body.match(/id=([A-Za-z0-9]+)/) || [])[1] || '', type: type, section: section, rounds: rounds });
     }
     idx = wikitext.indexOf('{{Bracket|', end);
   }
   return brackets;
 }
+
 
 module.exports = {
   parseTemplate: parseTemplate,
@@ -1197,6 +1207,7 @@ module.exports = {
   parseParticipants: parseParticipants,
   parseLeagueMetadata: parseLeagueMetadata,
   parseScheduledMatches: parseScheduledMatches,
+  parseMatchFields: parseMatchFields,         // P3.0：MatchPage 内容解析（供 CI bracket 同步）
   parseGroupStandings: parseGroupStandings,   // P3（2026-08-31）：小组积分表（排名+晋级状态）
   parseBrackets: parseBrackets,               // P3（2026-08-31）：淘汰赛对阵树
   parseBoFormat: parseBoFormat,   // ★ 2026-08-04：Format 段 BO 声明解析（BO 判定引擎 S2）

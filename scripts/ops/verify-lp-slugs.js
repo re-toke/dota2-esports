@@ -102,7 +102,7 @@ function collectCurationSlugs() {
   const out = [];
   (cura.CURATED_EVENTS || []).forEach((e) => {
     const seen = {};
-    ['liquipediaSlug', 'scheduledMatchesSlug', 'structureSlug'].forEach((f) => {
+    ['liquipediaSlug', 'scheduledMatchesSlug', 'structureSlug', 'bracketSlug'].forEach((f) => {
       const v = e[f];
       if (!v || seen[v]) return;
       seen[v] = true;

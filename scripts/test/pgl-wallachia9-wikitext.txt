@@ -1,0 +1,515 @@
+﻿{{DISPLAYTITLE:PGL Wallachia Season 9}}{{#vardefine:home|PGL/Wallachia/9}}
+{{PGL Navbox}}
+{{Tabs static
+|name1=Overview
+|link1={{FULLPAGENAME}}
+|name2=Group Stage
+|link2={{FULLPAGENAME}}/Group Stage
+|name3=Statistics
+|link3={{FULLPAGENAME}}/Statistics
+}}
+{{Infobox league
+|name=PGL Wallachia Season 9
+|tickername=PGL Wallachia S9
+|image=PGL Wallachia allmode.png
+|icon=PGL Wallachia icon allmode.png
+|series=PGL Wallachia
+|organizer=PGL
+|sponsor=
+|patch=7.41f
+|server=Europe West
+|country=Romania
+|city=Bucharest
+|venue=PGL Studio
+|type=Offline
+|sdate=2026-09-19
+|edate=2026-09-27
+|team_number=16
+|format=Swiss group stage<br>Double-elimination playoffs
+|prizepoolusd=1,000,000
+|liquipediatier=2<!-- https://discord.com/channels/93055209017729024/213718409567928331/1549729789839937567 -->
+|leagueid=20279
+|website=https://www.pglesports.com
+|facebook=pgl
+|instagram=pglesports
+|kick=pgldota2
+|twitch=pgl_dota2
+|twitter=pgldota2
+|twitter2=pglesports
+|youtube=@pgl
+|bracket=https://docs.google.com/spreadsheets/d/1E6u54BFC6_FhMfl0ht9Pw_riC7dGcuqTOoOK9R4viag/edit?gid=1453481974
+|rulebook=https://docs.google.com/document/d/1SRRMjLkIOi_iNDnJJ0r-6V8RT-xiHekyes461I9dPic
+|headtohead=true
+|previous={{BASEPAGENAME}}/{{#expr:{{SUBPAGENAME}}-1}}{{!}}Season {{#expr:{{SUBPAGENAME}}-1}}
+|next={{BASEPAGENAME}}/{{#expr:{{SUBPAGENAME}}+1}}{{!}}Season {{#expr:{{SUBPAGENAME}}+1}}
+}}
+
+==Format==
+*'''Group Stage''' ''(September 19 - September 23)''
+**One modified Swiss-system of sixteen teams
+**All matches are {{Abbr/Bo3}}
+**{{Bgcolortext|up|Top eight teams}} advance to playoffs
+**{{Bgcolortext|down|Remaining teams}} are eliminated
+**{{Collapsible rules|1|title=Click here for Group Stage tiebreaker rules|texts=
+#Current W-L record
+#Buchholz score
+#Initial seeding
+}}
+
+*'''Playoffs''' ''(September 24 - September 27)''
+**Double-elimination bracket
+**Grand Final is {{Abbr/Bo5}}, all other matches are {{Abbr/Bo3}}
+
+==Prize Pool==
+{{TeamPrizePool|import=true|prizesummary=yes
+|tournament1={{FULLPAGENAME}}/Group_Stage
+|tournament2=#Playoffs
+|{{Slot|usdprize=300000}}
+|{{Slot|usdprize=175000}}
+|{{Slot|usdprize=120000}}
+|{{Slot|usdprize=80000}}
+|{{Slot|place=5-6|usdprize=60000}}
+|{{Slot|place=7-8|usdprize=40000}}
+|{{Slot|place=9-11|usdprize=20000}}
+|{{Slot|place=12-14|usdprize=15000}}
+|{{Slot|place=15-16|usdprize=10000}}
+|adjacentContent=<gallery mode=packed-hover heights=250px style="text-align:center;">
+Team Yandex win PGL Wallachia Season 9.jpg|Team Yandex (from left to right):<br>[[Malady]], [[watson]], [[CHIRA_JUNIOR]], [[ATF]] and [[Saksa]]
+</gallery>
+}}
+
+==Participants==
+<small>Invited teams were announced on September 16.</small><ref>{{cite web|url=https://x.com/pgldota2/status/2100165314323296670|title=The lineup for PGL Wallachia Season 9 is here.|author=PGL DOTA 2|date=2026-09-16}}</ref>
+{{TeamParticipants|showplayerinfo=true
+|{{Opponent|Team Yandex
+|players={{Persons
+|{{Person|role=1|watson}}
+|{{Person|role=2|CHIRA_JUNIOR}}
+|{{Person|role=3|ATF}}
+|{{Person|role=4|Saksa}}
+|{{Person|role=5|Malady}}
+|{{Person|role=coach|Accell}}
+}}
+|qualification={{Qualification|method=invite}}
+}}
+|{{Opponent|1w Team
+|players={{Persons
+|{{Person|role=1|Shad}}
+|{{Person|role=2|bzm}}
+|{{Person|role=3|33}}
+|{{Person|role=4|Ari}}
+|{{Person|role=5|Whitemon}}
+|{{Person|role=coach|MoonMeander}}
+}}
+|qualification={{Qualification|method=invite}}
+|notes={{Notes|{{Notes|{{Player|Shad}} stand-in for {{Player|Pure|link=Pure (Russian player)}} due to visa issue.<ref>{{cite web|url=https://x.com/1windota2/status/2100533770755408050|title=Shad is our stand-in for PGL Wallachia Season 9.|author=1win Dota2|date=2026-09-17}}</ref>}}}}
+}}
+|{{Opponent|Aurora Gaming
+|players={{Persons
+|{{Person|role=1|skiter}}
+|{{Person|role=2|Stojkov}}
+|{{Person|role=3|Ws}}
+|{{Person|role=4|Mira}}
+|{{Person|role=5|kaori}}
+|{{Person|role=coach|kpii}}
+}}
+|qualification={{Qualification|method=invite}}
+|notes={{Notes|{{Notes|{{Player|Stojkov}} stand-in for {{Player|Mikoto}} due to personal reasons.<ref>{{cite web|url=https://x.com/AuroraDota2_GG/status/2100177892902604986|title=Start the season without a stand-in?|author=Aurora Dota2|date=2026-09-16}}</ref>}}}}
+}}
+|{{Opponent|Conventus Stellarum
+|players={{Persons
+|{{Person|role=1|Ghost|link=Ghost (Daniel Chan)}}
+|{{Person|role=2|lorenof|team=Nigma Galaxy}}
+|{{Person|role=3|DM|team=Team Yandex}}
+|{{Person|role=4|OmaR|team=Nigma Galaxy}}
+|{{Person|role=5|panto|team=Team Spirit}}
+|{{Person|role=coach|KuroKy|team=Nigma Galaxy}}
+}}
+|qualification={{Qualification|method=invite}}
+}}
+|{{Opponent|GamerLegion
+|players={{Persons
+|{{Person|role=1|Timado}}
+|{{Person|role=2|RCY}}
+|{{Person|role=3|Fayde}}
+|{{Person|role=4|Bignum}}
+|{{Person|role=5|Speeed}}
+|{{Person|role=coach|Mangusu}}
+}}
+|qualification={{Qualification|method=invite}}
+}}
+|{{Opponent|LGD Gaming
+|players={{Persons
+|{{Person|role=1|Wits}}
+|{{Person|role=2|SumaiL}}
+|{{Person|role=3|Davai}}
+|{{Person|role=4|Thiolicor}}
+|{{Person|role=5|Sneyking}}
+|{{Person|role=coach|BuLba}}
+}}
+|qualification={{Qualification|method=invite}}
+}}
+|{{Opponent|Xtreme Gaming
+|players={{Persons
+|{{Person|role=1|Ame}}
+|{{Person|role=2|Xm}}
+|{{Person|role=3|zeal}}
+|{{Person|role=4|XinQ}}
+|{{Person|role=5|BoBoKa}}
+|{{Person|role=coach|Maps}}
+}}
+|qualification={{Qualification|method=invite}}
+}}
+|{{Opponent|Natus Vincere
+|players={{Persons
+|{{Person|role=1|gotthejuice}}
+|{{Person|role=2|Niku}}
+|{{Person|role=3|pma}}
+|{{Person|role=4|daze}}
+|{{Person|role=5|Riddys}}
+|{{Person|role=coach|Cy-}}
+}}
+|qualification={{Qualification|method=invite}}
+}}
+|{{Opponent|MOUZ
+|players={{Persons
+|{{Person|role=1|423}}
+|{{Person|role=2|Supream^}}
+|{{Person|role=3|BOOM}}
+|{{Person|role=4|mrls}}
+|{{Person|role=5|MoOz}}
+|{{Person|role=coach|ImmortalFaith}}
+}}
+|qualification={{Qualification|method=invite}}
+}}
+|{{Opponent|Team Nemesis
+|players={{Persons
+|{{Person|role=1|JaCkky}}
+|{{Person|role=2|Mo13ei}}
+|{{Person|role=3|SaberLight}}
+|{{Person|role=4|Jhocam}}
+|{{Person|role=5|NARMAN}}
+|{{Person|role=coach|Arthur}}
+}}
+|qualification={{Qualification|method=invite}}
+|notes={{Notes|{{Notes|{{Player|Mo13ei}} and {{Player|SaberLight}} stand-in for {{Player|Ken}} and {{Player|Jabz}} due to visa issue.<ref>{{cite web|url=https://x.com/nmss_gg/status/2100570478511608090|title=Reinforcements are coming in for PGL Wallachia.|author=Team Nemesis|date=2026-09-17}}</ref>}}}}
+}}
+|{{Opponent|Pipsqueak+4
+|players={{Persons
+|{{Person|role=1|rincyq}}
+|{{Person|role=2|Copy}}
+|{{Person|role=3|Malik}}
+|{{Person|role=4|Ekki}}
+|{{Person|role=5|aik}}
+|{{Person|role=coach|Mag~}}
+}}
+|qualification={{Qualification|method=invite}}
+}}
+|{{Opponent|PlayTime
+|players={{Persons
+|{{Person|role=1|Yuma}}
+|{{Person|role=2|4nalog}}
+|{{Person|role=3|fcr}}
+|{{Person|role=4|Elmisho}}
+|{{Person|role=5|KJ}}
+|{{Person|role=coach|Astini}}
+}}
+|qualification={{Qualification|method=invite}}
+}}
+|{{Opponent|Team Cobra
+|players={{Persons
+|{{Person|role=1|Parker}}
+|{{Person|role=2|Lumpy}}
+|{{Person|role=3|Frank}}
+|{{Person|role=4|flag=br|CoYoTÃ£o|id=183126002}}
+|{{Person|role=5|Stinger}}
+|{{Person|role=coach|flag=pe|Tristam}}
+}}
+|qualification={{Qualification|method=invite}}
+}}
+|{{Opponent|Yakult Brothers
+|players={{Persons
+|{{Person|role=1|Lou}}
+|{{Person|role=2|Emo}}
+|{{Person|role=3|Beyond}}
+|{{Person|role=4|kaka}}
+|{{Person|role=5|å¤©å½}}
+|{{Person|role=coach|Yakult}}
+}}
+|qualification={{Qualification|method=invite}}
+}}
+|{{Opponent|Pibbles Corp
+|players={{Persons
+|{{Person|role=1|LumiÃ¨re}}
+|{{Person|role=2|lalatroni}}
+|{{Person|role=3|flag=pe|Ryu|id=421515107}}
+|{{Person|role=4|Mjz}}
+|{{Person|role=5|Prada}}
+}}
+|qualification={{Qualification|method=invite}}
+}}
+|{{Opponent|Hokori
+|players={{Persons
+|{{Person|role=1|payk}}
+|{{Person|role=2|wonderk1d}}
+|{{Person|role=3|Vitaly}}
+|{{Person|role=4|flag=pe|Asao|id=395770377}}
+|{{Person|role=5|Gardick}}
+|{{Person|role=coach|Astarte}}
+}}
+|qualification={{Qualification|method=invite}}
+}}
+}}
+{{Transfer List
+|title=Roster moves since The International
+|page={{FULLPAGENAME}}
+|sdate=2026-08-13
+|edate=2026-09-20
+}}<!--
+|notes={{Notes|{{Notes|{{Player|flag=world|Kano}}.<ref>{{cite web|url=|title=|author=|date=2026-09-00}}</ref>}}}}
+-->
+
+==Group Stage==
+===Standings===
+{{ShowStandings|page={{FULLPAGENAME}}/Group_Stage}}
+[[{{PAGENAME}}/Group_Stage#Matches|&ensp; âª ''Click to view detailed match results''.]]
+
+=={{Stage|Playoffs}}==
+{{Toggle bracket start}}
+{{Bracket|Bracket/8U4L2DSL1D|id=xHpm1txH7L
+
+<!-- Upper Bracket Quarterfinals -->
+|R1M1={{Match}}
+|R1M2={{Match}}
+|R1M3={{Match}}
+|R1M4={{Match}}
+
+<!-- Upper Bracket Semifinals -->
+|R2M1={{Match}}
+|R2M2={{Match}}
+
+<!-- Upper Bracket Final -->
+|R4M1={{Match}}
+
+<!-- Lower Bracket Round 1 -->
+|R1M5={{Match}}
+|R1M6={{Match}}
+
+<!-- Lower Bracket Quarterfinals -->
+|R2M3={{Match}}
+|R2M4={{Match}}
+
+<!-- Lower Bracket Semifinal -->
+|R3M1={{Match}}
+
+<!-- Lower Bracket Final -->
+|R4M2={{Match}}
+
+<!-- Grand Final -->
+|R5M1={{Match}}
+}}
+{{Toggle bracket end}}
+
+==Additional Content==
+===Broadcast===
+====Streams====
+<onlyinclude><section begin="Streams"/>
+{{box|start|padding=2em}}
+{{Streams|title=Primary
+|lang1=englishspeaking|twitch1=pgl_dota2|youtube1=pgl|kick1=pgldota2
+|lang2=russianspeaking|twitch2=dota2_paragon_ru|stream2=https://vkvideo.ru/@prgnevents/lives|2twitch2=okkocyber_dota2|2stream2=https://okko.sport/tournament/dota-2-pgl-wallachia-season-9
+|lang3=cn|bilibili3=13|huya3=825802
+|lang4=spanishspeaking|twitch4=americaesportsdota2|youtube4=channel/UCxuiAD6Lv3mEdTWYsKocqtg|kick4=americaesportsdota2|facebook4=americaesportsdota2
+|lang5=ua|twitch5=dota2_maincast|youtube5=@dota2_maincast
+}}
+{{box|break|padding=2em}}
+{{Streams|title=Secondary
+|lang1=englishspeaking|twitch1=pgl_dota2en2|youtube1=pgl|ytmultiple1=true|kick1=pgldota2_b
+|lang2=russianspeaking|twitch2=dota2_paragon_ru3|2twitch2=okkocyber_dota2_b
+|lang3=cn|bilibili3=14|huya3=825803
+|lang4=ua|twitch4=dota2_maincast2|youtube4=@dota2_maincast
+}}
+{{box|end}}
+<!--Don't add unofficial stream, thank you-->
+{{note||For community broadcasts guidelines; [https://news.pglesports.com/news/1749531579344-pgl-dota-2-wallachia-community-broadcast-rules click here].}}<section end="Streams"/></onlyinclude>
+
+====Talent====
+{{Tabs dynamic|name1=English|name2=Russian|name3=Spanish}}
+{{Tabs dynamic/tab|1}}
+The English broadcast talent was announced on September 15, 2026.<ref>{{cite web|url=https://x.com/pglesports/status/2099828509157822532|title=Talent lineup for PGL Wallachia Season 9 is locked in|author=PGL|date=2026-09-15}}</ref>
+{{box|start|padding=2em}}
+<small>'''(On-site)'''</small>
+{{box|start|padding=2em}}
+{{BroadcasterCard
+|position=Host|lang=English
+|b1=Sheever
+|b2=Richard Lewis
+}}
+{{BroadcasterCard
+|position=Analyst|lang=English
+|b1=TeaGuvnor
+|b2=Jenkins
+|b3=Lacoste
+|b4=KheZu
+}}
+{{BroadcasterCard
+|position=Caster|lang=English
+|b1=ODPixel
+|b2=Fogged
+|b3=SUNSfan
+|b4=syndereN
+}}
+{{box|break|padding=2em}}
+{{BroadcasterCard
+|position=Observer|lang=English
+|b1=skrff
+|b2=Weppas
+|b3=PTP
+|b4=Eosin
+}}
+{{BroadcasterCard
+|position=Statistician|lang=English
+|b1=Leamare
+}}
+{{BroadcasterCard
+|position=Sideline Reporter|lang=English
+|b1=Nomad
+}}
+{{BroadcasterCard
+|position=Content Creator|lang=English
+|b1=Nomad
+}}
+{{box|end}}
+{{box|break|padding=2em}}
+<small>'''(Remote)'''</small>
+{{box|start|padding=2em}}
+{{BroadcasterCard
+|position=Caster|lang=English
+|b1=Bkop
+|b2=lizZard
+|b3=Ares
+|b4=Gunnar
+}}
+{{box|end}}
+{{box|end}}
+{{Tabs dynamic/tab|2}}
+The Russian broadcast talent for [[Paragon Events]] was announced on September 18, 2026.<ref>{{cite web|url=https://t.me/prgnevents_dota2/7147|title=PGL Wallachia Ð²Ð¾Ð·Ð²ÑÐ°ÑÐ°ÐµÑÑÑ Ð² Ð½Ð¾Ð²Ð¾Ð¼, Ð´ÐµÐ²ÑÑÐ¾Ð¼ ÑÐµÐ·Ð¾Ð½Ðµ|trans_title=PGL Wallachia returns for a new, ninth season|language={{Flag|ru}} Russian|author=Paragon Events|author-link=Paragon Events|date=2026-09-18}}</ref>
+{{box|start|padding=2em}}
+{{BroadcasterCard
+|position=Host|lang=Russian
+|b1=Eiritel
+|b2=Zais
+|b3=NamiNetsu
+}}
+{{BroadcasterCard
+|position=Analyst|lang=Russian
+|b1=ArsZeeqq
+|b2=BLACKARXANGEL
+|b3=CrystalMay
+|b4=Grayne
+|b5=JAM
+|b6=Maelstorm
+|b7=Santa
+|b8=y0nd
+}}
+{{BroadcasterCard
+|position=Guest|lang=Russian
+|b1=nastyamulla
+}}
+{{box|break|padding=2em}}
+{{BroadcasterCard
+|position=Commentator|lang=Russian
+|b1=ArsZeeqq
+|b2=Autodestruction
+|b3=BLACKARXANGEL
+|b4=CrystalMay
+|b5=Eiritel
+|b6=JAM
+|b7=KawaiiSocks
+|b8=Maelstorm
+|b9=Mortalles
+|b10=PIVOVAR
+|b11=Santa
+|b12=y0nd
+|b13=Grayne
+}}
+{{box|break|padding=2em}}
+{{BroadcasterCard
+|position=Observer|lang=Russian
+|b1=WinG2Kana
+|b2=GrandUrahara
+}}
+{{box|end}}
+<hr>
+The Russian broadcast talent for '''Okko''' was announced on September 17, 2026.<ref>{{cite web|url=https://t.me/okkodota2/2299|title=ÐÑÐ¸ÑÐ»Ð¾ Ð²ÑÐµÐ¼Ñ Ð½Ð°ÑÐ¸Ñ ÑÐ°Ð»Ð°Ð½ÑÐ¾Ð² Ð½Ð° PGL Wallachia Season 9|trans_title=The time has come our talents to shine at PGL Wallachia Season 9|language={{Flag|ru}} Russian|author=Okko ÐÐ¸Ð±ÐµÑ Dota 2|author-link=Okko|date=2026-09-17}}</ref>
+{{box|start|padding=2em}}
+{{BroadcasterCard
+|position=Host|lang=Russian
+|b1=Vasilisa
+|b2=1ceN1ce
+}}
+{{BroadcasterCard
+|position=Analyst|lang=Russian
+|b1=LighTofHeaveN
+|b2=Petushara
+|b3=Serenada
+|b4=Smiling Knight
+}}
+{{box|break|padding=2em}}
+{{BroadcasterCard
+|position=Commentator|lang=Russian
+|b1=Adekvat
+|b2=Cloud Fox
+|b3=DedOk
+|b4=Faster
+|b5=gexsun
+|b6=LanigirO
+|b7=Smile
+|b8=Taroom
+|b9=Vanskor
+|b10=ya_sulen
+}}
+{{box|end}}
+
+{{Tabs dynamic/tab|3}}
+{{BroadcasterCard
+|position=Host|lang=Spanish
+|b1=Tio Inka
+}}
+{{BroadcasterCard
+|position=Analyst/Commentator|lang=Spanish
+|b1=YoloSergio
+|b2=Luckysor
+|b3=FalcoStyle
+|b4=Maverick
+|b5=D1smar
+|b6=Tio Inka
+}}
+{{Tabs dynamic/end}}
+
+===Miscellaneous===
+{{Tabs dynamic|name1=Interview|name2=Preview|name3=Conclusion|name4=Spotlight|name5=Other}}
+{{Tabs dynamic/tab|1}}
+{{ExternalMediaList|event={{PAGENAME}}|type=interview|dynamic=false|show_usuk=true}}
+{{Tabs dynamic/tab|2}}
+{{ExternalMediaList|event={{PAGENAME}}|type=preview|dynamic=false|show_usuk=true}}
+{{Tabs dynamic/tab|3}}
+{{ExternalMediaList|event={{PAGENAME}}|type=conclusion|dynamic=false|show_usuk=true}}
+{{Tabs dynamic/tab|4}}
+{{ExternalMediaList|event={{PAGENAME}}|type=Spotlight|dynamic=false|show_usuk=true}}
+{{Tabs dynamic/tab|5}}
+{{ExternalMediaList|event={{PAGENAME}}|type=miscellaneous|dynamic=false|show_usuk=true}}
+{{Tabs dynamic/end}}
+----
+===Statistics Overview===
+====Hero Stats====
+{{Hero statistics
+|statspage={{#var:home}}/Statistics
+|tournament={{#var:home}}/Group_Stage
+}}
+
+====Country Representation====
+{{Country representation}}
+
+==References==
+{{reflist}}

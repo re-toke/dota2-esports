@@ -30,4 +30,11 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: node scripts/sync-liquipedia-cache.js
+
+      # ★ P3.0（2026-10-26）：bracket 结构 + Match 页 → lp:br:<bracketId>
+      - name: Sync brackets
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node scripts/sync/sync-liquipedia-brackets.js
 # re-index 2026-09-11

@@ -836,30 +836,56 @@ function fetchScheduledLocal(slug, cacheKey) {
 //     curation.structureSlug（新增可选字段）→ curation.scheduledMatchesSlug → 主 slug。
 //     curation 未配 structureSlug 且 scheduledMatchesSlug 是子页面时解析结果可能为空 —— 空即不展示，无副作用。
 // 解析在客户端本地进行（fetchPageWikitext 自带 EF 抓取路径），不新增服务端端点。
-// 返回 { groups: [{ name, teams: [{rank,name,placement}] }], brackets: [{ id, type, section, rounds }] }
+// 返回 { groups: [{ name, teams: [{rank,name,placement}] }], brackets: [{ id, type, section, rounds, slots }] }
+// ★ 2026-10-26（P3.0）：groups 与 brackets 拆成两组独立数据源：
+//   groups ← structureSlug / scheduledMatchesSlug（TI = Swiss_Standings）
+//   brackets ← bracketSlug > structureSlug > scheduledMatchesSlug > <base>/Main Event > <base>/Playoffs > base
+//   各自失败不影响对方；bracket 页取「第一个含 {{Bracket}} 的候选页」。
 function getLeagueStructure(name, opts) {
   if (!ENABLED || !name) return Promise.resolve({ groups: [], brackets: [] });
   var curationEvent = null;
   try { curationEvent = require('./curation').curatedEventFor(name, { game: 'dota2' }); } catch (e) {}
-  var slug = (curationEvent && (curationEvent.structureSlug || curationEvent.scheduledMatchesSlug)) ||
-             liquipediaSlugFor(name);
-  var cacheKey = 'liquipedia_structure_' + consensus.normName(slug);
+  var baseSlug = (curationEvent && curationEvent.liquipediaSlug) || liquipediaSlugFor(name);
+  var groupsSlug = (curationEvent && (curationEvent.structureSlug || curationEvent.scheduledMatchesSlug)) || baseSlug;
+
+  var bracketCands = [];
+  var hitSlug = '';
+  function addSlug(s) { if (s && bracketCands.indexOf(s) < 0) bracketCands.push(s); }
+  if (curationEvent) addSlug(curationEvent.bracketSlug);
+  addSlug(curationEvent && curationEvent.structureSlug);
+  addSlug(curationEvent && curationEvent.scheduledMatchesSlug);
+  if (baseSlug) { addSlug(baseSlug + '/Main Event'); addSlug(baseSlug + '/Playoffs'); }
+  addSlug(baseSlug);
+
+  var cacheKey = 'liquipedia_structure_v2_' + consensus.normName(name);
   var force = !!(opts && opts.force);
   var cached = cache.get(cacheKey, CACHE_TTL_SCHEDULE);
   if (cached && !force) return Promise.resolve(cached);
-  return fetchPageWikitext(slug)
-    .then(function (wikitext) {
-      if (!wikitext) return { groups: [], brackets: [] };
-      var structure = {
-        groups: LiquiParse.parseGroupStandings(wikitext),
-        brackets: LiquiParse.parseBrackets(wikitext)
-      };
-      if (structure.groups.length || structure.brackets.length) {
-        try { cache.set(cacheKey, structure, CACHE_TTL_SCHEDULE); } catch (e) {}
-      }
-      return structure;
-    })
-    .catch(function () { return { groups: [], brackets: [] }; });
+
+  var groupsP = fetchPageWikitext(groupsSlug)
+    .then(function (wt) { return wt ? LiquiParse.parseGroupStandings(wt) : []; })
+    .catch(function () { return []; });
+
+  var bracketsP = (function tryAt(i) {
+    if (i >= bracketCands.length) return Promise.resolve([]);
+    return fetchPageWikitext(bracketCands[i]).then(function (wt) {
+      var list = (wt && LiquiParse.parseBrackets(wt)) || [];
+      if (list.length) { hitSlug = bracketCands[i]; return list; }
+      return tryAt(i + 1);
+    }).catch(function () { return tryAt(i + 1); });
+  })(0);
+
+  return Promise.all([groupsP, bracketsP]).then(function (r) {
+    var structure = {
+      groups: r[0] || [],
+      brackets: r[1] || [],
+      bracketSlug: hitSlug || ''
+    };
+    if (structure.groups.length || structure.brackets.length) {
+      try { cache.set(cacheKey, structure, CACHE_TTL_SCHEDULE); } catch (e) {}
+    }
+    return structure;
+  }).catch(function () { return { groups: [], brackets: [] }; });
 }
 
 // §8.3 战队 Logo（2026-07-29）：OpenDota logo_url 为空 + STRATZ 无数据时的兜底源。
@@ -933,6 +959,27 @@ function getTeamLogo(name) {
 // O-11（2026-08-15）：listAllTournaments 已删（0 业务引用）；cloudProxy.liquipediaListTournamentsProxy
 //   与服务端 handler 防御性保留（未来恢复赛事枚举能力时成本低）。
 
+// ★ P3.0（2026-10-26）：读取 CI 预生成的 bracket JSON（aggregation_cache key = lp:br:<bracketId>）。
+//   运行时零 LP 依赖：CI 抓 wikitext + Match 页 → 结构化 JSON；客户端只读缓存。
+function getLeagueBracket(bracketId) {
+  if (!bracketId) return Promise.resolve(null);
+  var key = 'lp:br:' + bracketId;
+  try {
+    var sb = require('./supabaseClient.js');
+    if (!sb || typeof sb.enabled !== 'function' || !sb.enabled()) return Promise.resolve(null);
+    return sb.rest('aggregation_cache', { select: 'payload,expire_at', eq: { key: key }, limit: 1 })
+      .then(function (rows) {
+        var row = rows && rows[0];
+        if (!row || !row.payload) return null;
+        if (row.expire_at && Date.parse(row.expire_at) < Date.now()) return null;
+        return typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload;
+      })
+      .catch(function () { return null; });
+  } catch (e) {
+    return Promise.resolve(null);
+  }
+}
+
 module.exports = {
   ENABLED: ENABLED,
   getLeagueMetadata: getLeagueMetadata,
@@ -940,6 +987,7 @@ module.exports = {
   getTeamRoster: getTeamRoster,
   getScheduledMatches: getScheduledMatches,
   getLeagueStructure: getLeagueStructure,   // P3（2026-08-31）：小组积分 + 淘汰赛对阵结构
+  getLeagueBracket: getLeagueBracket,       // P3.0：CI 预生成的 bracket JSON（只读缓存）
   getTeamLogo: getTeamLogo,
   parseParticipants: LiquiParse.parseParticipants  // 2026-07-28 导出供单元测试直接调用（单一来源：liquipedia-parse.js）
 };
