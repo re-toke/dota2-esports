@@ -31,6 +31,121 @@ assert(sn.normalizeTerminal(stillLive) === false && stillLive.phase === 'live', 
 const upcoming = { phase: 'upcoming', score1: 2, score2: 0, boType: 'BO3' };
 assert(sn.normalizeTerminal(upcoming) === false, '非 live 不处理');
 
+// ===== 4b. P1b：TBD / 去重键 / 模糊匹配 / 占位覆盖 =====
+assert(sn.isTbd('TBD') && sn.isTbd('') && sn.isTbd('待定') && sn.isTbd('To be determined'), 'TBD 识别（含空串/中文/英文短语）');
+assert(sn.isTbd('Team Secret') === false, '真实队名不判 TBD');
+assert(sn.dedupeKey('A', 'TBD') === null, '含 TBD → 不生成去重键');
+assert(sn.dedupeKey('Team Spirit', 'BetBoom Team') ===
+  sn.normalizeTeamNameForDedup('Team Spirit') + '__' + sn.normalizeTeamNameForDedup('BetBoom Team'),
+  '去重键使用统一归一化口径');
+assert(sn.fuzzyMatchName('Team Falcons', 'Falcons') === true, '模糊匹配：去后缀后全等');
+assert(sn.fuzzyMatchName('Nigma Galaxy', 'Nigma') === true, '模糊匹配：包含关系');
+assert(sn.fuzzyMatchName('OG', 'XG') === false, '短名（<3）不模糊匹配');
+
+const _nk = sn.normalizeTeamNameForDedup;
+const _k1 = _nk('Team Yandex') + '__' + _nk('Natus Vincere');
+const _keys = new Map([[_k1, 1000]]);
+const _times = new Map([[_k1, [1000, 5000]]]);
+assert(sn.placeholderCoveredByReal({ team1Name: 'Team Yandex', team2Name: 'TBD', startTime: 1000 + 3600 }, _keys, _times) === true,
+  '占位卡：共同方严格相等 + 时间差<2h → 已覆盖');
+assert(sn.placeholderCoveredByReal({ team1Name: 'Team Yandex', team2Name: 'TBD', startTime: 1000 + 5 * 3600 }, _keys, _times) === false,
+  '占位卡：时间差 5h → 不覆盖（保留）');
+assert(sn.placeholderCoveredByReal({ team1Name: 'TBD', team2Name: 'TBD', startTime: 1000 }, _keys, _times) === false,
+  '双方 TBD → 不判定覆盖');
+assert(sn.placeholderCoveredByReal({ team1Name: 'A', team2Name: 'B', startTime: 1000 }, _keys, _times) === false,
+  '非占位卡 → 不处理');
+
+// ===== 4c. P1b：开赛证据 / BO 上限（从页面 live 过滤抽出）=====
+const NOW = 2000;
+assert(sn.hasKickoffProof({ score1: 1, score2: 0, lastTime: 1000 }, NOW) === true, 'E1 比分非 0:0 → 有开赛证据');
+assert(sn.hasKickoffProof({ matchIds: [123], lastTime: 1000 }, NOW) === true, 'E2 真实 matchId → 有开赛证据');
+assert(sn.hasKickoffProof({ games: [{ radiant_win: false }], lastTime: 1000 }, NOW) === true, 'E3 games 已开赛 → 有开赛证据');
+assert(sn.hasKickoffProof({ lastTime: 2000 }, 2000 + 20 * 60) === true, 'E4 规划时间过 15min → 放行（容忍数据延迟）');
+assert(sn.hasKickoffProof({ lastTime: 2000 }, 2000 + 5 * 60) === false, '无证据且仅过 5min → 降级（不顺延误判 LIVE）');
+assert(sn.hasKickoffProof({ lastTime: 0 }, NOW) === false, '无开赛时间 → 无证据');
+
+assert(sn.isSeriesEndedByBoLimit({ scoreA: 2, scoreB: 1, boType: 'BO3' }) === true, 'BO3 2:1 → 达上限');
+assert(sn.isSeriesEndedByBoLimit({ scoreA: 1, scoreB: 1, boType: 'BO3' }) === false, 'BO3 1:1 → 未达上限');
+assert(sn.isSeriesEndedByBoLimit({ scoreA: 1, scoreB: 1, boType: 'BO2' }) === true, 'BO2 1:1 → 打满 2 局（达上限）');
+assert(sn.isSeriesEndedByBoLimit({ scoreA: 1, scoreB: 0, boType: 'BO2' }) === false, 'BO2 1:0 → 未打满');
+assert(sn.isSeriesEndedByBoLimit({ scoreA: 3, scoreB: 2, boType: 'BO5' }) === true, 'BO5 3:2 → 达上限');
+assert(sn.isSeriesEndedByBoLimit({ scoreA: 2, scoreB: 2, boType: 'BO5' }) === false, 'BO5 2:2 → 未达上限');
+assert(sn.isSeriesEndedByBoLimit({ seriesType: 1, scoreA: 2, scoreB: 0 }) === true, 'seriesType=1 → BO3 2:0 达上限');
+assert(sn.isSeriesEndedByBoLimit({ scoreA: 0, scoreB: 0, boType: 'BO3' }) === false, '0:0 → 不判');
+
+// ===== 4d. P1b：LP 时间窗过滤 =====
+const BJ = 8 * 3600;
+const _now = 1700000000;
+const _todayStart = Math.floor((_now + BJ) / 86400) * 86400 - BJ;
+const _win = (arr) => sn.filterLiquipediaCardsByWindow(arr, _now, BJ);
+assert(_win([{ phase: 'live', lastTime: _now - 2 * 3600, score1: 1, score2: 0, boType: 'BO3' }]).length === 1,
+  'LIVE：2h 前开赛且有比分 → 保留');
+assert(_win([{ phase: 'live', lastTime: _now - 7 * 3600, score1: 1, score2: 0, boType: 'BO3' }]).length === 0,
+  'LIVE：开赛超 6h → 剔除');
+assert(_win([{ phase: 'live', lastTime: _now - 5 * 60, boType: 'BO3' }]).length === 0,
+  'LIVE：刚过 5min 且无开赛证据 → 剔除（顺延等待）');
+assert(_win([{ phase: 'live', lastTime: _now - 25 * 60, boType: 'BO3' }]).length === 1,
+  'LIVE：过 15min 容忍窗 → 保留');
+assert(_win([{ phase: 'live', lastTime: _now - 2 * 3600, scoreA: 2, scoreB: 0, boType: 'BO3' }]).length === 0,
+  'LIVE：比分达 BO 上限 → 剔除（归 recent）');
+assert(_win([{ phase: 'upcoming', lastTime: _todayStart + 3600, boType: 'BO3' }]).length === 1,
+  'UPCOMING：今天内 → 保留');
+assert(_win([{ phase: 'upcoming', lastTime: _todayStart + 4 * 86400, boType: 'BO3' }]).length === 0,
+  'UPCOMING：超 3 天 → 剔除');
+assert(_win([{ phase: 'recent', lastTime: _todayStart - 10 * 86400, boType: 'BO3' }]).length === 1,
+  'RECENT：全部保留');
+
+// ===== 4e. P1b-2：OD 归一 / LP 映射（golden 关键字段）=====
+const _fmtStub = (m) => ({
+  match_id: m.match_id, radiantWin: m.radiant_win, aWin: false, bWin: false,
+  time: 't', duration: '', radiantName: m.radiant_team_name, direName: m.dire_team_name
+});
+const _odRaw = [
+  { match_id: 1, radiant_team_id: 11, dire_team_id: 22, radiant_team_name: 'Alpha', dire_team_name: 'Beta', series_id: 99, start_time: 1000, radiant_win: true, duration: 100, game_mode: 22, lobby_type: 2 },
+  { match_id: 2, radiant_team_id: 22, dire_team_id: 11, radiant_team_name: 'Beta', dire_team_name: 'Alpha', series_id: 99, start_time: 2000, radiant_win: false, duration: 100, game_mode: 22, lobby_type: 2 }
+];
+const _od = sn.normalizeOpenDotaSeries(_odRaw, { groupSeries: sources.groupSeries, fmt: _fmtStub, nowSec: 5000 });
+assert(_od.length === 1, 'OD 归一：同一 series_id 聚合为 1 张卡');
+assert(_od[0].games.length === 2, 'OD 归一：2 局都经 fmt 映射');
+assert(_od[0].sources.join(',') === 'od', 'OD 归一：provenance=od');
+assert(_od[0].phase === 'recent' && _od[0].scoreA === 2 && _od[0].scoreB === 0, 'OD 归一：比分/阶段来自 groupSeries');
+
+const _realNow = Math.floor(Date.now() / 1000);
+const _odUp = sn.normalizeOpenDotaSeries([{
+  match_id: 3, radiant_team_id: 11, dire_team_id: 22, radiant_team_name: 'Alpha', dire_team_name: 'Beta',
+  series_id: 100, start_time: _realNow + 3600, radiant_win: null, duration: 0, game_mode: 22, lobby_type: 2
+}], { groupSeries: sources.groupSeries, fmt: _fmtStub, nowSec: _realNow });
+assert(_odUp.length === 1 && !!_odUp[0].scheduledTimeText && !!_odUp[0].countdownText,
+  'OD 归一：upcoming 卡补 scheduledTimeText/countdownText');
+
+const _now2 = 1700000000;
+const _lpUp = sn.mapLiquipediaCards([{
+  team1Name: 'Alpha', team2Name: 'Beta', startTime: _now2 + 3600,
+  phase: 'upcoming', boType: 'BO3', score1: 0, score2: 0, matchIds: []
+}], { nowSec: _now2 });
+assert(_lpUp.length === 1, 'LP 映射：输出 1 张卡');
+assert(_lpUp[0].sources.join(',') === 'lp', 'LP 映射：provenance=lp');
+assert(_lpUp[0].isUpcoming && _lpUp[0].phase === 'upcoming' && _lpUp[0].countdownText === '1小时后',
+  'LP 映射：upcoming 倒计时（3600s）');
+assert(_lpUp[0].boType === 'BO3' && _lpUp[0].boLabel === '三局两胜' && _lpUp[0].boTagCls === 'bo-bo3',
+  'LP 映射：BO 展示字段');
+assert(/^liq-.*-\d+$/.test(_lpUp[0].key), 'LP 映射：稳定 key（分钟桶）');
+
+const _lpDecided = sn.mapLiquipediaCards([{
+  team1Name: 'Alpha', team2Name: 'Beta', startTime: _now2 - 3600,
+  phase: 'live', boType: 'BO3', score1: 2, score2: 1, matchIds: []
+}], { nowSec: _now2 });
+assert(_lpDecided[0].phase === 'recent' && _lpDecided[0].isLive === false,
+  'LP 映射：2:1 BO3 → phase=recent 且 isLive=false');
+assert(_lpDecided[0].isRecent === true, 'LP 映射：1h 前结束 → isRecent=true');
+
+const _lpTbd = sn.mapLiquipediaCards([{
+  team1Name: 'Team Yandex', team2Name: 'TBD', startTime: _now2 - 1200,
+  phase: 'live', boType: 'BO3', score1: 0, score2: 0, matchIds: []
+}], { nowSec: _now2 });
+assert(_lpTbd[0].phase === 'upcoming' && _lpTbd[0].isLive === false,
+  'LP 映射：TBD 对阵不得判 live → upcoming');
+
 // ===== 4. provenance：标签去重 / 并集 =====
 const s1 = { sources: ['od'] };
 sn.addSource(s1, 'od');
