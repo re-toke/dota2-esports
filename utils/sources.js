@@ -36,6 +36,7 @@ const names = require('./names.js');
 const api = require('./api.js');
 const stratz = require('./stratz.js');
 const seriesStatus = require('./seriesStatus.js');   // ★ P0-A：终局判据单一纯实现（见 seriesStatus.js 的收敛清单）
+const seriesNormalize = require('./seriesNormalize.js');   // ★ P1：比分形状归一 + provenance 标签
 const steam = require('./steam.js');
 const liquipedia = require('./liquipedia.js');
 const consensus = require('./consensus.js');
@@ -1434,6 +1435,8 @@ function groupSeries(matches) {
       // radiantLogo/direLogo：初始空字符串，由 league-detail.js enrichTeamLogos 异步注入
       isUpcoming: isUpcoming,
       phase: phase,
+      // ★ P1：来源标记（provenance）—— OpenDota 聚合卡
+      sources: ['od'],
       isMulti: games.length > 1,
       radiantName: radiantName,
       direName: direName,
@@ -1918,6 +1921,8 @@ function absorbSettledGames(openSeriesList, liqSeries, teamIdNameResolver) {
     card.games = games;
     card.scoreA = scoreA;
     card.scoreB = scoreB;
+    // ★ P1：LP 卡吸收了 OpenDota 已结算局 ⇒ 来源同时包含 lp + od
+    seriesNormalize.addSource(card, 'od');
     card.radiantTeamId = aId;  // LP A=team1 对应的 OpenDota team_id（logo/增强用）
     card.direTeamId = bId;
     const seen = new Set();
@@ -2135,6 +2140,9 @@ function dedupeLiveSeries(seriesList) {
       if (_sameMatch(cards[i], cards[j])) {
         var keeper = _keep(cards[i], cards[j]);
         var loser = (keeper === cards[i]) ? cards[j] : cards[i];
+        // ★ P1：保留卡继承被丢弃卡的来源标记（如 LP 占位卡被 OD 真名卡取代时仍标注 lp+od）
+        var mergedSources = seriesNormalize.unionSources([keeper.s, loser.s]);
+        if (mergedSources.length) keeper.s.sources = mergedSources;
         drop.push(loser.s);
       }
     }
@@ -2244,7 +2252,9 @@ function mergeSplittedBo3Series(allSeries) {
       seriesType: stype != null ? stype : null,
       games: sorted.map(function (s) { return s.games[0]; }),
       firstTime: sorted[0].firstTime || firstT,
-      lastTime: sorted[sorted.length - 1].lastTime || firstT
+      lastTime: sorted[sorted.length - 1].lastTime || firstT,
+      // ★ P1：被合并的各卡来源取并集
+      sources: seriesNormalize.unionSources(sorted)
     });
     sorted.forEach(function (s) { if (s.key) removedKeys[s.key] = true; });
     added.push(merged);
@@ -2606,6 +2616,8 @@ function mergeLiquipediaGroup(group) {
     //   首页 LP 卡点击跳转联赛详情丢目标（_cardFromSeries 依赖 s.leagueId）。
     leagueId: base.leagueId || 0,
     // 标记：由聚合产生，供调试 / 可选渲染小场（各局原始记录）
+    // ★ P1：来源标记（provenance）—— Liquipedia 聚合卡
+    sources: ['lp'],
     _aggregated: true,
     _games: group
   };

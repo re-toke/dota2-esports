@@ -1339,17 +1339,21 @@ check('names：★ 全库禁止再内联该规则（白名单外一律 FAIL）',
   check('★ 源码守卫：比分终局归一必须同时改 phase 与 isLive（防半修回归）', () => {
     const fs = require('fs');
     const path = require('path');
-    const src = fs.readFileSync(path.join(__dirname, '..', '..',
+    // ★ 2026-10-25（P1a）：归一逻辑已抽到 utils/seriesNormalize.js，页面只调用一次；
+    //   守卫改为「页面必须调用 normalizeTerminal」+「helper 内两个字段必须同时写」。
+    const pageSrc = fs.readFileSync(path.join(__dirname, '..', '..',
       'subpackages', 'detail', 'league-detail', 'league-detail.js'), 'utf8');
-    const i = src.indexOf("s.phase = 'recent';");
-    assert(i > 0, "未找到 `s.phase = 'recent';`（是否被改名/删除？）");
-    // 取该赋值之后的窗口（★ 需够宽：归一分支内夹着较长注释，实测 400 字符不够）
-    const win = src.slice(i, i + 2000);
-    assert(win.indexOf('s.isLive = false;') >= 0,
-      '★ 归一 phase 后必须同步 `s.isLive = false;`（否则同卡 isLive=true + phase=recent 矛盾）');
-    // ★ 敏感性：窗口缩到 30 字符（不含 isLive 同步）⇒ 判据应为 false（证明它真在看这段代码）
-    const wrong = src.slice(i, i + 30);
-    assert(!(wrong.indexOf('s.isLive = false;') >= 0),
+    assert(pageSrc.indexOf('seriesNormalize.normalizeTerminal(s)') >= 0,
+      '页面必须调用 seriesNormalize.normalizeTerminal(s)（不得改回就地两行手写）');
+    const helperSrc = fs.readFileSync(path.join(__dirname, '..', '..', 'utils', 'seriesNormalize.js'), 'utf8');
+    const i = helperSrc.indexOf("series.phase = 'recent';");
+    assert(i > 0, "未找到 `series.phase = 'recent';`（是否被改名/删除？）");
+    const win = helperSrc.slice(i, i + 200);
+    assert(win.indexOf('series.isLive = false;') >= 0,
+      '★ 归一 phase 后必须同步 `series.isLive = false;`（否则同卡 isLive=true + phase=recent 矛盾）');
+    // ★ 敏感性：窗口缩到 10 字符（不含 isLive 同步）⇒ 判据应为 false（证明它真在看这段代码）
+    const wrong = helperSrc.slice(i, i + 10);
+    assert(!(wrong.indexOf('series.isLive = false;') >= 0),
       '★ 敏感性：窗口内无 isLive 同步时判据必须失效（证明是这段代码在发挥作用）');
   });
 

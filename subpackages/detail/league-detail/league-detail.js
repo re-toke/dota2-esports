@@ -1,7 +1,7 @@
 const api = require('../../../utils/api.js');
 const util = require('../../../utils/util.js');
 const sources = require('../../../utils/sources.js');
-const seriesStatus = require('../../../utils/seriesStatus.js');   // ★ P0-A：终局判据单一纯实现
+const seriesNormalize = require('../../../utils/seriesNormalize.js');   // ★ P1：比分形状归一 + provenance
 // ★ 2026-09-20：队名「形状归一」单一实现（原先内联，须与快照 byName 键逐字一致）
 const names = require('../../../utils/names.js');
 // ★ 2026-09-21：队标本地化兜底（绕开 UGC 的 octet-stream MIME；见 utils/logoLocal.js）
@@ -166,23 +166,6 @@ function mergeMetadataWithFallback(meta, name, leagueId) {
   merged.participants = arr;
   merged.participantsCount = (count != null && isFinite(count)) ? count : null;
   return merged;
-}
-
-// ★★ 2026-09-23：由**比分**判定系列是否已终局（与来源 phase、BO 推导均无关）。
-//   实测依据：用户 Console 诊断 + 页面观察 —— 2:1（BO3）却仍被判 live ✗。
-//   规则：max(scoreA,scoreB) >= 2 ⇒ 至少 2 胜 ⇒ BO3 终局；BO5/BO2 的 2 胜不足以终局 ⇒ 不判（宁漏勿错）。
-//   ⚠️ 无比分（0:0）时一律不判 —— 不改变原有行为。
-function _decidedByScore(m, bo) {
-  if (!m) return false;
-  // ★★ 2026-09-26（P0-A）：判据**收敛到单一纯实现** `utils/seriesStatus.js`
-  //   （本页只保留"判定成立时的日志包装"，规则本身不再在本文件重复实现）。
-  var decided = seriesStatus.isDecidedByScore(m.scoreA, m.scoreB, bo);
-  if (decided) {
-    console.log('[league-detail] 比分达终局（' + (Number(m.scoreA) || 0) + ':' + (Number(m.scoreB) || 0) +
-      ' bo=' + (bo || 'unknown') + '）→ 判为已结束：' +
-      (m.teamA && m.teamA.name ? m.teamA.name : '') + ' vs ' + (m.teamB && m.teamB.name ? m.teamB.name : ''));
-  }
-  return decided;
 }
 
 Page({
@@ -1074,12 +1057,11 @@ Page({
               }
               // ★★ 2026-09-25：**先做「比分终局」归一，再算所有 phase 相关展示** ——
               //   LP 的 series phase 会滞后（对局已打完仍报 live）。此处把「比分已达 BO 终局」
-              //   （如 1:2 BO3，_decidedByScore）的 series 的 phase 归一为 recent，
+              //   （如 1:2 BO3，seriesNormalize.isDecided）的 series 的 phase 归一为 recent，
               //   让下方 liqScoreACls / liqElapsedSec / 卡片 LIVE 徽标全部一致。
               //   （09-23 的修复只改了 isLive 一个字段，分段与徽标仍用原始 phase ⇒ **只修了一半**，
               //     实测：详情页 1:2 BO3 仍标 LIVE 挂在「进行中」段，首页同一场却标「已结束 0:0」。）
-              if (m.phase === 'live' && _decidedByScore(m, m.boType)) {
-                m.phase = 'recent';
+              if (seriesNormalize.normalizeTerminal(m)) {
                 console.log('[league-detail] 比分达终局（LP）→ phase 归一为 recent');
               }
               // ★★ 2026-09-27（用户实测修复）：「**对阵未定（TBD）的排期条目不得视为 live**」。
@@ -1150,13 +1132,15 @@ Page({
                 //   用户实测：该对局比分已 2:1（BO3）却仍显示「进行中」✗；而本页 L1112-1118 的
                 //   「④ 未达 BO 上限」规则依赖 boGames，BO 一旦被判大即失效 ✗。
                 //   判据：max(比分) >= 2 ⇒ 至少赢下 2 局 ⇒ BO3 必然终局（BO5/BO2 跳过，不误杀）。
-                isLive: (m.phase === 'live') && !_decidedByScore(m, m.boType),
+                isLive: (m.phase === 'live') && !seriesNormalize.isDecided(m, m.boType),
 
                 isRecent: liqIsRecent,
                 // ★ P0-A：身份来源透传（'series_id' 权威 / 'heuristic' 软关联推断 / 'standalone' 单局）
                 identitySource: m.identitySource || null,
                 isUpcoming: m.phase === 'upcoming',
                 phase: m.phase,
+                // ★ P1：来源标记（provenance）—— Liquipedia 排期卡
+                sources: ['lp'],
                 isMulti: m.boType !== 'BO1',
                 // ★ 2026-08-04（v1.1 二次修复）：透传吸收所需字段 —— 此前缺失导致 absorbSettledGames 恒跳过、
                 //   LIVE 比分永远显示 LP score 0:0（模拟脚本手工补了字段掩盖了此断点，真机 0:0 实证）
@@ -1384,22 +1368,13 @@ Page({
         // ★ v3 优化项28：懒计算 — 只对当前页可见 series 计算新字段（在 setData 前计算）
         const liveList = [], upcomingList = [], recentList = [];
         allSeries.forEach(function (s) {
-          // ★★ 2026-09-25：分段前也做「比分终局」归一（与 LP map 内同一判据 _decidedByScore）——
+          // ★★ 2026-09-25：分段前也做「比分终局」归一（与 LP map 内同一判据 seriesNormalize.normalizeTerminal）——
           //   覆盖**非 LP 来源**的 series（OpenDota / steam 直连等）：它们不经过上方 LP map，
           //   若 phase 滞后为 live 而比分已达终局，会继续被分进「进行中」段并挂 LIVE 徽标。
           //   （实测截图：详情页 1:2 BO3 仍标 LIVE，首页同场却标「已结束 0:0」——两页口径不一致。）
           //   写回 s.phase ⇒ 分段、WXML 分隔符/徽标、isLive 三处同源（单一事实源）。
           //   对象由本次 buildSeriesFromSources 新建（非跨页共享缓存），原地改写安全。
-          if (s.phase === 'live' && _decidedByScore(s, s.boType)) {
-            s.phase = 'recent';
-            // ★★ 2026-09-27（用户实测修复）：**必须同步 `isLive`** —— 上一条注释声称
-            //   「写回 s.phase ⇒ 分段 / WXML 徽标 / **isLive** 三处同源」，但实现只写了 `s.phase`
-            //   ⇒ 实测出现**同卡字段矛盾**：`isLive === true` 且 `phase === 'recent'`
-            //   （例：`s1147599`）⇒ 任何按 `isLive` 判断的逻辑会与按 `phase` 渲染的界面不一致。
-            //   ★ 这也是本项目**同一类 bug 的另一半**：L1100 处曾记录"09-23 的修复**只改了 isLive 一个字段**，
-            //     分段与徽标仍用原始 phase ⇒ 只修了一半" ⇒ 现在轮到"只改 phase 不改 isLive"。
-            //   ⇒ 两个字段在归一后必须**同时**更新（本页 LP 路径天然一致：其 `isLive` 由归一后的 phase 算出）。
-            s.isLive = false;
+          if (seriesNormalize.normalizeTerminal(s)) {
             console.log('[league-detail] 比分达终局 → phase 归一为 recent（并同步 isLive=false）：' +
               (s.team1Name || s.teamA || '') + ' vs ' + (s.team2Name || s.teamB || ''));
           }
