@@ -84,7 +84,7 @@
 .info-fresh { color: var(--text-4); }
 .info-toggle {
   margin-top: var(--space-1);
-  min-height: 64rpx;
+  min-height: 88rpx;          /* P5：触控目标 88rpx（原 64rpx） */
   display: flex;
   align-items: center;
   font-size: var(--fs-caption);
@@ -223,8 +223,11 @@
 }
 .seg-item {
   flex: 1;
-  text-align: center;
+  min-height: 88rpx;          /* P5：触控目标 88rpx（44px WCAG AA） */
+  box-sizing: border-box;
   padding: 14rpx 0;
+  line-height: 60rpx;         /* 88 - 上下 padding，保持原「文字 + 计数」单行排布 */
+  text-align: center;
   font-size: var(--fs-label);
   color: var(--text-2);
   border-radius: var(--radius-sm);
@@ -1355,7 +1358,8 @@
   background: var(--card-bg, #FFFFFF);
   font-size: var(--fs-caption);
   color: var(--text-2);
-  min-height: 56rpx;
+  min-height: 64rpx;          /* P5：正文 chip 触控高度（原 56rpx 偏小） */
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
 }

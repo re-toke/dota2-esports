@@ -229,7 +229,8 @@ Page({
     lpGroups: [],            // [{ name, teams: [{rank,name,placement}] }]
     lpBrackets: [],          // [{ id, type, section, rounds: [{label, matches}] }]
     lpStructureLoading: false,
-    lpStructureLoaded: false
+    lpStructureLoaded: false,
+    lpStructureError: false   // ★ P5：结构拉取失败 → 淘汰赛 Tab 区分「失败可重试」与「真无数据」
   },
 
   onLoad(options) {
@@ -2732,8 +2733,9 @@ Page({
   },
 
   // P3：拉取 Liquipedia 结构页（小组积分 + 淘汰赛对阵），失败静默（排名 Tab 仍有 OpenDota 聚合）
+  // P5：失败时置 lpStructureError，淘汰赛 Tab 显示「加载失败 + 重试」而非「暂无数据」
   loadStructure() {
-    this.setData({ lpStructureLoading: true });
+    this.setData({ lpStructureLoading: true, lpStructureError: false });
     liquipedia.getLeagueStructure(this.data.name).then((structure) => {
       const groups = (structure && structure.groups) || [];
       const brackets = (structure && structure.brackets) || [];
@@ -2758,8 +2760,14 @@ Page({
         try { this.loadBracketDetail(brackets); } catch (e) { /* 隔离 */ }
       });
     }).catch(() => {
-      this.setData({ lpStructureLoading: false, lpStructureLoaded: true });
+      this.setData({ lpStructureLoading: false, lpStructureLoaded: true, lpStructureError: true });
     });
+  },
+
+  // P5：淘汰赛结构加载失败后的重试（复位 loaded 以便 switchTab 逻辑不拦截）
+  retryStructure() {
+    this.setData({ lpStructureLoaded: false, bracketView: null });
+    this.loadStructure();
   },
 
   // P3.1：选主对战表 —— 优先 Playoffs，其次填充率最高，最后第一个

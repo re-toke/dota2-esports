@@ -53,7 +53,7 @@
       <text wx:if="{{updatedLabel}}" class="info-fresh">{{updatedLabel}}</text>
       <text wx:if="{{scheduleUpdatedLabel}}" class="info-fresh">赛程 {{scheduleUpdatedLabel}}</text>
     </view>
-    <view class="info-toggle" wx:if="{{formatNote || metadata.prizeRawText || metadata.liquipediaSlug || quality || sourceBadges.length || (nameInfo && nameInfo.differs)}}" bindtap="toggleInfoMore">
+    <view class="info-toggle" wx:if="{{formatNote || metadata.prizeRawText || metadata.liquipediaSlug || quality || sourceBadges.length || (nameInfo && nameInfo.differs)}}" bindtap="toggleInfoMore" aria-role="button" aria-label="{{showInfoMore ? '收起更多信息' : '展开更多信息'}}">
       <text>{{showInfoMore ? '收起 ▴' : '更多信息 ▾'}}</text>
     </view>
     <view class="info-more" wx:if="{{showInfoMore}}">
@@ -83,13 +83,13 @@
 
   <!-- 三 Tab 切换（C 风格 Tournament Center） -->
   <view class="seg">
-    <view class="seg-item {{tab === 'matches' ? 'active' : ''}}" bindtap="switchTab" data-key="matches">
+    <view class="seg-item {{tab === 'matches' ? 'active' : ''}}" bindtap="switchTab" data-key="matches" aria-role="tab" aria-label="对阵">
       对阵<text class="seg-count">{{totalSeries}}</text>
     </view>
-    <view class="seg-item {{tab === 'teams' ? 'active' : ''}}" bindtap="switchTab" data-key="teams">
+    <view class="seg-item {{tab === 'teams' ? 'active' : ''}}" bindtap="switchTab" data-key="teams" aria-role="tab" aria-label="参赛队伍">
       参赛队伍<text class="seg-count" wx:if="{{participantsList.length}}">{{participantsList.length}}</text>
     </view>
-    <view class="seg-item {{tab === 'playoffs' ? 'active' : ''}}" bindtap="switchTab" data-key="playoffs">淘汰赛</view>
+    <view class="seg-item {{tab === 'playoffs' ? 'active' : ''}}" bindtap="switchTab" data-key="playoffs" aria-role="tab" aria-label="淘汰赛">淘汰赛</view>
   </view>
 
   <skeleton wx:if="{{loading}}" type="detail" />
@@ -105,8 +105,8 @@
   <block wx:elif="{{tab === 'matches'}}">
     <!-- P2：「全部 / 淘汰赛」筛选（仅当出现淘汰赛阶段时显示） -->
     <view class="match-filter" wx:if="{{hasPlayoffSeries}}">
-      <text class="filter-chip {{!playoffOnly ? 'active' : ''}}" bindtap="setPlayoffFilter" data-on="0">全部</text>
-      <text class="filter-chip {{playoffOnly ? 'active' : ''}}" bindtap="setPlayoffFilter" data-on="1">淘汰赛</text>
+      <text class="filter-chip {{!playoffOnly ? 'active' : ''}}" bindtap="setPlayoffFilter" data-on="0" aria-role="button" aria-label="显示全部对阵">全部</text>
+      <text class="filter-chip {{playoffOnly ? 'active' : ''}}" bindtap="setPlayoffFilter" data-on="1" aria-role="button" aria-label="只看淘汰赛对阵">淘汰赛</text>
     </view>
     <!-- ★ v3 优化项26：cancelled 赛事提示 -->
     <view wx:if="{{cancelledNotice}}" class="cancelled-notice">
@@ -368,6 +368,7 @@
             <view class="brk-card {{item.empty ? 'is-empty' : ''}}"
                   wx:for="{{sec.cards}}" wx:for-item="item" wx:key="key"
                   style="left:{{item.x}}rpx;top:{{item.y}}rpx"
+                  aria-role="button" aria-label="{{item.team1}} 对 {{item.team2}}"
                   catchtap="openBracketMatch" data-id="{{item.matchId}}">
               <view class="brk-team {{item.winner === 'A' ? 'win' : ''}}">
                 <text class="brk-name {{item.tbd1 ? 'tbd' : ''}}">{{item.team1}}</text>
@@ -387,6 +388,13 @@
       </scroll-view>
       <view class="brk-hint" wx:if="{{bracketView.width > 700}}">左右滑动查看后续轮次</view>
     </view>
+    <view wx:elif="{{lpStructureError}}" class="hint-card-enhanced">
+      <view class="hint-title">淘汰赛加载失败</view>
+      <view class="hint-desc">Liquipedia 结构暂时拉取不到，可稍后重试</view>
+      <view class="retry-wrap">
+        <t-button theme="primary" size="small" bindtap="retryStructure">重试</t-button>
+      </view>
+    </view>
     <view wx:else class="hint-card-enhanced">
       <view class="hint-title">暂无淘汰赛数据</view>
       <view class="hint-desc">该赛事在 Liquipedia 暂无淘汰赛对阵结构</view>
@@ -394,7 +402,7 @@
 
     <!-- 小组积分（Liquipedia，默认折叠） -->
     <block wx:if="{{lpGroups.length > 0}}">
-      <view class="lp-section-title" bindtap="toggleGroups">
+      <view class="lp-section-title" bindtap="toggleGroups" aria-role="button" aria-label="{{showGroups ? '收起小组积分' : '展开小组积分'}}">
         小组积分（Liquipedia）<text class="section-toggle">{{showGroups ? '收起 ▴' : '展开 ▾'}}</text>
       </view>
       <block wx:if="{{showGroups}}">
