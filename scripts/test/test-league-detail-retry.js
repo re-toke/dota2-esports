@@ -209,6 +209,8 @@ const tick = () => new Promise((r) => setTimeout(r, 20));
   assert(/Bo3\/Bo5/i.test(String(boFixEv.format || '')), '补录：BLAST SLAM VII format 含 Bo3/Bo5');
   const ewcEv = curation.curatedEventFor('Esports World Cup 2026', { game: 'dota2' }) || {};
   assert(/循环小组赛\(Bo2\)/.test(String(ewcEv.format || '')), '补录：EWC 原有赛制不被覆盖');
+  const blast6 = curation.curatedEventFor('BLAST Slam VI', { game: 'dota2' }) || {};
+  assert(/\(Bo3\)/.test(String(blast6.format || '')), '人工覆盖：BLAST Slam VI 淘汰轮按 Bo3');
 
   // ----- 场景 4：源码守卫（WXML 分支与 handler 接线） -----
   const wxml = fs.readFileSync(path.join(PAGE_DIR, 'league-detail.wxml'), 'utf8');

@@ -3,6 +3,8 @@
 // 仅用于 curation 中「format 完全没有 BO 信息」的赛事；已有 BO 的赛事不会被覆盖。
 // 生成方式：批量抓 action=query revisions → parseBoFormat → 人工复核异常（BO2 混合赛制已剔除）。
 module.exports = {
+  // 2026-10-27：人工确认覆盖——LP 该页 Format 误写 Bo1（实为小组赛口径），淘汰轮按 Bo3
+  'BLAST Slam VI': '双败淘汰(Bo3)',
   '1win Essence II': '淘汰赛(BO3/BO5决赛)',
   'BLAST SLAM IX China Closed Qualifier': '封闭预选(BO3)',
   'BLAST Slam': '淘汰赛(BO3/BO5决赛)',
