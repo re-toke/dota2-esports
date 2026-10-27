@@ -203,6 +203,13 @@ const tick = () => new Promise((r) => setTimeout(r, 20));
   const noBoCards = inst3.data.bracketView.sections.reduce((a, s) => a.concat(s.cards), []);
   assert((noBoCards[0] || {}).boType === '', 'BO 未知：清空 BO1 占位（前端只显示时间）');
 
+  // 赛制 BO 补录表：已核实赛事生效、已有 BO 的赛事不被覆盖
+  const curation = require('../../utils/curation.js');
+  const boFixEv = curation.curatedEventFor('BLAST SLAM VII', { game: 'dota2' }) || {};
+  assert(/Bo3\/Bo5/i.test(String(boFixEv.format || '')), '补录：BLAST SLAM VII format 含 Bo3/Bo5');
+  const ewcEv = curation.curatedEventFor('Esports World Cup 2026', { game: 'dota2' }) || {};
+  assert(/循环小组赛\(Bo2\)/.test(String(ewcEv.format || '')), '补录：EWC 原有赛制不被覆盖');
+
   // ----- 场景 4：源码守卫（WXML 分支与 handler 接线） -----
   const wxml = fs.readFileSync(path.join(PAGE_DIR, 'league-detail.wxml'), 'utf8');
   assert(/wx:elif="\{\{lpStructureError\}\}"/.test(wxml), 'WXML：error 分支在真无数据分支之前');

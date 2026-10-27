@@ -1121,6 +1121,15 @@ function buildLookups(events, teams) {
 }
 
 // 本地兜底查找器（始终基于内置 CURATED_*，离线/首启可用）
+// 2026-10-27：赛制 BO 补录（来源 Liquipedia ==Format== 段，见 curationBoFormat.js）。
+// 只补「format 完全无 BO 信息」的赛事，已有 BO 的赛事不覆盖。
+try {
+  var _BO_FMT = require('./curationBoFormat.js');
+  CURATED_EVENTS.forEach(function (e) {
+    if (e && _BO_FMT[e.canonical] && !/Bo\s*\d/i.test(String(e.format || ''))) e.format = _BO_FMT[e.canonical];
+  });
+} catch (_boFmtErr) {}
+
 const LOCAL = buildLookups(CURATED_EVENTS, CURATED_TEAMS);
 
 function curatedEventFor(name, ctx) { return LOCAL.eventFor(name, ctx); }
