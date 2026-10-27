@@ -14,6 +14,7 @@ const auth = require('../../../utils/auth.js');
 const config = require('../../../utils/config.js');
 const remoteCuration = require('../../../utils/remoteCuration.js');
 const liquipedia = require('../../../utils/liquipedia.js');
+const liquiParse = require('../../../utils/liquipedia-parse.js');   // ★ 2026-10-27：赛制 BO 解析
 const cloudProxy = require('../../../utils/cloudProxy.js');   // ★ 2026-09-01 P0-3③：详情页 bundle 聚合
 const heroes = require('../../../utils/heroes.js');
 const logoCache = require('../../../utils/logoCache.js'); // Phase 1-⑦：persistNow onUnload
@@ -2857,8 +2858,48 @@ Page({
     this.setData({ showBracketSchedule: !this.data.showBracketSchedule });
   },
 
+  // 2026-10-27：LP bracket 槽位多数不写 bestof（默认 BO1 占位），会导致全显示 BO1。
+  // 这里按「对阵卡已定 BO」→「赛制文本」两路信号还原；显式声明（boDeclared）保持不动。
+  _resolveBracketBo(b) {
+    if (!b || !Array.isArray(b.slots)) return b;
+    const md = this.data.metadata || {};
+    // 赛制文本优先级：curation（中文，常含 Bo3/Bo5）→ LP metadata.format（多为英文无 BO）
+    let fmtText = '';
+    try {
+      const ev = remoteCuration.curatedEventFor(this.data.name, { leagueId: this.data.leagueId, game: 'dota2' });
+      if (ev && ev.format) fmtText = String(ev.format);
+    } catch (e) {}
+    if (!fmtText) fmtText = String(md.format || this.data.formatNote || '');
+    let fmt = { group: null, playoff: null, grandFinal: null, default: null };
+    try { fmt = liquiParse.parseBoFormat(fmtText) || fmt; } catch (e) {}
+    // 「Bo5决赛 / 决赛 Bo5」这类紧邻写法，parseBoFormat 取不到，单独兜一层
+    let finalInline = '';
+    const mf = fmtText.match(/(?:Bo\s*(\d)|best\s*of\s*(\d))\s*(?:的)?\s*(?:grand\s*final|决赛)/i) ||
+      fmtText.match(/(?:grand\s*final|决赛)\s*(?:is|为|:|：)?\s*(?:Bo\s*(\d)|best\s*of\s*(\d))/i);
+    if (mf) finalInline = 'BO' + (mf[1] || mf[2]);
+    // 对阵卡（已由 BO 引擎定过）按队名对建立索引
+    const pairMap = {};
+    (this._allSeriesFull || this.allSeries || []).forEach((s) => {
+      const t1 = names.normTeamNameCjk(s.radiantName);
+      const t2 = names.normTeamNameCjk(s.direName);
+      if (t1 && t2 && s.boType) pairMap[t1 + '|' + t2] = s.boType;
+    });
+    const slots = b.slots.map((s) => {
+      if (!s || s.boDeclared || !s.boType) return s;
+      const t1 = names.normTeamNameCjk(s.team1Name);
+      const t2 = names.normTeamNameCjk(s.team2Name);
+      const byPair = (t1 && t2 && pairMap[t1 + '|' + t2]) || '';
+      const byFmt = (s.side === 'final')
+        ? (finalInline || fmt.grandFinal || fmt.playoff || fmt.default)
+        : (fmt.playoff || fmt.default);
+      const bo = byPair || byFmt;
+      return bo ? Object.assign({}, s, { boType: bo }) : s;
+    });
+    return Object.assign({}, b, { slots: slots });
+  },
+
   _renderBracket(b) {
-    const view = bracketLayout.layoutBracket(b, { formatTime: (t) => util.formatTime(t) });
+    const view = bracketLayout.layoutBracket(this._resolveBracketBo(b), { formatTime: (t) => util.formatTime(t) });
     // P4：算当前轮 → 高亮该列并把 scroll-view 定位过去（LIVE 优先）
     const cur = bracketLayout.findCurrentRound(view);
     const patch = {

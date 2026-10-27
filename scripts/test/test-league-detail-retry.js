@@ -153,6 +153,25 @@ const tick = () => new Promise((r) => setTimeout(r, 20));
   const curX = inst3.data.bracketView.sections[0].rounds[1].x;
   assert(inst3.data.bracketScrollLeft === Math.max(0, curX - 24), '当前轮：scroll-left 指向该轮表头');
 
+  // BO 还原：LP 槽位未声明 bestof（BO1 占位）→ 用赛制文本还原（决赛取 Bo5）
+  inst3.data.metadata = { format: '单败淘汰(Bo3/Bo5决赛)' };
+  inst3._renderBracket({
+    type: 'Bracket/8',
+    slots: [
+      { key: 'R1M1', side: 'main', roundNo: 1, slotNo: 1, team1Name: 'Nigma Galaxy', team2Name: 'BB Team', boType: 'BO1', boDeclared: false, phase: 'finished', finished: true, score1: 2, score2: 1 },
+      { key: 'F1', side: 'final', roundNo: 1, slotNo: 1, team1Name: 'BB Team', team2Name: 'LGD Gaming', boType: 'BO1', boDeclared: false, phase: 'upcoming' }
+    ],
+    rounds: [
+      { no: 1, side: 'main', label: 'Quarterfinals', matches: [{ key: 'R1M1', side: 'main', roundNo: 1, slotNo: 1 }] },
+      { no: 1, side: 'final', label: 'Grand Final', matches: [{ key: 'F1', side: 'final', roundNo: 1, slotNo: 1 }] }
+    ]
+  });
+  const boCards = inst3.data.bracketView.sections.reduce((a, s) => a.concat(s.cards), []);
+  const qf = boCards.filter((c) => c.key === 'R1M1')[0];
+  const gf = boCards.filter((c) => c.key === 'F1')[0];
+  assert(!!qf && qf.boType === 'BO3', 'BO 还原：淘汰轮按赛制 BO3');
+  assert(!!gf && gf.boType === 'BO5', 'BO 还原：决赛取 Bo5');
+
   // ----- 场景 4：源码守卫（WXML 分支与 handler 接线） -----
   const wxml = fs.readFileSync(path.join(PAGE_DIR, 'league-detail.wxml'), 'utf8');
   assert(/wx:elif="\{\{lpStructureError\}\}"/.test(wxml), 'WXML：error 分支在真无数据分支之前');
