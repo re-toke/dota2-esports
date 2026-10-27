@@ -134,6 +134,12 @@ const tick = () => new Promise((r) => setTimeout(r, 20));
   inst3.clearTeamSearch();
   assert(inst3.data.teamQuery === '' && inst3.data.teamVisibleCount === 3, '搜索：清空后恢复全部');
 
+  // P4：对战表「显示赛程」开关
+  inst3.toggleBracketSchedule();
+  assert(inst3.data.showBracketSchedule === false, '赛程开关：默认开 → 点击关闭');
+  inst3.toggleBracketSchedule();
+  assert(inst3.data.showBracketSchedule === true, '赛程开关：再次点击恢复显示');
+
   // ----- 场景 4：源码守卫（WXML 分支与 handler 接线） -----
   const wxml = fs.readFileSync(path.join(PAGE_DIR, 'league-detail.wxml'), 'utf8');
   assert(/wx:elif="\{\{lpStructureError\}\}"/.test(wxml), 'WXML：error 分支在真无数据分支之前');

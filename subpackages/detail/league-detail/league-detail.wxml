@@ -375,6 +375,10 @@ module.exports.match = function (name, tag, q) {
   <block wx:elif="{{tab === 'playoffs'}}">
     <view wx:if="{{bracketLoading}}" class="loading-row">对战表加载中…</view>
     <view wx:elif="{{bracketView && bracketView.sections.length}}" class="brk-wrap">
+      <!-- P4：显示赛程开关（只控制 BO/时间行，LIVE 常显） -->
+      <view class="brk-toolbar">
+        <text class="filter-chip {{showBracketSchedule ? 'active' : ''}}" bindtap="toggleBracketSchedule" aria-role="switch" aria-checked="{{showBracketSchedule}}" aria-label="显示赛程时间">{{showBracketSchedule ? '隐藏赛程' : '显示赛程'}}</text>
+      </view>
       <scroll-view scroll-x class="brk-scroll" enhanced show-scrollbar="{{false}}">
         <view class="brk-canvas" style="width:{{bracketView.width}}rpx;height:{{bracketView.height}}rpx">
           <!-- P4：Upper→Lower 降级线（画在卡片之下） -->
@@ -396,9 +400,9 @@ module.exports.match = function (name, tag, q) {
                 <text class="brk-name {{item.tbd2 ? 'tbd' : ''}}">{{item.team2}}</text>
                 <text class="brk-score">{{item.score2}}</text>
               </view>
-              <view class="brk-meta">
+              <view class="brk-meta" wx:if="{{item.live || (showBracketSchedule && item.boType)}}">
                 <text wx:if="{{item.live}}" class="brk-live">● LIVE</text>
-                <text wx:elif="{{item.boType}}" class="brk-bo">{{item.boType}}<text wx:if="{{item.timeLabel}}"> · {{item.timeLabel}}</text></text>
+                <text wx:elif="{{showBracketSchedule && item.boType}}" class="brk-bo">{{item.boType}}<text wx:if="{{item.timeLabel}}"> · {{item.timeLabel}}</text></text>
               </view>
             </view>
           </block>

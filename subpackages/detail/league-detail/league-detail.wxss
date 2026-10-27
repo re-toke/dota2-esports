@@ -1437,6 +1437,17 @@
 
 /* ===== P3.1：对战表 ===== */
 .brk-wrap { margin-bottom: var(--space-2); }
+/* P4（2026-10-27）：对战表工具栏（显示赛程开关） */
+.brk-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--space-1);
+}
+.brk-toolbar .filter-chip {
+  min-height: 64rpx;
+  display: flex;
+  align-items: center;
+}
 .brk-scroll {
   width: 100%;
   background: var(--card-bg, #FFFFFF);

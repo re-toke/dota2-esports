@@ -213,6 +213,7 @@ Page({
     bracketView: null,         // bracketLayout 输出（sections/cards/lines 坐标）
     bracketLoading: false,
     showGroups: false,         // 小组积分折叠态
+    showBracketSchedule: true, // P4：对战表「显示赛程」开关（控制 BO/时间行，LIVE 常显）
     // ===== 三段式分段计数（2026-07-28 新增） =====
     // series[] 按 phase 分段：live(desc) → upcoming(asc) → recent(desc)
     // liveCount/upcomingCount/recentCount 供 wxml 渲染分段分隔符与计数
@@ -2832,6 +2833,11 @@ Page({
     const playoff = list.find((b) => /playoff|淘汰/i.test(String(b.section || '')));
     if (playoff) return playoff;
     return list.slice().sort((a, b) => (b.filled || 0) - (a.filled || 0))[0];
+  },
+
+  // P4（2026-10-27）：对战表「显示赛程」开关 —— 只切 BO/时间行，LIVE 常显
+  toggleBracketSchedule() {
+    this.setData({ showBracketSchedule: !this.data.showBracketSchedule });
   },
 
   _renderBracket(b) {
