@@ -2893,7 +2893,8 @@ Page({
         ? (finalInline || fmt.grandFinal || fmt.playoff || fmt.default)
         : (fmt.playoff || fmt.default);
       const bo = byPair || byFmt;
-      return bo ? Object.assign({}, s, { boType: bo }) : s;
+      // 都拿不到信号时清空 BO1 占位，避免把「未知」显示成 BO1
+      return Object.assign({}, s, { boType: bo || '' });
     });
     return Object.assign({}, b, { slots: slots });
   },

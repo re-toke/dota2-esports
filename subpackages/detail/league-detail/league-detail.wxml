@@ -400,9 +400,9 @@ module.exports.match = function (name, tag, q) {
                 <text class="brk-name {{item.tbd2 ? 'tbd' : ''}}">{{item.team2}}</text>
                 <text class="brk-score">{{item.score2}}</text>
               </view>
-              <view class="brk-meta" wx:if="{{item.live || (showBracketSchedule && item.boType)}}">
+              <view class="brk-meta" wx:if="{{item.live || (showBracketSchedule && (item.boType || item.timeLabel))}}">
                 <text wx:if="{{item.live}}" class="brk-live">● LIVE</text>
-                <text wx:elif="{{showBracketSchedule && item.boType}}" class="brk-bo">{{item.boType}}<text wx:if="{{item.timeLabel}}"> · {{item.timeLabel}}</text></text>
+                <text wx:elif="{{showBracketSchedule}}" class="brk-bo"><text wx:if="{{item.boType}}">{{item.boType}}</text><text wx:if="{{item.boType && item.timeLabel}}"> · </text><text wx:if="{{item.timeLabel}}">{{item.timeLabel}}</text></text>
               </view>
             </view>
           </block>

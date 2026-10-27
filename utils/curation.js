@@ -67,7 +67,7 @@ const CURATED_EVENTS = [
     aliases: ['theinternational2026', 'ti2026', 'ti15'], year: 2026,
     leagueId: 19719, legacyFakeId: -1653808,
     start: Math.floor(Date.UTC(2026, 7, 13) / 1000), end: Math.floor(Date.UTC(2026, 7, 23) / 1000),
-    prizePool: '$1,600,000', organizer: 'Valve', region: '中国上海', format: '小组赛+双败淘汰',
+    prizePool: '$1,600,000', organizer: 'Valve', region: '中国上海', format: '小组赛+双败淘汰(Bo3/Bo5决赛)',
     participants: [
       // 直接受邀 7 支（Valve 基于 2025-26 赛季成绩邀请）
       { name: 'Aurora Gaming', region: 'EU', group: 'direct' },
@@ -488,7 +488,7 @@ const CURATED_EVENTS = [
     aliases: ['pglwallachiaseason9', 'pglwallachia9', 'wallachia2026', 'pglwallachia2026',
              'wallachia season 9', 'pgl wallachia s9'], year: 2026,
     start: 1789776000, end: 1790467200,
-    prizePool: '$1,000,000', organizer: 'PGL', region: '罗马尼亚·布加勒斯特', format: '双败淘汰',
+    prizePool: '$1,000,000', organizer: 'PGL', region: '罗马尼亚·布加勒斯特', format: '双败淘汰(Bo3/Bo5决赛)',
     participants: 16, status: '即将到来', liquipediaSlug: 'PGL/Wallachia/9',
     valve: false, topThirdParty: false },
   // BLAST SLAM VIII：9月29日-10月11日，欧洲/马耳他，$750,000
@@ -496,7 +496,7 @@ const CURATED_EVENTS = [
     aliases: ['blastslamviii', 'blastslam8', 'blastslam2026viii', 'blast2026s8'], year: 2026,
     leagueId: 19102,
     start: 1790640000, end: 1791676800,
-    prizePool: '$750,000', organizer: 'BLAST', region: '马耳他', format: '双败淘汰',
+    prizePool: '$750,000', organizer: 'BLAST', region: '马耳他', format: '双败淘汰(Bo3/Bo5决赛)',
     participants: 12, status: '即将到来', liquipediaSlug: 'BLAST/Slam/8',
     valve: false, topThirdParty: false },
   // Esports Nations Cup 2026：11月2-8日，利雅得，$1,500,000（国家级 Tier 1）
@@ -513,7 +513,7 @@ const CURATED_EVENTS = [
     aliases: ['blastslamix', 'blastslam9', 'blastslam2026ix', 'blast2026s9'], year: 2026,
     leagueId: 20208,
     start: 1795132800, end: 1795910400,
-    prizePool: '$750,000', organizer: 'BLAST', region: '欧洲', format: '双败淘汰',
+    prizePool: '$750,000', organizer: 'BLAST', region: '欧洲', format: '双败淘汰(Bo3/Bo5决赛)',
     participants: 12, status: '即将到来', liquipediaSlug: 'BLAST/Slam/9',
     valve: false, topThirdParty: false },
 

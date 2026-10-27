@@ -172,6 +172,37 @@ const tick = () => new Promise((r) => setTimeout(r, 20));
   assert(!!qf && qf.boType === 'BO3', 'BO 还原：淘汰轮按赛制 BO3');
   assert(!!gf && gf.boType === 'BO5', 'BO 还原：决赛取 Bo5');
 
+  // curation 赛制优先：TI 2026 本地 curation 已写 `(Bo3/Bo5决赛)`
+  inst3.data.name = 'The International 2026';
+  inst3.data.leagueId = 19719;
+  inst3.data.metadata = {};
+  inst3._renderBracket({
+    type: 'Bracket/8',
+    slots: [
+      { key: 'R1M1', side: 'main', roundNo: 1, slotNo: 1, team1Name: 'Aurora Gaming', team2Name: 'BoomBoys', boType: 'BO1', boDeclared: false, phase: 'upcoming' },
+      { key: 'F1', side: 'final', roundNo: 1, slotNo: 1, team1Name: 'Aurora Gaming', team2Name: 'Xtreme Gaming', boType: 'BO1', boDeclared: false, phase: 'upcoming' }
+    ],
+    rounds: [
+      { no: 1, side: 'main', label: 'R1', matches: [{ key: 'R1M1', side: 'main', roundNo: 1, slotNo: 1 }] },
+      { no: 1, side: 'final', label: 'Grand Final', matches: [{ key: 'F1', side: 'final', roundNo: 1, slotNo: 1 }] }
+    ]
+  });
+  const tiCards = inst3.data.bracketView.sections.reduce((a, s) => a.concat(s.cards), []);
+  assert((tiCards.filter((c) => c.key === 'R1M1')[0] || {}).boType === 'BO3', 'BO 还原：curation 赛制 → BO3');
+  assert((tiCards.filter((c) => c.key === 'F1')[0] || {}).boType === 'BO5', 'BO 还原：curation 决赛 → BO5');
+
+  // 无任何信号 → 清空 BO1 占位（不显示错误的 BO1）
+  inst3.data.name = '';
+  inst3.data.leagueId = 0;
+  inst3.data.metadata = {};
+  inst3._renderBracket({
+    type: 'Bracket/8',
+    slots: [{ key: 'R1M1', side: 'main', roundNo: 1, slotNo: 1, team1Name: 'A', team2Name: 'B', boType: 'BO1', boDeclared: false, phase: 'upcoming' }],
+    rounds: [{ no: 1, side: 'main', label: 'R1', matches: [{ key: 'R1M1', side: 'main', roundNo: 1, slotNo: 1 }] }]
+  });
+  const noBoCards = inst3.data.bracketView.sections.reduce((a, s) => a.concat(s.cards), []);
+  assert((noBoCards[0] || {}).boType === '', 'BO 未知：清空 BO1 占位（前端只显示时间）');
+
   // ----- 场景 4：源码守卫（WXML 分支与 handler 接线） -----
   const wxml = fs.readFileSync(path.join(PAGE_DIR, 'league-detail.wxml'), 'utf8');
   assert(/wx:elif="\{\{lpStructureError\}\}"/.test(wxml), 'WXML：error 分支在真无数据分支之前');
