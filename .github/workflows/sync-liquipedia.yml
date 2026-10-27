@@ -25,16 +25,18 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Run sync script
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-        run: node scripts/sync-liquipedia-cache.js
-
       # ★ P3.0（2026-10-26）：bracket 结构 + Match 页 → lp:br:<bracketId>
+      # ★ 2026-10-27：bracket 步骤前置 —— 旧缓存同步在 LP 失败率 >50% 时 exit 2，
+      #   放在其后会被整步跳过（实测 2026-10-26 两次定时任务均未执行到本步）。
       - name: Sync brackets
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: node scripts/sync/sync-liquipedia-brackets.js
+
+      - name: Run sync script
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node scripts/sync-liquipedia-cache.js
 # re-index 2026-09-11
