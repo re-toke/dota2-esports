@@ -241,6 +241,109 @@ const tick = () => new Promise((r) => setTimeout(r, 20));
   assert(orphan.length === 0, '补录表：所有键都能命中 curation（无孤儿键）' +
     (orphan.length ? '：' + orphan.join(',') : ''));
 
+  // 新增策展条目：PARI UNIVERSE by FISSURE（此前无条目 → slug 猜错 → 淘汰赛「暂无」）
+  const pari = curation.curatedEventFor('PARI UNIVERSE by FISSURE', { game: 'dota2' }) || {};
+  assert(pari.liquipediaSlug === 'PARI_Universe/1', 'PARI：curation slug 已登记（LP 页 PARI_Universe/1）');
+  assert(pari.leagueId === 20395, 'PARI：leagueId 精确 pin（20395 为实况赛事；20053 空壳）');
+  assert(pari.status === '进行中' && pari.prizePool === '$250,000', 'PARI：进行中 + 奖金池兜底');
+  assert(/Bo5决赛/.test(String(pari.format || '')), 'PARI：赛制含决赛 Bo5');
+  const eplII = curation.curatedEventFor('EPL Masters II', { game: 'dota2' }) || {};
+  assert(/Bo5决赛/.test(String(eplII.format || '')), 'EPL II：决赛 Bo5（与 GF 3:0 实况一致）');
+
+  // 比分借位 + 未知置空 + 决赛 BO 以赛制/实况为准（EPL Masters II 实测：LP Match 页无比分、GF 3:0 属 Bo5）
+  inst3.data.name = 'EPL Masters II';
+  inst3.data.leagueId = 19944;
+  inst3.data.metadata = {};
+  inst3._allSeriesFull = [
+    { radiantName: 'NAVI', direName: 'Klim Sani4', score1: 3, score2: 1, boType: 'BO5' },
+    { radiantName: 'NAVI', direName: 'GamerLegion', score1: 2, score2: 0, boType: 'BO5' }
+  ];
+  inst3._renderBracket({
+    type: 'Bracket/8U4L2DSL1D',
+    slots: [
+      { key: 'R5M1', side: 'final', roundNo: 5, slotNo: 1, team1Name: 'NAVI', team2Name: 'Klim Sani4', boType: 'BO1', boDeclared: false, finished: true, score1: 0, score2: 0 },
+      { key: 'R4M1', side: 'upper', roundNo: 4, slotNo: 1, team1Name: 'NAVI', team2Name: 'GamerLegion', boType: 'BO1', boDeclared: false, finished: true, score1: 0, score2: 0 },
+      { key: 'R3M1', side: 'lower', roundNo: 3, slotNo: 1, team1Name: 'MOUZ', team2Name: 'Klim Sani4', boType: 'BO1', boDeclared: false, finished: true, score1: 0, score2: 0 }
+    ],
+    rounds: [
+      { no: 4, side: 'upper', label: 'UB R4', matches: [{ key: 'R4M1', side: 'upper', roundNo: 4, slotNo: 1 }] },
+      { no: 3, side: 'lower', label: 'LB R3', matches: [{ key: 'R3M1', side: 'lower', roundNo: 3, slotNo: 1 }] },
+      { no: 5, side: 'final', label: 'Grand Final', matches: [{ key: 'R5M1', side: 'final', roundNo: 5, slotNo: 1 }] }
+    ]
+  });
+  const eplCards = inst3.data.bracketView.sections.reduce((a, s) => a.concat(s.cards), []);
+  const eplFin = eplCards.filter((c) => c.key === 'R5M1')[0] || {};
+  const eplUb = eplCards.filter((c) => c.key === 'R4M1')[0] || {};
+  const eplNo = eplCards.filter((c) => c.key === 'R3M1')[0] || {};
+  assert(eplFin.boType === 'BO5', '决赛 BO：赛制文本（Bo5决赛）与 3 胜实况一致');
+  assert(eplUb.boType === 'BO3', '比赛轮 BO：pair 的 BO5 不得覆盖赛事赛制 Bo3');
+  assert(eplFin.score1 === 3 && eplFin.score2 === 1, '比分：LP 缺失时按同对阵系列借位');
+  assert(eplUb.score1 === 2 && eplUb.score2 === 0, '比分：同对阵已定赛程借位（2:0）');
+  assert(eplNo.score1 === '' && eplNo.score2 === '', '比分：无来源时置空（不再显示 0:0）');
+
+  // 缩写别名：LP「NAVI」↔ OpenDota「Natus Vincere」
+  inst3._bracketAlias = { navi: 'natusvincere' };
+  inst3._allSeriesFull = [{ radiantName: 'Natus Vincere', direName: 'Klim Sani4', score1: 2, score2: 0, boType: 'BO3' }];
+  inst3._renderBracket({
+    type: 'Bracket/8U4L2DSL1D',
+    slots: [{ key: 'R4M1', side: 'upper', roundNo: 4, slotNo: 1, team1Name: 'NAVI', team2Name: 'Klim Sani4', boType: 'BO1', boDeclared: false, finished: true, score1: 0, score2: 0 }],
+    rounds: [{ no: 4, side: 'upper', label: 'UB R4', matches: [{ key: 'R4M1', side: 'upper', roundNo: 4, slotNo: 1 }] }]
+  });
+  const aliasCard = (inst3.data.bracketView.sections[0].cards.filter((c) => c.key === 'R4M1')[0]) || {};
+  assert(aliasCard.score1 === 2 && aliasCard.score2 === 0, '比分：缩写别名（NAVI→Natus Vincere）可借位');
+
+  // 自证：借到 3 胜 ⇒ 标签必须升到 BO5（避免「BO3 + 3:0」矛盾）
+  inst3._allSeriesFull = [{ radiantName: 'NAVI', direName: 'GamerLegion', score1: 3, score2: 0, boType: 'BO5' }];
+  inst3._renderBracket({
+    type: 'Bracket/8',
+    slots: [{ key: 'R4M1', side: 'upper', roundNo: 4, slotNo: 1, team1Name: 'NAVI', team2Name: 'GamerLegion', boType: 'BO1', boDeclared: false, finished: true, score1: 0, score2: 0 }],
+    rounds: [{ no: 4, side: 'upper', label: 'UB R4', matches: [{ key: 'R4M1', side: 'upper', roundNo: 4, slotNo: 1 }] }]
+  });
+  const bo5Card = (inst3.data.bracketView.sections[0].cards.filter((c) => c.key === 'R4M1')[0]) || {};
+  assert(bo5Card.boType === 'BO5' && bo5Card.score1 === 3, 'BO 自证：3 胜比分把标签校正为 BO5');
+
+  // 同一对阵交手两次（胜者组 + 决赛）：按槽位 startTime 就近取场次，且 OD 主客相反时交换比分
+  inst3._bracketAlias = { navi: 'natusvincere' };
+  inst3._allSeriesFull = [
+    { radiantName: 'Klim Sani4', direName: 'Natus Vincere', score1: 1, score2: 2, boType: 'BO3', lastTime: 1788895240 },
+    { radiantName: 'Natus Vincere', direName: 'Klim Sani4', score1: 3, score2: 0, boType: 'BO5', lastTime: 1789064832 }
+  ];
+  inst3._renderBracket({
+    type: 'Bracket/8U4L2DSL1D',
+    slots: [
+      { key: 'R2M1', side: 'upper', roundNo: 2, slotNo: 1, team1Name: 'NAVI', team2Name: 'Klim Sani4', boType: 'BO1', boDeclared: false, finished: true, score1: 0, score2: 0, startTime: 1788885000 },
+      { key: 'R5M1', side: 'final', roundNo: 5, slotNo: 1, team1Name: 'NAVI', team2Name: 'Klim Sani4', boType: 'BO1', boDeclared: false, finished: true, score1: 0, score2: 0, startTime: 1789056000 },
+      { key: 'R6M1', side: 'upper', roundNo: 6, slotNo: 1, team1Name: 'NAVI', team2Name: 'Klim Sani4', boType: 'BO1', boDeclared: false, finished: false, score1: 0, score2: 0, startTime: 1789200000 }
+    ],
+    rounds: [
+      { no: 2, side: 'upper', label: 'UB R2', matches: [{ key: 'R2M1', side: 'upper', roundNo: 2, slotNo: 1 }] },
+      { no: 5, side: 'final', label: 'Grand Final', matches: [{ key: 'R5M1', side: 'final', roundNo: 5, slotNo: 1 }] },
+      { no: 6, side: 'upper', label: 'UB R6', matches: [{ key: 'R6M1', side: 'upper', roundNo: 6, slotNo: 1 }] }
+    ]
+  });
+  const dupCards = inst3.data.bracketView.sections.reduce((a, s) => a.concat(s.cards), []);
+  const dupUb = dupCards.filter((c) => c.key === 'R2M1')[0] || {};
+  const dupFin = dupCards.filter((c) => c.key === 'R5M1')[0] || {};
+  const dupUnplayed = dupCards.filter((c) => c.key === 'R6M1')[0] || {};
+  assert(dupUb.score1 === 2 && dupUb.score2 === 1 && dupUb.boType === 'BO3',
+    '重复对阵：胜者组按 startTime 就近取 2:1（方向相反已交换）');
+  assert(dupFin.score1 === 3 && dupFin.score2 === 0 && dupFin.boType === 'BO5',
+    '重复对阵：决赛取 3:0 并校正 BO5');
+  assert(dupUnplayed.score1 === '' && dupUnplayed.score2 === '',
+    '未开赛槽位不借比分（避免显示小组赛旧比分）');
+
+  // 借位自洽性：BO3 淘汰赛不可能 1:1 平局（同队小组赛 BO2 的比分不得串进来）
+  inst3._allSeriesFull = [
+    { radiantName: 'Team Synapse', direName: 'Pipsqueak + 4', score1: 1, score2: 1, boType: 'BO2', lastTime: 1788875456 }
+  ];
+  inst3._renderBracket({
+    type: 'Bracket/8',
+    slots: [{ key: 'R1M6', side: 'lower', roundNo: 1, slotNo: 6, team1Name: 'Team Synapse', team2Name: 'Pipsqueak + 4', boType: 'BO1', boDeclared: false, finished: true, score1: 0, score2: 0, startTime: 1788870600 }],
+    rounds: [{ no: 1, side: 'lower', label: 'LB R1', matches: [{ key: 'R1M6', side: 'lower', roundNo: 1, slotNo: 6 }] }]
+  });
+  const drawCard = (inst3.data.bracketView.sections[0].cards.filter((c) => c.key === 'R1M6')[0]) || {};
+  assert(drawCard.score1 === '' && drawCard.score2 === '', '借位自洽：BO3 槽位拒绝 1:1 平局比分');
+
   // ----- 场景 4：源码守卫（WXML 分支与 handler 接线） -----
   const wxml = fs.readFileSync(path.join(PAGE_DIR, 'league-detail.wxml'), 'utf8');
   assert(/wx:elif="\{\{lpStructureError\}\}"/.test(wxml), 'WXML：error 分支在真无数据分支之前');

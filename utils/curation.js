@@ -263,6 +263,17 @@ const CURATED_EVENTS = [
     aliases: ['fissureuniverse', 'fissureuniverse2025'], year: 2025,
     liquipediaSlug: 'FISSURE/Universe/1' },
 
+  // PARI UNIVERSE by FISSURE（2026-10-22 ~ 11-01，欧洲线上，$250,000，10 队两组单循环 + 双败淘汰）
+  // LP 页 = PARI Universe/1（2026-10-27 实测：Format 段 Bo3、Grand Final Bo5；bracket 1lWhUOsDuZ 14 槽）
+  // OD leagueid 20395（2026-10-27 实测：47 场 / 10-22 起；20053 同名但是空壳 0 场，勿用）
+  { canonical: 'PARI UNIVERSE by FISSURE', tier: { grade: 'A', rank: 2, label: 'A级' },
+    leagueId: 20395,
+    aliases: ['pariuniverse', 'pari universe', 'pariuniverse2026', 'pari universe by fissure', 'parifissure2026'], year: 2026,
+    start: Math.floor(Date.UTC(2026, 9, 22) / 1000), end: Math.floor(Date.UTC(2026, 10, 1) / 1000),
+    prizePool: '$250,000', organizer: 'FISSURE', region: '欧洲', format: '小组赛(Bo3) + 双败淘汰(Bo3/Bo5决赛)',
+    participants: 10, status: '进行中', liquipediaSlug: 'PARI_Universe/1',
+    valve: false, topThirdParty: false },
+
   // ── S 级（ESL One 统一为 S-Tier，与 tiers.js 的 esl\s+one 规则对齐）2025 ──
   { canonical: 'ESL One Raleigh 2025', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['esloneraleigh2025', 'raleigh2025', 'eslraleigh2025'], year: 2025,
@@ -416,7 +427,7 @@ const CURATED_EVENTS = [
     aliases: ['epl masters ii'], year: 2026,
     start: Math.floor(Date.UTC(2026, 7, 30) / 1000), end: Math.floor(Date.UTC(2026, 8, 10) / 1000),
     prizePool: '$100,000', organizer: 'EPL', region: '欧洲/CIS · 线上',
-    format: '小组赛(2×6 Bo3 循环) + 双败淘汰(Bo3)',
+    format: '小组赛(2×6 Bo3 循环) + 双败淘汰(Bo3/Bo5决赛)',
     // ★ 2026-09-01（v8.4 Fix-F）：participants 由数字 16 升级为 16 队数组（Liquipedia EPL/Masters/2
     //   官方名单实锤）。根因：19944 被 Masters I/II 复用，OpenDota /leagues/19944/matches 返回两届
     //   混合数据，详情页按判届窗口过滤后仍混入 Masters I 季后赛残留（Nemiga/RE ARISE/Syntax）+

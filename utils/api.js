@@ -911,6 +911,31 @@ function getTeamTagsByName(names) {
   });
 }
 
+// 2026-10-27：队名/缩写 → 规范队名的别名映射（Liquipedia 常写 NAVI，OpenDota 写 Natus Vincere）。
+// 返回 { 归一化键(名或 tag): 归一化规范名 }，用于对战表借位比分/BO 时跨源匹配。
+function getTeamAliasMap(names) {
+  const nm = require('./names.js');
+  const uniq = Array.from(new Set((names || [])
+    .map((n) => String(n || '').trim().replace(/'/g, "''").toLowerCase())
+    .filter(Boolean))).slice(0, 80);
+  if (!uniq.length) return Promise.resolve({});
+  const inList = uniq.map((n) => "'" + n + "'").join(',');
+  const sql = 'SELECT name, tag FROM teams WHERE lower(trim(name)) IN (' + inList + ') OR lower(trim(tag)) IN (' + inList + ')';
+  const path = '/explorer?sql=' + encodeURIComponent(sql);
+  return cached(path, null, 6 * 3600).then((data) => {
+    const rows = (data && data.rows) || [];
+    const map = {};
+    rows.forEach((r) => {
+      if (!r || !r.name) return;
+      const canon = nm.normTeamNameCjk(r.name);
+      if (!canon) return;
+      map[nm.normTeamNameCjk(r.name)] = canon;
+      if (r.tag) map[nm.normTeamNameCjk(r.tag)] = canon;
+    });
+    return map;
+  });
+}
+
 // 物品表（id -> { name, img, dname }）：OpenDota /constants/items 返回 { name: { id, img, dname } }，
 // 反转为 id 索引便于比赛详情页按 item_0~5 数字 id 查物品名/图标。长缓存（物品几乎不变）。
 // 注意：OpenDota 的 img 是相对路径 /apps/dota2/images/dota_react/items/{name}.png?t=xxx，
@@ -1001,6 +1026,7 @@ module.exports = {
   getTeamLogos: getTeamLogos,
   getTeamTags: getTeamTags,
   getTeamTagsByName: getTeamTagsByName,
+  getTeamAliasMap: getTeamAliasMap,
   normTeamTagKey: normTeamTagKey,
   getItems: getItems,
   getItemsList: getItemsList,

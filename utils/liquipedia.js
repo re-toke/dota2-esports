@@ -866,20 +866,24 @@ function getLeagueStructure(name, opts) {
     .then(function (wt) { return wt ? LiquiParse.parseGroupStandings(wt) : []; })
     .catch(function () { return []; });
 
+  // 2026-10-27：记录「候选页抓取失败」（网络/未缓存）——空结果 + 有失败时，
+  // 页面应提示「加载失败可重试」，而不是「该赛事暂无淘汰赛结构」。
+  var bracketFetchFailed = false;
   var bracketsP = (function tryAt(i) {
     if (i >= bracketCands.length) return Promise.resolve([]);
     return fetchPageWikitext(bracketCands[i]).then(function (wt) {
       var list = (wt && LiquiParse.parseBrackets(wt)) || [];
       if (list.length) { hitSlug = bracketCands[i]; return list; }
       return tryAt(i + 1);
-    }).catch(function () { return tryAt(i + 1); });
+    }).catch(function () { bracketFetchFailed = true; return tryAt(i + 1); });
   })(0);
 
   return Promise.all([groupsP, bracketsP]).then(function (r) {
     var structure = {
       groups: r[0] || [],
       brackets: r[1] || [],
-      bracketSlug: hitSlug || ''
+      bracketSlug: hitSlug || '',
+      fetchFailed: bracketFetchFailed && !(r[1] && r[1].length)
     };
     if (structure.groups.length || structure.brackets.length) {
       try { cache.set(cacheKey, structure, CACHE_TTL_SCHEDULE); } catch (e) {}

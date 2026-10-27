@@ -2790,6 +2790,12 @@ Page({
     liquipedia.getLeagueStructure(this.data.name).then((structure) => {
       const groups = (structure && structure.groups) || [];
       const brackets = (structure && structure.brackets) || [];
+      // 2026-10-27：候选页抓取全部失败（未进 LP 缓存/网络不可达）→ 报「加载失败可重试」，
+      // 避免误报「该赛事暂无淘汰赛结构」。
+      if (structure && structure.fetchFailed && !brackets.length) {
+        this.setData({ lpStructureLoading: false, lpStructureLoaded: true, lpStructureError: true });
+        return;
+      }
       // 淘汰赛 match 预格式化时间（formatTime → 'YYYY-MM-DD'，UTC 口径与赛程页一致）
       brackets.forEach((b) => {
         (b.rounds || []).forEach((r) => {
@@ -2854,24 +2860,89 @@ Page({
     const mf = fmtText.match(/(?:Bo\s*(\d)|best\s*of\s*(\d))\s*(?:的)?\s*(?:grand\s*final|决赛)/i) ||
       fmtText.match(/(?:grand\s*final|决赛)\s*(?:is|为|:|：)?\s*(?:Bo\s*(\d)|best\s*of\s*(\d))/i);
     if (mf) finalInline = 'BO' + (mf[1] || mf[2]);
-    // 对阵卡（已由 BO 引擎定过）按队名对建立索引
+    // 对阵卡（已由 BO 引擎定过）按「无序队名对」建索引：同一对队可能交手多次（胜者组 + 决赛），
+    // 故每个键存数组，取用时再按开赛时间消歧（LP 槽位带 startTime，OD series 带 lastTime）。
     const pairMap = {};
     (this._allSeriesFull || this.allSeries || []).forEach((s) => {
-      const t1 = names.normTeamNameCjk(s.radiantName);
-      const t2 = names.normTeamNameCjk(s.direName);
-      if (t1 && t2 && s.boType) pairMap[t1 + '|' + t2] = s.boType;
+      const a = names.normTeamNameCjk(s.radiantName);
+      const c = names.normTeamNameCjk(s.direName);
+      if (!a || !c) return;
+      const k = a < c ? a + '|' + c : c + '|' + a;
+      (pairMap[k] = pairMap[k] || []).push({ s: s, a: a, b: c });
     });
+    // 同一对阵多场候选：按时间就近取（24h 内视为同一场；否则宁缺勿错）
+    const pickPair = (cands, slotStart) => {
+      if (!cands || !cands.length) return null;
+      if (cands.length === 1) return cands[0];
+      const st = Number(slotStart) || 0;
+      if (!st) return null;
+      let best = null;
+      let bestD = Infinity;
+      cands.forEach((c) => {
+        const t = Number(c.s.lastTime || c.s.startTime || 0);
+        if (!t) return;
+        const d = Math.abs(t - st);
+        if (d < bestD) { bestD = d; best = c; }
+      });
+      return bestD <= 24 * 3600 ? best : null;
+    };
+    const uniqKey = (x, y) => ((x < y) ? x + '|' + y : y + '|' + x);
     const slots = b.slots.map((s) => {
-      if (!s || s.boDeclared || !s.boType) return s;
-      const t1 = names.normTeamNameCjk(s.team1Name);
-      const t2 = names.normTeamNameCjk(s.team2Name);
-      const byPair = (t1 && t2 && pairMap[t1 + '|' + t2]) || '';
-      const byFmt = (s.side === 'final')
-        ? (finalInline || fmt.grandFinal || fmt.playoff || fmt.default)
-        : (fmt.playoff || fmt.default);
-      const bo = byPair || byFmt;
-      // 都拿不到信号时清空 BO1 占位，避免把「未知」显示成 BO1
-      return Object.assign({}, s, { boType: bo || '' });
+      if (!s) return s;
+      const out = Object.assign({}, s);
+      const al = this._bracketAlias || {};
+      const t1n = names.normTeamNameCjk(out.team1Name);
+      const t2n = names.normTeamNameCjk(out.team2Name);
+      // 跨源命名差异：LP 缩写（NAVI）→ 规范名（Natus Vincere）再匹配
+      const t1 = al[t1n] || t1n;
+      const t2 = al[t2n] || t2n;
+      // 两向兜底：一侧用缩写（NAVI）一侧用全名（Natus Vincere）都要能对上
+      let x = t1;
+      let y = t2;
+      let cands = (x && y) ? pairMap[uniqKey(x, y)] : null;
+      if (!cands) { x = t1n; y = t2n; cands = (x && y) ? pairMap[uniqKey(x, y)] : null; }
+      cands = cands || [];
+      const pick = pickPair(cands, out.startTime);
+      const pair = pick ? pick.s : null;
+      if (!out.boDeclared && out.boType) {
+        // 赛制文本（curation/LP Format）为赛事级权威；对阵卡只作缺失时兜底。
+        // 同一对队可能在赛中多次交手（pairMap 只能保留一条），因此不能让它覆盖赛制。
+        const boFmt = (out.side === 'final')
+          ? (finalInline || fmt.grandFinal || fmt.playoff || fmt.default)
+          : (fmt.playoff || fmt.default);
+        const bo = boFmt || (pair && pair.boType) || (cands[0] && cands[0].s && cands[0].s.boType);
+        out.boType = bo || '';
+      }
+      // ★ 2026-10-27：LP Match 页普遍不写比分（payload 恒 0:0）⇒ 同对阵已定赛程借位胜局数。
+      //   仅对「已结束且能唯一定位到某一场」的槽位生效，避免把小组赛/另一轮比分串错。
+      if (out.finished && pair &&
+          (Number(out.score1) || 0) === 0 && (Number(out.score2) || 0) === 0) {
+        const sc = seriesNormalize.scoresOf(pair);   // 兼容 scoreA/scoreB 与 score1/score2
+        let q1 = sc.a || 0;
+        let q2 = sc.b || 0;
+        if (pick.a === y) { const tmp = q1; q1 = q2; q2 = tmp; }   // OD 主客方向与槽位相反时交换
+        // 借来的比分必须与赛制自洽：BO3 里不可能出现 1:1（平局）或 1:0（只打了半场）；
+        // 出现 3 胜则反过来证明该场至少 BO5（LP 赛制文本常滞后）。
+        const boNow = String(out.boType || (pair && pair.boType) || '');
+        const nBo = Number(boNow.replace(/[^\d]/g, '')) || 0;
+        const hi = Math.max(q1, q2);
+        const lo = Math.min(q1, q2);
+        const fits = !nBo ? true
+          : (nBo === 2 ? ((hi === 2 && lo <= 1) || (hi === 1 && lo === 1))
+            : (hi === Math.ceil(nBo / 2) && lo < hi));
+        if (q1 + q2 > 0 && (fits || hi >= 3)) {
+          out.score1 = q1;
+          out.score2 = q2;
+          // 自证：出现 3 胜 ⇒ 该场至少 BO5（否则「BO3 + 3:0」自相矛盾）
+          if (q1 >= 3 || q2 >= 3) out.boType = 'BO5';
+        }
+      }
+      // 仍无比分 → 置空（显示空白），不再误导成 0:0
+      if ((Number(out.score1) || 0) === 0 && (Number(out.score2) || 0) === 0) {
+        out.score1 = '';
+        out.score2 = '';
+      }
+      return out;
     });
     return Object.assign({}, b, { slots: slots });
   },
@@ -2892,15 +2963,43 @@ Page({
   loadBracketDetail(brackets) {
     const primary = this._pickPrimaryBracket(brackets);
     if (!primary) { this.setData({ bracketView: null, bracketLoading: false }); return; }
-    if (!primary.id) { this._renderBracket(primary); return; }
+    if (!primary.id) {
+      this._loadBracketAlias(primary).then(() => this._renderBracket(primary));
+      return;
+    }
     this.setData({ bracketLoading: true });
-    liquipedia.getLeagueBracket(primary.id).then((payload) => {
-      const b = (payload && payload.slots && payload.slots.length) ? payload : primary;
-      this._renderBracket(b);
-      this.setData({ bracketLoading: false });
+    // 并行：payload + 队名别名表（跨源借位比分/BO 用）
+    Promise.all([liquipedia.getLeagueBracket(primary.id), this._loadBracketAlias(primary)])
+      .then((r) => {
+        const payload = r[0];
+        const b = (payload && payload.slots && payload.slots.length) ? payload : primary;
+        this._renderBracket(b);
+        this.setData({ bracketLoading: false });
+      }).catch(() => {
+        this._renderBracket(primary);
+        this.setData({ bracketLoading: false });
+      });
+  },
+
+  // 2026-10-27：收集对战表涉及的队名 → 队名/缩写别名表（NAVI → Natus Vincere），
+  // 供 _resolveBracketBo 在借位比分/BO 时跨 LP/OD 命名差异匹配。失败不阻塞（按原名匹配）。
+  _loadBracketAlias(b) {
+    if (this._bracketAlias) return Promise.resolve(this._bracketAlias);
+    const names = [];
+    (b && b.slots || []).forEach((s) => {
+      if (s && s.team1Name) names.push(s.team1Name);
+      if (s && s.team2Name) names.push(s.team2Name);
+    });
+    (b && b.rounds || []).forEach((r) => (r.matches || []).forEach((m) => {
+      if (m && m.team1Name) names.push(m.team1Name);
+      if (m && m.team2Name) names.push(m.team2Name);
+    }));
+    return api.getTeamAliasMap(names).then((map) => {
+      this._bracketAlias = map || {};
+      return this._bracketAlias;
     }).catch(() => {
-      this._renderBracket(primary);
-      this.setData({ bracketLoading: false });
+      this._bracketAlias = {};
+      return this._bracketAlias;
     });
   },
 
