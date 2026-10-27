@@ -104,6 +104,22 @@ const empty = bl.layoutBracket({
 const c = empty.sections[0].cards[0];
 assert(c.empty === true && c.team1 === '待定' && c.team2 === '待定', '空槽渲染为「待定」卡');
 
+// ===== 填充态：rounds 为空槽、slots 为 Match 页合并后的真实内容（CI 落库形状）=====
+const filled = bl.layoutBracket({
+  type: 'Bracket/8',
+  rounds: [{ no: 1, side: 'main', label: 'Quarterfinals', matches: [
+    slot(1, 1, 'main', '', ''), slot(1, 2, 'main', '', '')
+  ] }],
+  slots: [
+    slot(1, 1, 'main', 'Iron Wing', 'Team Spirit', { key: 'R1M1', matchIds: [8900771154] }),
+    slot(1, 2, 'main', 'Aurora', 'Tundra', { key: 'R1M2' })
+  ]
+});
+const f1 = filled.sections[0].cards.filter((x) => x.key === 'R1M1')[0];
+assert(!!f1 && f1.team1 === 'Iron Wing' && f1.team2 === 'Team Spirit', '填充态：slots 真实队名覆盖 rounds 空槽');
+assert(!!f1 && f1.empty === false, '填充态：空槽标记以 slots 为准');
+assert(!!f1 && f1.matchId === 8900771154, '填充态：slots 的 matchIds 用于跳转');
+
 // ===== 无数据 =====
 assert(bl.layoutBracket(null).sections.length === 0, 'null 输入 → 空布局');
 

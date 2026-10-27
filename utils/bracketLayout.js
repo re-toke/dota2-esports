@@ -160,6 +160,30 @@ function _cardFromSlot(s, formatTime) {
 }
 
 /**
+ * 缓存 payload 同时含 `rounds[].matches`（wikitext 结构，槽位基本为空）与 `slots`
+ * （Match 页合并后的真实内容）⇒ 必须按槽位回填，否则填充态永远渲染成「待定」。
+ */
+function _slotIndex(slots) {
+  const map = {};
+  (slots || []).forEach((s) => {
+    if (!s) return;
+    map[_slotKey(s)] = s;
+    // 同时登记「侧+轮+槽」复合键：rounds.matches 可能不带 key，只有结构字段
+    map[(s.side || 'main') + '|' + s.roundNo + '|' + s.slotNo] = s;
+  });
+  return map;
+}
+
+function _slotKey(s) {
+  return s.key || ((s.side || 'main') + '|' + s.roundNo + '|' + s.slotNo);
+}
+
+function _resolveSlot(m, index) {
+  if (!m) return m;
+  return index[_slotKey(m)] || index[(m.side || 'main') + '|' + m.roundNo + '|' + m.slotNo] || m;
+}
+
+/**
  * @param {object} bracket { slots: [...], rounds: [{no,side,label,matches}] }
  * @param {object} [opts] { formatTime: fn }
  */
@@ -174,8 +198,12 @@ function layoutBracket(bracket, opts) {
   const drops = _dropsOf(bracket && bracket.type);
   const shiftX = drops.length ? (CARD_W + COL_GAP) : 0;
 
-  // 以 rounds 为准分组（含 side），slots 兜底
-  let groups = rounds.map((r) => ({ side: _sideOfRound(r), no: r.no, label: r.label, matches: r.matches || [] }));
+  // 以 rounds 为准分组（含 side），slots 兜底；matches 一律用 slots 回填（填充态）
+  const slotIndex = _slotIndex(slots);
+  let groups = rounds.map((r) => ({
+    side: _sideOfRound(r), no: r.no, label: r.label,
+    matches: (r.matches || []).map((m) => _resolveSlot(m, slotIndex))
+  }));
   if (!groups.length) {
     const byKey = {};
     slots.forEach((s) => {
