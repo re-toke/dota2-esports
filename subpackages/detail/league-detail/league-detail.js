@@ -1128,35 +1128,18 @@ Page({
         // ★ v3 优化项⑮：RECENT 时间分层 — 刚刚结束(2h内)/今天/更早
         // ★ v3 优化项21：UPCOMING dateGroup 字段 + 按日期分组排序
         // ★ v3 优化项28：懒计算 — 只对当前页可见 series 计算新字段（在 setData 前计算）
-        const liveList = [], upcomingList = [], recentList = [];
-        allSeries.forEach(function (s) {
-          // ★★ 2026-09-25：分段前也做「比分终局」归一（与 LP map 内同一判据 seriesNormalize.normalizeTerminal）——
-          //   覆盖**非 LP 来源**的 series（OpenDota / steam 直连等）：它们不经过上方 LP map，
-          //   若 phase 滞后为 live 而比分已达终局，会继续被分进「进行中」段并挂 LIVE 徽标。
-          //   （实测截图：详情页 1:2 BO3 仍标 LIVE，首页同场却标「已结束 0:0」——两页口径不一致。）
-          //   写回 s.phase ⇒ 分段、WXML 分隔符/徽标、isLive 三处同源（单一事实源）。
-          //   对象由本次 buildSeriesFromSources 新建（非跨页共享缓存），原地改写安全。
-          if (seriesNormalize.normalizeTerminal(s)) {
-            console.log('[league-detail] 比分达终局 → phase 归一为 recent（并同步 isLive=false）：' +
-              (s.team1Name || s.teamA || '') + ' vs ' + (s.team2Name || s.teamB || ''));
-          }
-          if (s.phase === 'live') liveList.push(s);
-          else if (s.phase === 'upcoming') upcomingList.push(s);
-          else recentList.push(s);
+        // ★ P1b-3（2026-10-27）：分桶 + 三段排序已抽到 seriesNormalize.partitionSeries
+        //   （含「比分终局」归一 + UPCOMING dateGroup + 三段各自排序；语义与原内联块一致）
+        const _part = seriesNormalize.partitionSeries(allSeries, {
+          nowSec: fmtNowSec,
+          bjOffsetSec: config.time.bjOffsetSec,
+          log: function (msg) { console.log(msg); }
         });
-        liveList.sort(function (a, b) { return b.lastTime - a.lastTime; });
-        // ★ v3 优化项21：UPCOMING 按 dateGroup 分组排序
-        // 先计算 dateGroup（北京时间日期偏移）
-        var _bjNowSec = fmtNowSec + config.time.bjOffsetSec;
-        var _nowBjDay = Math.floor(_bjNowSec / 86400);
+        const liveList = _part.liveList;
+        const upcomingList = _part.upcomingList;
+        const recentList = _part.recentList;
+        // UPCOMING 装饰字段（排序已在 partitionSeries 内完成）
         upcomingList.forEach(function (s) {
-          if (s.lastTime > 0) {
-            var bjTime = s.lastTime + config.time.bjOffsetSec;
-            var bjDay = Math.floor(bjTime / 86400);
-            s.dateGroup = bjDay - _nowBjDay;  // 0=今天, 1=明天, 2=后天, ...
-          } else {
-            s.dateGroup = 0;
-          }
           // ★ v3 优化项⑭：UPCOMING 确定性标识
           if (s.confirmed === undefined) {
             s.confirmed = !isTBD(s.radiantName) && !isTBD(s.direName);
@@ -1171,12 +1154,6 @@ Page({
             s.matchupQuality = (aHigh && bHigh) ? 'focus' : '';
           }
         });
-        upcomingList.sort(function (a, b) {
-          var dayDiff = (a.dateGroup || 0) - (b.dateGroup || 0);
-          if (dayDiff !== 0) return dayDiff;
-          return a.lastTime - b.lastTime;
-        });
-        recentList.sort(function (a, b) { return b.lastTime - a.lastTime; });
         // ★ v3 优化项⑮：RECENT 时间分层 — 刚刚结束(2h内)/今天/更早
         // 为每个 series 设置 timeLayer + showTimeLayerHeader + timeLayerLabel，
         // 供 WXML 渲染三层子标题（与 UPCOMING date-sep 类似）

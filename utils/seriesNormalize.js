@@ -377,6 +377,46 @@ function mapLiquipediaCards(liqGrouped, opts) {
  *      ③ 含 TBD/占位的系列不得为 live；④ 不得同时标记双方获胜。
  * @returns {Array<{key:string, rule:string, detail:string}>}
  */
+/**
+ * P1b-3（2026-10-27）：三段分桶 + 排序（原 league-detail.buildSeriesFromSources 内联块）。
+ * 语义保持完全不变：
+ *   ① 分桶前先做「比分终局」归一（live 达 BO 上限 → phase=recent）；
+ *   ② LIVE 按 lastTime 降序；UPCOMING 按 dateGroup 升序再 lastTime 升序；RECENT 按 lastTime 降序；
+ *   ③ UPCOMING 的 dateGroup 以北京时间日界计算（0=今天）。
+ * 仅做「分桶/排序」，后续装饰字段（confirmed/matchupQuality/timeLayer 等）仍由调用方负责。
+ * @param {Array} list series 列表（会被原地补 dateGroup / phase 归一）
+ * @param {object} opts { nowSec, bjOffsetSec, log }
+ */
+function partitionSeries(list, opts) {
+  var o = opts || {};
+  var nowSec = o.nowSec || Math.floor(Date.now() / 1000);
+  var bj = (o.bjOffsetSec == null) ? 8 * 3600 : o.bjOffsetSec;
+  var log = typeof o.log === 'function' ? o.log : function () {};
+  var live = [], upcoming = [], recent = [];
+  (list || []).forEach(function (s) {
+    if (!s) return;
+    if (normalizeTerminal(s)) {
+      log('[league-detail] 比分达终局 → phase 归一为 recent（并同步 isLive=false）：' +
+        (s.team1Name || s.teamA || '') + ' vs ' + (s.team2Name || s.teamB || ''));
+    }
+    if (s.phase === 'live') live.push(s);
+    else if (s.phase === 'upcoming') upcoming.push(s);
+    else recent.push(s);
+  });
+  live.sort(function (a, b) { return b.lastTime - a.lastTime; });
+  var nowBjDay = Math.floor((nowSec + bj) / 86400);
+  upcoming.forEach(function (s) {
+    s.dateGroup = s.lastTime > 0 ? (Math.floor((s.lastTime + bj) / 86400) - nowBjDay) : 0;
+  });
+  upcoming.sort(function (a, b) {
+    var dayDiff = (a.dateGroup || 0) - (b.dateGroup || 0);
+    if (dayDiff !== 0) return dayDiff;
+    return a.lastTime - b.lastTime;
+  });
+  recent.sort(function (a, b) { return b.lastTime - a.lastTime; });
+  return { liveList: live, upcomingList: upcoming, recentList: recent };
+}
+
 function validateSeries(seriesList) {
   const out = [];
   (seriesList || []).forEach((s, i) => {
@@ -415,6 +455,7 @@ module.exports = {
   filterLiquipediaCardsByWindow,
   normalizeOpenDotaSeries,
   mapLiquipediaCards,
+  partitionSeries,
   sourceTagOf,
   scoresOf,
   isDecided,

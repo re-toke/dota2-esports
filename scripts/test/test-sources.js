@@ -1343,8 +1343,11 @@ check('names：★ 全库禁止再内联该规则（白名单外一律 FAIL）',
     //   守卫改为「页面必须调用 normalizeTerminal」+「helper 内两个字段必须同时写」。
     const pageSrc = fs.readFileSync(path.join(__dirname, '..', '..',
       'subpackages', 'detail', 'league-detail', 'league-detail.js'), 'utf8');
-    assert(pageSrc.indexOf('seriesNormalize.normalizeTerminal(s)') >= 0,
-      '页面必须调用 seriesNormalize.normalizeTerminal(s)（不得改回就地两行手写）');
+    // ★ 2026-10-27（P1b-3）：分桶+归一进一步抽到 partitionSeries，页面可能不再直接调用 normalizeTerminal
+    const viaSeriesNormalize = pageSrc.indexOf('seriesNormalize.normalizeTerminal(s)') >= 0 ||
+      pageSrc.indexOf('seriesNormalize.partitionSeries(') >= 0;
+    assert(viaSeriesNormalize,
+      '页面必须经 seriesNormalize 做终局归一（normalizeTerminal 或 partitionSeries，不得改回就地两行手写）');
     const helperSrc = fs.readFileSync(path.join(__dirname, '..', '..', 'utils', 'seriesNormalize.js'), 'utf8');
     const i = helperSrc.indexOf("series.phase = 'recent';");
     assert(i > 0, "未找到 `series.phase = 'recent';`（是否被改名/删除？）");

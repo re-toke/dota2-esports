@@ -216,5 +216,29 @@ assert(mrg.length === 1 && mrg[0].sources.join(',') === 'od,lp', '合并卡 sour
 assert(Array.isArray(sn.MERGE_PRIORITY.period) && sn.MERGE_PRIORITY.period[0] === 'curation',
   'MERGE_PRIORITY.period 首项为 curation');
 
+// ===== 8. P1b-3：三段分桶 + 排序（partitionSeries）=====
+const nowSec = Math.floor(Date.UTC(2026, 9, 27, 12, 0, 0) / 1000);   // 北京时间 20:00
+const mk = (o) => Object.assign({ radiantName: 'A', direName: 'B', boType: 'BO3', score1: 0, score2: 0 }, o);
+const part = sn.partitionSeries([
+  mk({ key: 'live-old', phase: 'live', lastTime: nowSec - 3600 }),
+  mk({ key: 'live-new', phase: 'live', lastTime: nowSec - 600 }),
+  mk({ key: 'up-今天晚', phase: 'upcoming', lastTime: nowSec + 3 * 3600 }),      // 北京 23:00 今天
+  mk({ key: 'up-明天早', phase: 'upcoming', lastTime: nowSec + 8 * 3600 }),      // 北京次日 04:00
+  mk({ key: 'recent-old', phase: 'recent', lastTime: nowSec - 7200 }),
+  mk({ key: 'recent-new', phase: 'recent', lastTime: nowSec - 60 })
+], { nowSec, bjOffsetSec: 8 * 3600 });
+
+assert(part.liveList.map((s) => s.key).join(',') === 'live-new,live-old', '分区：LIVE 按 lastTime 倒序');
+assert(part.recentList.map((s) => s.key).join(',') === 'recent-new,recent-old', '分区：RECENT 按 lastTime 倒序');
+assert(part.upcomingList.map((s) => s.key).join(',') === 'up-今天晚,up-明天早', '分区：UPCOMING 按日期升序');
+assert(part.upcomingList[0].dateGroup === 0 && part.upcomingList[1].dateGroup === 1,
+  '分区：dateGroup 以北京时间日界计算（0=今天,1=明天）');
+
+// 终局归一：live 2:0 BO3 → 移入 RECENT 并写回 phase
+const ended = mk({ key: 'ended', phase: 'live', lastTime: nowSec - 100, score1: 2, score2: 0 });
+const part2 = sn.partitionSeries([ended], { nowSec, bjOffsetSec: 8 * 3600 });
+assert(part2.liveList.length === 0 && part2.recentList.length === 1 && ended.phase === 'recent',
+  '分区：比分达终局先归一（live → recent）');
+
 console.log(`\n=== 结果 ===\n通过: ${pass}  失败: ${fail}`);
 process.exit(fail ? 1 : 0);
