@@ -417,6 +417,10 @@ module.exports.match = function (name, tag, q) {
         <t-button theme="primary" size="small" bindtap="retryStructure">重试</t-button>
       </view>
     </view>
+    <view wx:elif="{{lpStructureLoading || bracketLoading}}" class="hint-card-enhanced">
+      <view class="hint-title">淘汰赛加载中…</view>
+      <view class="hint-desc">正在获取 Liquipedia 对阵结构</view>
+    </view>
     <view wx:else class="hint-card-enhanced">
       <view class="hint-title">暂无淘汰赛数据</view>
       <view class="hint-desc">该赛事在 Liquipedia 暂无淘汰赛对阵结构</view>

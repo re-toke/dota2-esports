@@ -2564,6 +2564,8 @@ Page({
     });
 
     this.setData({ metadata: meta, participantsList: participantsList, periodText: periodText, formatNote: formatNote, pendingTeams: pendingTeams });
+    // 队伍列表可能晚于「切到队伍 Tab」才构建：构建后补一次 tag（已加载/加载中会自动跳过）
+    if (this.data.tab === 'teams') this._loadTeamTags();
 
     // ★★ 2026-09-21 修复「首次进入参赛队伍队名错误 / 退出再进却正确」：
     //
@@ -2736,15 +2738,28 @@ Page({
 
   // P2（2026-10-27）：批量补队伍缩写（tag），供搜索匹配缩写（如 TS → Team Spirit）。
   // 懒加载：仅进入队伍 Tab 时触发一次；失败不阻塞（下次进入再试），仍可按队名搜索。
+  // ★ LP 侧队伍的 id 是负数占位（非 OpenDota team_id）⇒ 同时走「按队名」反查。
   _loadTeamTags() {
     if (this.data.teamTagsLoaded || this.data.teamTagsLoading) return;
     const list = this.data.participantsList || [];
-    const ids = list.filter((t) => t && t.id > 0).map((t) => t.id);
-    if (!ids.length) { this.setData({ teamTagsLoaded: true }); return; }
+    const nums = list.filter((t) => t && t.id > 0).map((t) => t.id);
+    const names = list
+      .filter((t) => t && t.name && !/^(待公布|TBD|待定队伍 \d+)$/i.test(String(t.name).trim()))
+      .map((t) => String(t.name).trim());
+    if (!nums.length && !names.length) return;
     this.setData({ teamTagsLoading: true });
-    api.getTeamTags(ids).then((map) => {
+    Promise.all([
+      nums.length ? api.getTeamTags(nums) : Promise.resolve({}),
+      names.length ? api.getTeamTagsByName(names) : Promise.resolve({})
+    ]).then((r) => {
+      const byId = r[0] || {};
+      const byName = r[1] || {};
+      const merged = list.map((t) => {
+        const tag = (t && t.id > 0 && byId[t.id]) ||
+          (t && byName[api.normTeamTagKey(t.name)]) || (t && t.tag) || '';
+        return Object.assign({}, t, { tag: tag });
+      });
       const patch = { teamTagsLoaded: true, teamTagsLoading: false };
-      const merged = list.map((t) => Object.assign({}, t, { tag: (t && map[t.id]) || (t && t.tag) || '' }));
       merged.forEach((t, i) => {
         if (t.tag && t.tag !== list[i].tag) patch['participantsList[' + i + '].tag'] = t.tag;
       });

@@ -879,6 +879,38 @@ function getTeamTags(teamIds) {
   });
 }
 
+// 2026-10-27：按队名批量查 tag。Liquipedia 侧队伍只有负数占位 id，按 id 查不到，
+// 需要用队名（lower 精确 IN）反查 teams 表；返回 { 归一化队名: tag }。
+function normTeamTagKey(s) {
+  return String(s || '').toLowerCase().replace(/[\s\-._]/g, '');
+}
+
+function getTeamTagsByName(names) {
+  const list = (names || [])
+    .map((n) => String(n || '').trim().replace(/'/g, "''").toLowerCase())
+    .filter(Boolean)
+    .slice(0, 60);
+  if (!list.length) return Promise.resolve({});
+  const sql = 'SELECT team_id, name, tag FROM teams WHERE lower(trim(name)) IN (' +
+    list.map((n) => "'" + n + "'").join(',') + ')';
+  const path = '/explorer?sql=' + encodeURIComponent(sql);
+  return cached(path, null, 6 * 3600).then((data) => {
+    const rows = (data && data.rows) || [];
+    const map = {};
+    const bestId = {};
+    // 同名队伍可能有多条历史记录：取 team_id 最大的（最新队）避免拿到退役队伍缩写
+    rows.forEach((r) => {
+      if (!r || !r.name) return;
+      const k = normTeamTagKey(r.name);
+      if (bestId[k] == null || (r.team_id || 0) > bestId[k]) {
+        bestId[k] = r.team_id || 0;
+        map[k] = (r.tag || '').trim();
+      }
+    });
+    return map;
+  });
+}
+
 // 物品表（id -> { name, img, dname }）：OpenDota /constants/items 返回 { name: { id, img, dname } }，
 // 反转为 id 索引便于比赛详情页按 item_0~5 数字 id 查物品名/图标。长缓存（物品几乎不变）。
 // 注意：OpenDota 的 img 是相对路径 /apps/dota2/images/dota_react/items/{name}.png?t=xxx，
@@ -968,6 +1000,8 @@ module.exports = {
   getTeamNames: getTeamNames,
   getTeamLogos: getTeamLogos,
   getTeamTags: getTeamTags,
+  getTeamTagsByName: getTeamTagsByName,
+  normTeamTagKey: normTeamTagKey,
   getItems: getItems,
   getItemsList: getItemsList,
   getItemTimings: getItemTimings
