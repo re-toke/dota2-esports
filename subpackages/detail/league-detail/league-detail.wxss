@@ -879,6 +879,40 @@
   color: var(--text-4);
   font-family: var(--font-numeric);
 }
+/* P2（2026-10-27）：参赛队伍本地搜索 */
+.teams-search {
+  display: flex;
+  align-items: center;
+  height: 88rpx;
+  padding: 0 var(--space-2);
+  margin-bottom: var(--space-2);
+  background: var(--card-bg, #FFFFFF);
+  border: 1rpx solid var(--td-border-level-1-color);
+  border-radius: var(--radius-md, 12rpx);
+}
+.teams-search-input {
+  flex: 1;
+  min-width: 0;
+  height: 88rpx;
+  font-size: var(--fs-caption);
+  color: var(--text-2);
+}
+.teams-search-ph { color: var(--text-4); }
+.teams-search-clear {
+  flex: 0 0 auto;
+  width: 88rpx;
+  height: 88rpx;
+  line-height: 88rpx;
+  text-align: center;
+  font-size: 26rpx;
+  color: var(--text-4);
+}
+.teams-empty {
+  padding: var(--space-3) 0;
+  text-align: center;
+  font-size: var(--fs-caption);
+  color: var(--text-4);
+}
 .teams-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

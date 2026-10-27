@@ -1,3 +1,15 @@
+<wxs module="tf">
+// P2（2026-10-27）：参赛队伍本地搜索 —— 队名忽略大小写/空格/连字符匹配
+function norm(s) {
+  var t = ('' + (s || '')).toLowerCase();
+  t = t.split(' ').join('');
+  return t.split('-').join('');
+}
+module.exports.match = function (name, q) {
+  if (!q) return true;
+  return norm(name).indexOf(norm(q)) >= 0;
+};
+</wxs>
 <view class="container">
   <!-- 头部：赛事名 + 关注 + 对阵数（分级/状态统一到「赛事信息」卡，避免重复展示） -->
   <view class="head">
@@ -327,9 +339,13 @@
         <text class="teams-title">参赛队伍</text>
         <text class="teams-count">{{metadata.participantsCount || (participantsList.length + pendingTeams)}} 支</text>
       </view>
+      <view class="teams-search">
+        <input class="teams-search-input" value="{{teamQuery}}" placeholder="搜索队名" placeholder-class="teams-search-ph" confirm-type="search" aria-role="searchbox" aria-label="搜索参赛队伍" bindinput="onTeamSearch" />
+        <text wx:if="{{teamQuery}}" class="teams-search-clear" catchtap="clearTeamSearch" aria-role="button" aria-label="清空搜索">✕</text>
+      </view>
       <view class="teams-grid">
         <!-- 参赛队伍 chip：已公布可点击跳转，待公布灰色不可点击 -->
-        <view class="team-chip {{item.status === 'TBD' || item.name === '待公布' ? 'is-pending' : ''}}" wx:for="{{participantsList}}" wx:for-index="pidx" wx:key="id" catchtap="openTeam" data-id="{{item.id}}">
+        <view wx:if="{{tf.match(item.name, teamQuery)}}" class="team-chip {{item.status === 'TBD' || item.name === '待公布' ? 'is-pending' : ''}}" wx:for="{{participantsList}}" wx:for-index="pidx" wx:key="id" catchtap="openTeam" data-id="{{item.id}}">
           <view class="team-chip-logo">
             <image wx:if="{{item.logo}}" class="team-logo-img" src="{{item.logo}}" mode="aspectFill" lazy-load binderror="onParticipantLogoError" data-idx="{{pidx}}" />
             <text wx:else>{{item.name ? item.name[0] : '?'}}</text>
@@ -346,8 +362,9 @@
           <text wx:if="{{item.played === false}}" class="team-chip-badge pending">未登场</text>
         </view>
       </view>
+      <view wx:if="{{teamQuery && teamVisibleCount === 0}}" class="teams-empty">没有匹配「{{teamQuery}}」的队伍</view>
       <!-- P2：待公布队伍汇总（替代逐条占位） -->
-      <view wx:if="{{pendingTeams > 0}}" class="teams-pending">
+      <view wx:if="{{pendingTeams > 0 && !teamQuery}}" class="teams-pending">
         <text>另有 {{pendingTeams}} 队待公布</text>
       </view>
     </view>

@@ -115,7 +115,22 @@ const tick = () => new Promise((r) => setTimeout(r, 20));
   assert(calls.length === 2, `S2 连续失败后仍发起第 2 次（实际 ${calls.length}）`);
   assert(inst2.data.lpStructureError === true, 'S2 连续失败可无限重试（不被 loaded 锁死）');
 
-  // ----- 场景 3：源码守卫（WXML 分支与 handler 接线） -----
+  // ----- 场景 3：参赛队伍搜索（P2 剩余项） -----
+  const inst3 = makeInstance();
+  inst3.data.participantsList = [
+    { id: 1, name: 'Team Spirit' }, { id: 2, name: 'Xtreme Gaming' }, { id: 3, name: '待公布' }
+  ];
+  inst3.onTeamSearch({ detail: { value: 'spirit' } });
+  assert(inst3.data.teamQuery === 'spirit', '搜索：关键词写入 teamQuery');
+  assert(inst3.data.teamVisibleCount === 1, `搜索：忽略空格/大小写命中 1 队（实际 ${inst3.data.teamVisibleCount}）`);
+  inst3.onTeamSearch({ detail: { value: 'teamspirit' } });
+  assert(inst3.data.teamVisibleCount === 1, '搜索：无空格关键词同样命中');
+  inst3.onTeamSearch({ detail: { value: 'zzz' } });
+  assert(inst3.data.teamVisibleCount === 0, '搜索：无命中返回 0');
+  inst3.clearTeamSearch();
+  assert(inst3.data.teamQuery === '' && inst3.data.teamVisibleCount === 3, '搜索：清空后恢复全部');
+
+  // ----- 场景 4：源码守卫（WXML 分支与 handler 接线） -----
   const wxml = fs.readFileSync(path.join(PAGE_DIR, 'league-detail.wxml'), 'utf8');
   assert(/wx:elif="\{\{lpStructureError\}\}"/.test(wxml), 'WXML：error 分支在真无数据分支之前');
   assert(/bindtap="retryStructure"/.test(wxml), 'WXML：重试按钮绑定 retryStructure');

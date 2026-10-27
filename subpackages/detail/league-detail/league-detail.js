@@ -204,6 +204,9 @@ Page({
     playoffOnly: false,        // 「仅看淘汰赛」筛选态
     hasPlayoffSeries: false,   // 是否出现 playoff/grandFinal 阶段（无则不显示筛选）
     pendingTeams: 0,           // 「另有 N 队待公布」汇总数
+    // ===== P2（2026-10-27）：参赛队伍本地搜索（零网络） =====
+    teamQuery: '',             // 搜索关键词（WXML 由 WXS 过滤，不重建列表）
+    teamVisibleCount: 0,       // 命中队伍数（仅用于空结果提示）
     // ===== P3.1：对战表 =====
     bracketView: null,         // bracketLayout 输出（sections/cards/lines 坐标）
     bracketLoading: false,
@@ -2694,7 +2697,10 @@ Page({
   switchTab(e) {
     const key = e.currentTarget.dataset.key;
     if (key === this.data.tab) return;
-    this.setData({ tab: key, expandedGame: '' });
+    const patch = { tab: key, expandedGame: '' };
+    // P2：进入队伍 Tab 时重算可见数（participantsList 可能在加载过程中被重建）
+    if (key === 'teams') patch.teamVisibleCount = this._countTeamMatches(this.data.teamQuery);
+    this.setData(patch);
     // P3.1：Tab 改名「淘汰赛」（原 standings）—— 懒加载聚合战绩 + LP 结构
     if (key === 'playoffs' && !this.data.standingsLoaded) {
       this.loadStandings();
@@ -2707,6 +2713,28 @@ Page({
     if (key === 'teams' && !this.data.lpStructureLoaded && !this.data.lpStructureLoading) {
       this.loadStructure();
     }
+  },
+
+  // P2（2026-10-27）：参赛队伍本地搜索 —— 只改关键词与命中数，
+  // 列表过滤交给 WXS（不重建 participantsList，避免 logo 异步回填丢失）。
+  onTeamSearch(e) {
+    const q = (e && e.detail && e.detail.value) || '';
+    this.setData({ teamQuery: q, teamVisibleCount: this._countTeamMatches(q) });
+  },
+
+  clearTeamSearch() {
+    this.setData({ teamQuery: '', teamVisibleCount: this._countTeamMatches('') });
+  },
+
+  _countTeamMatches(q) {
+    const list = this.data.participantsList || [];
+    const k = this._normTeamQuery(q);
+    if (!k) return list.length;
+    return list.filter((t) => t && this._normTeamQuery(t.name).indexOf(k) >= 0).length;
+  },
+
+  _normTeamQuery(s) {
+    return String(s || '').toLowerCase().replace(/[\s\-]/g, '');
   },
 
   // P2：LP 小组表 → 归一化队名 → 组名（供参赛队伍分组反查）
