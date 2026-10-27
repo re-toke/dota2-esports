@@ -212,6 +212,35 @@ const tick = () => new Promise((r) => setTimeout(r, 20));
   const blast6 = curation.curatedEventFor('BLAST Slam VI', { game: 'dota2' }) || {};
   assert(/\(Bo3\)/.test(String(blast6.format || '')), '人工覆盖：BLAST Slam VI 淘汰轮按 Bo3');
 
+  // BO3 覆盖：渲染链路（LP 未声明 → curation 人工覆盖 Bo3 生效，决赛同样 Bo3、不臆造 Bo5）
+  inst3.data.name = 'BLAST Slam VI';
+  inst3.data.leagueId = 19099;
+  inst3.data.metadata = {};
+  inst3._renderBracket({
+    type: 'Bracket/8',
+    slots: [
+      { key: 'R1M1', side: 'main', roundNo: 1, slotNo: 1, team1Name: 'A', team2Name: 'B', boType: 'BO1', boDeclared: false, phase: 'upcoming' },
+      { key: 'F1', side: 'final', roundNo: 1, slotNo: 1, team1Name: 'A', team2Name: 'C', boType: 'BO1', boDeclared: false, phase: 'upcoming' }
+    ],
+    rounds: [
+      { no: 1, side: 'main', label: 'R1', matches: [{ key: 'R1M1', side: 'main', roundNo: 1, slotNo: 1 }] },
+      { no: 1, side: 'final', label: 'Final', matches: [{ key: 'F1', side: 'final', roundNo: 1, slotNo: 1 }] }
+    ]
+  });
+  const b6Cards = inst3.data.bracketView.sections.reduce((a, s) => a.concat(s.cards), []);
+  assert((b6Cards.filter((c) => c.key === 'R1M1')[0] || {}).boType === 'BO3', 'BO 覆盖：BLAST Slam VI 淘汰卡 → BO3');
+  assert((b6Cards.filter((c) => c.key === 'F1')[0] || {}).boType === 'BO3', 'BO 覆盖：决赛同为 BO3（不臆造 Bo5）');
+
+  // 补录表自检：条目均含 BO 数字；键都能命中 curation（防键名拼写漂移，如 SLAM/Slam 大小写）
+  const boMap = require('../../utils/curationBoFormat.js');
+  assert(Object.keys(boMap).every((k) => /Bo\s*\d/i.test(String(boMap[k]))), '补录表：每个条目都含 BO 数字');
+  const orphan = Object.keys(boMap).filter((k) => {
+    const ev = curation.curatedEventFor(k, { game: 'dota2' });
+    return !ev || !/Bo\s*\d/i.test(String(ev.format || ''));
+  });
+  assert(orphan.length === 0, '补录表：所有键都能命中 curation（无孤儿键）' +
+    (orphan.length ? '：' + orphan.join(',') : ''));
+
   // ----- 场景 4：源码守卫（WXML 分支与 handler 接线） -----
   const wxml = fs.readFileSync(path.join(PAGE_DIR, 'league-detail.wxml'), 'utf8');
   assert(/wx:elif="\{\{lpStructureError\}\}"/.test(wxml), 'WXML：error 分支在真无数据分支之前');
