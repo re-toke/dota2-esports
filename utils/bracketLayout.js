@@ -273,8 +273,33 @@ function layoutBracket(bracket, opts) {
   };
 }
 
+/**
+ * P4（2026-10-27）：定位「当前轮」——LIVE 优先，其次最早「有队伍且未完赛」的轮，
+ * 全部完赛则取最后一轮。返回 { side, roundNo, x, left } 或 null。
+ * `left` 可直接作 scroll-view 的 scroll-left（左侧留 24rpx 呼吸位）。
+ */
+function findCurrentRound(view) {
+  const sections = (view && view.sections) || [];
+  const all = [];
+  sections.forEach((s) => (s.cards || []).forEach((c) => all.push(c)));
+  let target = all.filter((c) => c.live)[0];
+  if (!target) target = all.filter((c) => !c.empty && !c.finished)[0];
+  if (!target) {
+    const played = all.filter((c) => !c.empty);
+    target = played.length ? played[played.length - 1] : null;
+  }
+  if (!target) return null;
+  const sec = sections.filter((s) => s.side === target.side)[0] || sections[0];
+  if (!sec) return null;
+  const rounds = sec.rounds || [];
+  if (!rounds.length) return null;
+  const idx = Math.max(0, Math.min(rounds.length - 1, (target.roundNo || 1) - 1));
+  return { side: sec.side, roundNo: idx + 1, x: rounds[idx].x, left: Math.max(0, rounds[idx].x - 24) };
+}
+
 module.exports = {
   layoutBracket: layoutBracket,
+  findCurrentRound: findCurrentRound,
   CARD_W: CARD_W,
   CARD_H: H,
   COL_GAP: COL_GAP

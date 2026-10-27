@@ -1448,6 +1448,15 @@
   display: flex;
   align-items: center;
 }
+/* P4（2026-10-27）：当前轮高亮（自动横滑定位到该列） */
+.brk-card.is-current {
+  border-color: var(--td-brand-color);
+  box-shadow: 0 0 0 2rpx var(--td-brand-color-focus);
+}
+.brk-round-head.is-current {
+  color: var(--td-brand-color);
+  font-weight: 600;
+}
 .brk-scroll {
   width: 100%;
   background: var(--card-bg, #FFFFFF);

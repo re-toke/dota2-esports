@@ -140,6 +140,19 @@ const tick = () => new Promise((r) => setTimeout(r, 20));
   inst3.toggleBracketSchedule();
   assert(inst3.data.showBracketSchedule === true, '赛程开关：再次点击恢复显示');
 
+  // P4：当前轮定位（渲染后写焦点 + 横滑偏移）
+  inst3._renderBracket({
+    type: 'Bracket/8',
+    slots: [],
+    rounds: [
+      { no: 1, side: 'main', label: 'R1', matches: [{ key: 'R1M1', side: 'main', roundNo: 1, slotNo: 1, team1Name: 'A', team2Name: 'B', finished: true, score1: 2, score2: 1, boType: 'Bo3' }] },
+      { no: 2, side: 'main', label: 'R2', matches: [{ key: 'R2M1', side: 'main', roundNo: 2, slotNo: 1, team1Name: 'A', team2Name: 'C', phase: 'live', boType: 'Bo3' }] }
+    ]
+  });
+  assert(inst3.data.bracketFocus && inst3.data.bracketFocus.roundNo === 2, '当前轮：渲染后焦点落在 LIVE 轮');
+  const curX = inst3.data.bracketView.sections[0].rounds[1].x;
+  assert(inst3.data.bracketScrollLeft === Math.max(0, curX - 24), '当前轮：scroll-left 指向该轮表头');
+
   // ----- 场景 4：源码守卫（WXML 分支与 handler 接线） -----
   const wxml = fs.readFileSync(path.join(PAGE_DIR, 'league-detail.wxml'), 'utf8');
   assert(/wx:elif="\{\{lpStructureError\}\}"/.test(wxml), 'WXML：error 分支在真无数据分支之前');

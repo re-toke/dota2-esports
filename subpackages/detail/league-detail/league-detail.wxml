@@ -379,15 +379,15 @@ module.exports.match = function (name, tag, q) {
       <view class="brk-toolbar">
         <text class="filter-chip {{showBracketSchedule ? 'active' : ''}}" bindtap="toggleBracketSchedule" aria-role="switch" aria-checked="{{showBracketSchedule}}" aria-label="显示赛程时间">{{showBracketSchedule ? '隐藏赛程' : '显示赛程'}}</text>
       </view>
-      <scroll-view scroll-x class="brk-scroll" enhanced show-scrollbar="{{false}}">
+      <scroll-view scroll-x class="brk-scroll" enhanced show-scrollbar="{{false}}" scroll-left="{{bracketScrollLeft}}" scroll-with-animation>
         <view class="brk-canvas" style="width:{{bracketView.width}}rpx;height:{{bracketView.height}}rpx">
           <!-- P4：Upper→Lower 降级线（画在卡片之下） -->
           <view class="brk-cross" wx:for="{{bracketView.crossLines}}" wx:for-item="cl" wx:key="index" style="left:{{cl.left}}rpx;top:{{cl.top}}rpx;width:{{cl.width}}rpx;height:{{cl.height}}rpx"></view>
           <block wx:for="{{bracketView.sections}}" wx:for-item="sec" wx:key="side">
             <view class="brk-section-head" style="top:{{sec.y}}rpx">{{sec.label}}</view>
-            <view class="brk-round-head" wx:for="{{sec.rounds}}" wx:for-item="rd" wx:key="label" style="left:{{rd.x}}rpx;top:{{sec.y + 24}}rpx">{{rd.label}}</view>
+            <view class="brk-round-head {{bracketFocus && bracketFocus.side === sec.side && bracketFocus.roundNo === ridx + 1 ? 'is-current' : ''}}" wx:for="{{sec.rounds}}" wx:for-item="rd" wx:for-index="ridx" wx:key="label" style="left:{{rd.x}}rpx;top:{{sec.y + 24}}rpx">{{rd.label}}</view>
             <view class="brk-line" wx:for="{{sec.lines}}" wx:for-item="ln" wx:key="index" style="left:{{ln.left}}rpx;top:{{ln.top}}rpx;width:{{ln.width}}rpx;height:{{ln.height}}rpx"></view>
-            <view class="brk-card {{item.empty ? 'is-empty' : ''}}"
+            <view class="brk-card {{item.empty ? 'is-empty' : ''}} {{bracketFocus && bracketFocus.side === item.side && bracketFocus.roundNo === item.roundNo ? 'is-current' : ''}}"
                   wx:for="{{sec.cards}}" wx:for-item="item" wx:key="key"
                   style="left:{{item.x}}rpx;top:{{item.y}}rpx"
                   aria-role="button" aria-label="{{item.team1}} 对 {{item.team2}}"

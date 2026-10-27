@@ -120,6 +120,43 @@ assert(!!f1 && f1.team1 === 'Iron Wing' && f1.team2 === 'Team Spirit', '填充�
 assert(!!f1 && f1.empty === false, '填充态：空槽标记以 slots 为准');
 assert(!!f1 && f1.matchId === 8900771154, '填充态：slots 的 matchIds 用于跳转');
 
+// ===== P4：当前轮定位 =====
+const curView = bl.layoutBracket({
+  type: 'Bracket/8',
+  slots: [],
+  rounds: [
+    { no: 1, side: 'main', label: 'R1', matches: [slot(1, 1, 'main', 'A', 'B', { finished: true, score1: 2, score2: 1 })] },
+    { no: 2, side: 'main', label: 'R2', matches: [slot(2, 1, 'main', 'A', 'C', { phase: 'live' })] }
+  ]
+});
+const cur = bl.findCurrentRound(curView);
+assert(!!cur && cur.side === 'main' && cur.roundNo === 2, '当前轮：LIVE 卡所在轮为焦点');
+assert(!!cur && cur.x === curView.sections[0].rounds[1].x, '当前轮：x 取该轮表头坐标');
+assert(!!cur && cur.left === Math.max(0, cur.x - 24), '当前轮：scroll-left 预留 24rpx 呼吸位');
+
+// 无 LIVE：取最早「有队伍且未完赛」的轮
+const curView2 = bl.layoutBracket({
+  type: 'Bracket/8',
+  slots: [],
+  rounds: [
+    { no: 1, side: 'main', label: 'R1', matches: [slot(1, 1, 'main', 'A', 'B', { finished: true, score1: 2, score2: 0 })] },
+    { no: 2, side: 'main', label: 'R2', matches: [slot(2, 1, 'main', 'A', 'C')] }
+  ]
+});
+assert(bl.findCurrentRound(curView2).roundNo === 2, '当前轮：无 LIVE 时取未完赛轮');
+
+// 全部完赛：退回最后一轮（决赛）
+const curView3 = bl.layoutBracket({
+  type: 'Bracket/8',
+  slots: [],
+  rounds: [
+    { no: 1, side: 'main', label: 'R1', matches: [slot(1, 1, 'main', 'A', 'B', { finished: true, score1: 2, score2: 0 })] },
+    { no: 2, side: 'main', label: 'R2', matches: [slot(2, 1, 'main', 'A', 'C', { finished: true, score1: 3, score2: 1 })] }
+  ]
+});
+assert(bl.findCurrentRound(curView3).roundNo === 2, '当前轮：全部完赛取最后一轮');
+assert(bl.findCurrentRound(null) === null, '当前轮：空视图返回 null');
+
 // ===== 无数据 =====
 assert(bl.layoutBracket(null).sections.length === 0, 'null 输入 → 空布局');
 
