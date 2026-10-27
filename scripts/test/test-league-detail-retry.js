@@ -118,13 +118,17 @@ const tick = () => new Promise((r) => setTimeout(r, 20));
   // ----- 场景 3：参赛队伍搜索（P2 剩余项） -----
   const inst3 = makeInstance();
   inst3.data.participantsList = [
-    { id: 1, name: 'Team Spirit' }, { id: 2, name: 'Xtreme Gaming' }, { id: 3, name: '待公布' }
+    { id: 1, name: 'Team Spirit', tag: 'TS' }, { id: 2, name: 'Xtreme Gaming' }, { id: 3, name: '待公布' }
   ];
   inst3.onTeamSearch({ detail: { value: 'spirit' } });
   assert(inst3.data.teamQuery === 'spirit', '搜索：关键词写入 teamQuery');
   assert(inst3.data.teamVisibleCount === 1, `搜索：忽略空格/大小写命中 1 队（实际 ${inst3.data.teamVisibleCount}）`);
   inst3.onTeamSearch({ detail: { value: 'teamspirit' } });
   assert(inst3.data.teamVisibleCount === 1, '搜索：无空格关键词同样命中');
+  inst3.onTeamSearch({ detail: { value: 'ts' } });
+  assert(inst3.data.teamVisibleCount === 1, '搜索：缩写 ts 命中 Team Spirit');
+  inst3.onTeamSearch({ detail: { value: 'TS' } });
+  assert(inst3.data.teamVisibleCount === 1, '搜索：缩写忽略大小写');
   inst3.onTeamSearch({ detail: { value: 'zzz' } });
   assert(inst3.data.teamVisibleCount === 0, '搜索：无命中返回 0');
   inst3.clearTeamSearch();

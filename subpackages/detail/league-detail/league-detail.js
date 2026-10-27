@@ -207,6 +207,8 @@ Page({
     // ===== P2（2026-10-27）：参赛队伍本地搜索（零网络） =====
     teamQuery: '',             // 搜索关键词（WXML 由 WXS 过滤，不重建列表）
     teamVisibleCount: 0,       // 命中队伍数（仅用于空结果提示）
+    teamTagsLoaded: false,     // 队伍缩写（tag）是否已批量补全（进入队伍 Tab 时懒加载）
+    teamTagsLoading: false,
     // ===== P3.1：对战表 =====
     bracketView: null,         // bracketLayout 输出（sections/cards/lines 坐标）
     bracketLoading: false,
@@ -2699,7 +2701,10 @@ Page({
     if (key === this.data.tab) return;
     const patch = { tab: key, expandedGame: '' };
     // P2：进入队伍 Tab 时重算可见数（participantsList 可能在加载过程中被重建）
-    if (key === 'teams') patch.teamVisibleCount = this._countTeamMatches(this.data.teamQuery);
+    if (key === 'teams') {
+      patch.teamVisibleCount = this._countTeamMatches(this.data.teamQuery);
+      this._loadTeamTags();
+    }
     this.setData(patch);
     // P3.1：Tab 改名「淘汰赛」（原 standings）—— 懒加载聚合战绩 + LP 结构
     if (key === 'playoffs' && !this.data.standingsLoaded) {
@@ -2726,11 +2731,33 @@ Page({
     this.setData({ teamQuery: '', teamVisibleCount: this._countTeamMatches('') });
   },
 
-  _countTeamMatches(q) {
+  // P2（2026-10-27）：批量补队伍缩写（tag），供搜索匹配缩写（如 TS → Team Spirit）。
+  // 懒加载：仅进入队伍 Tab 时触发一次；失败不阻塞（下次进入再试），仍可按队名搜索。
+  _loadTeamTags() {
+    if (this.data.teamTagsLoaded || this.data.teamTagsLoading) return;
     const list = this.data.participantsList || [];
+    const ids = list.filter((t) => t && t.id > 0).map((t) => t.id);
+    if (!ids.length) { this.setData({ teamTagsLoaded: true }); return; }
+    this.setData({ teamTagsLoading: true });
+    api.getTeamTags(ids).then((map) => {
+      const patch = { teamTagsLoaded: true, teamTagsLoading: false };
+      const merged = list.map((t) => Object.assign({}, t, { tag: (t && map[t.id]) || (t && t.tag) || '' }));
+      merged.forEach((t, i) => {
+        if (t.tag && t.tag !== list[i].tag) patch['participantsList[' + i + '].tag'] = t.tag;
+      });
+      patch.teamVisibleCount = this._countTeamMatches(this.data.teamQuery, merged);
+      this.setData(patch);
+    }).catch(() => {
+      this.setData({ teamTagsLoading: false });
+    });
+  },
+
+  _countTeamMatches(q, list) {
+    const arr = list || this.data.participantsList || [];
     const k = this._normTeamQuery(q);
-    if (!k) return list.length;
-    return list.filter((t) => t && this._normTeamQuery(t.name).indexOf(k) >= 0).length;
+    if (!k) return arr.length;
+    return arr.filter((t) => t &&
+      (this._normTeamQuery(t.name).indexOf(k) >= 0 || this._normTeamQuery(t.tag).indexOf(k) >= 0)).length;
   },
 
   _normTeamQuery(s) {

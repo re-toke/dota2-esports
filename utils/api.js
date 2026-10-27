@@ -859,6 +859,26 @@ function getTeamLogos(teamIds) {
   });
 }
 
+// 2026-10-27：批量查询队伍缩写 tag（team_id -> tag），供参赛队伍搜索匹配缩写。
+// 与 getTeamNames/getTeamLogos 同源（1 次 explorer 批量 + 6h 缓存），避免逐队 getTeam。
+function getTeamTags(teamIds) {
+  const ids = (teamIds || [])
+    .map((x) => Number(x))
+    .filter((x) => !isNaN(x) && x > 0);
+  if (!ids.length) return Promise.resolve({});
+  // 注意：SQL 只允许数字 id（上面已过滤），无注入风险
+  const sql = 'SELECT team_id, tag FROM teams WHERE team_id IN (' + ids.join(',') + ')';
+  const path = '/explorer?sql=' + encodeURIComponent(sql);
+  return cached(path, null, 6 * 3600).then((data) => {
+    const rows = (data && data.rows) || [];
+    const map = {};
+    rows.forEach((r) => {
+      if (r && r.team_id != null) map[r.team_id] = (r.tag || '').trim();
+    });
+    return map;
+  });
+}
+
 // 物品表（id -> { name, img, dname }）：OpenDota /constants/items 返回 { name: { id, img, dname } }，
 // 反转为 id 索引便于比赛详情页按 item_0~5 数字 id 查物品名/图标。长缓存（物品几乎不变）。
 // 注意：OpenDota 的 img 是相对路径 /apps/dota2/images/dota_react/items/{name}.png?t=xxx，
@@ -947,6 +967,7 @@ module.exports = {
   getHeroMatchups: getHeroMatchups,
   getTeamNames: getTeamNames,
   getTeamLogos: getTeamLogos,
+  getTeamTags: getTeamTags,
   getItems: getItems,
   getItemsList: getItemsList,
   getItemTimings: getItemTimings

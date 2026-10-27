@@ -5,9 +5,10 @@ function norm(s) {
   t = t.split(' ').join('');
   return t.split('-').join('');
 }
-module.exports.match = function (name, q) {
+module.exports.match = function (name, tag, q) {
   if (!q) return true;
-  return norm(name).indexOf(norm(q)) >= 0;
+  var k = norm(q);
+  return norm(name).indexOf(k) >= 0 || norm(tag).indexOf(k) >= 0;
 };
 </wxs>
 <view class="container">
@@ -345,7 +346,7 @@ module.exports.match = function (name, q) {
       </view>
       <view class="teams-grid">
         <!-- 参赛队伍 chip：已公布可点击跳转，待公布灰色不可点击 -->
-        <view wx:if="{{tf.match(item.name, teamQuery)}}" class="team-chip {{item.status === 'TBD' || item.name === '待公布' ? 'is-pending' : ''}}" wx:for="{{participantsList}}" wx:for-index="pidx" wx:key="id" catchtap="openTeam" data-id="{{item.id}}">
+        <view wx:if="{{tf.match(item.name, item.tag, teamQuery)}}" class="team-chip {{item.status === 'TBD' || item.name === '待公布' ? 'is-pending' : ''}}" wx:for="{{participantsList}}" wx:for-index="pidx" wx:key="id" catchtap="openTeam" data-id="{{item.id}}">
           <view class="team-chip-logo">
             <image wx:if="{{item.logo}}" class="team-logo-img" src="{{item.logo}}" mode="aspectFill" lazy-load binderror="onParticipantLogoError" data-idx="{{pidx}}" />
             <text wx:else>{{item.name ? item.name[0] : '?'}}</text>
