@@ -274,23 +274,54 @@ function layoutBracket(bracket, opts) {
 }
 
 /**
- * P4（2026-10-27）：定位「当前轮」——LIVE 优先，其次最早「有队伍且未完赛」的轮，
- * 全部完赛则取最后一轮。返回 { side, roundNo, x, left } 或 null。
+ * P4（2026-10-27）：定位「当前轮」——LIVE 优先；否则取「进度最靠前的未完成分区」里
+ * 第一个尚未开打的轮（maxFinishedRound + 1），避免 R1 残留未完赛卡把焦点拉回第 1 轮；
+ * 全部完赛则取最后一个分区（通常为决赛）。返回 { side, roundNo, x, left } 或 null。
  * `left` 可直接作 scroll-view 的 scroll-left（左侧留 24rpx 呼吸位）。
  */
+function _maxFinishedRound(sec) {
+  let m = 0;
+  (sec.cards || []).forEach((c) => {
+    if (!c.empty && c.finished && (c.roundNo || 0) > m) m = c.roundNo || 0;
+  });
+  return m;
+}
+
 function findCurrentRound(view) {
   const sections = (view && view.sections) || [];
-  const all = [];
-  sections.forEach((s) => (s.cards || []).forEach((c) => all.push(c)));
-  let target = all.filter((c) => c.live)[0];
-  if (!target) target = all.filter((c) => !c.empty && !c.finished)[0];
-  if (!target) {
-    const played = all.filter((c) => !c.empty);
-    target = played.length ? played[played.length - 1] : null;
+  if (!sections.length) return null;
+  const played = (s) => (s.cards || []).filter((c) => !c.empty);
+  let sec = null;
+  let target = null;
+
+  // 1) LIVE 优先（任意分区）
+  for (let i = 0; i < sections.length && !target; i++) {
+    target = played(sections[i]).filter((c) => c.live)[0] || null;
+    if (target) sec = sections[i];
   }
-  if (!target) return null;
-  const sec = sections.filter((s) => s.side === target.side)[0] || sections[0];
-  if (!sec) return null;
+  // 2) 进度最靠前的未完成分区：取 maxFinishedRound 之后第一个有队伍的轮
+  if (!target) {
+    const pending = sections.filter((s) => {
+      const cs = played(s);
+      return cs.length && cs.some((c) => !c.finished);
+    });
+    if (pending.length) {
+      pending.sort((a, b) => _maxFinishedRound(b) - _maxFinishedRound(a));
+      sec = pending[0];
+      const cs = played(sec);
+      const next = cs.filter((c) => !c.finished && (c.roundNo || 1) > _maxFinishedRound(sec));
+      // 没有「下一轮」时（最后一轮进行中），取轮次最大的未完赛卡，忽略早期残留
+      const rest = cs.filter((c) => !c.finished).sort((a, b) => (b.roundNo || 1) - (a.roundNo || 1));
+      target = next[0] || rest[0] || null;
+    }
+  }
+  // 3) 全部完赛：取最后一个分区（决赛/季军所在分区）
+  if (!target) {
+    sec = sections[sections.length - 1];
+    const cs = played(sec);
+    target = cs.length ? cs[cs.length - 1] : null;
+  }
+  if (!sec || !target) return null;
   const rounds = sec.rounds || [];
   if (!rounds.length) return null;
   const idx = Math.max(0, Math.min(rounds.length - 1, (target.roundNo || 1) - 1));

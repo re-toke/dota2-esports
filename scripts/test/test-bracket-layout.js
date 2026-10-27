@@ -157,6 +157,32 @@ const curView3 = bl.layoutBracket({
 assert(bl.findCurrentRound(curView3).roundNo === 2, '当前轮：全部完赛取最后一轮');
 assert(bl.findCurrentRound(null) === null, '当前轮：空视图返回 null');
 
+// R1 残留未完赛卡、R2 进行中 → 焦点不能被拉回 R1
+const curView4 = bl.layoutBracket({
+  type: 'Bracket/8',
+  slots: [],
+  rounds: [
+    { no: 1, side: 'main', label: 'R1', matches: [
+      slot(1, 1, 'main', 'A', 'B', { finished: true, score1: 2, score2: 0 }), slot(1, 2, 'main', 'C', 'D')
+    ] },
+    { no: 2, side: 'main', label: 'R2', matches: [
+      slot(2, 1, 'main', 'A', 'C', { finished: true, score1: 2, score2: 1 }), slot(2, 2, 'main', 'B', 'D')
+    ] }
+  ]
+});
+assert(bl.findCurrentRound(curView4).roundNo === 2, '当前轮：早期残留卡不拉回焦点');
+
+// 双败：upper 已完赛、lower 进行中 → 焦点在 lower
+const curView5 = bl.layoutBracket({
+  type: 'Bracket/8U4L2DSL1D',
+  slots: [],
+  rounds: [
+    { no: 1, side: 'upper', label: 'UB R1', matches: [slot(1, 1, 'upper', 'A', 'B', { finished: true, score1: 2, score2: 0 })] },
+    { no: 1, side: 'lower', label: 'LB R1', matches: [slot(1, 1, 'lower', 'C', 'D')] }
+  ]
+});
+assert(bl.findCurrentRound(curView5).side === 'lower', '当前轮：双败取未完成分区');
+
 // ===== 无数据 =====
 assert(bl.layoutBracket(null).sections.length === 0, 'null 输入 → 空布局');
 
