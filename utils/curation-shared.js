@@ -5,9 +5,9 @@
 // cannot load .json directly).
 module.exports = {
   "version": 3,
-  "generatedAt": "2026-09-25T09:53:25.845Z",
+  "generatedAt": "2026-10-28T04:59:42.257Z",
   "source": "utils/curation.js#CURATED_EVENTS",
-  "eventCount": 321,
+  "eventCount": 327,
   "map": {
     "theinternational2025": "The International 2025",
     "ti2025": "The International 2025",
@@ -86,6 +86,10 @@ module.exports = {
     "fissure2025": "FISSURE Playground",
     "fissureuniverse": "FISSURE Universe",
     "fissureuniverse2025": "FISSURE Universe",
+    "pariuniversebyfissure": "PARI UNIVERSE by FISSURE",
+    "pariuniverse": "PARI UNIVERSE by FISSURE",
+    "pariuniverse2026": "PARI UNIVERSE by FISSURE",
+    "parifissure2026": "PARI UNIVERSE by FISSURE",
     "esloneraleigh2025": "ESL One Raleigh 2025",
     "raleigh2025": "ESL One Raleigh 2025",
     "eslraleigh2025": "ESL One Raleigh 2025",
@@ -293,7 +297,8 @@ module.exports = {
     "20143": "RES Unchained 5: BLAST SLAM VIII SEA Qualifier",
     "20159": "WINLINE Star Series Season 4",
     "20169": "BLAST Slam VII China Qualifier",
-    "20208": "BLAST SLAM IX"
+    "20208": "BLAST SLAM IX",
+    "20395": "PARI UNIVERSE by FISSURE"
   },
-  "dataVersion": "1790330005838"
+  "dataVersion": "1793163582249"
 };
