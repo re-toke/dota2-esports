@@ -47,6 +47,8 @@ var EDGE_ACTIONS = {
   getHeroes: 'opendota-proxy',
   getProMatches: 'opendota-proxy',
   getLiveMatches: 'opendota-proxy',
+  // 2026-10-28（首页冷启动第 3 步）：pro+live 一次 RTT（EF 内 live 最多等 2.5s）
+  getHomeBundle: 'opendota-proxy',
   // ★ 2026-10-12（BUG-A 接线）：数据源健康探测 —— opendota-proxy 新增 health action（探 OpenDota 可达性）
   health: 'opendota-proxy',
   // Steam / STRATZ / Liquipedia 薄代理

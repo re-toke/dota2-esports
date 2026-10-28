@@ -76,6 +76,17 @@ assert('冷启动：快照仅在 _lastPro 为空时使用',
   /if \(!this\._lastPro\)[\s\S]{0,240}?cache\.peek\(HOME_PRO_SNAP_KEY\)/.test(indexJs));
 assert('冷启动：settle 后写快照（pro 非空）',
   /cache\.set\(HOME_PRO_SNAP_KEY, pro, HOME_PRO_SNAP_TTL\)/.test(indexJs));
+// 2026-10-28（第 3 步）：homeBundle 一次 RTT + 单路回退
+assert('冷启动：homeBundle 优先，pro/live 各自回退单路',
+  /const bundleP[\s\S]{0,400}?api\.getProMatches\(\)[\s\S]{0,200}?api\.getLiveMatches\(\)/.test(indexJs));
+const apiSrc = fs.readFileSync(path.join(__dirname, '..', '..', 'utils', 'api.js'), 'utf8');
+assert('api：导出 getHomeBundle', /getHomeBundle: getHomeBundle/.test(apiSrc));
+const cpSrc = fs.readFileSync(path.join(__dirname, '..', '..', 'utils', 'cloudProxy.js'), 'utf8');
+assert('cloudProxy：getHomeBundle → opendota-proxy', /getHomeBundle: 'opendota-proxy'/.test(cpSrc));
+const efSrc = fs.readFileSync(path.join(__dirname, '..', '..', 'supabase', 'functions', 'opendota-proxy', 'index.ts'), 'utf8');
+assert('EF：getHomeBundle 分派 + trimLive 裁剪',
+  /action === "getHomeBundle"/.test(efSrc) && /function trimLive/.test(efSrc) &&
+  /action === "getLiveMatches"\) data = trimLive\(data\)/.test(efSrc));
 
 console.log('\n=== 结果 ===');
 console.log('PASS: ' + pass + ', FAIL: ' + fail);

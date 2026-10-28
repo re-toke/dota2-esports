@@ -425,7 +425,9 @@ const ACTION_MAP = {
   //   path 与 direct 侧 cached 写入 key 逐字符一致（/proMatches|{}、/live|{}），
   //   writeThrough 写穿后断网/云熔断回退直连可命中本地缓存（O-4 机制自动生效）。
   getProMatches: function () { return { action: 'getProMatches', params: {}, path: '/proMatches', ttlKey: 'proMatches' }; },
-  getLiveMatches: function () { return { action: 'getLiveMatches', params: {}, path: '/live', ttlKey: 'liveMatches' }; }
+  getLiveMatches: function () { return { action: 'getLiveMatches', params: {}, path: '/live', ttlKey: 'liveMatches' }; },
+  // 2026-10-28（首页冷启动第 3 步）：pro+live 一次 RTT；EF 内 live 最多等 2.5s
+  getHomeBundle: function () { return { action: 'getHomeBundle', params: {} }; }
 };
 
 // C1 高阶函数（2026-07-29）：统一「云代理优先 → 失败回退直连」模式。
@@ -535,6 +537,15 @@ function getProMatches() {
 function getLiveMatches() {
   return tryCloudOrDirect('getLiveMatches', [],
     function () { return cached('/live', null, config.cacheTTL.liveMatches); });
+}
+
+// 2026-10-28（首页冷启动第 3 步）：pro + live 一次 EF 往返。
+//   EF 内并行抓两路，live 最多等 2.5s（超时返回 live:null + livePartial=true）。
+//   直连无 bundle 能力 ⇒ resolve(null)，调用方回退到 getProMatches/getLiveMatches。
+//   ⚠️ 不加本地缓存：live 语义是 60s，bundle 由 EF 侧 60s 缓存负责。
+function getHomeBundle(force) {
+  return tryCloudOrDirect('getHomeBundle', [],
+    function () { return Promise.resolve(null); }, null, force);
 }
 
 // 一次 SQL 拿所有赛事近半年的时间窗口：{ leagueid -> { earliest, latest, count } }
@@ -1009,6 +1020,7 @@ module.exports = {
   getLeagues: getLeagues,
   getProMatches: getProMatches,
   getLiveMatches: getLiveMatches,
+  getHomeBundle: getHomeBundle,   // 2026-10-28：pro+live 一次 EF 往返
   getLeagueWindows: getLeagueWindows,
   getLeagueMatches: getLeagueMatches,
   getMatch: getMatch,

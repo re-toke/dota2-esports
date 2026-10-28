@@ -606,8 +606,19 @@ Page({
     //   且进行中/已结束段暂空不会闪现「暂无对局」空态。
     //   ★ S3（同轮落地）：LP 数据带 _stale 标记（缓存 >5min 旧）时，渲染旧值秒开后
     //   由 _refreshStaleLp 后台 force 重拉转新。
-    const proP = api.getProMatches().catch(() => null);
-    const liveP = api.getLiveMatches().catch(() => null);
+    // 2026-10-28（首页冷启动第 3 步）：bundle（pro+live 一次 RTT）优先；
+    //   EF 未部署 / 失败 → 回退单路请求。bundle 的 live 可能为 null（EF 内 2.5s 超时）→ 单独补一次。
+    const bundleP = (typeof api.getHomeBundle === 'function')
+      ? api.getHomeBundle().catch(() => null)
+      : Promise.resolve(null);
+    const proP = bundleP.then((b) => {
+      if (b && b.pro && b.pro.length) return b.pro;
+      return api.getProMatches().catch(() => null);
+    });
+    const liveP = bundleP.then((b) => {
+      if (b && b.live) return b.live;
+      return api.getLiveMatches().catch(() => null);
+    });
     // 2026-10-28（首页冷启动 P2）：首屏快照 —— 仅 pro，6h 内冷启动直接上屏（0 RTT），
     //   网络到达后由下方 settle 分支覆盖。LIVE 段不落快照（陈旧比分有误导性）。
     if (!this._lastPro) {

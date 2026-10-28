@@ -183,6 +183,81 @@ function trimLeagues(payload: any): any {
   return out;
 }
 
+// ===== 2026-10-28（首页冷启动第 3 步）：/live 服务端裁剪 =====
+// 问题：OpenDota /live 返回全部公开对局（含路人局），实测 **139KB / ~100 条**，
+//   而客户端只用 league_id > 0 的职业局，且 normalizeLiveMatch 只读固定 14 个字段。
+// 方案：只保留 league_id > 0，并瘦字段（实测可降 60%+）；缓存里也存裁剪版。
+function trimLive(payload: any): any {
+  if (!Array.isArray(payload)) return payload;
+  const out: any[] = [];
+  for (const m of payload) {
+    if (!m || !(m.league_id > 0)) continue;
+    out.push({
+      match_id: m.match_id,
+      league_id: m.league_id,
+      league_name: m.league_name || "",
+      team_id_radiant: m.team_id_radiant,
+      team_id_dire: m.team_id_dire,
+      team_name_radiant: m.team_name_radiant,
+      team_name_dire: m.team_name_dire,
+      series_id: m.series_id,
+      series_type: m.series_type,
+      radiant_score: m.radiant_score,
+      dire_score: m.dire_score,
+      activate_time: m.activate_time,
+      start_time: m.start_time,
+      duration: m.duration,
+      spectators: m.spectators
+    });
+  }
+  return out;
+}
+
+// ===== 2026-10-28（首页冷启动第 3 步）：homeBundle =====
+// 目的：首页首屏需要 pro + live，原实现两次跨网 RTT（EF ≈ 0.5-2s / 次）。
+// 策略：EF 并行抓两路，**live 最多等 2.5s**（避免被慢 live 拖住首屏）：
+//   · live 在窗口内到达 → 一次请求拿全；
+//   · 未到达 → 返回 pro + live:null（livePartial=true），客户端随后单独补 live。
+const HOME_BUNDLE_TTL = 60 * 1000;
+const HOME_BUNDLE_LIVE_WAIT_MS = 2500;
+
+async function handleHomeBundle(force?: boolean): Promise<{ data?: any; error?: string; source?: string }> {
+  const key = "od:__homeBundle";
+  if (!force) {
+    const cached = await getCache(key);
+    if (cached !== null) return { data: cached, source: "cache" };
+    // 2026-10-28：先尝试用「单路缓存」拼装（app.onLaunch 已预取 pro/live ⇒ 命中即零上游请求）
+    const single = await Promise.all([getCache("od:/proMatches"), getCache("od:/live")]);
+    if (single[0] !== null) {
+      const data = { pro: single[0], live: single[1], livePartial: single[1] == null, ts: Date.now() };
+      try { await setCache(key, data, HOME_BUNDLE_TTL); } catch (e) { /* 静默 */ }
+      return { data, source: "compose" };
+    }
+  }
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  let pro: any = null;
+  let live: any = null;
+  try {
+    const liveP = fetchOd("/live").then(trimLive).catch(() => null);
+    const r = await Promise.all([
+      fetchOd("/proMatches"),
+      Promise.race([liveP, sleep(HOME_BUNDLE_LIVE_WAIT_MS).then(() => null)])
+    ]);
+    pro = r[0];
+    live = r[1];
+  } catch (e) {
+    const stale = await getStaleCache(key);
+    if (stale) return { data: stale, source: "cache_fallback" };
+    return { error: (e as Error).message };
+  }
+  const data = { pro, live, livePartial: live == null, ts: Date.now() };
+  // 写穿到单路缓存，供 getProMatches / getLiveMatches 复用（也保证下一次 bundle 更快）
+  try { if (pro) await setCache("od:/proMatches", pro, resolveTtl("getProMatches")); } catch (e) { /* 静默 */ }
+  try { if (live) await setCache("od:/live", live, resolveTtl("getLiveMatches")); } catch (e) { /* 静默 */ }
+  await setCache(key, data, HOME_BUNDLE_TTL);
+  return { data, source: "fresh" };
+}
+
 // ===== HTTP 请求（原生 fetch 替代 got） =====
 async function fetchOd(path: string): Promise<any> {
   const res = await fetch(OD_BASE + path, {
@@ -230,6 +305,10 @@ async function handleAction(action: string, params: any, force?: boolean): Promi
   }
 
   const path = buildPath(action, params);
+  // 2026-10-28：首页 bundle（pro+live 一次 RTT；live 最多等 2.5s）
+  if (action === "getHomeBundle") {
+    return await handleHomeBundle(force);
+  }
   if (!path) return { error: "unknown action: " + action };
 
   // 缓存 key 用裸 path（EF 缓存表独立于云开发缓存，无碰撞面）
@@ -243,6 +322,12 @@ async function handleAction(action: string, params: any, force?: boolean): Promi
         await setCache(cacheKey, trimmed, resolveTtl(action));   // 回写裁剪版（下次秒发小包）
         return { data: trimmed, source: "cache_trimmed" };
       }
+      // 2026-10-28：/live 老缓存（未裁剪）命中时补一次 trim（幂等、体积立降）
+      if (action === "getLiveMatches" && Array.isArray(cached)) {
+        const trimmed = trimLive(cached);
+        await setCache(cacheKey, trimmed, resolveTtl(action));
+        return { data: trimmed, source: "cache_trimmed" };
+      }
       return { data: cached, source: "cache" };
     }
   }
@@ -251,26 +336,32 @@ async function handleAction(action: string, params: any, force?: boolean): Promi
     let data = await fetchOd(path);
     // ★ v8.31：裁剪在写入缓存前做（缓存里存小包，命中即直发）
     if (action === "getLeagues") data = trimLeagues(data);
+    // 2026-10-28：/live 同样在写缓存前裁剪
+    if (action === "getLiveMatches") data = trimLive(data);
     const ttl = resolveTtl(action);
     await setCache(cacheKey, data, ttl);
     return { data, source: "fresh" };
   } catch (e) {
     // 兜底：失败时返回 stale 缓存（与云函数语义一致）
     const stale = await getStaleCache(cacheKey);
-    if (stale) return { data: action === "getLeagues" ? trimLeagues(stale) : stale, source: "cache_fallback" };
+    if (stale) return { data: action === "getLeagues" ? trimLeagues(stale) : action === "getLiveMatches" ? trimLive(stale) : stale, source: "cache_fallback" };
     return { error: (e as Error).message };
   }
 }
 
 // ===== 预热（cron-job.org 定时 GET 触发） =====
 async function preheat(): Promise<void> {
-  const hotPaths = ["/leagues", "/heroes", "/proMatches"];
+  const hotPaths = ["/leagues", "/heroes", "/proMatches", "/live"];
   for (const path of hotPaths) {
     try {
       let data = await fetchOd(path);
       // ★ v8.31：/leagues 预热同样裁剪（保证缓存里恒为小包，命中即直发 ~150KB）
       if (path === "/leagues") data = trimLeagues(data);
-      await setCache("od:" + path, data, path === "/proMatches" ? 5 * 60 * 1000 : 6 * 3600 * 1000);
+      if (path === "/live") data = trimLive(data);   // 2026-10-28：live 也裁剪后再入缓存
+      const ttl = path === "/proMatches" ? 5 * 60 * 1000
+        : path === "/live" ? 60 * 1000
+        : 6 * 3600 * 1000;
+      await setCache("od:" + path, data, ttl);
     } catch (e) {
       console.warn("[preheat]", path, "failed:", (e as Error).message);
     }
