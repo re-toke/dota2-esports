@@ -380,6 +380,61 @@ const tick = () => new Promise((r) => setTimeout(r, 20));
   const syncJs = fs.readFileSync(path.join(__dirname, '..', 'sync', 'sync-liquipedia-brackets.js'), 'utf8');
   assert(/upsertCache\('lp:brl:' \+ ev\.leagueId/.test(syncJs), 'CI：写 leagueId 别名 lp:brl:<leagueId>');
 
+  // ===== 2026-10-28（第 5 步 · 2026 比分审计）：借位比分对「占位队名 / 跨源拼写」的鲁棒性 =====
+  // 根因：OD `/leagues/{id}/matches` 的队名恒 null ⇒ groupSeries 兜底「天辉/夜魇」，
+  //   旧实现按占位名建 pairMap ⇒ 整页借位落空（TI26 中国预选 10 张已结束卡全 0 比分）。
+  const inst4 = makeInstance();
+  inst4.data.leagueId = 19893;
+  inst4.data.name = 'The International 2026 - Regional Qualifier China';
+  inst4.data.metadata = {};
+  // 运行时代名表（explorer 批量；load 阶段同步可得）
+  inst4._teamIdNameMap = { 726228: 'Vici Gaming', 9351740: 'Yakult Brothers', 5017210: 'Team Resilience' };
+  inst4._allSeriesFull = [
+    // 系列队名仍是占位（异步 enrichTeamNames 未跑完）→ 必须靠 team_id 兜底
+    { radiantName: '天辉', direName: '夜魇', radiantTeamId: 726228, direTeamId: 9351740,
+      scoreA: 2, scoreB: 0, boType: 'Bo3', lastTime: 1781774100 + 3600 },
+    // 跨源拼写差异：LP "yakutou brothers 2025" ↔ OD "Yakult Brothers"
+    { radiantName: 'Yakult Brothers', direName: 'Team Resilience', radiantTeamId: 9351740, direTeamId: 5017210,
+      scoreA: 0, scoreB: 2, boType: 'Bo3', lastTime: 1781863200 + 3600 },
+    // 跨源拼写差异：LP "4 Anchors and Ilmeria" ↔ OD "4 Anchors + Ilmeria"
+    { radiantName: '4 Anchors + Ilmeria', direName: 'Team Resilience', radiantTeamId: 10170769, direTeamId: 5017210,
+      scoreA: 0, scoreB: 2, boType: 'Bo3', lastTime: 1781956800 + 3600 }
+  ];
+  // 别名表：curation 兜底（"yakutou brothers 2025" → "yakultbrothers"）
+  inst4._bracketAlias = inst4._mergeCurationAlias({}, ['yakutou brothers 2025', 'Vici Gaming', 'Team Resilience']);
+  assert(inst4._bracketAlias['yakutoubrothers2025'] === 'yakultbrothers',
+    '别名：LP "yakutou brothers 2025" → OD "Yakult Brothers"（curation 兜底）');
+  // 同一批别名表：LP "4 Anchors and Ilmeria" ↔ OD "4 Anchors + Ilmeria"（"+" 归一后不同）
+  const _alias2 = inst4._mergeCurationAlias({}, ['4 Anchors and Ilmeria']);
+  assert(_alias2['4anchorsandilmeria'] === '4anchorsilmeria',
+    `别名：LP "4 Anchors and Ilmeria" → OD "4 Anchors + Ilmeria"（实际 ${_alias2['4anchorsandilmeria']}）`);
+  // 别名表不可用（快路径渲染早于 _loadBracketAlias）时，_resolveBracketBo 仍要靠 curation 兜底
+  inst4._bracketAlias = {};
+  const _bkgNoAlias = inst4._resolveBracketBo({
+    slots: [{ key: 'R1M1', side: 'main', roundNo: 1, slotNo: 1,
+      team1Name: '4 Anchors and Ilmeria', team2Name: 'Team Resilience',
+      score1: 0, score2: 0, finished: true, empty: false, startTime: 1781956800 }]
+  });
+  assert(Number(_bkgNoAlias.slots[0].score1) === 0 && Number(_bkgNoAlias.slots[0].score2) === 2,
+    `别名兜底：无 _bracketAlias 时仍能匹配（实际 ${_bkgNoAlias.slots[0].score1}:${_bkgNoAlias.slots[0].score2}）`);
+  const bkg = inst4._resolveBracketBo({
+    slots: [
+      { key: 'R1M1', side: 'upper', roundNo: 1, slotNo: 1, team1Name: 'Vici Gaming', team2Name: 'Yakult Brothers',
+        score1: 0, score2: 0, finished: true, empty: false, startTime: 1781774100 },
+      { key: 'R2M1', side: 'upper', roundNo: 2, slotNo: 1, team1Name: 'yakutou brothers 2025', team2Name: 'Team Resilience',
+        score1: 0, score2: 0, finished: true, empty: false, startTime: 1781863200 }
+    ]
+  });
+  assert(Number(bkg.slots[0].score1) === 2 && Number(bkg.slots[0].score2) === 0,
+    `借位：占位队名场景按 team_id 兜底取到 2:0（实际 ${bkg.slots[0].score1}:${bkg.slots[0].score2}）`);
+  assert(Number(bkg.slots[1].score1) === 0 && Number(bkg.slots[1].score2) === 2,
+    `借位：跨源拼写（yakutou brothers 2025 ↔ Yakult Brothers）取到 0:2（实际 ${bkg.slots[1].score1}:${bkg.slots[1].score2}）`);
+  // 系列到齐后必须重算（否则先于 OD 渲染的对战表会永久停在 0 比分）
+  assert(/this\._lastBracketPayload = b/.test(js), '重算：_renderBracket 记录最近一次 payload');
+  assert(/this\._lastBracketPayload\s*\)\s*\{\s*try\s*\{\s*this\._renderBracket/.test(js),
+    '重算：series 就绪后按同一 payload 重渲染对战表');
+
+
   console.log(`\n=== 结果 ===\n通过: ${pass}  失败: ${fail}`);
   process.exit(fail ? 1 : 0);
 })();

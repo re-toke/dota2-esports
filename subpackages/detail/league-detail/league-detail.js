@@ -1123,6 +1123,12 @@ Page({
         // 「淘汰赛」筛选可用性 + 过滤（P2）
         // 未过滤集合仅供「未登场」判定（顺序无关），过滤后再做分段排序
         this._allSeriesFull = allSeries;
+        // ★ 2026-10-28（第 5 步审计）：对战表可能早于 OD series 渲染（leagueId 一跳 / 结构骨架），
+        //   那一刻卡面 0 比分，且此后再无触发重算 ⇒ 永久停在无比分。系列到齐后按最近一次
+        //   payload 重算一次（幂等、零网络）。
+        if (this._lastBracketPayload) {
+          try { this._renderBracket(this._lastBracketPayload); } catch (e) { /* 隔离：渲染失败不影响主链路 */ }
+        }
         const hasPlayoffSeries = allSeries.some((s) =>
           s.stageKey === 'playoff' || s.stageKey === 'grandFinal');
         if (this.data.playoffOnly) {
@@ -2892,11 +2898,23 @@ Page({
     if (mf) finalInline = 'BO' + (mf[1] || mf[2]);
     // 对阵卡（已由 BO 引擎定过）按「无序队名对」建索引：同一对队可能交手多次（胜者组 + 决赛），
     // 故每个键存数组，取用时再按开赛时间消歧（LP 槽位带 startTime，OD series 带 lastTime）。
+    // ★ 2026-10-28（第 5 步审计）：OpenDota `/leagues/{id}/matches` 的 `radiant_team_name`
+    //   恒为 null ⇒ groupSeries 兜底成占位名「天辉/夜魇」，而队名补全（enrichTeamNames）是
+    //   异步的、可能晚于对战表渲染 ⇒ 旧实现在这里直接去占位名建键，导致**整页借位全部落空**
+    //   （实测 TI26 中国预选 10 张已结束卡全 0 比分）。改为：占位名时用同步可得的
+    //   `_teamIdNameMap`（explorer 批量查，load 阶段已备）按 team_id 兜底取名。
+    const _seriesName = (raw, teamId) => {
+      const s = String(raw == null ? '' : raw);
+      if (s && s !== '天辉' && s !== '夜魇') return s;
+      const m = (this._teamIdNameMap || {})[Number(teamId)];
+      return m || s;
+    };
     const pairMap = {};
     (this._allSeriesFull || this.allSeries || []).forEach((s) => {
-      const a = names.normTeamNameCjk(s.radiantName);
-      const c = names.normTeamNameCjk(s.direName);
-      if (!a || !c) return;
+      const a = names.normTeamNameCjk(_seriesName(s.radiantName, s.radiantTeamId));
+      const c = names.normTeamNameCjk(_seriesName(s.direName, s.direTeamId));
+      if (!a || !c || a === c) return;
+      if (a === '天辉' || a === '夜魇' || c === '天辉' || c === '夜魇') return;   // 解析不出真名 ⇒ 不参与
       const k = a < c ? a + '|' + c : c + '|' + a;
       (pairMap[k] = pairMap[k] || []).push({ s: s, a: a, b: c });
     });
@@ -2917,15 +2935,30 @@ Page({
       return bestD <= 24 * 3600 ? best : null;
     };
     const uniqKey = (x, y) => ((x < y) ? x + '|' + y : y + '|' + x);
+    // ★ 2026-10-28（第 5 步审计）：别名解析不能只依赖 `_bracketAlias` —— 它在「快路径渲染」
+    //   早于 `_loadBracketAlias` 完成时会为空 ⇒ 跨源拼写（LP "4 Anchors and Ilmeria" ↔
+    //   OD "4 Anchors + Ilmeria"）借位失败。此处再加一层 curation 兜底（本地零网络、幂等）。
+    const _aliasOf = (raw, norm) => {
+      const al = this._bracketAlias || {};
+      const hit = al[norm];
+      if (hit) return hit;
+      try {
+        const t = remoteCuration.curatedTeamFor(raw);
+        if (t && t.name) {
+          const c = names.normTeamNameCjk(t.name);
+          if (c && c !== norm) return c;
+        }
+      } catch (e) { /* 忽略 */ }
+      return norm;
+    };
     const slots = b.slots.map((s) => {
       if (!s) return s;
       const out = Object.assign({}, s);
-      const al = this._bracketAlias || {};
       const t1n = names.normTeamNameCjk(out.team1Name);
       const t2n = names.normTeamNameCjk(out.team2Name);
       // 跨源命名差异：LP 缩写（NAVI）→ 规范名（Natus Vincere）再匹配
-      const t1 = al[t1n] || t1n;
-      const t2 = al[t2n] || t2n;
+      const t1 = _aliasOf(out.team1Name, t1n);
+      const t2 = _aliasOf(out.team2Name, t2n);
       // 两向兜底：一侧用缩写（NAVI）一侧用全名（Natus Vincere）都要能对上
       let x = t1;
       let y = t2;
@@ -2978,6 +3011,7 @@ Page({
   },
 
   _renderBracket(b) {
+    this._lastBracketPayload = b;   // 2026-10-28（第 5 步）：series 到齐后按此 payload 重算比分
     const view = bracketLayout.layoutBracket(this._resolveBracketBo(b), { formatTime: (t) => util.formatTime(t) });
     // P4：算当前轮 → 高亮该列并把 scroll-view 定位过去（LIVE 优先）
     const cur = bracketLayout.findCurrentRound(view);
@@ -3032,6 +3066,7 @@ Page({
       if (!payload || !payload.slots || !payload.slots.length) return;
       if (this._loadToken !== token) return;
       this._bracketFastDone = true;
+      this._bracketFastPayload = payload;   // 2026-10-28（第 5 步）：series 到齐后按同一份 payload 重算比分
       return this._loadBracketAlias(payload).then(() => this._renderBracket(payload));
     }).catch(() => { this._bracketFastPending = false; });
   },
@@ -3081,12 +3116,31 @@ Page({
       if (m && m.team2Name) names.push(m.team2Name);
     }));
     return api.getTeamAliasMap(names).then((map) => {
-      this._bracketAlias = map || {};
+      this._bracketAlias = this._mergeCurationAlias(map, names);
       return this._bracketAlias;
     }).catch(() => {
-      this._bracketAlias = {};
+      // explorer 失败不阻塞：curation 别名表仍可离线兜底
+      this._bracketAlias = this._mergeCurationAlias({}, names);
       return this._bracketAlias;
     });
+  },
+
+  // 2026-10-28（第 5 步审计）：LP 与 OD 的队名拼写可能不同（实测 LP "yakutou brothers 2025"
+  //   ↔ OD "Yakult Brothers"），explorer 按全名精确匹配查不到 ⇒ 用 curation 的 teams 别名表兜底。
+  //   curation 是本地零网络数据，`curatedTeamFor(别名)` 返回规范队名（OD 侧写法）。
+  _mergeCurationAlias(map, lpNames) {
+    const out = {};
+    Object.keys(map || {}).forEach((k) => { out[k] = map[k]; });
+    (lpNames || []).forEach((n) => {
+      try {
+        const t = remoteCuration.curatedTeamFor(n);
+        if (!t || !t.name) return;
+        const k = names.normTeamNameCjk(n);
+        const canon = names.normTeamNameCjk(t.name);
+        if (k && canon && k !== canon) out[k] = canon;
+      } catch (e) { /* 单条失败忽略 */ }
+    });
+    return out;
   },
 
   // P3.1：对战表卡片点击 → match-detail（无 matchId 则提示待定）

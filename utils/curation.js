@@ -921,7 +921,14 @@ const CURATED_TEAMS = {
   9766941:  { name: 'Talon Esports', tag: 'TLN', country: 'TH', tier: { grade: 'S', label: 'S-Tier' },
               aliases: ['talon', 'talonesports', 'flipstertalon'] },  // OpenDota 现名 FLIPSTER TALON
   726228:   { name: 'Vici Gaming', tag: 'VG', country: 'CN', tier: { grade: 'S', label: 'S-Tier' },
-              aliases: ['vici', 'vici gaming', 'vg'] }               // 中国老牌战队，多届 TI 参赛 + EWC 2026 参赛
+              aliases: ['vici', 'vici gaming', 'vg'] },              // 中国老牌战队，多届 TI 参赛 + EWC 2026 参赛
+  // ★ 2026-10-28（第 5 步比分审计）：Liquipedia 写 "yakutou brothers 2025"，OpenDota 规范名
+  //   "Yakult Brothers"（team_id=9351740）⇒ 别名登记，供对战表「借位比分」跨源匹配。
+  9351740:  { name: 'Yakult Brothers', tag: 'YB', country: 'CN', tier: { grade: 'A', label: 'A-Tier' },
+              aliases: ['yakultbrothers', 'yakult', 'yb', 'yakutoubrothers', 'yakutoubrothers2025'] },
+  // ★ 同上：LP 写 "4 Anchors and Ilmeria"，OpenDota 规范名 "4 Anchors + Ilmeria"（team_id=10170769）
+  10170769: { name: '4 Anchors + Ilmeria', tag: '', country: '', tier: { grade: 'A', label: 'A-Tier' },
+              aliases: ['4anchors ilmeria', '4anchorsilmeria', '4anchorsandilmeria'] }
 };
 
 // ===== 历届 TI 参赛队 ID 集合（2022-2026 主赛事）=====
