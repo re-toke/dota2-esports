@@ -52,13 +52,43 @@ function _dropsOf(type) {
 
 const SIDE_ORDER = { upper: 0, main: 1, lower: 2, final: 3, third: 4, qualifier: 5 };
 const SIDE_LABEL = {
-  upper: 'Upper Bracket',
-  lower: 'Lower Bracket',
+  upper: '胜者组',
+  lower: '败者组',
   main: '淘汰赛',
-  final: 'Grand Final',
+  final: '总决赛',
   third: '季军赛',
   qualifier: '突围赛'
 };
+
+// 2026-10-28（方案 §12 缺口 10）：常见 LP 轮名 → 中文。
+// 只映射能确定语义的固定写法，未知/自定义轮名原样保留（不硬猜）。
+function _sideCn(s) {
+  return /^u/i.test(s) ? '胜者组' : '败者组';
+}
+const ROUND_LABEL_RULES = [
+  [/^(upper|lower)(?: bracket)? quarter-?finals$/i, (m) => _sideCn(m[1]) + '¼决赛'],
+  [/^(upper|lower)(?: bracket)? semi-?finals?$/i, (m) => _sideCn(m[1]) + '半决赛'],
+  [/^(upper|lower)(?: bracket)? round (\d+)$/i, (m) => _sideCn(m[1]) + '第' + m[2] + '轮'],
+  [/^(upper|lower)(?: bracket)? finals?$/i, (m) => _sideCn(m[1]) + '决赛'],
+  [/^grand finals?$/i, '总决赛'],
+  [/^third place( match)?$/i, '季军赛'],
+  [/^round (\d+)$/i, (m) => '第' + m[1] + '轮'],
+  [/^quarter-?finals$/i, '¼决赛'],
+  [/^semi-?finals?$/i, '半决赛'],
+  [/^finals?$/i, '决赛']
+];
+function localizeRoundLabel(label) {
+  const s = String(label == null ? '' : label).trim();
+  if (!s) return s;
+  for (let i = 0; i < ROUND_LABEL_RULES.length; i++) {
+    const m = s.match(ROUND_LABEL_RULES[i][0]);
+    if (m) {
+      const out = ROUND_LABEL_RULES[i][1];
+      return typeof out === 'function' ? out(m) : out;
+    }
+  }
+  return s;   // 未知轮名保留原文
+}
 
 function _sideOfRound(r) {
   if (r && r.side) return r.side;
@@ -236,7 +266,7 @@ function layoutBracket(bracket, opts) {
       const cards = _placeRound(list.map((s) => _cardFromSlot(s, o.formatTime)), prev, idx);
       if (prev.length) lines.push.apply(lines, _linesFor(prev, cards));
       placedRounds.push(cards);
-      roundHeaders.push({ label: r.label || ('R' + r.no), x: xOff + idx * (CARD_W + COL_GAP) });
+      roundHeaders.push({ label: localizeRoundLabel(r.label) || ('R' + r.no), x: xOff + idx * (CARD_W + COL_GAP) });
       cards.forEach((c) => { sectionHeight = Math.max(sectionHeight, c.y + H); });
       prev = cards;
     });
@@ -331,6 +361,7 @@ function findCurrentRound(view) {
 module.exports = {
   layoutBracket: layoutBracket,
   findCurrentRound: findCurrentRound,
+  localizeRoundLabel: localizeRoundLabel,   // 2026-10-28：轮名中文化（未知保留原文）
   CARD_W: CARD_W,
   CARD_H: H,
   COL_GAP: COL_GAP

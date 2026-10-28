@@ -432,7 +432,15 @@ Page({
   refreshSourceBadges() {},
 
   onPullDownRefresh() {
-    this.load().finally(() => wx.stopPullDownRefresh());
+    // 2026-10-28：下拉必须让「淘汰赛结构 / 小组赛战绩」也失效 —— 原实现只刷 series，
+    //   下拉后对战表/战绩仍是旧数据（方案 §9 风险表 & §12 缺口 1）。
+    //   结构走 force 绕过 30min 缓存；已有对战表时静默替换，不闪加载态。
+    this.setData({ lpStructureLoaded: false, standingsLoaded: false });
+    const jobs = [this.load()];
+    const key = this.data.tab;
+    if (key === 'playoffs' || key === 'teams') jobs.push(this.loadStructure(true));
+    if (key === 'playoffs') jobs.push(this.loadStandings());
+    Promise.all(jobs).then(() => wx.stopPullDownRefresh(), () => wx.stopPullDownRefresh());
   },
 
   retry() {
@@ -2801,7 +2809,7 @@ Page({
       // 已有内容时静默刷新，不闪「加载中」
       this.setData({ lpStructureError: false });
     }
-    liquipedia.getLeagueStructure(this.data.name, { force: !!force }).then((structure) => {
+    return liquipedia.getLeagueStructure(this.data.name, { force: !!force }).then((structure) => {
       const groups = (structure && structure.groups) || [];
       const brackets = (structure && structure.brackets) || [];
       // 2026-10-27：候选页抓取全部失败（未进 LP 缓存/网络不可达）→ 报「加载失败可重试」，
@@ -3037,7 +3045,7 @@ Page({
   // Tab 2: 赛事排名（按已结束比赛聚合队伍胜负）
   loadStandings() {
     this.setData({ standingsLoading: true });
-    sources.getLeagueStandings(this.data.leagueId).then((list) => {
+    return sources.getLeagueStandings(this.data.leagueId).then((list) => {
       const standings = list || [];
       // 队名补全：OpenDota /api/matches 返回的 radiant_team_name / dire_team_name
       // 可能为空，导致 getLeagueStandings 回退为 "Team {id}" 占位符。

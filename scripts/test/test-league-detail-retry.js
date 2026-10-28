@@ -359,6 +359,13 @@ const tick = () => new Promise((r) => setTimeout(r, 20));
     '重进淘汰赛 Tab：60s 节流强制刷新');
   assert(/hadView[\s\S]{0,120}?bracketLoading: true/.test(js),
     '静默刷新：已有对战表时不闪加载态');
+  // 下拉刷新（方案 §9 风险表 / §12 缺口 1）：结构 + 战绩必须一起失效，结构 force 刷新
+  assert(/onPullDownRefresh\(\)[\s\S]{0,300}?lpStructureLoaded: false[\s\S]{0,120}?standingsLoaded: false/.test(js),
+    '下拉刷新：复位 lpStructureLoaded / standingsLoaded');
+  assert(/onPullDownRefresh\(\)[\s\S]{0,460}?loadStructure\(true\)/.test(js),
+    '下拉刷新：淘汰赛结构 force 刷新');
+  assert(/onPullDownRefresh\(\)[\s\S]{0,520}?loadStandings\(\)/.test(js),
+    '下拉刷新：淘汰赛 Tab 同时刷新小组赛战绩');
 
   console.log(`\n=== 结果 ===\n通过: ${pass}  失败: ${fail}`);
   process.exit(fail ? 1 : 0);

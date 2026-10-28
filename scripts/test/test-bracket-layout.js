@@ -63,6 +63,15 @@ const d = bl.layoutBracket(de);
 assert(d.sections.map((x) => x.side).join(',') === 'upper,lower,final', '双败：upper/lower/final 三个分区');
 assert(d.sections[1].y > d.sections[0].y + d.sections[0].height - 1, 'lower 分区在 upper 下方');
 assert(d.sections[2].y > d.sections[1].y, 'final 分区在 lower 下方');
+// 2026-10-28：分区标题 / 轮次表头中文化（方案 §12 缺口 10）
+assert(d.sections[0].label === '胜者组' && d.sections[1].label === '败者组', '分区标题：Upper/Lower → 胜者组/败者组');
+assert(d.sections[2].label === '总决赛', '分区标题：Grand Final → 总决赛');
+assert(bl.localizeRoundLabel('Upper Bracket Quarterfinals') === '胜者组¼决赛', '轮名：Upper Bracket Quarterfinals');
+assert(bl.localizeRoundLabel('Lower Bracket Round 2') === '败者组第2轮', '轮名：Lower Bracket Round N');
+assert(bl.localizeRoundLabel('Grand Final') === '总决赛', '轮名：Grand Final');
+assert(bl.localizeRoundLabel('Upper Bracket Semifinals') === '胜者组半决赛', '轮名：Upper Bracket Semifinals');
+assert(bl.localizeRoundLabel('Custom Round X') === 'Custom Round X', '轮名：未知保留原文（不硬猜）');
+assert(bl.localizeRoundLabel('') === '', '轮名：空串保持空（由调用方回退 R{n}）');
 
 // ===== P4：Upper→Lower 降级线（Bracket/8U4L2DSL1D，与 PGL S9 / TI 2026 同构）=====
 function pglRounds() {
