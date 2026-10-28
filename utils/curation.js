@@ -174,7 +174,8 @@ const CURATED_EVENTS = [
     tier: { grade: 'B', rank: 1, label: 'B级', qualifier: true },
     aliases: ['blastslamviichinaqualifier', 'blastslam7chinaqualifier',
               'blastslamviichina', 'blastslam7china'], year: 2026,
-    leagueId: 20169,
+    leagueId: 19520,   // ★ 2026-10-28（比分审计）：原 20169 是 2026-08 的另一届（同名赛事两条 OD 记录）；
+                       //   本事件 LP 对阵是 2026-03-30~04-03 ⇒ 对应 OD leagueid=19520（31 场）
     start: 1775088000, end: 1775231999,
     organizer: 'BLAST', region: '中国', format: '中国预选',
     status: '已结束', liquipediaSlug: 'BLAST/SLAM/7/China',
@@ -903,9 +904,13 @@ const CURATED_TEAMS = {
   10136357: { name: 'Nigma Galaxy', tag: 'NGX', country: 'EU', tier: { grade: 'SSS', label: 'TI 参赛' },
               aliases: ['nigma', 'nigmagalaxy', 'nigmagx'] },  // 合并原 350190 + 8124688
   8255888:  { name: 'BetBoom Team', tag: 'BB', country: 'RU', tier: { grade: 'S', label: 'S-Tier' },
-              aliases: ['betboom', 'betboomteam', 'boomboys'] },  // ★ 2026-08-05（审核 R3）：修正原 7262280（实测不存在），真 BetBoom=8255888（OpenDota 名 BoomBoys/tag=BB）
+              // ★ 2026-10-28（比分审计）：LP 对战表把队名写成「BetBoom Team 2024」（带年份后缀）；
+              //   另有只写队标「BB Team」（归一化后为 'bb'）
+              aliases: ['betboom', 'betboomteam', 'boomboys', 'betboomteam2024', 'betboom2024', 'bb', 'bbteam'] },  // ★ 2026-08-05（审核 R3）：修正原 7262280（实测不存在），真 BetBoom=8255888（OpenDota 名 BoomBoys/tag=BB）
   10182357: { name: '1w Team', tag: '1W', country: 'RU', tier: { grade: 'A', label: 'A-Tier' },
-              aliases: ['1w', '1wteam'] },  // ★ 2026-08-05（审核 R3）：OpenDota 名 '1w'
+              // ★ 2026-10-28（比分审计）：OpenDota 现网名是「1win」（10182357），与 curation 显示名不同
+              odName: '1win',
+              aliases: ['1w', '1wteam', '1win'] },  // ★ 2026-08-05（审核 R3）：OpenDota 名 '1w'
   8261500:  { name: 'Xtreme Gaming', tag: 'XG', country: 'CN', tier: { grade: 'SSS', label: 'TI 参赛' },
               aliases: ['xtremegaming', 'xg', 'extremegaming'] },
   8574561:  { name: 'Azure Ray', tag: 'AR', country: 'CN', tier: { grade: 'S', label: 'S-Tier' },
@@ -915,7 +920,11 @@ const CURATED_TEAMS = {
   9247354:  { name: 'Team Falcons', tag: 'FAL', country: 'SA', tier: { grade: 'SSS', label: 'TI 参赛' },
               aliases: ['falcons', 'teamfalcons'] },
   8260824:  { name: 'PARIVISION', tag: 'PARI', country: 'RU', tier: { grade: 'S', label: 'S-Tier' },
-              aliases: ['parivision'] },   // ⚠️待复核：id 待替换正确值
+              // ★ 2026-10-28（比分审计）：Liquipedia 常写缩写 PVISION
+              aliases: ['parivision', 'pvision'] },   // ⚠️待复核：id 待替换正确值
+  // ★ 2026-10-28（比分审计）：EWC 2026 / TI26 预选常见队；OD 名与 LP 写法一致，仅需登记别名索引
+  9895247:  { name: 'Rune Eaters', tag: 'RE', country: '', tier: { grade: 'A', label: 'A-Tier' },
+              aliases: ['runeeaters'] },
   9338413:  { name: 'MOUZ', tag: 'MOUZ', country: 'DE', tier: { grade: 'S', label: 'S-Tier' },
               aliases: ['mouz'] },
   9766941:  { name: 'Talon Esports', tag: 'TLN', country: 'TH', tier: { grade: 'S', label: 'S-Tier' },

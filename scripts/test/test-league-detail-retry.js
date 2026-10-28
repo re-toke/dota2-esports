@@ -398,7 +398,10 @@ const tick = () => new Promise((r) => setTimeout(r, 20));
       scoreA: 0, scoreB: 2, boType: 'Bo3', lastTime: 1781863200 + 3600 },
     // 跨源拼写差异：LP "4 Anchors and Ilmeria" ↔ OD "4 Anchors + Ilmeria"
     { radiantName: '4 Anchors + Ilmeria', direName: 'Team Resilience', radiantTeamId: 10170769, direTeamId: 5017210,
-      scoreA: 0, scoreB: 2, boType: 'Bo3', lastTime: 1781956800 + 3600 }
+      scoreA: 0, scoreB: 2, boType: 'Bo3', lastTime: 1781956800 + 3600 },
+    // EWC 2026：LP 写缩写 PVISION / 队标 BB Team，OD 写 PARIVISION / BetBoom Team
+    { radiantName: 'PARIVISION', direName: 'Rune Eaters', radiantTeamId: 9824702, direTeamId: 9895247,
+      scoreA: 1, scoreB: 2, boType: 'Bo3', lastTime: 1782050400 + 3600 }
   ];
   // 别名表：curation 兜底（"yakutou brothers 2025" → "yakultbrothers"）
   inst4._bracketAlias = inst4._mergeCurationAlias({}, ['yakutou brothers 2025', 'Vici Gaming', 'Team Resilience']);
@@ -417,6 +420,25 @@ const tick = () => new Promise((r) => setTimeout(r, 20));
   });
   assert(Number(_bkgNoAlias.slots[0].score1) === 0 && Number(_bkgNoAlias.slots[0].score2) === 2,
     `别名兜底：无 _bracketAlias 时仍能匹配（实际 ${_bkgNoAlias.slots[0].score1}:${_bkgNoAlias.slots[0].score2}）`);
+  // 2026-10-28（第 5 步补）：curation 显示名与 OpenDota 现网名不同（odName）／LP 带年份后缀
+  //   注：归一化会剥掉结尾的 "Team" —— "1w Team" → "1w"，"BetBoom Team" → "betboom"；
+  //   带年份的 "BetBoom Team 2024" 因 team 不在结尾而保留为 "betboomteam2024"。
+  const _alias3 = inst4._mergeCurationAlias({}, ['1w Team', 'BetBoom Team 2024']);
+  assert(_alias3['1w'] === '1win',
+    `别名：LP "1w Team" → OD "1win"（odName 覆盖，实际 ${_alias3['1w']}）`);
+  assert(_alias3['betboomteam2024'] === 'betboom',
+    `别名：LP "BetBoom Team 2024" → OD "BetBoom Team"（年份后缀，实际 ${_alias3['betboomteam2024']}）`);
+  // EWC 2026：LP 缩写 PVISION / 队标 BB Team → OD PARIVISION / BetBoom Team
+  const _alias4 = inst4._mergeCurationAlias({}, ['PVISION', 'BB Team', 'Rune Eaters']);
+  assert(_alias4['pvision'] === 'parivision', `别名：PVISION → PARIVISION（实际 ${_alias4['pvision']}）`);
+  assert(_alias4['bb'] === 'betboom', `别名：BB Team → BetBoom Team（实际 ${_alias4['bb']}）`);
+  const _bkgEwc = inst4._resolveBracketBo({
+    slots: [{ key: 'R1M1', side: 'main', roundNo: 1, slotNo: 1,
+      team1Name: 'PVISION', team2Name: 'Rune Eaters',
+      score1: 0, score2: 0, finished: true, empty: false, startTime: 1782050400 }]
+  });
+  assert(Number(_bkgEwc.slots[0].score1) === 1 && Number(_bkgEwc.slots[0].score2) === 2,
+    `借位：PVISION vs Rune Eaters → 1:2（实际 ${_bkgEwc.slots[0].score1}:${_bkgEwc.slots[0].score2}）`);
   const bkg = inst4._resolveBracketBo({
     slots: [
       { key: 'R1M1', side: 'upper', roundNo: 1, slotNo: 1, team1Name: 'Vici Gaming', team2Name: 'Yakult Brothers',

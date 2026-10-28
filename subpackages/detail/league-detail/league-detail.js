@@ -2944,8 +2944,8 @@ Page({
       if (hit) return hit;
       try {
         const t = remoteCuration.curatedTeamFor(raw);
-        if (t && t.name) {
-          const c = names.normTeamNameCjk(t.name);
+        if (t) {
+          const c = names.normTeamNameCjk(this._curationOdName(t));
           if (c && c !== norm) return c;
         }
       } catch (e) { /* 忽略 */ }
@@ -3127,16 +3127,23 @@ Page({
 
   // 2026-10-28（第 5 步审计）：LP 与 OD 的队名拼写可能不同（实测 LP "yakutou brothers 2025"
   //   ↔ OD "Yakult Brothers"），explorer 按全名精确匹配查不到 ⇒ 用 curation 的 teams 别名表兜底。
-  //   curation 是本地零网络数据，`curatedTeamFor(别名)` 返回规范队名（OD 侧写法）。
+  //   curation 是本地零网络数据，`curatedTeamFor(别名)` 返回规范队名。
+  //   ★ 同一队在两源可能叫法不同（curation 显示名 vs OD 现网名，如 "1w Team" ↔ "1win"）⇒
+  //     映射目标优先取 `odName`（声明 OD 侧写法），没有则用 curation name。
+  _curationOdName(t) {
+    if (!t) return '';
+    return String(t.odName || t.name || '');
+  },
+
   _mergeCurationAlias(map, lpNames) {
     const out = {};
     Object.keys(map || {}).forEach((k) => { out[k] = map[k]; });
     (lpNames || []).forEach((n) => {
       try {
         const t = remoteCuration.curatedTeamFor(n);
-        if (!t || !t.name) return;
+        if (!t) return;
         const k = names.normTeamNameCjk(n);
-        const canon = names.normTeamNameCjk(t.name);
+        const canon = names.normTeamNameCjk(this._curationOdName(t));
         if (k && canon && k !== canon) out[k] = canon;
       } catch (e) { /* 单条失败忽略 */ }
     });

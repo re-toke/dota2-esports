@@ -5,7 +5,7 @@
 // cannot load .json directly).
 module.exports = {
   "version": 3,
-  "generatedAt": "2026-10-28T04:59:42.257Z",
+  "generatedAt": "2026-10-28T13:49:20.671Z",
   "source": "utils/curation.js#CURATED_EVENTS",
   "eventCount": 327,
   "map": {
@@ -283,6 +283,7 @@ module.exports = {
     "19099": "BLAST Slam VI",
     "19101": "BLAST Slam VII",
     "19102": "BLAST SLAM VIII",
+    "19520": "BLAST Slam VII China Qualifier",
     "19719": "The International 2026",
     "19785": "Esports World Cup 2026",
     "19890": "The International 2026 - Regional Qualifier North America",
@@ -296,9 +297,8 @@ module.exports = {
     "20142": "RES Unchained 5: BLAST SLAM VIII Europe Qualifier",
     "20143": "RES Unchained 5: BLAST SLAM VIII SEA Qualifier",
     "20159": "WINLINE Star Series Season 4",
-    "20169": "BLAST Slam VII China Qualifier",
     "20208": "BLAST SLAM IX",
     "20395": "PARI UNIVERSE by FISSURE"
   },
-  "dataVersion": "1793163582249"
+  "dataVersion": "1793195360668"
 };
