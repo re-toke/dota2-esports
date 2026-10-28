@@ -95,7 +95,7 @@ function _sideOfRound(r) {
   return 'main';
 }
 
-/** 首轮按序排；后续轮按「上一轮 2j / 2j+1」中心平均，缺子节点时按指数间距兜底 */
+/** 首轮按序排；后续轮按「上一轮 2j / 2j+1」中心平均；上一轮不够配对时紧接其后（不再指数放大） */
 function _placeRound(cards, prevCards, roundIndex) {
   const baseGap = H + G;
   return cards.map((m, j) => {
@@ -107,9 +107,15 @@ function _placeRound(cards, prevCards, roundIndex) {
       const c2 = prevCards[j * 2 + 1];
       if (c1 && c2) y = ((c1.y + H / 2) + (c2.y + H / 2)) / 2 - H / 2;
       else if (c1) y = c1.y;
-      else y = j * baseGap * Math.pow(2, roundIndex);
+      else {
+        // ★ 2026-10-28（真机 UI 复盘）：原实现 `j * baseGap * 2^roundIndex` 在败者组这类
+        //   「卡片数 > 上一轮 × 2」的分区会制造巨大空白（实测一屏只放得下 2 轮）。
+        //   改为紧接上一轮最后一张卡下方一个卡位，画布高度随卡片数线性增长。
+        const last = prevCards[prevCards.length - 1];
+        y = last.y + baseGap * (j - Math.floor(prevCards.length / 2) + 1);
+      }
     } else {
-      y = j * baseGap * Math.pow(2, roundIndex);
+      y = j * baseGap;   // 上一轮为空：按普通顺序排（不再指数放大）
     }
     return Object.assign({}, m, { x: roundIndex * (CARD_W + COL_GAP), y: y });
   });
@@ -180,6 +186,9 @@ function _cardFromSlot(s, formatTime) {
     tbd1: tbd1, tbd2: tbd2,
     score1: empty ? '' : s.score1,
     score2: empty ? '' : s.score2,
+    // 2026-10-28：已结束但两源都取不到终局比分 → 卡面显式「无数据」（不再留白像 bug）
+    noScore: !empty && finished &&
+      (s.score1 === '' || s.score1 == null) && (s.score2 === '' || s.score2 == null),
     winner: winner,
     finished: finished,
     boType: s.boType || '',

@@ -212,6 +212,7 @@ Page({
     teamTagsLoading: false,
     // ===== P3.1：对战表 =====
     bracketView: null,         // bracketLayout 输出（sections/cards/lines 坐标）
+    bracketNav: [],            // 2026-10-28：轮次导航条（一列一个 chip → 点击横滑定位）
     bracketLoading: false,
     showGroups: false,         // 小组积分折叠态
     showBracketSchedule: true, // P4：对战表「显示赛程」开关（控制 BO/时间行，LIVE 常显）
@@ -2973,12 +2974,42 @@ Page({
     const view = bracketLayout.layoutBracket(this._resolveBracketBo(b), { formatTime: (t) => util.formatTime(t) });
     // P4：算当前轮 → 高亮该列并把 scroll-view 定位过去（LIVE 优先）
     const cur = bracketLayout.findCurrentRound(view);
+    // 2026-10-28（真机 UI 复盘）：轮次导航条 —— 一列一个 chip，点击直接横滑到该轮，
+    //   解决「14 槽双败要滑很久才知道有哪些轮次」的浏览问题。
+    const nav = [];
+    (view.sections || []).forEach((sec) => {
+      (sec.rounds || []).forEach((rd, i) => {
+        nav.push({
+          key: sec.side + '-' + (i + 1),
+          side: sec.side,
+          roundNo: i + 1,
+          label: rd.label,
+          x: rd.x
+        });
+      });
+    });
     const patch = {
       bracketView: view,
+      bracketNav: nav,
       bracketFocus: cur ? { side: cur.side, roundNo: cur.roundNo } : null
     };
     if (cur) patch.bracketScrollLeft = cur.left;
     this.setData(patch);
+  },
+
+  // 2026-10-28：轮次导航条点击 → 横滑到该轮并高亮
+  jumpToRound(e) {
+    const ds = (e && e.currentTarget && e.currentTarget.dataset) || {};
+    const side = ds.side;
+    const roundNo = Number(ds.round);
+    if (!side || !roundNo) return;
+    const nav = this.data.bracketNav || [];
+    const hit = nav.filter((n) => n.side === side && n.roundNo === roundNo)[0];
+    if (!hit) return;
+    this.setData({
+      bracketFocus: { side: side, roundNo: roundNo },
+      bracketScrollLeft: Math.max(0, (hit.x || 0) - 24)
+    });
   },
 
   // P3.1：缓存 JSON（CI 生成的 Match 页内容）优先；缺失/失败回落 wikitext 骨架

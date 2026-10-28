@@ -366,6 +366,11 @@ const tick = () => new Promise((r) => setTimeout(r, 20));
     '下拉刷新：淘汰赛结构 force 刷新');
   assert(/onPullDownRefresh\(\)[\s\S]{0,520}?loadStandings\(\)/.test(js),
     '下拉刷新：淘汰赛 Tab 同时刷新小组赛战绩');
+  // 2026-10-28：轮次导航条 + 无比分「无数据」
+  assert(/bracketNav: nav/.test(js), '轮次导航：渲染时生成 bracketNav');
+  assert(/jumpToRound\(e\)[\s\S]{0,520}?bracketScrollLeft/.test(js), '轮次导航：点击后更新焦点并横滑');
+  assert(/bindtap="jumpToRound"/.test(wxml), 'WXML：轮次导航绑定 jumpToRound');
+  assert(/brk-no-data/.test(wxml), 'WXML：无比分卡显示「无数据」');
 
   console.log(`\n=== 结果 ===\n通过: ${pass}  失败: ${fail}`);
   process.exit(fail ? 1 : 0);

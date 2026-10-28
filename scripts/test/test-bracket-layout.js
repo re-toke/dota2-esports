@@ -73,6 +73,34 @@ assert(bl.localizeRoundLabel('Upper Bracket Semifinals') === '胜者组半决赛
 assert(bl.localizeRoundLabel('Custom Round X') === 'Custom Round X', '轮名：未知保留原文（不硬猜）');
 assert(bl.localizeRoundLabel('') === '', '轮名：空串保持空（由调用方回退 R{n}）');
 
+// ===== 2026-10-28（真机 UI 复盘）：无数据标记 + 败者组紧凑排布 =====
+const ns = bl.layoutBracket({
+  rounds: [
+    { no: 1, side: 'main', label: 'R1', matches: [
+      slot(1, 1, 'main', 'A', 'B', { finished: true, score1: '', score2: '' }),
+      slot(1, 2, 'main', 'C', 'D', { finished: true, score1: 2, score2: 1 })
+    ] }
+  ]
+});
+const nsCards = ns.sections[0].cards;
+assert(nsCards[0].noScore === true, '无数据：已结束且两源无比分 → noScore=true');
+assert(nsCards[1].noScore === false, '无数据：有比分 → noScore=false');
+assert(nsCards[2] === undefined && nsCards[3] === undefined, '无数据：不额外生成卡片');
+
+const compact = {
+  rounds: [
+    { no: 1, side: 'lower', label: 'Lower R1', matches: [slot(1, 5, 'lower', 'A', 'B'), slot(1, 6, 'lower', 'C', 'D')] },
+    { no: 2, side: 'lower', label: 'Lower R2', matches: [slot(2, 3, 'lower', 'A', 'C'), slot(2, 4, 'lower', 'B', 'D')] }
+  ]
+};
+const cView = bl.layoutBracket(compact);
+const lCards = cView.sections[0].cards;
+const r1m6 = lCards.filter((c) => c.key === 'R1M6')[0];
+const r2m4 = lCards.filter((c) => c.key === 'R2M4')[0];
+assert(r2m4.y - r1m6.y === bl.CARD_H + 24,
+  '紧凑排布：上一轮不够配对时只下移一个卡位（原指数间距为 4 个卡位）');
+assert(cView.height < bl.CARD_H * 6, '紧凑排布：画布高度不指数膨胀');
+
 // ===== P4：Upper→Lower 降级线（Bracket/8U4L2DSL1D，与 PGL S9 / TI 2026 同构）=====
 function pglRounds() {
   return [

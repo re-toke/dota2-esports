@@ -1448,6 +1448,39 @@
   display: flex;
   align-items: center;
 }
+/* 2026-10-28：轮次导航条（横向 chip，点击横滑定位） */
+.brk-nav {
+  white-space: nowrap;
+  margin-bottom: var(--space-1);
+}
+.brk-nav-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 56rpx;
+  padding: 0 20rpx;
+  margin-right: 12rpx;
+  border-radius: 28rpx;
+  font-size: var(--fs-caption);
+  color: var(--text-2);
+  background: var(--bg-2, #F5F6F8);
+  border: 1rpx solid var(--td-border-level-1-color);
+}
+.brk-nav-chip.active {
+  color: var(--td-brand-color);
+  border-color: var(--td-brand-color);
+  background: var(--td-brand-color-light, #F0F6FF);
+  font-weight: 600;
+}
+/* 已结束但两源都无终局比分：卡面右侧标注，不遮挡队名 */
+.brk-card.no-score .brk-name { padding-right: 76rpx; }
+.brk-no-data {
+  position: absolute;
+  right: 12rpx;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: var(--fs-micro);
+  color: var(--text-4);
+}
 /* P4（2026-10-27）：当前轮高亮（自动横滑定位到该列） */
 .brk-card.is-current {
   border-color: var(--td-brand-color);
