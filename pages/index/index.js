@@ -19,6 +19,11 @@ const followBatch = require('../../utils/followBatch.js');   // ★ 2026-09-27�
 const indexCardHelpers = require('../../utils/indexCardHelpers.js');   // ★ 2026-10-13（P1-20 子项 2）：首页卡片纯函数层（队名整形 + LIVE 局归一）
 const config = require('../../utils/config.js');   // ★ P0-B：诊断明细开关（config.debug.verboseLog）
 const monitor = require('../../utils/monitor.js');   // ★ P2-23：数据质量未达标 → 上报（wx.reportAnalytics）
+const cache = require('../../utils/cache.js');     // ★ 2026-10-28：首页 pro 首屏快照（SWR）
+
+// 2026-10-28（首页冷启动 P2）：首屏快照只存 pro（已结束/未开赛，比分非实时），LIVE 段不落快照。
+const HOME_PRO_SNAP_KEY = 'home:proSnap:v1';
+const HOME_PRO_SNAP_TTL = 6 * 3600;   // 6h 内冷启动可直接上屏，网络回来再覆盖
 // v5.1（2026-09-01）：首页「对局级 upcoming」源 —— Liquipedia/Steam/haglund 排期（云代理，30min 缓存）
 const liquipedia = require('../../utils/liquipedia.js');
 // ★ 2026-10-14（P2-21）：原在此 require 的构建时队徽快照（utils/team-logo-local-data.js，199KB）
@@ -603,6 +608,33 @@ Page({
     //   由 _refreshStaleLp 后台 force 重拉转新。
     const proP = api.getProMatches().catch(() => null);
     const liveP = api.getLiveMatches().catch(() => null);
+    // 2026-10-28（首页冷启动 P2）：首屏快照 —— 仅 pro，6h 内冷启动直接上屏（0 RTT），
+    //   网络到达后由下方 settle 分支覆盖。LIVE 段不落快照（陈旧比分有误导性）。
+    if (!this._lastPro) {
+      const snap = cache.peek(HOME_PRO_SNAP_KEY);
+      if (snap && snap.value && snap.value.length &&
+          (Date.now() - (snap.fetchedAt || 0)) < HOME_PRO_SNAP_TTL * 1000) {
+        this._lastPro = snap.value;
+        this._lastProTs = snap.fetchedAt || Date.now();
+        console.info('[index][perf] 首屏快照命中 ' + snap.value.length + ' 场（' +
+          Math.round((Date.now() - this._lastProTs) / 60000) + 'min 前）');
+        this._applyMatchSources(this._lastPro, null, this._followRows || [], []);
+      }
+    }
+    // 2026-10-28（首页冷启动 P1）：pro 先渲染 —— live 往往是最慢/最大的一条
+    //   （本机冷路径实测 pro 8.5s / live 15.7s·139KB），原 Promise.all 必须等它才出卡。
+    //   现在 pro 一到先渲染一版，live 到达后由 settle 分支再补渲染。
+    //   视图契约：这里**不关闭** matchLoading（骨架屏靠「有卡即隐藏」，且 LIVE 段空态不闪现）。
+    let _proFirstRendered = false;
+    proP.then((pro) => {
+      if (myEpoch !== this._epoch) return;
+      if (_proFirstRendered) return;
+      if (!(pro && pro.length)) return;   // pro 失败/为空 → 交给 settle 分支统一降级
+      _proFirstRendered = true;
+      this._lastPro = pro; this._lastProTs = Date.now();
+      this._applyMatchSources(pro, null, this._followRows || [], lpReady || []);
+    });
+
     // ★★ 2026-10-10（首页优化 ①·**⑥段延迟发起**）：
     //   原实现 `lpP` 与 pro/live **同时**发起 ⇒ ⑥段内部最多 5 个候选赛事 × 每赛事 2 次尝试
     //   （EF 失败/未命中 → haglund 兜底）≈ **10 个请求**，会**抢占首屏的并发配额**
@@ -656,6 +688,10 @@ Page({
         ((pro && pro.length) || 0) + ' live=' + ((live && live.length) || 0) + '）');
       this._lastPro = pro; this._lastProTs = Date.now();
       this._lastLive = live; this._lastLiveTs = Date.now();
+      // 2026-10-28：成功拿到 pro → 落首屏快照（6h），供下次冷启动 0 RTT 上屏
+      if (pro && pro.length) {
+        try { cache.set(HOME_PRO_SNAP_KEY, pro, HOME_PRO_SNAP_TTL); } catch (e) { /* 静默 */ }
+      }
       const degraded = (pro == null) && (live == null) && !this._allMatches;
       // LP 已就绪则此渲染直接带上（lpReady）；未就绪则稍后由 LP 回调独立渲染
       this._applyMatchSources(pro, live, this._followRows || [], lpReady || []);

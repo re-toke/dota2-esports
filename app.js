@@ -55,6 +55,12 @@ App({
     // 所有「后台预热 / 非关键预取」一律推迟到首屏渲染之后执行，
     // 避免 onLaunch 同步阶段堆满 wx.getStorageSync / JSON.parse / 云调用而触发长任务告警。
     // 页面已用 heroReady / itemReady 守卫，延迟填充不影响首屏与交互。
+    // 2026-10-28（首页冷启动 P0）：pro/live 是首屏关键数据，必须在页面 onLoad 之前发出。
+    //   这里只发起网络（异步、不解析），不违反「首屏前不做重活」；
+    //   页面随后调用同一 action 时会命中 cloudProxy 的前台并发去重（action+载荷），不会重复请求。
+    api.getProMatches().catch(() => {});
+    api.getLiveMatches().catch(() => {});
+
     setTimeout(() => {
       // ★ 2026-10-12（P1-2 开机通道体检）：并发探测候选中转宿主 /healthz，结果**异步**写回
       //   utils/endpoints.js 作为首选出口（不阻塞首屏、失败静默）。①单出口时 no-op（当前状态）；

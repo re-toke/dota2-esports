@@ -60,6 +60,23 @@ assert('normalizeLiveMatch：series_id=0 → null（0 不当作有效系列）',
   H.normalizeLiveMatch({ series_id: 0 }, now).series_id === null);
 assert('normalizeLiveMatch：无 league_name → 空串', H.normalizeLiveMatch({}, now).league_name === '');
 
+// ===== ⑥ 2026-10-28（首页冷启动）：源码守卫 =====
+const fs = require('fs');
+const indexJs = fs.readFileSync(path.join(__dirname, '..', '..', 'pages', 'index', 'index.js'), 'utf8');
+const appJs = fs.readFileSync(path.join(__dirname, '..', '..', 'app.js'), 'utf8');
+assert('冷启动：app.onLaunch 预取 pro/live（先于页面 onLoad）',
+  /onLaunch\(\)[\s\S]{0,1200}?api\.getProMatches\(\)/.test(appJs) &&
+  /onLaunch\(\)[\s\S]{0,1200}?api\.getLiveMatches\(\)/.test(appJs));
+assert('冷启动：pro 先渲染（proP.then → _applyMatchSources(pro, null)）',
+  /proP\.then\([\s\S]{0,360}?_applyMatchSources\(pro, null/.test(indexJs));
+assert('冷启动：首屏快照键/6h TTL',
+  /HOME_PRO_SNAP_KEY = 'home:proSnap:v1'/.test(indexJs) &&
+  /HOME_PRO_SNAP_TTL = 6 \* 3600/.test(indexJs));
+assert('冷启动：快照仅在 _lastPro 为空时使用',
+  /if \(!this\._lastPro\)[\s\S]{0,240}?cache\.peek\(HOME_PRO_SNAP_KEY\)/.test(indexJs));
+assert('冷启动：settle 后写快照（pro 非空）',
+  /cache\.set\(HOME_PRO_SNAP_KEY, pro, HOME_PRO_SNAP_TTL\)/.test(indexJs));
+
 console.log('\n=== 结果 ===');
 console.log('PASS: ' + pass + ', FAIL: ' + fail);
 process.exit(fail ? 1 : 0);
