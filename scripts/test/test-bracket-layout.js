@@ -41,9 +41,13 @@ const sf1 = s.sections[0].cards.filter((c) => c.key === 'R2M1')[0];
 const gf = s.sections[0].cards.filter((c) => c.key === 'R3M1')[0];
 assert(qf.x === 0 && qf.y === s.sections[0].y + 56, 'QF1 位于首列首行（含 section 头偏移）');
 assert(sf1.x === 344, `SF1 x = 280+64（实际 ${sf1.x}）`);
-assert(sf1.y === s.sections[0].y + 56 + 78, `SF1 y = 两源中心平均（实际相对 ${sf1.y - s.sections[0].y - 56}）`);
+const _HALF_GAP = (bl.CARD_H + 24) / 2;
+assert(sf1.y === s.sections[0].y + 56 + _HALF_GAP, `SF1 y = 两源中心平均（实际相对 ${sf1.y - s.sections[0].y - 56}）`);
 assert(gf.x === 688, `GF x 第三列（实际 ${gf.x}）`);
-assert(gf.y === s.sections[0].y + 56 + 234, `GF y 居中（实际相对 ${gf.y - s.sections[0].y - 56}）`);
+assert(gf.y === s.sections[0].y + 56 + _HALF_GAP * 3, `GF y 居中（实际相对 ${gf.y - s.sections[0].y - 56}）`);
+// 2026-10-28（第 4 步）：三行压两行 → 卡片高度 132 → 104（BO/LIVE 走角标，不占行高）
+assert(bl.CARD_H === 104, `卡片高度：紧凑两行 = 104rpx（实际 ${bl.CARD_H}）`);
+assert(s.cardH === bl.CARD_H, '布局输出带 cardH（页面据此内联卡片高度，与 CSS 单一来源）');
 assert(s.sections[0].lines.length > 0, '单败：生成连线');
 assert(sf1.winner === 'A' && sf1.score1 === 2, '胜者/比分写入卡片');
 assert(gf.matchId === 8891145641, 'matchIds → 卡片 matchId（可跳转）');
@@ -133,6 +137,21 @@ assert(se8.crossLines.length === 0, 'P4：单败 Bracket/8 无降级线');
 const unknown = bl.layoutBracket({ type: 'Bracket/16U8L4D', rounds: pglRounds() });
 assert(unknown.crossLines.length === 0, 'P4：未知 type 不画降级线（不臆测）');
 assert(unknown.sections[1].cards[0].x === 0, 'P4：无降级线时 lower 分区不位移');
+
+// ===== 2026-10-28（第 4 步 · 真机 UI）：卡面契约（源码守卫）=====
+const fs = require('fs');
+const path = require('path');
+const _wxml = fs.readFileSync(path.join(__dirname, '../../subpackages/detail/league-detail/league-detail.wxml'), 'utf8');
+const _wxss = fs.readFileSync(path.join(__dirname, '../../subpackages/detail/league-detail/league-detail.wxss'), 'utf8');
+assert(_wxml.indexOf('class="brk-meta"') < 0, '卡面：移除第三行 meta（BO/时间改角标，不占行高）');
+assert(_wxml.indexOf('brk-badge') > 0 && _wxml.indexOf('item.boType') > 0, '卡面：BO / LIVE 右上角徽标');
+assert(_wxml.indexOf('{{bracketView.cardH}}') > 0, '卡面：卡片高度取 bracketView.cardH（与 CARD_H 单一来源）');
+assert(/\.brk-card\s*\{[^}]*height:\s*104rpx/.test(_wxss), '样式：.brk-card 高度 104rpx');
+assert(/\.brk-card\.has-bo \.brk-team/.test(_wxss) && /\.brk-card\.has-live \.brk-team/.test(_wxss),
+  '样式：徽标占位 → 两行比分统一内缩（左右同列）');
+assert(/\.standings-card\s*\{[^}]*border:\s*1rpx solid/.test(_wxss) &&
+  /\.lp-group-card\s*\{[^}]*border:\s*1rpx solid/.test(_wxss),
+  '视觉统一：小组积分卡 / 战绩卡 同容器（白底 + 1rpx 边框）');
 
 // ===== 空槽 =====
 const empty = bl.layoutBracket({

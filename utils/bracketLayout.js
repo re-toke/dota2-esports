@@ -9,7 +9,10 @@
 
 const CARD_W = 280;
 const COL_GAP = 64;
-const H = 132;
+// 2026-10-28（第 4 步 · 卡片三行压两行）：卡片内只剩「队1」「队2」两行 ——
+// BO / LIVE 改为右上角徽标（绝对定位，不占行高），赛程时间在卡外汇总在卡片下方。
+// ⚠️ 改本常量必须同步 `league-detail.wxss` 的 `.brk-card` 高度（页面用 `bracketView.cardH` 内联覆盖）
+const H = 104;
 const G = 24;
 const SECTION_GAP = 24;
 const HEADER_H = 56;   // 分区标题 24 + 轮次表头 24 + 间距（视觉验证修正：原 44 导致标题重叠）

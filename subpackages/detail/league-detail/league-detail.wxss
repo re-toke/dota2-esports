@@ -738,6 +738,7 @@
 /* ===== Tab 2 · 赛事排名数据表样式 ===== */
 .standings-card {
   background: var(--card-bg, #FFFFFF);
+  border: 1rpx solid var(--td-border-level-1-color);   /* 2026-10-28（第 4 步）：与小组积分卡统一容器 */
   border-radius: var(--radius-lg, 16rpx);
   overflow: hidden;
   margin-bottom: var(--space-2);
@@ -1277,27 +1278,33 @@
   color: var(--text-1);
   margin: var(--space-3) 0 var(--space-2);
 }
+/* 2026-10-28（第 4 步）：小组积分卡与「小组赛战绩」卡统一视觉 ——
+   同容器（白底 + 1rpx 边框 + 16 圆角）、同表头条（浅底 caption）、同行高节奏。 */
 .lp-group-card {
   background: var(--card-bg, #FFFFFF);
   border: 1rpx solid var(--td-border-level-1-color);
   border-radius: var(--radius-lg, 16rpx);
-  padding: var(--space-2-5) var(--space-3);
+  padding: 0;
+  overflow: hidden;
   margin-bottom: var(--space-2);
 }
 .lp-group-name {
-  font-size: var(--fs-label);
+  font-size: var(--fs-caption);
   font-weight: 700;
   color: var(--text-2);
-  margin-bottom: var(--space-1-5);
+  background: var(--card-bg-elevated, #F1F3F5);
+  padding: var(--space-2) var(--space-2-5);
+  letter-spacing: 1rpx;
 }
 .lp-team-row {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-1) 0;
-  border-bottom: 1rpx solid var(--td-border-level-1-color);
+  padding: 0 var(--space-2-5);
+  min-height: 64rpx;
+  border-top: 1rpx solid var(--td-border-level-1-color);
 }
-.lp-team-row:last-child { border-bottom: none; }
+.lp-team-row:first-child { border-top: none; }
 .lp-team-rank {
   width: 40rpx;
   font-size: var(--fs-caption);
@@ -1521,7 +1528,7 @@
 .brk-card {
   position: absolute;
   width: 280rpx;
-  height: 132rpx;
+  height: 104rpx;   /* 2026-10-28（第 4 步）：132 → 104，正文仅两行；与 bracketLayout.CARD_H 同源 */
   box-sizing: border-box;
   background: var(--card-bg, #FFFFFF);
   border: 1rpx solid var(--td-border-level-1-color);
@@ -1530,7 +1537,9 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 2rpx;
+  gap: 0;
+  /* 徽标/时间允许溢出到卡片边缘外（时间落在卡间距里） */
+  overflow: visible;
 }
 .brk-card.is-empty { border-style: dashed; opacity: 0.75; }
 .brk-team {
@@ -1540,13 +1549,42 @@
   gap: 8rpx;
   font-size: var(--fs-label);
   color: var(--text-1);
-  line-height: var(--lh-normal);
+  line-height: 40rpx;
+}
+/* 两行之间的细分隔，避免「两行队名」视觉粘连 */
+.brk-team + .brk-team { border-top: 1rpx solid var(--td-border-level-1-color); }
+/* 右上角徽标（BO / LIVE）占位：两行比分整体内缩，保证左右同列对齐 */
+.brk-card.has-bo .brk-team { padding-right: 52rpx; }
+.brk-card.has-live .brk-team { padding-right: 92rpx; }
+.brk-badge {
+  position: absolute;
+  top: 3rpx;
+  right: 6rpx;
+  height: 22rpx;
+  line-height: 22rpx;
+  padding: 0 6rpx;
+  border-radius: var(--radius-sm, 6rpx);
+  font-size: var(--fs-micro);
+  color: var(--text-3);
+  background: var(--card-bg-elevated, #F1F3F5);
+  font-family: var(--font-numeric, "SF Pro Display", sans-serif);
+  letter-spacing: 0;
+}
+/* 赛程时间：卡片下方，落在 24rpx 卡间距内（不撑高布局） */
+.brk-time {
+  position: absolute;
+  top: 100%;
+  right: 4rpx;
+  margin-top: 2rpx;
+  font-size: var(--fs-micro);
+  line-height: 20rpx;
+  color: var(--text-4);
+  white-space: nowrap;
 }
 .brk-team.win { font-weight: 700; color: var(--dota-gold-strong); }
 .brk-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .brk-name.tbd { color: var(--text-4); font-style: italic; }
 .brk-score { font-family: var(--font-numeric); font-weight: 700; }
-.brk-meta { font-size: var(--fs-micro); color: var(--text-4); margin-top: 2rpx; }
-.brk-live { color: var(--status-live, #EF4444); }
+.brk-live { color: var(--status-live, #EF4444); background: rgba(239, 68, 68, 0.10); }
 .brk-hint { text-align: center; font-size: var(--fs-caption); color: var(--text-4); margin-top: 8rpx; }
 .section-toggle { margin-left: var(--space-1); font-size: var(--fs-caption); color: var(--dota-gold-strong); font-weight: 400; }

@@ -393,9 +393,9 @@ module.exports.match = function (name, tag, q) {
             <view class="brk-section-head" style="top:{{sec.y}}rpx">{{sec.label}}</view>
             <view class="brk-round-head {{bracketFocus && bracketFocus.side === sec.side && bracketFocus.roundNo === ridx + 1 ? 'is-current' : ''}}" wx:for="{{sec.rounds}}" wx:for-item="rd" wx:for-index="ridx" wx:key="label" style="left:{{rd.x}}rpx;top:{{sec.y + 24}}rpx">{{rd.label}}</view>
             <view class="brk-line" wx:for="{{sec.lines}}" wx:for-item="ln" wx:key="index" style="left:{{ln.left}}rpx;top:{{ln.top}}rpx;width:{{ln.width}}rpx;height:{{ln.height}}rpx"></view>
-            <view class="brk-card {{item.empty ? 'is-empty' : ''}} {{item.noScore ? 'no-score' : ''}} {{bracketFocus && bracketFocus.side === item.side && bracketFocus.roundNo === item.roundNo ? 'is-current' : ''}}"
+            <view class="brk-card {{item.empty ? 'is-empty' : ''}} {{item.noScore ? 'no-score' : ''}} {{item.live ? 'has-live' : (showBracketSchedule && item.boType ? 'has-bo' : '')}} {{bracketFocus && bracketFocus.side === item.side && bracketFocus.roundNo === item.roundNo ? 'is-current' : ''}}"
                   wx:for="{{sec.cards}}" wx:for-item="item" wx:key="key"
-                  style="left:{{item.x}}rpx;top:{{item.y}}rpx"
+                  style="left:{{item.x}}rpx;top:{{item.y}}rpx;height:{{bracketView.cardH}}rpx"
                   aria-role="button" aria-label="{{item.team1}} 对 {{item.team2}}"
                   catchtap="openBracketMatch" data-id="{{item.matchId}}">
               <view class="brk-team {{item.winner === 'A' ? 'win' : ''}}">
@@ -406,10 +406,11 @@ module.exports.match = function (name, tag, q) {
                 <text class="brk-name {{item.tbd2 ? 'tbd' : ''}}">{{item.team2}}</text>
                 <text class="brk-score">{{item.score2}}</text>
               </view>
-              <view class="brk-meta" wx:if="{{item.live || (showBracketSchedule && (item.boType || item.timeLabel))}}">
-                <text wx:if="{{item.live}}" class="brk-live">● LIVE</text>
-                <text wx:elif="{{showBracketSchedule}}" class="brk-bo"><text wx:if="{{item.boType}}">{{item.boType}}</text><text wx:if="{{item.boType && item.timeLabel}}"> · </text><text wx:if="{{item.timeLabel}}">{{item.timeLabel}}</text></text>
-              </view>
+              <!-- 2026-10-28（第 4 步）：BO / LIVE 收进右上角徽标，正文只剩两行队名+比分 -->
+              <text wx:if="{{item.live}}" class="brk-badge brk-live">● LIVE</text>
+              <text wx:elif="{{showBracketSchedule && item.boType}}" class="brk-badge">{{item.boType}}</text>
+              <!-- 赛程时间挪到卡片下方（落在卡片间距里，不撑高卡片） -->
+              <text wx:if="{{showBracketSchedule && item.timeLabel}}" class="brk-time">{{item.timeLabel}}</text>
               <!-- 2026-10-28：两源都取不到终局比分 → 显式「无数据」 -->
               <text wx:if="{{item.noScore}}" class="brk-no-data">无数据</text>
             </view>
