@@ -11,6 +11,22 @@
 set -e
 cd "$(git rev-parse --show-toplevel)"
 
+# 2026-10-28（CI G4 连续三轮失败复盘）：改 utils/curation.js 必须同步 curation-shared.js。
+#   CI 的 "Verify curation map is up to date" 会现场 `npm run sync:canon` 并比对 git diff；
+#   漏同步 → 每次 push 都红（37054fc / a91bbfd / 169edc2 三次）。
+#   这里在提交阶段自动重生成并加入本次提交，从源头消除该漏步。
+if git diff --cached --name-only --diff-filter=ACM | grep -qx 'utils/curation.js'; then
+  echo "[pre-commit] 检测到 utils/curation.js → 自动同步 curation-shared.js..."
+  if ! npm run sync:canon >/dev/null 2>&1; then
+    echo "❌ sync:canon 失败（G4）。请先修复 utils/curation.js 后重试。"
+    exit 1
+  fi
+  if ! git diff --quiet -- utils/curation-shared.js; then
+    git add utils/curation-shared.js
+    echo "  已自动暂存 utils/curation-shared.js（CI G4 将无需再生成 diff）"
+  fi
+fi
+
 # 仅对已暂存（Added/Copied/Modified）的 .js 跑检查，排除依赖与构建产物
 STAGED_JS=$(git diff --cached --name-only --diff-filter=ACM \
   | grep -E '\.js$' \
