@@ -215,7 +215,9 @@ Page({
     bracketNav: [],            // 2026-10-28：轮次导航条（一列一个 chip → 点击横滑定位）
     bracketLoading: false,
     showGroups: false,         // 小组积分折叠态
-    showBracketSchedule: true, // P4：对战表「显示赛程」开关（控制 BO/时间行，LIVE 常显）
+    showBracketSchedule: false, // P4：对战表「显示赛程」开关（控制 BO/时间行，LIVE 常显）
+    // ★ 2026-10-28（第 4 步真机复盘）：默认关闭 —— 卡片压缩到两行后，逐卡日期会贴在卡下沿、
+    //   与下一张卡只隔 24rpx，默认视图显得拥挤；用户点「显示赛程」再看时间即可。
     bracketFocus: null,        // P4：当前轮焦点 { side, roundNo }（高亮 + 自动横滑定位）
     bracketScrollLeft: 0,      // P4：scroll-view 横向偏移（进入时定位到当前轮）
     // ===== 三段式分段计数（2026-07-28 新增） =====

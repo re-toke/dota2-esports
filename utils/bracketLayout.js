@@ -98,6 +98,17 @@ function _sideOfRound(r) {
   return 'main';
 }
 
+// 2026-10-28（真机截图复盘）：画布上的「分区标题 + 轮次标题」重复（胜者组 / 胜者组¼决赛）。
+// 分区标题已表明 upper/lower ⇒ 轮次标题去掉分区前缀；与分区同名（如总决赛）则留空整行隐藏。
+// ⚠️ 导航 chip 仍用全名 label（跨分区需要区分），此处只产出画布用的 short。
+function _shortRoundLabel(label, secLabel) {
+  if (label === secLabel) return '';
+  if (secLabel && label.indexOf(secLabel) === 0) {
+    return label.slice(secLabel.length).trim();
+  }
+  return label;
+}
+
 /** 首轮按序排；后续轮按「上一轮 2j / 2j+1」中心平均；上一轮不够配对时紧接其后（不再指数放大） */
 function _placeRound(cards, prevCards, roundIndex) {
   const baseGap = H + G;
@@ -278,7 +289,13 @@ function layoutBracket(bracket, opts) {
       const cards = _placeRound(list.map((s) => _cardFromSlot(s, o.formatTime)), prev, idx);
       if (prev.length) lines.push.apply(lines, _linesFor(prev, cards));
       placedRounds.push(cards);
-      roundHeaders.push({ label: localizeRoundLabel(r.label) || ('R' + r.no), x: xOff + idx * (CARD_W + COL_GAP) });
+      const _secLabel = SIDE_LABEL[side] || side;
+      const _fullLabel = localizeRoundLabel(r.label) || ('R' + r.no);
+      roundHeaders.push({
+        label: _fullLabel,                                   // 导航 chip 用（跨分区可区分）
+        short: _shortRoundLabel(_fullLabel, _secLabel),       // 画布用（去掉与分区标题重复的前缀）
+        x: xOff + idx * (CARD_W + COL_GAP)
+      });
       cards.forEach((c) => { sectionHeight = Math.max(sectionHeight, c.y + H); });
       prev = cards;
     });

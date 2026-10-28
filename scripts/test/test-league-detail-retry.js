@@ -134,11 +134,11 @@ const tick = () => new Promise((r) => setTimeout(r, 20));
   inst3.clearTeamSearch();
   assert(inst3.data.teamQuery === '' && inst3.data.teamVisibleCount === 3, '搜索：清空后恢复全部');
 
-  // P4：对战表「显示赛程」开关
+  // P4：对战表「显示赛程」开关（2026-10-28 第 4 步：默认关闭，避免逐卡日期挤在卡下沿）
   inst3.toggleBracketSchedule();
-  assert(inst3.data.showBracketSchedule === false, '赛程开关：默认开 → 点击关闭');
+  assert(inst3.data.showBracketSchedule === true, '赛程开关：默认关 → 点击显示');
   inst3.toggleBracketSchedule();
-  assert(inst3.data.showBracketSchedule === true, '赛程开关：再次点击恢复显示');
+  assert(inst3.data.showBracketSchedule === false, '赛程开关：再次点击隐藏');
 
   // P4：当前轮定位（渲染后写焦点 + 横滑偏移）
   inst3._renderBracket({

@@ -1558,8 +1558,8 @@
 .brk-card.has-live .brk-team { padding-right: 92rpx; }
 .brk-badge {
   position: absolute;
-  top: 3rpx;
-  right: 6rpx;
+  top: 5rpx;
+  right: 8rpx;
   height: 22rpx;
   line-height: 22rpx;
   padding: 0 6rpx;
@@ -1570,14 +1570,15 @@
   font-family: var(--font-numeric, "SF Pro Display", sans-serif);
   letter-spacing: 0;
 }
-/* 赛程时间：卡片下方，落在 24rpx 卡间距内（不撑高布局） */
+/* 赛程时间：卡片下方，落在 24rpx 卡间距内（不撑高布局）
+   2026-10-28 真机复盘：原 margin-top 2rpx 时会被「当前轮」2rpx 高亮环压住 ⇒ 加到 6rpx 并压小字号 */
 .brk-time {
   position: absolute;
   top: 100%;
-  right: 4rpx;
-  margin-top: 2rpx;
-  font-size: var(--fs-micro);
-  line-height: 20rpx;
+  right: 6rpx;
+  margin-top: 6rpx;
+  font-size: 18rpx;
+  line-height: 18rpx;
   color: var(--text-4);
   white-space: nowrap;
 }

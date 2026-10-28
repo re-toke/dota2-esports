@@ -138,14 +138,26 @@ const unknown = bl.layoutBracket({ type: 'Bracket/16U8L4D', rounds: pglRounds() 
 assert(unknown.crossLines.length === 0, 'P4：未知 type 不画降级线（不臆测）');
 assert(unknown.sections[1].cards[0].x === 0, 'P4：无降级线时 lower 分区不位移');
 
+// ===== 2026-10-28（第 4 步 · 真机截图复盘）：轮次标题去重（分区标题已表明 upper/lower）=====
+assert(pgl.sections[0].rounds[0].label === '胜者组¼决赛', '轮次标题：导航 chip 保留全名（跨分区可区分）');
+assert(pgl.sections[0].rounds[0].short === '¼决赛', '轮次标题：画布去掉分区前缀（胜者组¼决赛 → ¼决赛）');
+assert(pgl.sections[0].rounds[1].short === '半决赛', '轮次标题：胜者组半决赛 → 半决赛');
+assert(pgl.sections[1].rounds[0].short === '第1轮', '轮次标题：败者组第1轮 → 第1轮');
+assert(pgl.sections[2].rounds[0].short === '', '轮次标题：与分区同名（总决赛）→ 画布整行隐藏');
+assert(s.sections[0].rounds[0].short === '¼决赛', '轮次标题：单败 main 分区 Quarterfinals → ¼决赛');
+
 // ===== 2026-10-28（第 4 步 · 真机 UI）：卡面契约（源码守卫）=====
 const fs = require('fs');
 const path = require('path');
 const _wxml = fs.readFileSync(path.join(__dirname, '../../subpackages/detail/league-detail/league-detail.wxml'), 'utf8');
 const _wxss = fs.readFileSync(path.join(__dirname, '../../subpackages/detail/league-detail/league-detail.wxss'), 'utf8');
+const _js = fs.readFileSync(path.join(__dirname, '../../subpackages/detail/league-detail/league-detail.js'), 'utf8');
 assert(_wxml.indexOf('class="brk-meta"') < 0, '卡面：移除第三行 meta（BO/时间改角标，不占行高）');
 assert(_wxml.indexOf('brk-badge') > 0 && _wxml.indexOf('item.boType') > 0, '卡面：BO / LIVE 右上角徽标');
+assert(_wxml.indexOf('class="brk-badge">{{item.boType}}') > 0, '卡面：BO 徽标常显（不随「显示赛程」开关）');
 assert(_wxml.indexOf('{{bracketView.cardH}}') > 0, '卡面：卡片高度取 bracketView.cardH（与 CARD_H 单一来源）');
+assert(_wxml.indexOf('rd.short') > 0, '卡面：轮次标题用 short（不重复分区名）');
+assert(/showBracketSchedule:\s*false/.test(_js), '默认：赛程时间关闭（压缩后避免逐卡日期拥挤）');
 assert(/\.brk-card\s*\{[^}]*height:\s*104rpx/.test(_wxss), '样式：.brk-card 高度 104rpx');
 assert(/\.brk-card\.has-bo \.brk-team/.test(_wxss) && /\.brk-card\.has-live \.brk-team/.test(_wxss),
   '样式：徽标占位 → 两行比分统一内缩（左右同列）');
