@@ -2694,8 +2694,14 @@ Page({
       this.loadStandings();
     }
     // P3（2026-08-31）：懒加载 Liquipedia 小组积分/淘汰赛对阵（与 OpenDota 聚合排名互补）
-    if (key === 'playoffs' && !this.data.lpStructureLoaded && !this.data.lpStructureLoading) {
-      this.loadStructure();
+    // 2026-10-28：已加载过也允许重进时静默强制刷新（60s 节流）——
+    //   避免 30min 结构缓存让用户在赛前/赛后一直看到旧版「待定 / 无比分」。
+    if (key === 'playoffs' && !this.data.lpStructureLoading) {
+      if (!this.data.lpStructureLoaded) {
+        this.loadStructure();
+      } else if (!this._structureRefreshAt || Date.now() - this._structureRefreshAt > 60000) {
+        this.loadStructure(true);
+      }
     }
     // P2：参赛队伍 Tab 也需要 LP 小组表做「分组反查」
     if (key === 'teams' && !this.data.lpStructureLoaded && !this.data.lpStructureLoading) {
@@ -2785,9 +2791,17 @@ Page({
 
   // P3：拉取 Liquipedia 结构页（小组积分 + 淘汰赛对阵），失败静默（排名 Tab 仍有 OpenDota 聚合）
   // P5：失败时置 lpStructureError，淘汰赛 Tab 显示「加载失败 + 重试」而非「暂无数据」
-  loadStructure() {
-    this.setData({ lpStructureLoading: true, lpStructureError: false });
-    liquipedia.getLeagueStructure(this.data.name).then((structure) => {
+  // 2026-10-28：force=true 时绕过 30min 结构缓存重新拉 LP（进入淘汰赛 Tab / 点重试）。
+  // 赛前赛后 LP 会持续补对阵与比分，旧实现只在首次加载一次 → 用户会长时间看到上一版「待定」。
+  loadStructure(force) {
+    this._structureRefreshAt = Date.now();
+    if (!force || !this.data.lpStructureLoaded) {
+      this.setData({ lpStructureLoading: true, lpStructureError: false });
+    } else {
+      // 已有内容时静默刷新，不闪「加载中」
+      this.setData({ lpStructureError: false });
+    }
+    liquipedia.getLeagueStructure(this.data.name, { force: !!force }).then((structure) => {
       const groups = (structure && structure.groups) || [];
       const brackets = (structure && structure.brackets) || [];
       // 2026-10-27：候选页抓取全部失败（未进 LP 缓存/网络不可达）→ 报「加载失败可重试」，
@@ -2824,7 +2838,7 @@ Page({
   // P5：淘汰赛结构加载失败后的重试（复位 loaded 以便 switchTab 逻辑不拦截）
   retryStructure() {
     this.setData({ lpStructureLoaded: false, bracketView: null });
-    this.loadStructure();
+    this.loadStructure(true);   // 必须 force：否则又是那份缓存里的空结构
   },
 
   // P3.1：选主对战表 —— 优先 Playoffs，其次填充率最高，最后第一个
@@ -2967,7 +2981,10 @@ Page({
       this._loadBracketAlias(primary).then(() => this._renderBracket(primary));
       return;
     }
-    this.setData({ bracketLoading: true });
+    // 2026-10-28：已有对战表时静默替换，不闪「对战表加载中…」（重进 Tab 的强制刷新会走这里）
+    const hadView = !!(this.data.bracketView && this.data.bracketView.sections &&
+      this.data.bracketView.sections.length);
+    if (!hadView) this.setData({ bracketLoading: true });
     // 并行：payload + 队名别名表（跨源借位比分/BO 用）
     Promise.all([liquipedia.getLeagueBracket(primary.id), this._loadBracketAlias(primary)])
       .then((r) => {

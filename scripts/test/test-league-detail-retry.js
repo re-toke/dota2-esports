@@ -349,6 +349,17 @@ const tick = () => new Promise((r) => setTimeout(r, 20));
   assert(/wx:elif="\{\{lpStructureError\}\}"/.test(wxml), 'WXML：error 分支在真无数据分支之前');
   assert(/bindtap="retryStructure"/.test(wxml), 'WXML：重试按钮绑定 retryStructure');
 
+  // 缓存时序（2026-10-28）：重进淘汰赛 Tab 允许 force 绕过 30min 结构缓存；重试必须 force
+  const js = fs.readFileSync(path.join(PAGE_DIR, 'league-detail.js'), 'utf8');
+  assert(/getLeagueStructure\(this\.data\.name, \{ force: !!force \}\)/.test(js),
+    '结构刷新：loadStructure(force) 透传到 getLeagueStructure');
+  assert(/retryStructure\(\)[\s\S]{0,140}?loadStructure\(true\)/.test(js),
+    '结构重试：retryStructure 必须 force 刷新');
+  assert(/key === 'playoffs'[\s\S]{0,300}?loadStructure\(true\)/.test(js),
+    '重进淘汰赛 Tab：60s 节流强制刷新');
+  assert(/hadView[\s\S]{0,120}?bracketLoading: true/.test(js),
+    '静默刷新：已有对战表时不闪加载态');
+
   console.log(`\n=== 结果 ===\n通过: ${pass}  失败: ${fail}`);
   process.exit(fail ? 1 : 0);
 })();
