@@ -371,6 +371,14 @@ const tick = () => new Promise((r) => setTimeout(r, 20));
   assert(/jumpToRound\(e\)[\s\S]{0,520}?bracketScrollLeft/.test(js), '轮次导航：点击后更新焦点并横滑');
   assert(/bindtap="jumpToRound"/.test(wxml), 'WXML：轮次导航绑定 jumpToRound');
   assert(/brk-no-data/.test(wxml), 'WXML：无比分卡显示「无数据」');
+  // 2026-10-28（详情页冷启动第 2 步）：leagueId 一跳直读 + 本地 bracket 缓存
+  assert(/getLeagueBracketByLeague\(id\)/.test(js), '直读：leagueId → 主 bracket（一跳）');
+  assert(/key === 'playoffs'\)\s*this\._loadBracketByLeague\(\)/.test(js), '淘汰赛 Tab：触发一跳直读');
+  const lpJs = fs.readFileSync(path.join(__dirname, '..', '..', 'utils', 'liquipedia.js'), 'utf8');
+  assert(/getLeagueBracketByLeague: getLeagueBracketByLeague/.test(lpJs), 'liquipedia：导出 league 别名读取');
+  assert(/cache\.getStale\(ck, BRACKET_FRESH_SEC, BRACKET_TTL_SEC\)/.test(lpJs), 'bracket：本地缓存 stale 秒回');
+  const syncJs = fs.readFileSync(path.join(__dirname, '..', 'sync', 'sync-liquipedia-brackets.js'), 'utf8');
+  assert(/upsertCache\('lp:brl:' \+ ev\.leagueId/.test(syncJs), 'CI：写 leagueId 别名 lp:brl:<leagueId>');
 
   console.log(`\n=== 结果 ===\n通过: ${pass}  失败: ${fail}`);
   process.exit(fail ? 1 : 0);

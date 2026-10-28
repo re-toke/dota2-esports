@@ -164,6 +164,12 @@ async function syncEvent(ev, dry) {
     }
   }
   if (!found) return { event: ev.canonical, brackets: 0 };
+  // 2026-10-28：选「主 bracket」（Playoffs 优先，其次填充最多）→ 额外写 leagueId 别名，
+  //   客户端进淘汰赛 Tab 可一跳直读（不必先等结构页返回 bracketId）。
+  const _filledOf = (bb) => ((bb.slots || []).filter((s) => !s.empty).length);
+  const primaryB = found.brackets.filter((bb) => /playoff|淘汰/i.test(String(bb.section || '')))[0] ||
+    found.brackets.slice().sort((a, b) => _filledOf(b) - _filledOf(a))[0] || null;
+  let leaguePayload = null;
   let written = 0;
   for (const b of found.brackets) {
     if (!b.id) continue;
@@ -183,12 +189,18 @@ async function syncEvent(ev, dry) {
       slots, total: slots.length, filled, rounds: b.rounds,
       updatedAt: Math.floor(Date.now() / 1000)
     };
+    if (b === primaryB) leaguePayload = payload;
     if (dry) {
       console.log('  [dry] bracket', b.id, 'slots', slots.length, 'filled', filled);
     } else {
       await upsertCache('lp:br:' + b.id, payload, TTL_SEC);
     }
     written++;
+  }
+  // 2026-10-28：leagueId 别名（同一份 payload，客户端一跳直读）
+  if (!dry && ev.leagueId != null && leaguePayload) {
+    try { await upsertCache('lp:brl:' + ev.leagueId, leaguePayload, TTL_SEC); }
+    catch (e) { console.warn('  ✗ leagueId 别名写入失败', ev.leagueId, e.message); }
   }
   return { event: ev.canonical, brackets: written, slug: found.slug };
 }

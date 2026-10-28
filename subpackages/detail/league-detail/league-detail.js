@@ -437,6 +437,7 @@ Page({
     //   下拉后对战表/战绩仍是旧数据（方案 §9 风险表 & §12 缺口 1）。
     //   结构走 force 绕过 30min 缓存；已有对战表时静默替换，不闪加载态。
     this.setData({ lpStructureLoaded: false, standingsLoaded: false });
+    this._bracketFastDone = false;   // 2026-10-28：下拉后允许重新走结构/payload 渲染
     const jobs = [this.load()];
     const key = this.data.tab;
     if (key === 'playoffs' || key === 'teams') jobs.push(this.loadStructure(true));
@@ -2716,6 +2717,9 @@ Page({
     if (key === 'teams' && !this.data.lpStructureLoaded && !this.data.lpStructureLoading) {
       this.loadStructure();
     }
+    // 2026-10-28（详情页冷启动第 2 步）：leagueId → 主 bracket 一跳直读（CI 写 lp:brl:<id>），
+    //   先于结构页渲染对战表；结构到达后只补小组积分/分组（loadBracketDetail 跳过重复渲染）。
+    if (key === 'playoffs') this._loadBracketByLeague();
   },
 
   // P2（2026-10-27）：参赛队伍本地搜索 —— 只改关键词与命中数，
@@ -2847,6 +2851,7 @@ Page({
   // P5：淘汰赛结构加载失败后的重试（复位 loaded 以便 switchTab 逻辑不拦截）
   retryStructure() {
     this.setData({ lpStructureLoaded: false, bracketView: null });
+    this._bracketFastDone = false;
     this.loadStructure(true);   // 必须 force：否则又是那份缓存里的空结构
   },
 
@@ -3012,8 +3017,31 @@ Page({
     });
   },
 
+  // 2026-10-28（详情页冷启动第 2 步）：leagueId 别名直读 —— 不依赖结构页先返回 bracketId。
+  //   CI 写 lp:brl:<leagueId>（主 bracket 的同一份 payload）；命中即渲染，结构页随后只补小组积分。
+  _loadBracketByLeague() {
+    const id = Number(this.data.leagueId);
+    if (!id || id < 0) return;
+    if (this._bracketFastPending) return;
+    this._bracketFastPending = true;
+    const token = this._loadToken;
+    liquipedia.getLeagueBracketByLeague(id).then((payload) => {
+      this._bracketFastPending = false;
+      if (!payload || !payload.slots || !payload.slots.length) return;
+      if (this._loadToken !== token) return;
+      this._bracketFastDone = true;
+      return this._loadBracketAlias(payload).then(() => this._renderBracket(payload));
+    }).catch(() => { this._bracketFastPending = false; });
+  },
+
   // P3.1：缓存 JSON（CI 生成的 Match 页内容）优先；缺失/失败回落 wikitext 骨架
   loadBracketDetail(brackets) {
+    // 2026-10-28：已由 leagueId 一跳渲染过 → 结构分支不重复渲染（仍会 setData 小组积分）
+    if (this._bracketFastDone && this.data.bracketView &&
+        this.data.bracketView.sections && this.data.bracketView.sections.length) {
+      this.setData({ bracketLoading: false });
+      return;
+    }
     const primary = this._pickPrimaryBracket(brackets);
     if (!primary) { this.setData({ bracketView: null, bracketLoading: false }); return; }
     if (!primary.id) {

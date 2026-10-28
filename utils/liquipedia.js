@@ -965,9 +965,12 @@ function getTeamLogo(name) {
 
 // ★ P3.0（2026-10-26）：读取 CI 预生成的 bracket JSON（aggregation_cache key = lp:br:<bracketId>）。
 //   运行时零 LP 依赖：CI 抓 wikitext + Match 页 → 结构化 JSON；客户端只读缓存。
-function getLeagueBracket(bracketId) {
-  if (!bracketId) return Promise.resolve(null);
-  var key = 'lp:br:' + bracketId;
+// ★ 2026-10-28（详情页冷启动第 2 步）：加本地缓存（10min 新鲜 / 2h 硬 TTL，stale 秒回 + 后台刷新）。
+//   切走再回详情页 / 重复进淘汰赛 Tab 不再付跨网 RTT。
+var BRACKET_FRESH_SEC = 10 * 60;
+var BRACKET_TTL_SEC = 2 * 3600;
+
+function _readBracketRow(key) {
   try {
     var sb = require('./supabaseClient.js');
     if (!sb || typeof sb.enabled !== 'function' || !sb.enabled()) return Promise.resolve(null);
@@ -984,6 +987,37 @@ function getLeagueBracket(bracketId) {
   }
 }
 
+function _cachedBracket(key) {
+  var ck = 'bracket:' + key;
+  var st = null;
+  try { st = cache.getStale(ck, BRACKET_FRESH_SEC, BRACKET_TTL_SEC); } catch (e) { st = null; }
+  if (st && st.value && st.fresh) return Promise.resolve(st.value);
+  if (st && st.value && !st.expired) {
+    // 旧值秒回，后台静默刷新
+    _readBracketRow(key).then(function (v) {
+      if (v) { try { cache.set(ck, v, BRACKET_TTL_SEC); } catch (e) {} }
+    }).catch(function () {});
+    return Promise.resolve(st.value);
+  }
+  return _readBracketRow(key).then(function (v) {
+    if (v) { try { cache.set(ck, v, BRACKET_TTL_SEC); } catch (e) {} }
+    return v;
+  });
+}
+
+function getLeagueBracket(bracketId) {
+  if (!bracketId) return Promise.resolve(null);
+  return _cachedBracket('lp:br:' + bracketId);
+}
+
+// ★ 2026-10-28：CI 额外写 `lp:brl:<leagueId>`（该赛事「主 bracket」的同一份 payload）⇒
+//   客户端进淘汰赛 Tab 可一跳直读，不必先等结构页返回 bracketId。
+function getLeagueBracketByLeague(leagueId) {
+  var id = Number(leagueId);
+  if (!id || id < 0) return Promise.resolve(null);
+  return _cachedBracket('lp:brl:' + id);
+}
+
 module.exports = {
   ENABLED: ENABLED,
   getLeagueMetadata: getLeagueMetadata,
@@ -992,6 +1026,7 @@ module.exports = {
   getScheduledMatches: getScheduledMatches,
   getLeagueStructure: getLeagueStructure,   // P3（2026-08-31）：小组积分 + 淘汰赛对阵结构
   getLeagueBracket: getLeagueBracket,       // P3.0：CI 预生成的 bracket JSON（只读缓存）
+  getLeagueBracketByLeague: getLeagueBracketByLeague,   // 2026-10-28：leagueId → 主 bracket（一跳直读）
   getTeamLogo: getTeamLogo,
   parseParticipants: LiquiParse.parseParticipants  // 2026-07-28 导出供单元测试直接调用（单一来源：liquipedia-parse.js）
 };
