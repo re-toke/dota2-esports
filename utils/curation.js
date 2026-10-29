@@ -509,7 +509,7 @@ const CURATED_EVENTS = [
     leagueId: 19102,
     start: 1790640000, end: 1791676800,
     prizePool: '$750,000', organizer: 'BLAST', region: '马耳他', format: '双败淘汰(Bo3/Bo5决赛)',
-    participants: 12, status: '即将到来', liquipediaSlug: 'BLAST/Slam/8',
+    participants: 12, status: '即将到来', liquipediaSlug: 'BLAST/SLAM/8',
     valve: false, topThirdParty: false },
   // Esports Nations Cup 2026：11月2-8日，利雅得，$1,500,000（国家级 Tier 1）
   { canonical: 'Esports Nations Cup 2026', tier: { grade: 'S', rank: 3, label: 'S级' },
@@ -526,7 +526,7 @@ const CURATED_EVENTS = [
     leagueId: 20208,
     start: 1795132800, end: 1795910400,
     prizePool: '$750,000', organizer: 'BLAST', region: '欧洲', format: '双败淘汰(Bo3/Bo5决赛)',
-    participants: 12, status: '即将到来', liquipediaSlug: 'BLAST/Slam/9',
+    participants: 12, status: '即将到来', liquipediaSlug: 'BLAST/SLAM/9',
     valve: false, topThirdParty: false },
 
   // ── 2026-08-31 新增：BLAST SLAM IX 三大赛区封闭预选赛（来源：Liquipedia Tournaments Upcoming，
@@ -682,13 +682,13 @@ const CURATED_EVENTS = [
     aliases: ['blastslamvi', 'blastslam6', 'blastslam2026vi'], year: 2026,
     leagueId: 19099,
     prizePool: '$750,000', organizer: 'BLAST', region: '欧洲', format: '双败淘汰',
-    participants: 12, status: '已结束', liquipediaSlug: 'BLAST/Slam/6',
+    participants: 12, status: '已结束', liquipediaSlug: 'BLAST/SLAM/6',
     valve: false, topThirdParty: false },
   { canonical: 'BLAST Slam VII', tier: { grade: 'S', rank: 3, label: 'S级' },
     aliases: ['blastslamvii', 'blastslam7', 'blastslam2026vii'], year: 2026,
     leagueId: 19101,
     prizePool: '$750,000', organizer: 'BLAST', region: '欧洲', format: '双败淘汰',
-    participants: 12, status: '已结束', liquipediaSlug: 'BLAST/Slam/7',
+    participants: 12, status: '已结束', liquipediaSlug: 'BLAST/SLAM/7',
     valve: false, topThirdParty: false },
 
   // ── PGL Wallachia Season 3+（PGL 三年马拉松系列，S-Tier）──

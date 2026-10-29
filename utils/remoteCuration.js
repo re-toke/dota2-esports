@@ -42,7 +42,10 @@ function ensure() {
   const meta = cache.getStale(CACHE_KEY, config.remoteCuration.ttlSec, config.remoteCuration.ttlSec);
   if (meta.value && meta.value.events && meta.value.teams) {
     effectiveEvents = meta.value.events;
-    effectiveTeams = meta.value.teams;
+    // ★ 2026-10-29（第 6 步）：旧缓存里的 teams 是「上一版代码」合并出来的，可能已丢失
+    //   本版本新增的别名（如 8260824 的 'pvision'）。这里再与本地做一次字段级合并，
+    //   使客户端升级后立即可用，而不必等 6h TTL 过期或清缓存。
+    effectiveTeams = mergeTeamsWithLocal(meta.value.teams);
     effectiveTiIds = meta.value.tiContestantIds || curation.TI_CONTESTANT_TEAM_IDS;
   } else {
     effectiveEvents = curation.CURATED_EVENTS;
@@ -82,6 +85,40 @@ function mergeEventFields(local, remote) {
   return merged;
 }
 
+// ★ 2026-10-29（第 6 步）：远程战队条目**字段级合并**（aliases 取并集）。
+//   根因：原实现 `tmMap[id] = remote.teams[id]` 整条覆盖 → 云端旧条目（无 aliases 或
+//   缺少本版本新增的别名）会把本地随代码发布的新别名整条抹掉。
+//   实测：EWC 2026 的 PARIVISION（8260824）本地已加 'pvision'，云端旧条目覆盖后
+//   `curatedTeamFor('PVISION')` 失配 → 淘汰赛 2 张卡的跨源借位比分全部落空。
+function mergeTeamFields(local, remote) {
+  if (!remote) return local;
+  const merged = Object.assign({}, local);
+  Object.keys(remote).forEach((k) => {
+    const v = remote[k];
+    if (v === undefined || v === null) return;
+    if (k === 'aliases') {
+      const a = Array.isArray(merged.aliases) ? merged.aliases.slice() : [];
+      (Array.isArray(v) ? v : []).forEach((x) => { if (a.indexOf(x) < 0) a.push(x); });
+      merged.aliases = a;                                  // 并集：本地新增别名不会被云端旧数据抹掉
+      return;
+    }
+    merged[k] = v;
+  });
+  return merged;
+}
+
+// 以本地 CURATED_TEAMS 为底，把远程（或旧缓存的）teams 逐条字段级合并进来。
+// 远程新 id 直接追加；同 id 走 mergeTeamFields（aliases 并集）。
+function mergeTeamsWithLocal(remoteTeams) {
+  const out = {};
+  Object.keys(curation.CURATED_TEAMS).forEach((id) => { out[Number(id)] = curation.CURATED_TEAMS[id]; });
+  Object.keys(remoteTeams || {}).forEach((id) => {
+    const nid = Number(id);
+    out[nid] = out[nid] ? mergeTeamFields(out[nid], remoteTeams[id]) : remoteTeams[id];
+  });
+  return out;
+}
+
 function buildEffective(remote) {
   const evMap = {};
   curation.CURATED_EVENTS.forEach((e) => { if (e && e.canonical) evMap[consensus.normName(e.canonical)] = e; });
@@ -92,9 +129,7 @@ function buildEffective(remote) {
   });
   const events = Object.keys(evMap).map((k) => evMap[k]);
 
-  const tmMap = {};
-  Object.keys(curation.CURATED_TEAMS).forEach((id) => { tmMap[Number(id)] = curation.CURATED_TEAMS[id]; });
-  Object.keys(remote.teams || {}).forEach((id) => { tmMap[Number(id)] = remote.teams[id]; });
+  const tmMap = mergeTeamsWithLocal(remote.teams);
 
   const tiIds = remote.tiContestantIds || curation.TI_CONTESTANT_TEAM_IDS;
 
