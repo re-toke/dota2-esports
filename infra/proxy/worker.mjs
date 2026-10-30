@@ -611,8 +611,22 @@ async function _handle(request, env, ctx) {
         headers: Object.assign({ 'Content-Type': 'application/json' }, sbHeaders, adminFwd),
         body: rawBody
       };
-      // 未登记 ⇒ 原行为：流式透传（不缓冲、不缓存）
-      if (!policy) return forward(await fetchUpstream(efUrl, efInit, efLabel));
+      // 未登记 ⇒ 不缓存，但**必须给 body 读也设上限**（★ 2026-10-30 实测修因）：
+      //   `forward()` 只把上游的 body 流原样转出，而 `fetchUpstream` 的超时
+      //   **在拿到响应头时就 clearTimeout 了** ⇒ body 段停滞时中转会把连接**无限挂着**。
+      //   实测（GetLiveLeagueGames via hungry-pike）：EF 早已回 200 头，body 停滞 **983s（16 分钟）**，
+      //   客户端只能等自己的 25s 超时并把这次失败计入 `steam-proxy|steamProxy` 熔断桶
+      //   ⇒ 这正是「熔断级联」的连接层成因。改为缓冲 + `UPSTREAM_TIMEOUT_MS` 上限，超时回 504。
+      if (!policy) {
+        const r0 = await fetchUpstream(efUrl, efInit, efLabel);
+        let buf = '';
+        try { buf = await readText(r0, UPSTREAM_TIMEOUT_MS); }
+        catch (e) {
+          try { r0.body && r0.body.cancel && await r0.body.cancel(); } catch (e2) { /* ignore */ }
+          return json({ error: 'upstream body timeout', detail: String((e && e.message) || e) }, 504);
+        }
+        return textResponse(buf, r0.status, r0.headers.get('content-type') || 'application/json');
+      }
 
       // 登记但无命中（或 force）：首次最多 12s × 2；有旧值但已超出 stale 窗口 ⇒ 单次 4s + 旧值兜底
       let r;
