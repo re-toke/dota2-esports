@@ -2,7 +2,7 @@
 //   做法：mock 全局 fetch（拦截上游请求），把 worker 的 handle() 当成纯函数调用，
 //   逐条断言：① 路由命中 ② **服务端确实覆盖了客户端的错 key** ③ /leagues 裁剪 ④ 最小权限/健康检查
 // 运行：node infra/proxy/test.mjs
-import { handle, EF_ALLOW, TTL, _cache } from './worker.mjs';
+import { handle, EF_ALLOW, EF_CACHE, TTL, _cache, keepWarmOnce, KEEP_WARM_EFS } from './worker.mjs';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 
@@ -317,7 +317,8 @@ const textOf = async (r) => { try { return await r.clone().text(); } catch (e) {
   ok('★ v4 白名单 EF：二次 HIT 且不再打上游',
     r2.headers.get('X-Proxy-Cache') === 'HIT' && calls.length === n1, r2.headers.get('X-Proxy-Cache') + ' / calls=' + calls.length + '（首次 ' + n1 + '）');
   // ★ 反向断言：**未登记**的 (EF, action) 一律不缓存（防"误缓写类/鉴权类 EF"）
-  const b2 = JSON.stringify({ action: 'getProMatches', params: {} });
+  //   ⚠️ 2026-10-29（B3）：`getProMatches` 已被收进 EF_CACHE ⇒ 改用仍未登记的 `searchTeams` 做反向断言。
+  const b2 = JSON.stringify({ action: 'searchTeams', params: {} });
   calls.length = 0;
   await handle(req('/sb/functions/v1/opendota-proxy', { method: 'POST', body: b2, headers: H }), ENV);
   const m1 = calls.length;
@@ -574,6 +575,188 @@ const textOf = async (r) => { try { return await r.clone().text(); } catch (e) {
     'ce=' + forced.headers.get('Content-Encoding'));
 
   globalThis.fetch = savedFetch;
+}
+
+// ── ⑰ B1（2026-10-29）：`/matches/{id}` 白名单裁剪 + 分状态 TTL + `?full=1` ──────────
+{
+  const saved = globalThis.fetch;
+  const mkPlayers = () => {
+    const arr = [];
+    for (let i = 0; i < 10; i++) {
+      arr.push({
+        account_id: 1000 + i, player_slot: i, isRadiant: i < 5, hero_id: 1 + i,
+        personaname: 'Player-' + i, name: 'Name-' + i,
+        kills: 1, deaths: 2, assists: 3, gold_per_min: 500, xp_per_min: 600,
+        last_hits: 100, denies: 5, hero_damage: 10000, tower_damage: 1000,
+        item_0: 1, item_1: 2, item_2: 3, item_3: 4, item_4: 5, item_5: 6, item_neutral: 7,
+        // 以下都是**客户端不读**的重字段（真实响应里正是它们把 286KB 撑起来）
+        purchase_log: Array.from({ length: 200 }, (_, k) => ({ time: k * 30, key: 'item_' + k })),
+        kills_log: Array.from({ length: 50 }, (_, k) => ({ time: k * 60, key: 'npc_dota_hero_' + k })),
+        ability_upgrades_arr: Array.from({ length: 100 }, (_, k) => k),
+        gold_t: Array.from({ length: 60 }, (_, k) => k * 100),
+        xp_t: Array.from({ length: 60 }, (_, k) => k * 90)
+      });
+    }
+    return arr;
+  };
+  const live = {
+    match_id: 555001, radiant_win: null, duration: 1800, start_time: 1700000000,
+    radiant_score: 10, dire_score: 8, radiant_team_id: 1, dire_team_id: 2,
+    radiant_name: 'A', dire_name: 'B',
+    radiant_logo: true, dire_logo: false,
+    league: { leagueid: 19102, name: 'Test League', tier: 'professional' },
+    radiant_gold_adv: Array.from({ length: 60 }, (_, k) => k * 3),
+    radiant_xp_adv: Array.from({ length: 60 }, (_, k) => k * 2),
+    objectives: Array.from({ length: 100 }, (_, k) => ({
+      time: k * 20, type: 'building_kill', key: 'npc_dota_badguys_tower1_top', subtype: '', slot: k, team: 2, value: 1
+    })),
+    players: mkPlayers()
+  };
+  let up = 0;
+  globalThis.fetch = async () => { up++; return new Response(JSON.stringify(live), { status: 200, headers: { 'Content-Type': 'application/json' } }); };
+
+  calls.length = 0;
+  const r = await handle(req('/od/api/matches/555001'), ENV);
+  const b = JSON.parse(await textOf(r));
+  const bytes = Buffer.byteLength(JSON.stringify(b), 'utf8');
+  ok('★ B1 裁剪后响应 ≤15KB', bytes <= 15 * 1024, bytes + 'B');
+  ok('★ B1 players 关键字段保留（比分/装备/经济）',
+    b.players.length === 10 && b.players[0].gold_per_min === 500 && b.players[0].item_5 === 6 &&
+    b.players[0].isRadiant === true && b.players[0].hero_id === 1, JSON.stringify(b.players[0]));
+  ok('★ B1 客户端不读的重字段被剔除',
+    b.players[0].purchase_log === undefined && b.players[0].ability_upgrades_arr === undefined &&
+    b.players[0].gold_t === undefined, Object.keys(b.players[0]).join(','));
+  ok('★ B1 顶层字段（比分/队名/曲线/league）保留',
+    b.radiant_score === 10 && b.dire_score === 8 && b.league && b.league.leagueid === 19102 &&
+    Array.isArray(b.radiant_gold_adv) && b.objectives.length === 100, JSON.stringify(Object.keys(b)));
+  ok('★ B1 回执头 X-Proxy-Trim=match:10p/…K', /^match:10p\/\d+K$/.test(r.headers.get('X-Proxy-Trim') || ''),
+    String(r.headers.get('X-Proxy-Trim')));
+
+  // 分状态 TTL：直播 30s（= 客户端轮询间隔）；已完赛 30min
+  const entLive = _cache.get('od|matches/555001|t0');
+  ok('★ B1 直播中 TTL=30s（≤ 客户端 30s 轮询）',
+    !!entLive && Math.abs((entLive.exp - entLive.at) - 30000) < 500,
+    entLive ? String(entLive.exp - entLive.at) : '无缓存项');
+
+  // `?full=1` 显式要全量（且与裁剪版缓存键隔离）
+  up = 0;
+  const rf = await handle(req('/od/api/matches/555001?full=1'), ENV);
+  const bf = JSON.parse(await textOf(rf));
+  ok('★ B1 ?full=1 返回全量（重字段仍在）',
+    bf.players[0].purchase_log && bf.players[0].purchase_log.length === 200, String(rf.headers.get('X-Proxy-Cache')));
+  ok('★ B1 full / 裁剪 缓存互不污染（full 为 MISS 且打上游）',
+    rf.headers.get('X-Proxy-Cache') === 'MISS' && up === 1, rf.headers.get('X-Proxy-Cache') + '/' + up);
+
+  // 已完赛 + objectives 超限 ⇒ 一级兜底（只留 ROSHAN / building_kill）
+  const done = Object.assign({}, live, {
+    match_id: 555002, radiant_win: true,
+    objectives: Array.from({ length: 800 }, (_, k) => ({
+      time: k, type: 'CHAT_MESSAGE', key: 'x', subtype: '', slot: k, player_slot: k, team: 1, value: 1
+    })).concat([{ time: 100, type: 'ROSHAN_KILL', key: 'npc_dota_roshan', subtype: '', slot: 0, team: 2, value: 1 }])
+  });
+  globalThis.fetch = async () => new Response(JSON.stringify(done), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  const rd = await handle(req('/od/api/matches/555002'), ENV);
+  const bd = JSON.parse(await textOf(rd));
+  ok('★ B1 objectives 超限 ⇒ 只留客户端消费的事件（ROSHAN / 拆塔）',
+    Array.isArray(bd.objectives) && bd.objectives.length === 1 && bd.objectives[0].type === 'ROSHAN_KILL',
+    'len=' + (bd.objectives ? bd.objectives.length : 'none'));
+  ok('★ B1 二级兜底后仍 ≤15KB', Buffer.byteLength(JSON.stringify(bd), 'utf8') <= 15 * 1024,
+    Buffer.byteLength(JSON.stringify(bd), 'utf8') + 'B');
+  const entDone = _cache.get('od|matches/555002|t0');
+  ok('★ B1 已完赛 TTL=30min',
+    !!entDone && Math.abs((entDone.exp - entDone.at) - 30 * 60e3) < 500,
+    entDone ? String(entDone.exp - entDone.at) : '无缓存项');
+  globalThis.fetch = saved;
+}
+
+// ── ⑱ B3/B4（2026-10-29）：EF 缓存扩面 + STALE-while-revalidate + force 跳过 ─────────
+{
+  const H = { 'Content-Type': 'application/json' };
+  const body = JSON.stringify({ action: 'getLeagues', params: { probe: 'b3' } });
+  calls.length = 0;
+  const r1 = await handle(req('/sb/functions/v1/opendota-proxy', { method: 'POST', body: body, headers: H }), ENV);
+  const r2 = await handle(req('/sb/functions/v1/opendota-proxy', { method: 'POST', body: body, headers: H }), ENV);
+  ok('★ B3 扩面：getLeagues 首次 MISS', r1.headers.get('X-Proxy-Cache') === 'MISS', String(r1.headers.get('X-Proxy-Cache')));
+  ok('★ B3 扩面：getLeagues 二次 HIT 且不打上游',
+    r2.headers.get('X-Proxy-Cache') === 'HIT' && calls.length === 1, r2.headers.get('X-Proxy-Cache') + '/calls=' + calls.length);
+
+  // 把该条置为「新鲜期已过、仍在 stale 窗口内」⇒ 立即 STALE + 后台刷新
+  const key = 'ef|opendota-proxy|getLeagues|{"probe":"b3"}';
+  const ent = _cache.get(key);
+  ok('B3 缓存键格式与实现一致', !!ent, key);
+  if (ent) {
+    ent.exp = Date.now() - 1;
+    ent.at = Date.now() - (EF_CACHE['opendota-proxy|getLeagues'].fresh + 1000);
+  }
+  calls.length = 0;
+  const t0 = Date.now();
+  const r3 = await handle(req('/sb/functions/v1/opendota-proxy', { method: 'POST', body: body, headers: H }), ENV);
+  const ms3 = Date.now() - t0;
+  ok('★ B3 stale 窗口内 ⇒ 立即 STALE（不等上游）',
+    r3.headers.get('X-Proxy-Cache') === 'STALE' && ms3 < 1500, r3.headers.get('X-Proxy-Cache') + '/' + ms3 + 'ms');
+  ok('B3 STALE 响应体与旧值一致', (await textOf(r3)).indexOf('"source":"ef"') >= 0);
+  await new Promise(function (res) { setTimeout(res, 30); });
+  ok('★ B3 STALE 触发**一次**后台刷新（_efRefreshing 去重）', calls.length === 1, 'calls=' + calls.length);
+  const r4 = await handle(req('/sb/functions/v1/opendota-proxy', { method: 'POST', body: body, headers: H }), ENV);
+  ok('★ B3 后台刷新写回 ⇒ 下一次 HIT', r4.headers.get('X-Proxy-Cache') === 'HIT', String(r4.headers.get('X-Proxy-Cache')));
+
+  // 客户端 force（下拉刷新/重试）⇒ 跳过读缓存
+  calls.length = 0;
+  const forced = JSON.stringify({ action: 'getLeagues', params: { probe: 'b3' }, force: true });
+  const r5 = await handle(req('/sb/functions/v1/opendota-proxy', { method: 'POST', body: forced, headers: H }), ENV);
+  ok('★ B3 force:true ⇒ 跳过读缓存（MISS 且打上游）',
+    r5.headers.get('X-Proxy-Cache') === 'MISS' && calls.length === 1, r5.headers.get('X-Proxy-Cache') + '/calls=' + calls.length);
+
+  // B4：bundle 的 fresh 由 60s 上调到 6min（5–10min 区间）
+  const pol = EF_CACHE['bundle-aggregator|getLeagueDetailBundle'];
+  ok('★ B4 bundle fresh=6min（5–10min 区间内）', pol && pol.fresh === 6 * 60e3 && pol.stale >= 10 * 60e3, JSON.stringify(pol));
+}
+
+// ── ⑲ B6（2026-10-29）：EF keep-warm（6 个只读 EF / 空 action / 400 也算唤醒成功） ─────
+{
+  const saved = globalThis.fetch;
+  calls.length = 0;
+  globalThis.fetch = async (target, init) => {
+    calls.push({ url: String(target), method: (init && init.method) || 'GET', headers: (init && init.headers) || {}, body: init && init.body });
+    return new Response('{"error":"bad action"}', { status: 400, headers: { 'Content-Type': 'application/json' } });
+  };
+  const res = await keepWarmOnce(ENV);
+  ok('★ B6 keep-warm 覆盖 6 个只读 EF', res.length === 6 && KEEP_WARM_EFS.every((n) => res.some((x) => x.ef === n)),
+    res.map((x) => x.ef).join(','));
+  ok('★ B6 每个 EF 各收到一次空体 POST', calls.length === 6 && calls.every((c) => c.method === 'POST' && c.body === '{}'),
+    'calls=' + calls.length);
+  ok('★ B6 带上真 key（EF 若校验 JWT 也能唤醒）', calls.every((c) => c.headers.apikey === REAL_KEY));
+  ok('★ B6 400 也算唤醒成功（只要求"到达 EF"，不要求 2xx）', res.every((x) => !x.error),
+    JSON.stringify(res.filter((x) => x.error)));
+  globalThis.fetch = saved;
+
+  const hb = await (await handle(req('/healthz'), ENV)).json();
+  ok('★ B6 /healthz 回显 keepWarm.registered=false（Node 无 Deno.cron ⇒ 未注册，防误判）',
+    hb.keepWarm && hb.keepWarm.registered === false && hb.keepWarm.efs === 6, JSON.stringify(hb.keepWarm));
+}
+
+// ── ⑳ B2（2026-10-29）：直播轮询**串行**（永不叠请求；旧 setInterval 会叠加） ────────────
+{
+  const cfg = require('../../utils/config.js');
+  const rt = require('../../subpackages/detail/realtime.js');
+  const savedInterval = cfg.realtime.pollInterval;
+  cfg.realtime.pollInterval = 20;          // 测试用 20ms 间隔（默认 30s）
+  let calls2 = 0, inflight = 0, maxInflight = 0;
+  const session = rt.createSession(999001, {
+    fetchPoll: () => {
+      calls2++;
+      inflight++;
+      maxInflight = Math.max(maxInflight, inflight);
+      return new Promise((res) => setTimeout(() => { inflight--; res({ match_id: 999001 }); }, 60));  // 单次比间隔长 3 倍
+    },
+    onUpdate: () => {},
+    onStatus: () => {}
+  });
+  await new Promise((res) => setTimeout(res, 260));
+  session.close();
+  cfg.realtime.pollInterval = savedInterval;
+  ok('★ B2 轮询串行：单次 60ms > 间隔 20ms 时仍 maxInflight=1（不叠请求）', maxInflight === 1, 'maxInflight=' + maxInflight);
+  ok('★ B2 轮询确有推进（≥2 次）', calls2 >= 2, 'calls=' + calls2);
 }
 
 console.log('\n=== 结果 ===');

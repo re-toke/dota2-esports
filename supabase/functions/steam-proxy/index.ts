@@ -58,8 +58,14 @@ async function fetchSteam(path: string, params: Record<string, any> | null): Pro
   const key = Deno.env.get("STEAM_API_KEY")!;
   const ps: Record<string, any> = Object.assign({ key }, params || {});
   const qs = Object.keys(ps).map(k => k + "=" + encodeURIComponent(String(ps[k]))).join("&");
+  // ★★ 2026-10-30（steam-proxy 熔断/挂死修因）：**上游超时 8s**。
+  //   实测：`GetTeamInfoByTeamID` 正常 3~7s，但 `GetLiveLeagueGames` 在本机与两台宿主上
+  //   **均 >25s 挂死**；本函数原先**无超时** ⇒ EF 一直挂着，客户端只能等自己的 25s 超时，
+  //   再加出口切换时的批量失败就会把 `steam-proxy|steamProxy` 熔断桶打穿。
+  //   ⇒ 8s 快速失败（502），让客户端/上层尽快走降级分支，而不是白等 25s。
   const res = await fetch(STEAM_BASE + path + "/v1/?" + qs, {
-    headers: { "User-Agent": "DOTA2-Esports-Hub/1.0" }
+    headers: { "User-Agent": "DOTA2-Esports-Hub/1.0" },
+    signal: AbortSignal.timeout(8000)
   });
   if (!res.ok) throw new Error("Steam " + res.status + ": " + (await res.text()).slice(0, 200));
   return await res.json();
