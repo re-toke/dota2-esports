@@ -35,7 +35,15 @@ const SLOW_OK = { 'opendota-proxy': 30000 };
 
 // 探测清单：{ 名称, action, params, 说明 }
 // 关键路径优先（登录是硬依赖）
-const PROBES = [
+// ★★ 2026-10-29（B5/B6）：`PROBE_EMPTY=1` ⇒ 改用**空 action** 探测（与中转 keep-warm 同形），
+//   用来验证「idle 10min 后空 action 首调 ≤4s」：
+//     PROBE_LAT_MS=4000 PROBE_EMPTY=1 node scripts/ops/probe-ef.js
+//   做法：3 个网络（联通 / 移动 / 电信热点）× 各跑 3 次，逐次记录首调耗时。
+const EMPTY_EFS = ['opendota-proxy', 'bundle-aggregator', 'steam-proxy', 'stratz-proxy', 'haglund-proxy', 'liquipedia-proxy'];
+const EMPTY_MODE = process.env.PROBE_EMPTY === '1';
+const PROBES = EMPTY_MODE ? EMPTY_EFS.map(function (name) {
+  return { name: name, action: '', params: {}, desc: '空 action（keep-warm 同形；只要求"到达 EF"，400 也算活）' };
+}) : [
   { name: 'wechat-auth', action: 'login', params: { code: 'probe-invalid-code' }, desc: '登录（硬依赖：拿不到 openid 则关注/提醒/订阅全废）' },
   { name: 'opendota-proxy', action: 'getLeagues', params: {}, desc: '赛事数据主源' },
   { name: 'liquipedia-proxy', action: 'liquipediaFetchRawWikitext', params: { pageName: '__probe__' }, extra: { cacheOnly: true }, desc: 'LP 读表（cacheOnly 探针，不触发现抓；★ 必须传 cacheOnly 否则 EF 会真去抓 LP）' },
@@ -53,7 +61,7 @@ function probe(name, action, params, extra) {
       hostname: new URL(SUPABASE_URL).hostname,
       path: '/functions/v1/' + name,
       method: 'POST',
-      timeout: SLOW_OK[name] || 20000,
+      timeout: EMPTY_MODE ? 45000 : (SLOW_OK[name] || 20000),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ' + (ANON_KEY || SERVICE_KEY),

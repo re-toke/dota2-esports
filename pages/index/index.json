@@ -10,6 +10,7 @@
     "skeleton": "../../components/skeleton/skeleton",
     "week-calendar": "../../components/week-calendar/week-calendar",
     "match-flow": "../../components/match-flow/match-flow",
+    "page-header": "../../components/page-header/page-header",
     "empty-state": "../../components/empty-state/empty-state"
   }
 }

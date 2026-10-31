@@ -26,6 +26,7 @@
       scoreB="{{direScore}}"
       winSide="{{anchorWinSide}}"
       live="{{isLive}}"
+      pending="{{scorePending}}"
       tierLabel="{{anchorTierLabel}}"
       tierClass="{{anchorTierClass}}"
       metaList="{{anchorMeta}}"

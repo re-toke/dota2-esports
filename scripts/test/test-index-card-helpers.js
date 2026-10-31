@@ -76,9 +76,13 @@ assert('冷启动：快照仅在 _lastPro 为空时使用',
   /if \(!this\._lastPro\)[\s\S]{0,240}?cache\.peek\(HOME_PRO_SNAP_KEY\)/.test(indexJs));
 assert('冷启动：settle 后写快照（pro 非空）',
   /cache\.set\(HOME_PRO_SNAP_KEY, pro, HOME_PRO_SNAP_TTL\)/.test(indexJs));
-// 2026-10-28（第 3 步）：homeBundle 一次 RTT + 单路回退
-assert('冷启动：homeBundle 优先，pro/live 各自回退单路',
-  /const bundleP[\s\S]{0,400}?api\.getProMatches\(\)[\s\S]{0,200}?api\.getLiveMatches\(\)/.test(indexJs));
+// ★ 2026-10-29（P0-3 复核）：实测 bundle 4.2–6.7s vs 单路 pro 1.4–2.6s，
+//   且 proP 原挂在 bundleP 上会被 live 的 2.5s 等待拖住 ⇒ 首屏 pro/live 并行直连。
+assert('冷启动：pro/live 并行直连（不被 bundle gate）',
+  /const proP = api\.getProMatches\(\)/.test(indexJs) &&
+  /const liveP = api\.getLiveMatches\(\)/.test(indexJs) &&
+  !/proP = bundleP\.then/.test(indexJs) &&
+  /proP\.then\([\s\S]{0,360}?_applyMatchSources\(pro, null/.test(indexJs));
 const apiSrc = fs.readFileSync(path.join(__dirname, '..', '..', 'utils', 'api.js'), 'utf8');
 assert('api：导出 getHomeBundle', /getHomeBundle: getHomeBundle/.test(apiSrc));
 const cpSrc = fs.readFileSync(path.join(__dirname, '..', '..', 'utils', 'cloudProxy.js'), 'utf8');
@@ -87,6 +91,45 @@ const efSrc = fs.readFileSync(path.join(__dirname, '..', '..', 'supabase', 'func
 assert('EF：getHomeBundle 分派 + trimLive 裁剪',
   /action === "getHomeBundle"/.test(efSrc) && /function trimLive/.test(efSrc) &&
   /action === "getLiveMatches"\) data = trimLive\(data\)/.test(efSrc));
+
+// ===== ⑦ 2026-10-29（Batch A · A5 战报预填）：源码守卫 =====
+// 目标：跳转方把已在手的队名/队徽/赛事暂存，战报 onLoad 先渲染锚点卡再回源（首帧不等网络）。
+const matchDetailJs = fs.readFileSync(path.join(__dirname, '..', '..', 'subpackages', 'detail', 'match-detail', 'match-detail.js'), 'utf8');
+const leagueJs = fs.readFileSync(path.join(__dirname, '..', '..', 'subpackages', 'detail', 'league-detail', 'league-detail.js'), 'utf8');
+const h2hJs = fs.readFileSync(path.join(__dirname, '..', '..', 'subpackages', 'detail', 'h2h', 'h2h.js'), 'utf8');
+const anchorJs = fs.readFileSync(path.join(__dirname, '..', '..', 'components', 'anchor-card', 'anchor-card.js'), 'utf8');
+const anchorWxml = fs.readFileSync(path.join(__dirname, '..', '..', 'components', 'anchor-card', 'anchor-card.wxml'), 'utf8');
+assert('A5：战报 onLoad 先 _applyPrefill() 再 load()',
+  /this\._applyPrefill\(\);\s*\n\s*this\.load\(\)/.test(matchDetailJs));
+assert('A5：预填一次性消费 + matchId 严格匹配 + 30s 过期',
+  /gd\.matchPrefill = null/.test(matchDetailJs) &&
+  /String\(p\.matchId\) !== String\(this\.data\.matchId\)/.test(matchDetailJs) &&
+  /PREFILL_MAX_AGE_MS/.test(matchDetailJs));
+assert('A5：预填期间不回退骨架屏（scorePending 参与 hasData）',
+  /this\.data\.radiant\.length\) \|\| this\.data\.scorePending/.test(matchDetailJs));
+assert('A5：首页卡写入 matchPrefill（队名/队徽/赛事）',
+  /getApp\(\)\.globalData\.matchPrefill = \{/.test(indexJs) &&
+  /radiantLogo: card\.teamA\.logo/.test(indexJs));
+assert('A5：赛事页写预填（对战表只给队名 / 小场给局级比分）',
+  /_prefillMatch\(id, \{ radiantName: ds\.t1/.test(leagueJs) &&
+  /exactScore: true/.test(leagueJs));
+assert('A5：H2H 局级比分预填（左右按 m.radiant 映射天辉/夜魇）',
+  /this\._prefillById = prefillById/.test(h2hJs) &&
+  /radiantName: m\.radiant \? teamA\.name : teamB\.name/.test(h2hJs));
+assert('A5：anchor-card 支持 pending（比分未知显示「—」而非 0）',
+  /pending: \{ type: Boolean/.test(anchorJs) && /\(live \|\| pending\)/.test(anchorWxml));
+// ===== ⑧ 2026-10-29（Batch B · B2 直播轮询）：源码守卫 =====
+// 目标：① 轮询必须回源（否则本地 30min 缓存吞掉比分变化）；② 串行调度（不叠请求）。
+const realtimeJs = fs.readFileSync(path.join(__dirname, '..', '..', 'subpackages', 'detail', 'realtime.js'), 'utf8');
+assert('B2：战报轮询 fetchPoll 强制回源（{ force: true }）',
+  /fetchPoll: \(\) => api\.getMatch\(this\.data\.matchId, \{ force: true \}\)/.test(matchDetailJs));
+assert('B2：轮询改递归 setTimeout（不再 setInterval 固定节拍）',
+  /pollTimer = setTimeout\(tick, pollInterval\)/.test(realtimeJs) && !/setInterval\(tick, pollInterval\)/.test(realtimeJs));
+assert('B2：串行守卫（上一次请求 settle 后才排下一次）',
+  /\.then\(\(\) => \{ if \(!closed\) pollTimer = setTimeout\(tick, pollInterval\); \}\)/.test(realtimeJs));
+assert('B2：轮询期间关闭会话即停止（closed 守卫）',
+  /function stopPolling\(\) \{\s*\n\s*if \(pollTimer\) \{ clearTimeout\(pollTimer\); pollTimer = null; \}/.test(realtimeJs));
+
 
 console.log('\n=== 结果 ===');
 console.log('PASS: ' + pass + ', FAIL: ' + fail);

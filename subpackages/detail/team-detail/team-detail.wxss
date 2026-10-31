@@ -103,7 +103,7 @@
 .quality-pill .q-src { font-size: var(--fs-caption); opacity: 0.85; }
 .quality-high { background: rgba(95, 211, 168, 0.12); color: var(--status-verified); }
 .quality-high .q-dot { background: var(--status-verified); }
-.quality-medium { background: rgba(255, 207, 92, 0.12); color: var(--dota-gold-strong); }
+.quality-medium { background: var(--amber-a12); color: var(--dota-gold-strong); }
 .quality-medium .q-dot { background: var(--amber-bright); }
 .quality-low { background: rgba(107, 114, 128, 0.16); color: var(--text-2); }
 .quality-low .q-dot { background: var(--text-2); }
@@ -285,7 +285,7 @@
 
 /* H2H 卡片优先级样式（有 S 级以上对战记录时高亮） */
 .h2h-row-priority {
-  background: rgba(255, 207, 92, 0.04);
+  background: var(--amber-a04);
 }
 .h2h-tier-badge {
   display: inline-block;
@@ -294,9 +294,9 @@
   font-size: var(--fs-badge);
   font-weight: 600;
   margin-left: var(--space-1);
-  background: rgba(255, 207, 92, 0.15);
+  background: var(--amber-a15);
   color: var(--dota-gold-strong);
-  border: 1rpx solid rgba(255, 207, 92, 0.3);
+  border: 1rpx solid var(--amber-a30);
 }
 .h2h-stier {
   color: var(--dota-gold-strong);

@@ -67,6 +67,7 @@ page {
   --td-bg-color-component-active: #E5E7EB;
   --td-bg-color-component-disabled: #F8F9FA;
   --td-bg-color-specialcomponent: #FFFFFF;
+  --tabbar-bg: rgba(248, 249, 250, 0.92);   /* 自定义 tabBar 半透明底（blur 之上） */
 
   /* 文字（雾峰雪 v2.0：亮底深字反相，灰阶四档化）
      --text-* 为语义别名，指向同值 --td-*；页面统一引用 --text-*，禁止散落字面量灰 */
@@ -356,6 +357,24 @@ page {
   /* --- 琥珀亮色（比赛流「即将到来」分隔条 / 质量点 / 近期边框） ---
      注意：与 --source-liquipedia 同值但**语义不同**，故独立定义 */
   --amber-bright: #ffcf5c;
+  /* 琥珀 alpha 梯度：半透明金色装饰（底纹/描边/光晕），禁止再写 rgba 字面量 */
+  --amber-a04: rgba(255, 207, 92, 0.04);
+  --amber-a08: rgba(255, 207, 92, 0.08);
+  --amber-a10: rgba(255, 207, 92, 0.10);
+  --amber-a12: rgba(255, 207, 92, 0.12);
+  --amber-a15: rgba(255, 207, 92, 0.15);
+  --amber-a20: rgba(255, 207, 92, 0.20);
+  --amber-a25: rgba(255, 207, 92, 0.25);
+  --amber-a30: rgba(255, 207, 92, 0.30);
+  --amber-a35: rgba(255, 207, 92, 0.35);
+  --amber-a40: rgba(255, 207, 92, 0.40);
+  --amber-a50: rgba(255, 207, 92, 0.50);
+  --amber-a60: rgba(255, 207, 92, 0.60);
+  --amber-a85: rgba(255, 207, 92, 0.85);
+
+  /* --- 反白（深色/品牌实底上的勾选与描边） --- */
+  --check-on-brand: #FFFFFF;
+  --white-a12: rgba(255, 255, 255, 0.12);
 
   /* --- 弱化次要文字（日期范围 / 焦点日期 / H2H 辅助文案） ---
      ★ 2026-09-20 修复「字体模糊看不清」：原值 #9bb0c9 对白底仅 **2.22:1**
@@ -432,8 +451,8 @@ page {
   --fs-label:    26rpx;   /* 分区标签、tab 文字、快捷入口名 */
   --fs-body:     24rpx;   /* 正文（比赛信息、详情描述） */
   --fs-caption:  22rpx;   /* 辅助文字（日期、来源、状态标签） */
-  --fs-micro:    20rpx;   /* 极小标注（角标、版本号、KPI 单位） */
-  --fs-badge:    18rpx;   /* 徽章、胜负标识、极小辅助 */
+  --fs-micro:    22rpx;   /* 极小标注（角标、版本号、KPI 单位）· 2026-10-30 下限提到 22rpx */
+  --fs-badge:    22rpx;   /* 徽章、胜负标识、极小辅助 · 2026-10-30 下限提到 22rpx */
 
   /* 字重 */
   --fw-bold:     700;
@@ -527,7 +546,7 @@ page {
 .src-opendota { color: var(--source-opendota); background: rgba(95, 211, 95, 0.10); }
 .src-stratz { color: var(--source-stratz); background: rgba(96, 84, 241, 0.14); }
 .src-steam { color: #66c0f4; background: rgba(27, 40, 56, 0.45); }
-.src-liquipedia { color: var(--source-liquipedia); background: rgba(255, 207, 92, 0.12); }
+.src-liquipedia { color: var(--source-liquipedia); background: var(--amber-a12); }
 .src-curation { color: var(--source-curation); background: rgba(155, 176, 201, 0.12); }
 .src-verified { color: var(--status-verified); background: rgba(95, 211, 168, 0.12); }
 

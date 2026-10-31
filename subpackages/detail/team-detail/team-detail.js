@@ -292,13 +292,20 @@ Page({
       });
   },
 
-  // ★ P0-1 A（2026-10-12）：**两阶段加载** —— 先 `?recent=N` 快出（秒开），再后台补全量。
+  // ★ P0-1 A（2026-10-12）：**两阶段加载** —— 先 `?recent=N` 快出（秒开），再补全量。
   //   背景：全量 `/teams/<id>/matches` 实测 480KB（远超上游 12s 口径）⇒ 单次全量会让本页超时。
-  //   语义：`totalMatches` / 完整分页 / `buildH2h` 依赖全量 ⇒ 阶段 2 到达后**覆盖**为全量结果；
-  //         阶段 1 先按「最近 N 场」渲染（分页在 N 内可达），全量失败则保留 recent 视图（可接受降级）。
+  //   语义：`totalMatches` / 完整分页 / `buildH2h` 依赖全量 ⇒ 全量到达后**覆盖**为全量结果；
+  //         recent 先按「最近 N 场」渲染（分页在 N 内可达），全量失败则保留 recent 视图（可接受降级）。
+  //
+  // ★★ 2026-10-30（全量段 38.9s 修因）：两阶段**改为并行发起**（原为「recent 完成后才开始全量」）。
+  //   真机实测：近期段 +16219ms、全量段 +38985ms ⇒ 全量段 = 近期段耗时 + 全量耗时（纯排队）。
+  //   并行后全量段 ≈ max(近期, 全量)：EF 全量实测 8.25s（热）/ 13.9~22.7s（冷，见 api.js 注释），
+  //   预期从 38.9s 降到 ~23s（冷）/ ~8s（热）；近期段仍可先上屏（谁先到谁先渲染）。
+  //   守卫：全量先到 ⇒ `fullApplied` 置位，后到的 recent **不再覆盖**（防止列表从全量「降级」为 50 场）。
   loadMatches() {
     const seq = (this._matchSeq = (this._matchSeq || 0) + 1);
     this.setData({ matchLoading: true });
+    let fullApplied = false;
     const apply = (list) => {
       if (seq !== this._matchSeq) return;   // 页面已离开 / 已发起新加载 ⇒ 丢弃过期结果
       this.allMatches = (list || []).map((m) => this.fmtMatch(m));
@@ -317,24 +324,24 @@ Page({
         updatedLabel: util.formatAgo(at)
       });
     };
-    // 阶段 1：最近 N 场（走中转裁剪，快）
     // ★ 2026-10-13（P1-21）：比赛流分段 `[perf]`（近期段 / 全量段），相对 onLoad 起点。
-    return api.getTeamMatches(this.data.teamId, { recent: api.RECENT_TEAM_MATCHES })
+    // 阶段 1：最近 N 场（走中转裁剪）
+    const pRecent = api.getTeamMatches(this.data.teamId, { recent: api.RECENT_TEAM_MATCHES })
       .then((recentList) => {
-        apply(recentList);
         if (this._perfT0) console.info('[team-detail][perf] 比赛·近期段 +' + (Date.now() - this._perfT0) + 'ms（' + ((recentList || []).length) + ' 场）');
+        if (!fullApplied) apply(recentList);
       })
-      .catch(() => {})
-      .then(() => {
-        if (seq !== this._matchSeq) return null;
-        // 阶段 2：后台补全量（totalMatches / 完整分页 / buildH2h）；失败保留阶段 1 视图
-        return api.getTeamMatches(this.data.teamId)
-          .then((full) => {
-            apply(full);
-            if (this._perfT0) console.info('[team-detail][perf] 比赛·全量段 +' + (Date.now() - this._perfT0) + 'ms（' + ((full || []).length) + ' 场）');
-          })
-          .catch(() => { if (seq === this._matchSeq) this.setData({ matchLoading: false }); });
-      });
+      .catch(() => {});
+    // 阶段 2：全量（totalMatches / 完整分页 / buildH2h）；失败保留阶段 1 视图
+    const pFull = api.getTeamMatches(this.data.teamId)
+      .then((full) => {
+        if (seq !== this._matchSeq) return;
+        fullApplied = true;
+        apply(full);
+        if (this._perfT0) console.info('[team-detail][perf] 比赛·全量段 +' + (Date.now() - this._perfT0) + 'ms（' + ((full || []).length) + ' 场）');
+      })
+      .catch(() => { if (seq === this._matchSeq && !fullApplied) this.setData({ matchLoading: false }); });
+    return Promise.all([pRecent, pFull]);
   },
 
   // 对战记录聚合：按对手 team_id 分组统计胜负。

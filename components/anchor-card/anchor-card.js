@@ -10,6 +10,8 @@ Component({
     scoreB: { type: Number, value: 0 },
     winSide: { type: String, value: '' },        // 'A' | 'B' | ''（未分胜负/进行中）
     live: { type: Boolean, value: false },       // 进行中则比分显示为「—」、中部显示「进行中」
+    // 2026-10-29（A5 战报预填）：比分尚未回源（已知队名/赛事，但比分未知）→ 比分位显示「—」
+    pending: { type: Boolean, value: false },
     tierLabel: { type: String, value: '' },      // Tier 文案，如「S-Tier」
     tierClass: { type: String, value: '' },      // tier-sss / tier-s / tier-a / tier-b
     metaList: { type: Array, value: [] },        // [{ label, value }] 时长/开赛等

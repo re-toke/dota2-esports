@@ -1,4 +1,6 @@
 <view class="container with-safe-bottom">
+  <!-- C5：补齐页头（此前只有搜索框，与首页/赛事/资料库不一致） -->
+  <page-header title="DOTA2赛事" sub="战队资料 · 选手 · 战绩" small="{{true}}" />
   <view class="search-wrap">
     <t-search value="{{keyword}}" placeholder="搜索战队名称 / 缩写" bind:change="onSearch" bind:clear="onClear" />
   </view>

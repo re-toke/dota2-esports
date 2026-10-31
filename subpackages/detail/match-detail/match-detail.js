@@ -5,33 +5,18 @@ const liveSources = require('../../../utils/liveSources.js');
 const realtime = require('../realtime.js');
 const heroes = require('../../../utils/heroes.js');
 const sources = require('../../../utils/sources.js');
+const matchView = require('../../../utils/matchView.js');
 
-// Steam CDN 英雄头像基址（_sb.png = 小横幅图）
-const HERO_IMG_BASE = 'https://cdn.cloudflare.steamstatic.com/apps/dota2/images/heroes/';
-// 物品图标统一走 Steam CDN（与英雄头像同源，已加入合法域名白名单）。
-// api.getItems() 已把 OpenDota 相对路径规范为绝对地址，这里仅做防御性兜底。
-const ITEM_CDN_ORIGIN = 'https://cdn.cloudflare.steamstatic.com';
+// ★ 2026-10-30（Batch C · C5）：选手/出装/曲线等纯视图函数已抽到 utils/matchView.js，
+//   本页只保留数据编排（请求、setData、实时连接）。
+// ★ 2026-10-29（P1-1）：战队官方 logo 的 CDN 规则（OpenDota 响应只给 radiant_logo 布尔，
+//   不给 URL）⇒ 有官方 logo 时按 team_id 直接拼，省掉两次 getTeam（实测各约 4.7s）。
+const TEAM_LOGO_BASE = 'https://cdn.cloudflare.steamstatic.com/apps/dota2/images/team_logos/';
+// ★ 2026-10-29（A5 战报预填）：跳转方写入 globalData.matchPrefill 的有效期。
+//   超过 30s 视为陈旧（用户可能点了卡又干了别的），宁可走骨架也不上错数据。
+const PREFILL_MAX_AGE_MS = 30 * 1000;
 
-// 从比赛 objectives 提取关键事件标记（肉山/推塔），映射到经济差曲线采样下标。
-// 经济差曲线每 5 分钟(300s)采样一次，故 index = floor(time / 300)。
-function buildEvents(m, goldLen) {
-  if (!goldLen) return [];
-  const objs = m.objectives || [];
-  const out = [];
-  const seen = {};
-  objs.forEach((o) => {
-    const t = o.time;
-    if (t == null) return;
-    const idx = Math.floor(t / 300);
-    if (idx < 0 || idx >= goldLen) return;
-    if (o.type && /ROSHAN/.test(o.type)) {
-      if (!seen['r' + idx]) { seen['r' + idx] = 1; out.push({ index: idx, label: '肉山', color: '#C8A951' }); }
-    } else if (o.type === 'building_kill' && (o.key === 'tower' || (o.subtype || '').indexOf('tower') >= 0)) {
-      if (!seen['t' + idx]) { seen['t' + idx] = 1; out.push({ index: idx, label: '推塔', color: '#A41E1E' }); }
-    }
-  });
-  return out.slice(0, 10);
-}
+// 从比赛 objectives 提取关键事件标记（肉山/推塔）已移至 utils/matchView.js（buildEvents）
 
 Page({
   data: {
@@ -72,7 +57,10 @@ Page({
     anchorWinSide: '',
     // 队伍 Logo URL（异步获取后注入 anchor-card）
     radiantLogo: '',
-    direLogo: ''
+    direLogo: '',
+    // ★ 2026-10-29（A5）：预填首帧 —— 锚点卡已知队名/赛事，但比分要等 getMatch，
+    //   true 时 anchor-card 的比分位显示「—」而不是误导性的 0。
+    scorePending: false
   },
 
   onLoad(options) {
@@ -83,11 +71,15 @@ Page({
     }
     this.setData({ matchId: matchId });
     wx.setNavigationBarTitle({ title: '战报 #' + matchId });
+    // ★ 2026-10-29（A5）：先用跳转方暂存的队名/队徽/赛事渲染锚点卡（首帧 ≤0.3s），
+    //   再走 load() 回源校正。预填缺失时退回原骨架流程。
+    this._applyPrefill();
     this.load();
   },
 
   onPullDownRefresh() {
-    this.load().finally(() => wx.stopPullDownRefresh());
+    // force：下拉刷新主动回源，不吃 stale-first
+    this.load(true).finally(() => wx.stopPullDownRefresh());
   },
 
   onUnload() {
@@ -113,34 +105,65 @@ Page({
   },
 
   retry() {
-    this.load();
+    this.load(true);
   },
 
-  // 把 item_0~5 + item_neutral 数字 id 转成 { name, img, dname }
-  buildItems(p, itemMap) {
-    const slots = ['item_0', 'item_1', 'item_2', 'item_3', 'item_4', 'item_5', 'item_neutral'];
-    const items = [];
-    slots.forEach((slot) => {
-      const id = p[slot];
-      if (id == null || id === 0) return; // 空槽位
-      const it = itemMap[id];
-      if (it) {
-        // it.img 已由 api.getItems() 规范为 Steam CDN 绝对地址；此处仅做防御性兜底
-        let img = it.img || '';
-        if (img && img.indexOf('http') !== 0) {
-          img = ITEM_CDN_ORIGIN + (img.charAt(0) === '/' ? img : '/' + img);
-        }
-        items.push({ name: it.name, img: img, dname: it.dname });
-      } else {
-        items.push({ name: 'item_' + id, img: '', dname: '物品' + id });
-      }
+  // ★ 2026-10-30（C5）：出装映射已移至 utils/matchView.js（buildItems），本页不再保留。
+
+  // ★ 2026-10-29（A5 战报预填）：跳转方（首页卡 / 赛事对战表 / 系列赛小场 / H2H）
+  //   已持有队名、队徽、赛事名与比分，写入 `app.globalData.matchPrefill`。
+  //   本页 onLoad 直接用它渲染锚点卡（不额外发请求），随后 load() 回源校正。
+  //   `exactScore` 为真才上比分：bo 系列卡给的是「系列胜局」，与战报的「击杀数」
+  //   语义不同，此时置 scorePending=true 让 anchor-card 显示「—」。
+  _applyPrefill() {
+    const gd = app.globalData || {};
+    const p = gd.matchPrefill;
+    gd.matchPrefill = null;   // 一次性消费：避免串到下一场
+    if (!p) return false;
+    if (String(p.matchId) !== String(this.data.matchId)) return false;
+    if (!p.at || (Date.now() - p.at) > PREFILL_MAX_AGE_MS) return false;
+
+    const league = p.league || '';
+    const tier = league ? sources.getMatchTier(league) : null;
+    const anchorMeta = [];
+    const duration = p.duration ? util.formatDuration(p.duration) : '';
+    if (duration) anchorMeta.push({ label: '时长', value: duration });
+    const time = p.startTime ? util.formatTime(p.startTime) : '';
+    if (time) anchorMeta.push({ label: '开赛', value: time });
+
+    const exact = p.exactScore === true;
+    this.setData({
+      radiantName: p.radiantName || '天辉',
+      direName: p.direName || '夜魇',
+      radiantTeamId: p.radiantTeamId || '',
+      direTeamId: p.direTeamId || '',
+      radiantLogo: p.radiantLogo || '',
+      direLogo: p.direLogo || '',
+      league: league,
+      time: time,
+      isLive: !!p.isLive,
+      anchorTierLabel: tier ? tier.label : '',
+      anchorTierClass: tier ? ('tier-' + (tier.grade || '').toLowerCase()) : '',
+      anchorMeta: anchorMeta,
+      radiantScore: exact ? (p.radiantScore || 0) : 0,
+      direScore: exact ? (p.direScore || 0) : 0,
+      anchorWinSide: (exact && p.radiantWin != null) ? (p.radiantWin ? 'A' : 'B') : '',
+      scorePending: !exact,
+      loading: false
     });
-    return items;
+    return true;
   },
 
-  load() {
-    this.setData({ loading: true, error: '' });
-    return api.getMatch(this.data.matchId)
+  // ★ 2026-10-29（A6 stale-first）：默认走 api.getMatch 的「已完赛旧值先上屏 + 后台刷新」，
+  //   刷新成功经 onUpdate 回填；force=true（下拉 / 重试）则跳过缓存直接回源。
+  load(force) {
+    // 预填已出锚点卡 → 不再回退到骨架屏（否则会把首帧内容闪掉）
+    const hasData = !!(this.data.radiant && this.data.radiant.length) || this.data.scorePending;
+    if (!hasData) this.setData({ loading: true, error: '' });
+    return api.getMatch(this.data.matchId, {
+      force: !!force,
+      onUpdate: (m) => { if (m) this.applyMatch(m); }
+    })
       .then((m) => {
         if (!m) {
           this.setData({ loading: false, error: '未找到该比赛' });
@@ -149,7 +172,8 @@ Page({
         this.applyMatch(m);
       })
       .catch(() => {
-        this.setData({ loading: false, error: '加载失败，请检查网络或域名配置' });
+        // 2026-10-29（P0-5）：不再让用户去「检查域名配置」（普通用户无从处理）
+        this.setData({ loading: false, error: '加载失败，请检查网络后重试' });
       });
   },
 
@@ -173,18 +197,14 @@ Page({
       this._applyLiveUpdate(m);
       return;
     }
-    const heroMap = (app.globalData && app.globalData.heroMap) || {};
-    let itemMap = (app.globalData && app.globalData.itemMap) || {};
+    const itemMap = (app.globalData && app.globalData.itemMap) || {};
 
-    // 并行加载英雄库（拼头像 URL）+ 物品库（若 globalData 尚未就绪则现场加载）
-    const heroesP = heroes.getHeroes().catch(() => []);
-    const itemsP = (Object.keys(itemMap).length > 0)
-      ? Promise.resolve(itemMap)
-      : api.getItems().catch(() => ({}));
-
-    Promise.all([heroesP, itemsP]).then((res) => {
-      this._applyMatchWithData(m, res[0], res[1]);
-    });
+    // ★ 2026-10-29（P0-2 渐进渲染）：首帧只依赖 getMatch —— 用当前已就绪的英雄/物品映射
+    //   立即渲染比分/锚点/选手；缺失的头像与出装图标由 _ensureAssets 异步补齐后局部重绘。
+    //   原实现 Promise.all([heroes.getHeroes(), items]) 把 loading:false 推迟到
+    //   items(336KB / 12s 超时) 与 heroStats 之后 ⇒ 战报最长白等 12–25s。
+    this._applyMatchWithData(m, itemMap);
+    this._ensureAssets(m);
   },
 
   // F3/F4 轻量更新：直播推送时仅更新变化的核心标量（比分/时长/状态/更新时间），
@@ -213,87 +233,33 @@ Page({
     this.setData(patch);
   },
 
+  // ★ 2026-10-29（P0-2）：选手数组构建抽为独立方法 —— 首帧渲染与「资源后补重绘」共用。
+  //   映射来源优先级：globalData（app 预热 / 本页填充）→ heroes 内存表 → 空（降级文字）。
+  //   2026-10-30（C5）：映射逻辑移至 utils/matchView.js（buildPlayers），此处只组装入参。
+  _buildPlayers(m, itemMap) {
+    const gd = app.globalData || {};
+    return matchView.buildPlayers(m, {
+      heroMap: gd.heroMap,
+      internalMap: gd.heroInternalMap || heroes.internalNameMap() || {},
+      itemMap: itemMap
+    });
+  },
+
   // 核心渲染逻辑（抽取为独立方法，供 applyMatch 直接调用）
-  _applyMatchWithData(m, heroList, itemMap) {
-    const heroMap = (app.globalData && app.globalData.heroMap) || {};
-    const NPC_PREFIX = 'npc_dota_hero_';
-    // id -> 内部名（strip 前缀后拼 Steam CDN 头像 URL）
-    const internalMap = {};
-    (heroList || []).forEach((h) => {
-      if (h && h.id != null) {
-        let n = h.name || '';
-        if (n.indexOf(NPC_PREFIX) === 0) n = n.slice(NPC_PREFIX.length);
-        internalMap[h.id] = n;
-      }
-    });
+  _applyMatchWithData(m, itemMap) {
+    const built = this._buildPlayers(m, itemMap);
+    const radiant = built.radiant;
+    const dire = built.dire;
+    const mvp = built.mvp;
 
-    const radiant = [];
-    const dire = [];
-    let mvp = null;
-    let mvpScore = -1;
-
-    (m.players || []).forEach((p) => {
-      const isRadiant = (p.isRadiant != null) ? p.isRadiant : (p.player_slot < 128);
-      const kdaVal = p.deaths > 0 ? (p.kills + p.assists) / p.deaths : (p.kills + p.assists);
-      const heroName = heroMap[p.hero_id] || ('英雄' + p.hero_id);
-      // Steam CDN 英雄头像（strip npc_dota_hero_ 前缀）
-      const heroInternalName = internalMap[p.hero_id] || '';
-      const heroImg = heroInternalName
-        ? (HERO_IMG_BASE + encodeURIComponent(heroInternalName) + '_sb.png')
-        : '';
-      const item = {
-        account_id: p.account_id,
-        hero_id: p.hero_id,
-        heroName: heroName,
-        heroShort: (heroName || '?').slice(0, 4),
-        heroImg: heroImg,
-        name: p.name || p.personaname || '匿名',
-        kills: p.kills || 0,
-        deaths: p.deaths || 0,
-        assists: p.assists || 0,
-        kda: (p.kills || 0) + '/' + (p.deaths || 0) + '/' + (p.assists || 0),
-        kdaScore: Math.round(kdaVal * 100) / 100,
-        gpm: p.gold_per_min || 0,
-        xpm: p.xp_per_min || 0,
-        isRadiant: isRadiant,
-        items: this.buildItems(p, itemMap),  // 出装栏
-        lastHits: p.last_hits || 0,
-        denies: p.denies || 0,
-        heroDamage: p.hero_damage || 0,
-        towerDamage: p.tower_damage || 0
-      };
-      if (isRadiant) radiant.push(item);
-      else dire.push(item);
-      // MVP 综合分
-      const score = kdaVal * 2 + (p.gold_per_min || 0) / 100;
-      if (score > mvpScore) {
-        mvpScore = score;
-        mvp = item;
-      }
-    });
-
-    // 经济/经验曲线（OpenDota 字段：radiant_gold_advantage_timeline / radiant_xp_advantage_timeline）
-    // 每分钟一个值，正数=天辉领先，负数=夜魇领先。采样降密度（每 5 分钟取一个）避免 setData 过大。
-    const goldFull = m.radiant_gold_advantage_timeline || m.radiant_gold_adv || [];
-    const xpFull = m.radiant_xp_advantage_timeline || m.radiant_xp_adv || [];
-    const sampleEvery = 5;
-    const goldAdv = [];
-    const xpAdv = [];
-    for (let i = 0; i < goldFull.length; i += sampleEvery) {
-      goldAdv.push(Math.round(goldFull[i]));
-    }
-    for (let i = 0; i < xpFull.length; i += sampleEvery) {
-      xpAdv.push(Math.round(xpFull[i]));
-    }
-    const goldFinal = goldFull.length ? Math.round(goldFull[goldFull.length - 1]) : 0;
-
-    // V4 图表：双序列对比 + 关键事件标记
-    const chartSeries = [
-      { name: '经济差', color: '#C8A951', data: goldAdv },
-      { name: '经验差', color: '#3FB950', data: xpAdv }
-    ];
-    const chartCats = goldAdv.map((_, i) => (i * 5) + 'm');
-    const chartEvents = buildEvents(m, goldAdv.length);
+    // 经济/经验曲线 + V4 图表数据（2026-10-30 C5：移至 utils/matchView.js）
+    const series = matchView.buildAdvSeries(m);
+    const goldAdv = series.goldAdv;
+    const xpAdv = series.xpAdv;
+    const goldFinal = series.goldFinal;
+    const chartSeries = series.chartSeries;
+    const chartCats = series.chartCats;
+    const chartEvents = series.chartEvents;
 
     const at = api.fetchedAtOf('match', this.data.matchId) || Date.now();
     // F1：比赛进行中判定 —— 未分胜负且近 12h 开赛视为直播中
@@ -344,7 +310,8 @@ Page({
       anchorTierLabel: tier ? tier.label : '',
       anchorTierClass: tier ? ('tier-' + (tier.grade || '').toLowerCase()) : '',
       anchorMeta: anchorMeta,
-      anchorWinSide: isLive ? '' : (m.radiant_win ? 'A' : 'B')
+      anchorWinSide: isLive ? '' : (m.radiant_win ? 'A' : 'B'),
+      scorePending: false   // A5：真实比分已到，撤掉预填的「—」
     });
 
     // 步骤2：明细（选手数组 + 图表，体积大，独立 setData 避免阻塞骨架渲染）
@@ -363,9 +330,56 @@ Page({
     // T4：直播中进行时建立实时连接（WebSocket 或降级轮询）
     this.startRealtime(isLive);
 
-    // 异步获取双方队伍 Logo：用 team_id 调 api.getTeam 拿 logo_url，
-    // 再经 sources.enrichTeamLogo 获取最终展示 URL（含缓存/STRATZ/Liquipedia 兜底）
-    this.enrichMatchLogos(m.radiant_team_id, m.dire_team_id);
+    // 队徽：直接用比赛响应字段，不再为两队各打一次 getTeam（P1-1）
+    this.enrichMatchLogos(m);
+  },
+
+  // ★ 2026-10-29（P0-2）：资源（英雄 / 物品表）后到 → 只重绘选手区，不重跑锚点与图表。
+  _refreshPlayers(m) {
+    if (!m || !this.data.match || this.data.match.match_id !== m.match_id) return;
+    const itemMap = (app.globalData && app.globalData.itemMap) || {};
+    const built = this._buildPlayers(m, itemMap);
+    try {
+      this.setData({ radiant: built.radiant, dire: built.dire, mvp: built.mvp });
+    } catch (e) { /* 隔离 */ }
+  },
+
+  // ★ 2026-10-29（P0-2）：首帧不等英雄 / 物品表；后台补齐后局部重绘。
+  //   英雄只拉 /heroes（id + 名称 + 内部名），不拉 heroStats —— 比 heroes.getHeroes() 少一趟。
+  _ensureAssets(m) {
+    const gd = app.globalData || {};
+    if (!gd.heroReady && !this._heroLoading) {
+      this._heroLoading = true;
+      api.getHeroes()
+        .then((list) => {
+          const map = {};
+          const internal = {};
+          (list || []).forEach((h) => {
+            if (!h || h.id == null) return;
+            map[h.id] = h.localized_name;
+            let n = h.name || '';
+            if (n.indexOf('npc_dota_hero_') === 0) n = n.slice('npc_dota_hero_'.length);
+            internal[h.id] = n;
+          });
+          gd.heroMap = map;
+          gd.heroInternalMap = internal;
+          gd.heroReady = true;
+          this._refreshPlayers(m);
+        })
+        .catch(() => {})
+        .then(() => { this._heroLoading = false; });
+    }
+    if (!gd.itemReady && !this._itemsLoading) {
+      this._itemsLoading = true;
+      api.getItems()
+        .then((map) => {
+          gd.itemMap = map || {};
+          gd.itemReady = true;
+          this._refreshPlayers(m);
+        })
+        .catch(() => {})
+        .then(() => { this._itemsLoading = false; });
+    }
   },
 
   // T4：实时比分连接（WebSocket + 断线重连 + 降级轮询）
@@ -373,52 +387,44 @@ Page({
     if (this._realtimeStarted || !isLive) return;
     this._realtimeStarted = true;
     const session = realtime.createSession(this.data.matchId, {
-      fetchPoll: () => api.getMatch(this.data.matchId),
+      // ★ 2026-10-29（B2）：**轮询必须回源**（`force: true`）—— 否则 30min 本地缓存会让
+      //   直播中的比分"永远停在进页面那一刻"（旧实现就是这个症状）。
+      //   中转侧 `/od/api/matches/{id}` 的分状态 TTL（直播 15s）保证回源也不会把上游打爆。
+      fetchPoll: () => api.getMatch(this.data.matchId, { force: true }),
       onUpdate: (m) => { if (m) this.applyMatch(m); },
       onStatus: (s) => { this.setData({ liveStatus: s }); }
     });
     this._realtime = session;
   },
 
-  // 异步获取双方队伍 Logo：用 team_id 调 api.getTeam + enrichTeamLogo，
-  // 与 league-detail.enrichTeamLogos 使用相同的 logo 获取链路。
-  enrichMatchLogos(radiantId, direId) {
-    if (!radiantId && !direId) return;
-    var tasks = [];
-    if (radiantId) {
+  // ★ 2026-10-29（P1-1）：队徽直接用比赛响应字段，不再为两队各打一次 getTeam。
+  //   OpenDota /matches/{id} 自带 radiant_logo / dire_logo（布尔：该队是否有官方 logo），
+  //   URL 可按 Steam CDN 规则直拼 ⇒ 省掉两次 getTeam（实测单次 4.7s）。
+  //   无官方 logo 时才走 sources 的 STRATZ / Liquipedia 兜底（仍不调用 getTeam）。
+  enrichMatchLogos(m) {
+    if (!m) return;
+    const items = [
+      { id: m.radiant_team_id, hasLogo: !!m.radiant_logo, name: m.radiant_name || '', key: 'radiantLogo' },
+      { id: m.dire_team_id, hasLogo: !!m.dire_logo, name: m.dire_name || '', key: 'direLogo' }
+    ];
+    const patch = {};
+    const tasks = [];
+    items.forEach((it) => {
+      if (!it.id) return;
+      const direct = it.hasLogo ? (TEAM_LOGO_BASE + it.id + '.png') : '';
       tasks.push(
-        api.getTeam(radiantId)
-          .then(function (info) {
-            var logoUrl = (info && info.logo_url) || '';
-            return sources.enrichTeamLogo({ id: radiantId, name: info && info.name || '', logo: logoUrl });
-          })
-          .then(function (r) { return r && r.logo || null; })
-          .catch(function () { return null; })
+        sources.enrichTeamLogo({ id: it.id, name: it.name, logo: direct })
+          .then((r) => (r && r.logo) || direct || null)
+          .catch(() => direct || null)
+          .then((url) => { if (url) patch[it.key] = url; })
       );
-    } else {
-      tasks.push(Promise.resolve(null));
-    }
-    if (direId) {
-      tasks.push(
-        api.getTeam(direId)
-          .then(function (info) {
-            var logoUrl = (info && info.logo_url) || '';
-            return sources.enrichTeamLogo({ id: direId, name: info && info.name || '', logo: logoUrl });
-          })
-          .then(function (r) { return r && r.logo || null; })
-          .catch(function () { return null; })
-      );
-    } else {
-      tasks.push(Promise.resolve(null));
-    }
-    Promise.all(tasks).then(function (results) {
-      var patch = {};
-      if (results[0]) patch.radiantLogo = results[0];
-      if (results[1]) patch.direLogo = results[1];
+    });
+    if (!tasks.length) return;
+    Promise.all(tasks).then(() => {
       if (Object.keys(patch).length) {
         try { this.setData(patch); } catch (e) { /* 隔离 */ }
       }
-    }.bind(this)).catch(function () { /* 隔离 */ });
+    }).catch(() => { /* 隔离 */ });
   },
 
   // 5.1 赛事详情内嵌「双方对战」：带双方 team_id 上下文跳 H2H 历史对比

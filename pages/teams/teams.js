@@ -84,6 +84,23 @@ function buildSuggestion(kw, extra) {
 // 本地战队模糊匹配已抽到 utils/teamSearch.js（与 pages/search 共用同一套语料/兜底逻辑）。
 // 此处仅保留热门战队综合评分等页面级逻辑。
 
+// ★ 2026-10-30（steam-proxy 熔断修因）：热门列表补全的并发上限（原为全量 Promise.all，最多 12 路）。
+const HOT_ENRICH_CONCURRENCY = 3;
+
+// 并发上限执行（结果保序）：最多 limit 个 worker 同时在途。
+function runLimited(items, limit, worker) {
+  const out = new Array(items.length);
+  let cursor = 0;
+  function run() {
+    if (cursor >= items.length) return Promise.resolve();
+    const idx = cursor++;
+    return Promise.resolve(worker(items[idx], idx)).then((v) => { out[idx] = v; return run(); });
+  }
+  const runners = [];
+  for (let i = 0; i < Math.min(limit, items.length); i++) runners.push(run());
+  return Promise.all(runners).then(() => out);
+}
+
 // 热门战队综合评分（用于动态排序，替代写死顺序）
 // 维度：近期度（基于 last_match_time，180 天内线性衰减）+ 评分(rating) + 胜率(winRate)
 // 热点=近期活跃，故近期度权重最高。成员数量需逐队拉 roster（getTeamPlayers），成本高，
@@ -227,8 +244,12 @@ Page({
 
   // 构建补全任务：动态榜队伍（hasStats=true）跳过逐队请求；其余 cacheMap 命中复用云端详情，
   // 否则 api.getTeam；完成后做二次增强（logo/规范名）+ 评分排序。
+  // ★ 2026-10-30（steam-proxy 熔断修因）：并发从「全量 Promise.all（最多 12 路）」降为
+  //   HOT_ENRICH_CONCURRENCY。真机 Console：出口切换瞬间 9 个在途 `steamProxy` 同时失败
+  //   ⇒ `steam-proxy|steamProxy` 桶被一次打穿 2min。限并发后单批最多 3 路，叠加
+  //   `steam.getTeamInfo` 的 TTL 缓存/在途去重，稳态并发远低于熔断阈值。
   buildHotTasks(list, cacheMap) {
-    const tasks = list.map((item) => {
+    const build = (item) => {
       // P2：explorer 动态行已带全统计字段，直接复用，省去逐队 getTeam（一次榜单=一次请求）
       if (item.hasStats) {
         return sources.enrichTeamInfo({ id: item.id, name: item.name })
@@ -243,8 +264,8 @@ Page({
           .then((info) => applyExtra(merged, info))
           .catch(() => merged))
         .catch(() => item); // 隔离错误，保持原样
-    });
-    Promise.all(tasks).then((enriched) => this.rankAndSetHot(enriched));
+    };
+    runLimited(list, HOT_ENRICH_CONCURRENCY, build).then((enriched) => this.rankAndSetHot(enriched));
   },
 
   // 综合评分排序后写入 hot（近期活跃 + 高评分 + 高胜率 靠前；长期无比赛的队自然下沉）。

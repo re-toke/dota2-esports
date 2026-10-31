@@ -49,8 +49,8 @@
   display: flex;
   align-items: center;
   gap: var(--space-1-5);
-  background: linear-gradient(90deg, rgba(255, 207, 92, 0.12), rgba(255, 207, 92, 0.04));
-  border: 1rpx solid rgba(255, 207, 92, 0.3);
+  background: linear-gradient(90deg, var(--amber-a12), var(--amber-a04));
+  border: 1rpx solid var(--amber-a30);
   border-radius: var(--radius-lg, 16rpx);
   padding: var(--space-2) var(--space-2-5);
   margin-bottom: var(--space-2);
@@ -60,7 +60,7 @@
   font-size: var(--fs-caption);
   font-weight: 700;
   color: var(--dota-gold-strong);
-  background: rgba(255, 207, 92, 0.2);
+  background: var(--amber-a20);
   padding: var(--space-0-5) 14rpx;
   border-radius: var(--radius-pill, 999rpx);
 }
@@ -158,13 +158,17 @@
   font-weight: 700;
   color: var(--text-3);
 }
-/* 英雄头像图片（Steam CDN _sb.png，mode=aspectFill 裁切填满） */
+/* 英雄头像图片（Steam CDN _sb.png，mode=aspectFill 裁切填满）
+   ★ C3：外层 .c-hero 固定 100rpx + 图片固定 56×56rpx + 骨架底色，
+   图片未到 / 失败时占位盒尺寸一致，避免列表跳动 */
 .hero-img {
+  display: block;
   width: 56rpx;
   height: 56rpx;
   border-radius: var(--radius-sm, 8rpx);
   border: 1rpx solid var(--td-border-level-1-color);
   background: var(--card-bg-inset, #F1F3F5);
+  box-sizing: border-box;
 }
 .hero-box.win-side {
   border-color: rgba(95, 211, 95, 0.4);
@@ -236,26 +240,34 @@
   flex: 1;
   align-items: center;
 }
+/* ★ C3：出装槽固定 44×32rpx（含骨架底色），无论「图标 / 文字兜底 / 未加载」
+   都占同一格，items 表后到时不会把整行撑宽、跳动 */
 .item-icon {
-  width: 44rpx;
-  height: 32rpx;
+  width: 100%;
+  height: 100%;
   border-radius: var(--radius-sm);
-  border: 1rpx solid var(--td-border-level-1-color);
   background: var(--td-bg-color-container);
 }
 .item-slot {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  width: 44rpx;
+  height: 32rpx;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  border: 1rpx solid var(--td-border-level-1-color);
+  background: var(--card-bg-inset, #F1F3F5);
 }
+.item-icon { border: none; }
 .item-fallback {
   font-size: var(--fs-badge);
-  line-height: 32rpx;
+  line-height: 1;
+  width: 100%;
+  text-align: center;
   color: var(--slate-text);
   background: var(--td-bg-color-container);
-  border: 1rpx solid var(--td-border-level-1-color);
-  border-radius: var(--radius-sm);
-  padding: 0 6rpx;
-  max-width: 96rpx;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;

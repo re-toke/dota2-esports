@@ -110,7 +110,7 @@ dota2-esports/
 |---|---|---|
 | T1 | 客户端内存热缓存 | `cloudProxy.HOT_TTL_SEC`（仅 `HOT_ACTIONS`）|
 | T2 | 客户端本地 Storage | `api.js` 的 `cachedFresh` / `cached`（SWR）|
-| T3 | 中转 | GET 短路 TTL + EF 白名单 `EF_CACHE_MS` |
+| T3 | 中转 | GET 短路 TTL + EF 白名单 `EF_CACHE`（HIT / STALE+后台刷新）|
 | T4 | EF 内存 L1 | `_shared/l1cache.ts`（Map + TTL + FIFO）|
 | T5 | EF Postgres | `aggregation_cache`（KV 表，每日由 CI 清理过期行）|
 

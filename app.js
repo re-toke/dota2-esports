@@ -45,6 +45,9 @@ App({
   globalData: {
     // 英雄 id -> 中文名 映射，启动预加载，避免每页重复请求
     heroMap: {},
+    // 英雄 id -> 内部名（antimage/luna…），战报拼 Steam CDN 头像 URL 用；
+    // 与 heroMap 同批填充，避免页面为拿内部名再拉一次 /heroes（2026-10-29 P0-2）
+    heroInternalMap: {},
     heroReady: false,
     // 物品 id -> { name, img, dname } 映射，比赛详情页出装展示用
     itemMap: {},
@@ -52,62 +55,62 @@ App({
   },
 
   onLaunch() {
-    // 所有「后台预热 / 非关键预取」一律推迟到首屏渲染之后执行，
-    // 避免 onLaunch 同步阶段堆满 wx.getStorageSync / JSON.parse / 云调用而触发长任务告警。
-    // 页面已用 heroReady / itemReady 守卫，延迟填充不影响首屏与交互。
+    // ★ 2026-10-29（P0-1 启动网络预算）：t0 只发首屏关键 pro / live；
+    //   其余非关键请求整体后移到 t+3s（见下方第二个 setTimeout），
+    //   避免启动期 6–8 个请求（items 336KB / windows 25.5s）与首屏抢连接与带宽。
     // 2026-10-28（首页冷启动 P0）：pro/live 是首屏关键数据，必须在页面 onLoad 之前发出。
     //   这里只发起网络（异步、不解析），不违反「首屏前不做重活」；
     //   页面随后调用同一 action 时会命中 cloudProxy 的前台并发去重（action+载荷），不会重复请求。
     api.getProMatches().catch(() => {});
     api.getLiveMatches().catch(() => {});
 
+    // ★ 2026-10-29（P0-1）：t0 只做**本地**工作 —— 清理过期缓存 / 幂等迁移，
+    //   不产生任何网络请求（prune 已分片，不阻塞首帧）。
     setTimeout(() => {
-      // ★ 2026-10-12（P1-2 开机通道体检）：并发探测候选中转宿主 /healthz，结果**异步**写回
-      //   utils/endpoints.js 作为首选出口（不阻塞首屏、失败静默）。①单出口时 no-op（当前状态）；
-      //   ②探活本身也要 ~10s（本项目「小程序→中转」固定开销）⇒ 必须异步生效，不可阻塞首屏。
-      try { endpoints.probe(); } catch (e) {}
       // §6.4 启动时清理过期/超限缓存（LRU prune），释放存储空间
       // ★ 2026-09-25：启动期改用**分片版** prune（原同步版会一次阻塞 ~900ms ✗）；
       //   写入路径（cache.set 内部）仍用同步 prune ✓ —— 那条路径依赖"返回时空间已腾出" ✓
       try { cache.pruneIdle(); } catch (e) {}
-      // ★★ 2026-09-25（微信云开发**彻底脱离**收尾）：原「CloudBase 初始化」块**已删除** ——
-      //   云函数/云数据库/云存储均已退役（客户端 0 处 wx.cloud.* 调用，已全库核查 ✓），
-      //   再调用 wx.cloud.init() 只会去初始化一个**正在关闭/已关闭**的云环境 ✗
-      //   （真机启动期 `[Violation] 'setTimeout' handler took 410ms` 的高度可疑来源 ✓）。
-      //   ⚠️ 保留 config.cloudProxy.enabled **不动** —— 2026-10-12（P1-4）已删除 cloudBreaker 全局闸门；
-      //      该 flag 现仅用于「是否尝试走 EF」的开关（app.js / stratz.js / steam.js），
-      //      EF 可用性本身由 cloudProxy.efAvailable() 判定。
+      // ★ 2026-08-11 方案 E：迁移老用户 fakeId 关注记录到真实 leagueId（一次性幂等）
+      migrateFakeIdFollows();
+    }, 0);
+
+    // ★ 2026-10-29（P0-1 启动网络预算）：非关键预热整体后移到首帧之后（t+3s）。
+    //   原实现与 pro/live 同时在 t0 发出：实测启动期 6–8 个请求，items 336KB（TTFB 105s）、
+    //   windows 25.5s、leagues 67KB ⇒ 与首屏抢同一条出口带宽/连接。
+    //   ⚠️ items **移出启动链路**：只在战报页按需加载（配合 P0-2 渐进渲染）。
+    //   微信云开发已彻底退役（全库 0 处 wx.cloud.*）；config.cloudProxy.enabled
+    //   仍作为「是否尝试走 EF」的开关，EF 可用性由 cloudProxy.efAvailable() 判定。
+    setTimeout(() => {
+      // ★ 2026-10-12（P1-2 开机通道体检）：并发探测候选中转宿主 /healthz，结果异步写回
+      //   utils/endpoints.js 作为首选出口（不阻塞首屏、失败静默）。
+      try { endpoints.probe(); } catch (e) {}
       // 远程 curation（若配置 url）后台静默加载，失败不阻塞
       remoteCuration.load();
+      // 英雄表：一次填充 heroMap（中文名）+ heroInternalMap（拼头像 URL 的内部名）
       api.getHeroes()
         .then((list) => {
           const map = {};
+          const internal = {};
           (list || []).forEach((h) => {
+            if (!h || h.id == null) return;
             map[h.id] = h.localized_name;
+            let n = h.name || '';
+            if (n.indexOf('npc_dota_hero_') === 0) n = n.slice('npc_dota_hero_'.length);
+            internal[h.id] = n;
           });
           this.globalData.heroMap = map;
+          this.globalData.heroInternalMap = internal;
           this.globalData.heroReady = true;
         })
         .catch(() => {
-          // 英雄表加载失败不阻塞主流程，队员页会回退显示 hero_id
+          // 英雄表加载失败不阻塞主流程；战报页会按需重试并降级为文字
         });
-      // 物品表预加载（比赛详情页出装展示用，失败不阻塞）
-      api.getItems()
-        .then((map) => {
-          this.globalData.itemMap = map || {};
-          this.globalData.itemReady = true;
-        })
-        .catch(() => {});
       // T6 A/B 实验分组拉取（best-effort，失败回退本地 DEFAULTS，不阻塞启动）
       experiment.refresh().catch(() => {});
       // ★ 2026-08-07（R2）：账号预登录预热（fire-and-forget，失败静默；缓存命中后零请求）
       auth.ensureLogin().catch(() => {});
-      // ★ 2026-08-11 方案 E：迁移老用户 fakeId 关注记录到真实 leagueId（一次性幂等）
-      migrateFakeIdFollows();
-      // ★ 2026-09-03（加载优化 A）：冷启动后台预取赛事列表 + 时间窗口（fire-and-forget）。
-      //   用户从首页浏览数秒后切到赛事页时本地缓存已热（cachedFresh 1h 新鲜窗口命中），
-      //   4493ms 网络段 → 秒开。5min 节流避免短时间多次冷启动重复打云。
-      //   预取条件：① 仅在启用云代理时 ② 距上次预取 > 5min 或首次冷启动。
+      // ★ 2026-09-03（加载优化 A）：赛事列表 + 时间窗口预取（5min 节流，失败静默）
       const _now = Date.now();
       if (
         config.cloudProxy && config.cloudProxy.enabled &&
@@ -117,7 +120,7 @@ App({
         api.getLeagues().catch(() => {});
         api.getLeagueWindows().catch(() => {});
       }
-    }, 0);
+    }, 3000);
   },
 
   // O-27（2026-08-15）：全局错误兜底 —— 线上未捕获 JS 异常静默丢失的补救通道。

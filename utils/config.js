@@ -107,7 +107,7 @@ module.exports = {
   //     T1 客户端**内存热缓存** utils/cloudProxy.js `HOT_TTL_SEC=5min`（会话级；仅 HOT_ACTIONS 命中）
   //     T2 客户端**本地缓存**   utils/api.js（`cachedFresh(freshSec,ttlSec)` 或 `cached(ttl)`；ttlSec 见本对象）
   //     T3 **中转层**           infra/proxy/worker.mjs —— GET 短路 `TTL`（仅 `/od/api` 直连 passthrough）
-  //                             + EF 白名单 `EF_CACHE_MS`（只缓 `bundle-aggregator|getLeagueDetailBundle` 60s）
+  //                             + EF 白名单 `EF_CACHE`（9 个只读 action，见 worker.mjs；bundle 6min + STALE 30min）
   //     T4 **EF 内存 L1**       supabase/functions（`_shared/l1cache`；opendota 等 10min / cap40）
   //     T5 **EF Postgres**      supabase/functions/opendota-proxy `resolveTtl`（aggregation_cache）
   //
@@ -123,7 +123,7 @@ module.exports = {
   //     | teamPlayers           | —    | 20min / 3h     | —                | 10min | 6h       | EF 6h（下注①；T2硬3h<T5）|
   //     | teamMatches           | —    | 10min / 30min  | —                | 10min | 30min    | EF 30min             |
   //     | heroes                | 5min | 24h / 24h      | GET default 120s | 10min | 24h      | EF 24h               |
-  //     | getLeagueDetailBundle | —    | —（无客户端缓存）| EF 白名单 60s    | 10min | —（聚合） | **中转 EF 白名单 60s** |
+  //     | getLeagueDetailBundle | —    | —（无客户端缓存）| EF 白名单 6min / STALE 30min | 10min | —（聚合） | **中转 EF 白名单 6min** |
   //      * `getLeagueWindows` 走 explorer SQL ⇒ EF 侧落 `resolveTtl` 的 `default`（30min）。
   //
   //   ▸ 一致性约束（改 TTL 时须同时守住）：

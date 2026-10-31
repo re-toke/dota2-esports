@@ -325,8 +325,8 @@
   top: 8rpx;
   width: 10rpx;
   height: 18rpx;
-  border-right: 3rpx solid #fff;
-  border-bottom: 3rpx solid #fff;
+  border-right: 3rpx solid var(--check-on-brand);
+  border-bottom: 3rpx solid var(--check-on-brand);
   transform: rotate(45deg);
 }
 

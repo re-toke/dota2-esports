@@ -1,4 +1,5 @@
 const api = require('../../utils/api.js');
+const liquipedia = require('../../utils/liquipedia.js');   // ★ 2026-10-30：详情页点击预取（赛程段）
 const util = require('../../utils/util.js');
 const follow = require('../../utils/follow.js');
 const config = require('../../utils/config.js');
@@ -424,6 +425,16 @@ Page({
       }
     }
     this._restored = true;
+    // ★★ 2026-10-30（真机「加载不全/状态错」根因之一）：阶段 2（curation 全量补全）会被
+    //   onHide 递增 `_normalizeGen` 取消 —— 用户点进赛事页后立刻切到别的 tab，链就断了，
+    //   回页时列表永远停在 lite 数据（无官方赛期/奖金/策展状态，卡片大量显示「社区分级」
+    //   与 OpenDota 口径的「战局已定」），直到下拉刷新。
+    //   修复：回页时若检测到阶段 2 未完成，续跑一次 loadLeagues（网络段命运行期缓存，通常 <10ms；
+    //   已有列表数据时不会回骨架屏 —— 见 loadLeagues 内 `_skipSkeleton` 判定）。
+    if (!this._normalizeDone && this.allLeagues && this.allLeagues.length) {
+      console.info('[leagues] onShow：阶段 2 被切页中断，自动续跑（' + this.allLeagues.length + ' 条）');
+      this.loadLeagues();
+    }
   },
 
   retry() {
@@ -543,7 +554,9 @@ Page({
     }
 
     // 缓存未命中（首访 / 二次刷新 / 缓存渲染失败）→ 原行为：loading 骨架
-    if (!_skipSkeleton) this.setData({ loading: true, error: '' });
+    // ★ 2026-10-30：已有列表数据时（阶段 2 被切页中断后的 onShow 续跑 / 重载）不再置骨架，
+    //   避免「回到赛事页白屏闪烁」；数据到达后原地替换即可。
+    if (!_skipSkeleton && !(this.allLeagues && this.allLeagues.length)) this.setData({ loading: true, error: '' });
 
     // 并行拉赛事元数据 + 时间窗口（explorer 一条 SQL 拿全部）
     // ★ 2026-09-01（P0-1）：拆解 Promise.all 失败耦合 —— leagueWindows 仅影响日期范围，
@@ -665,8 +678,17 @@ Page({
     //   多次 normalize 重复计算。以 leagueid 为键缓存结果（同一 leagueid 的 curatedEventFor
     //   输入恒定，结果确定）；列表数据不变时零重算。注意：缓存的是返回对象引用，
     //   下游只读不写（normalize 内不修改 cur），安全。
-    let cur = _curatedEventCache[String(l.leagueid)];
-    if (cur === undefined) {
+    //
+    // ★★ 2026-10-30（真机 PARI UNIVERSE「战局已定」根因）：缓存必须带**查找器代际**。
+    //   冷启动瞬间 remoteCuration 可能仍是旧缓存（缺本版本新增的本地条目）→ 这里算出 null；
+    //   随后远端 curation 加载完成（重建 lookups，代际 +1），但 `null` 已被永久记忆化 →
+    //   整页赛事永久退回 OpenDota 口径（错分级/错状态/丢官方赛期）。代际不一致即重算。
+    const _cg = (typeof remoteCuration.getLookupGen === 'function') ? remoteCuration.getLookupGen() : 0;
+    let _ent = _curatedEventCache[String(l.leagueid)];
+    let cur;
+    if (_ent && _ent.gen === _cg) {
+      cur = _ent.cur;
+    } else {
       cur = remoteCuration.curatedEventFor(l.name, { leagueId: l.leagueid, game: 'dota2' });
       // ★ 2026-09-19（归一化铁律：两条路径必须同步）：curation 查表也要支持「年份位置变体」——
       //   OpenDota 原名常把年份插在中间（如 `PGL Wallachia 2026 Season 9`），直接查表 MISS
@@ -680,7 +702,7 @@ Page({
           cur = remoteCuration.curatedEventFor(_canon, { leagueId: l.leagueid, game: 'dota2' });
         }
       }
-      _curatedEventCache[String(l.leagueid)] = cur;
+      _curatedEventCache[String(l.leagueid)] = { gen: _cg, cur: cur };
     }
     // 分级优先取 curation.tier（与详情页 sources.getLeagueTier 的 curation 输入一致），
     // 未配置时回退 util.unifiedTier（OpenDota tier 映射），保证列表与详情"赛段"一致。
@@ -1617,9 +1639,30 @@ Page({
         }
       }
     }
+    this._prefetchDetail(id, name);
     wx.navigateTo({
       url: '/subpackages/detail/league-detail/league-detail?leagueId=' + id + '&name=' + encodeURIComponent(name)
     });
+  },
+
+  // ★★ 2026-10-30（详情页首访提速）：点击卡片即预取详情页的两段网络 ——
+  //   ① OpenDota 赛事比赛（api.getLeagueMatches，与详情页同一缓存键 + 同一 inflight 去重）
+  //   ② Liquipedia 赛程（getScheduledMatches，与详情页同一 cacheKey）
+  //   目的：把「点击 → 页面初始化」这段等待用于提前发请求；详情页 load 时直接命中缓存，
+  //   首屏系列赛不必再等二段网络（真机反馈「赛事详情页数据加载有点慢」）。
+  //   失败静默：详情页仍走原链路，预取失败不改变任何行为。
+  _prefetchDetail(id, name) {
+    let lid = Number(id);
+    if (!(lid > 0)) return;
+    // 与详情页 onLoad 的重定向口径一致：curation pin 的 leagueId 才是实际加载的 id
+    try {
+      const cur = remoteCuration.curatedEventFor(name, { leagueId: lid, game: 'dota2' });
+      if (cur && cur.leagueId != null && cur.leagueId !== lid) lid = Number(cur.leagueId);
+    } catch (e) {}
+    try { api.getLeagueMatches(lid).catch(function () {}); } catch (e) {}
+    if (name && lid > 0) {
+      try { liquipedia.getScheduledMatches(name, { leagueId: lid }).catch(function () {}); } catch (e) {}
+    }
   },
 
   // 「重点运营节点」焦点卡：仅 TI + Esports World Cup 双旗舰（2026-08-13 收窄，按复核修正）。
@@ -1735,6 +1778,7 @@ Page({
   openFocus(e) {
     const id = e.currentTarget.dataset.id;
     const name = e.currentTarget.dataset.name;
+    this._prefetchDetail(id, name);
     wx.navigateTo({
       url: '/subpackages/detail/league-detail/league-detail?leagueId=' + id + '&name=' + encodeURIComponent(name)
     });

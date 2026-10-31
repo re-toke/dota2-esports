@@ -1,11 +1,6 @@
 <view class="container with-safe-bottom">
-  <view class="brand-header">
-    <image class="brand-logo" src="/assets/brand-logo.png" mode="aspectFill" />
-    <view class="brand-text">
-      <text class="brand-title">DOTA2赛事 · 资料库</text>
-      <text class="brand-sub">英雄属性 / 职业胜率 / 对位 · 物品价格 / 配方</text>
-    </view>
-  </view>
+  <!-- C5：页头统一为 page-header 组件 -->
+  <page-header title="DOTA2赛事 · 资料库" sub="英雄属性 / 职业胜率 / 对位 · 物品价格 / 配方" />
 
   <view class="entry-grid">
     <view class="entry-card entry-hero" hover-class="entry-card--hover" bindtap="goHero">

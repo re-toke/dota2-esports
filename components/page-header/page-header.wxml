@@ -1,0 +1,8 @@
+<view class="brand-header">
+  <image class="brand-logo {{small ? 'brand-logo--sm' : ''}}" src="{{logo}}" mode="aspectFill" />
+  <view class="brand-text">
+    <text class="brand-title">{{title}}</text>
+    <text class="brand-sub" wx:if="{{sub}}">{{sub}}</text>
+  </view>
+  <slot></slot>
+</view>

@@ -44,8 +44,20 @@ var LiquiParse = require('./liquipedia-parse.js');
 var slugMapCache = null;
 function getSlugMap() {
   if (slugMapCache === null) {
-    try { slugMapCache = require('./liquipedia-slugmap.json'); }
-    catch (e) { slugMapCache = { mappings: {} }; }
+    // ★★ 2026-10-30（真机 Console 实证 · 根因）：**小程序 require 不支持 .json** ——
+    //   原实现只 require './liquipedia-slugmap.json'，微信运行时会把它解析成
+    //   `liquipedia-slugmap.json.js` → 抛 `module '...json.js' is not defined`
+    //   → 下面的 catch 静默回退 `{ mappings: {} }` ⇒ **映射表在真机上从未生效**。
+    //   证据：本次 Console 报未命中的 3 条（DreamLeague Season 30 Qualifiers /
+    //   PARI Universe by FISSURE Closed Qualifiers / WINLINE Star Series 4）都精确等于
+    //   映射键（已逐字符比对，无尾随空格/不可见字符），而命中 10 条全部来自 curation ③.5。
+    //   修复：改用 `npm run sync:slugmap` 生成的 **JS 镜像**（与 JSON 源逐键校验）；
+    //   JSON 仅保留给 Node 脚本/兜底（小程序内 require 必然失败，故放在第二顺位）。
+    try { slugMapCache = require('./liquipedia-slugmap.js'); }
+    catch (e) {
+      try { slugMapCache = require('./liquipedia-slugmap.json'); }
+      catch (e2) { slugMapCache = { mappings: {} }; }
+    }
   }
   return slugMapCache;
 }
@@ -59,6 +71,12 @@ var _slugMissedNames = {};
 var _slugMissReported = false;   // 2026-09-25: 本会话是否已打印过「全量缺失清单」
 var SLUG_MISS_LIMIT = 50;
 function liquipediaSlugFor(name) {
+  // ★ 2026-10-30（真机 Console 实证）：部分上游联赛名可能带首尾空白（此前实测
+  //   `"PARI Universe by FISSURE Closed Qualifiers "`、`"DreamLeague Season 30 Qualifiers "`），
+  //   精确匹配会 miss。统一 trim 后再查表（对已能命中的输入零影响）。
+  //   ⚠️ 补充：本次仍报未命中的 3 条经逐字符比对**并无空白/不可见字符**，
+  //      真正根因是「小程序 require 不支持 .json」（见 getSlugMap 的注释），此处 trim 仅为防御。
+  if (typeof name === 'string') name = name.trim();
   var m = getSlugMap();
   var mm = (m && m.mappings) || null;
   // ① 精确命中（原逻辑，命中路径零额外成本、零回归）
@@ -585,7 +603,28 @@ function getTeamRoster(name) {
 //     注意：原计划同时覆盖 UPCOMING 的 GetScheduledLeagueGames 已被 Valve 删除，
 //     UPCOMING 段仍依赖 Liquipedia LPDB v3（申请中）或 curation 兜底。
 //     Steam 命中即返回；未命中 / 未配 leagueId / Steam 失败 → 走原 Liquipedia 路径。
+// ★★ 2026-10-30（真机 Console 实证）：**在途请求去重** ——
+//   列表页点击预取（leagues.js `_prefetchDetail`）与详情页 load 会对同一赛事各发一次赛程请求，
+//   而 Liquipedia 速率限制器是串行的（≥2.2s/次）⇒ 第二个请求被排到 ~4.5s。
+//   证据：TI 详情页 `lp 到达 4502ms`（≈2×2.2s），同一时刻 `_prefetchDetail` 与 `load` 各打了一次
+//   「赛程两条路径均为空」。同一赛事同一 force 语义的在途请求直接复用同一个 Promise
+//   （不改变缓存/SWR 语义：命中缓存的调用本就在本包装之外立即 resolve 路径不受影响——
+//   实现上本包装在最外层，缓存命中也会被短暂共享，但结果同源，无副作用）。
+var _schedInflight = {};
 function getScheduledMatches(name, opts) {
+  var force = !!(opts && opts.force);
+  var leagueId = opts && (opts.leagueId || opts.league_id);
+  var key = (leagueId || '') + '|' + (name || '') + '|' + (force ? '1' : '0');
+  var pending = _schedInflight[key];
+  if (pending) return pending;
+  var p = getScheduledMatchesUncached(name, opts);
+  _schedInflight[key] = p;
+  var clear = function () { if (_schedInflight[key] === p) delete _schedInflight[key]; };
+  p.then(clear, clear);
+  return p;
+}
+
+function getScheduledMatchesUncached(name, opts) {
   if (!ENABLED) return Promise.resolve({ matches: [], boFormat: null });
   if (!name) return Promise.resolve({ matches: [], boFormat: null });
 

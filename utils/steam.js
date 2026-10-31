@@ -66,9 +66,24 @@ function getLeagues() {
 }
 
 // 战队信息（Valve 官方，按 team_id 查询）
+//
+// ★★ 2026-10-30（steam-proxy 熔断修因）：**本地 TTL 缓存 + 在途去重**。
+//   背景：本方法是 `steamProxy` 唯一的客户端调用面，扇出源是 teams 页
+//   `buildHotTasks` 的**最多 12 队 `Promise.all`**（另有 team-detail / h2h）。
+//   真机 Console：出口切换瞬间 9 个在途请求一起失败 ⇒ `steam-proxy|steamProxy`
+//   桶 3→9 fails 立即 OPEN（EF 与 Steam 实测本身健康）。
+//   ⇒ 同队 10min 内只打一次网络；同队并发（详情页 + 列表 + 交锋页）复用同一 Promise。
+const TEAM_INFO_TTL_MS = 10 * 60 * 1000;
+const _teamInfoCache = {};      // teamId -> { at, value }
+const _teamInfoInflight = {};   // teamId -> Promise
+
 function getTeamInfo(teamId) {
   if (!ENABLED) return Promise.resolve(null);
-  return get('/GetTeamInfoByTeamID', { start_at_team_id: teamId, teams_requested: 1 }).then((d) => {
+  const k = String(teamId);
+  const hit = _teamInfoCache[k];
+  if (hit && Date.now() - hit.at < TEAM_INFO_TTL_MS) return Promise.resolve(hit.value);
+  if (_teamInfoInflight[k]) return _teamInfoInflight[k];
+  const p = get('/GetTeamInfoByTeamID', { start_at_team_id: teamId, teams_requested: 1 }).then((d) => {
     const teams = (d && d.result && d.result.teams) || [];
     const t = teams[0];
     if (!t) return null;
@@ -79,7 +94,15 @@ function getTeamInfo(teamId) {
       logo: t.logo_url || '',
       country: t.country_code || ''
     };
+  }).then((info) => {
+    // 只缓存成功结果；null/失败不落盘（避免把瞬时故障固化成 10min 空值）
+    if (info) _teamInfoCache[k] = { at: Date.now(), value: info };
+    return info;
   }).catch(() => null);
+  _teamInfoInflight[k] = p;
+  const clear = () => { if (_teamInfoInflight[k] === p) delete _teamInfoInflight[k]; };
+  p.then(clear, clear);
+  return p;
 }
 
 // 赛事奖金池（原设计：Steam 独有，OpenDota/STRATZ 无此数据）

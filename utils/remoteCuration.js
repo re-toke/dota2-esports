@@ -35,24 +35,41 @@ let effectiveEvents = null;
 let effectiveTeams = null;
 let effectiveTiIds = null;
 let loadingPromise = null;
+// ★ 2026-10-30：查找器代际。每次重建 lookups（ensure 首次 / 远端重载）自增。
+//   用途：调用方（pages/leagues/leagues.js 的 `_curatedEventCache`）据此作废自己的
+//   记忆化结果 —— 否则冷启动瞬间的一次 MISS（cur=null）会被永久缓存，
+//   整页赛事状态/赛期/分级卡在 OpenDota 口径（真机 PARI UNIVERSE 误判「战局已定」）。
+let lookupGen = 0;
 
 // 同步初始化：读缓存（若新鲜）否则用本地兜底。保证 curated* 同步可用。
 function ensure() {
   if (lookups) return lookups;
   const meta = cache.getStale(CACHE_KEY, config.remoteCuration.ttlSec, config.remoteCuration.ttlSec);
   if (meta.value && meta.value.events && meta.value.teams) {
-    effectiveEvents = meta.value.events;
-    // ★ 2026-10-29（第 6 步）：旧缓存里的 teams 是「上一版代码」合并出来的，可能已丢失
-    //   本版本新增的别名（如 8260824 的 'pvision'）。这里再与本地做一次字段级合并，
-    //   使客户端升级后立即可用，而不必等 6h TTL 过期或清缓存。
-    effectiveTeams = mergeTeamsWithLocal(meta.value.teams);
-    effectiveTiIds = meta.value.tiContestantIds || curation.TI_CONTESTANT_TEAM_IDS;
+    // ★★ 2026-10-30：**旧缓存必须与本地字段级合并**（events 与 teams 都要）。
+    //   根因（真机复现）：旧缓存是「上一版代码 + 当时的远端」合并出来的 events 数组，
+    //   本版本新增的本地 curation 条目（如 PARI UNIVERSE by FISSURE，Supabase 尚未回填）
+    //   不在其中；而原实现直接 `effectiveEvents = meta.value.events` **不并本地** →
+    //   `curatedEventFor(name, { leagueId })` 的 leagueId pin 落空 →
+    //     ① 列表页该赛事退回 OpenDota 口径（错分级「S-Tier」/错状态「战局已定」/丢官方赛期）；
+    //     ② 首页 ⑥ 段候选缺「进行中」赛事 → 「即将开始」卡片全空。
+    //   修法与 teams（2026-10-29）完全同构：统一走 buildEffective（本地为底 + 远程字段覆盖）。
+    //   幂等：缓存本身已是合并结果，再合一次结果不变。
+    const eff = buildEffective({
+      events: meta.value.events,
+      teams: meta.value.teams,
+      tiContestantIds: meta.value.tiContestantIds
+    });
+    effectiveEvents = eff.events;
+    effectiveTeams = eff.teams;
+    effectiveTiIds = eff.tiContestantIds;
   } else {
     effectiveEvents = curation.CURATED_EVENTS;
     effectiveTeams = curation.CURATED_TEAMS;
     effectiveTiIds = curation.TI_CONTESTANT_TEAM_IDS;
   }
   lookups = curation.buildLookups(effectiveEvents, effectiveTeams);
+  lookupGen++;
   return lookups;
 }
 
@@ -265,6 +282,7 @@ function _applyRemote(data, partial) {
     effectiveTeams = eff.teams;
     effectiveTiIds = eff.tiContestantIds;
     lookups = curation.buildLookups(eff.events, eff.teams);
+    lookupGen++;
     var _ttl = partial ? 1800 : config.remoteCuration.ttlSec;   // partial: 30min；完整: 6h
     if (partial) console.log('[remoteCuration] 仅近期子集 → 缓存 30min（下次启动重试全量）');
     cache.set(CACHE_KEY, { events: eff.events, teams: eff.teams, tiContestantIds: eff.tiContestantIds }, _ttl);
@@ -483,6 +501,8 @@ module.exports = {
   isTIContestantTeam: isTIContestantTeam,
   isHighPriorityTeam: isHighPriorityTeam,
   getEffectiveEvents: getEffectiveEvents,
+  // ★ 2026-10-30：查找器代际（调用方缓存失效用；远端重载后 +1）
+  getLookupGen: function () { return lookupGen; },
   buildEffective: buildEffective,
   load: load,
   // ★ 2026-09-20：内容指纹（版本号）—— 导出供单测锁住「改字段值也必须变版本」这一契约。

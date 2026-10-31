@@ -1,12 +1,6 @@
 <view class="container with-tab-bar">
-  <!-- 品牌标识栏 -->
-  <view class="brand-header">
-    <image class="brand-logo brand-logo--sm" src="/assets/brand-logo.png" mode="aspectFill" />
-    <view class="brand-text">
-      <text class="brand-title">DOTA2赛事</text>
-      <text class="brand-sub">赛事 · 战队 · 对战</text>
-    </view>
-  </view>
+  <!-- 品牌标识栏（C5：统一为 page-header 组件） -->
+  <page-header title="DOTA2赛事" sub="赛事 · 战队 · 对战" small="{{true}}" />
 
   <!-- 焦点卡：重点运营节点（S 级以上热门赛事自动轮替，2026-08-13 动态化）
        批次3（2026-08-30）· PRD §10.2 hero 级视觉：Tier 色浸染背景（替代 focus-glow 光斑）、

@@ -12,6 +12,7 @@
     "t-button": "tdesign-miniprogram/button/button",
     "t-skeleton": "tdesign-miniprogram/skeleton/skeleton",
     "empty-state": "../../components/empty-state/empty-state",
+    "page-header": "../../components/page-header/page-header",
     "skeleton": "../../components/skeleton/skeleton"
   }
 }

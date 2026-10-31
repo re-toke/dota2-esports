@@ -291,7 +291,8 @@ function cachedFresh(path, data, freshSec, ttlSec) {
 // 查询某请求最新采集时间戳（用于 UI 「更新于 X 前」）。返回 unix 毫秒或 0。
 function fetchedAtOf(name, arg) {
   let path = null;
-  if (name === 'team') path = '/teams/' + arg;
+  if (name === 'match') path = '/matches/' + arg;
+  else if (name === 'team') path = '/teams/' + arg;
   else if (name === 'teamPlayers') path = '/teams/' + arg + '/players';
   else if (name === 'teamMatches') path = '/teams/' + arg + '/matches';
   else if (name === 'player') path = '/players/' + arg;
@@ -419,6 +420,12 @@ const ACTION_MAP = {
   searchTeams: function (name) { return { action: 'searchTeams', params: { q: name }, path: '/search', data: { q: name }, ttlKey: 'search' }; },
   getTeam: function (id) { return { action: 'getTeam', params: { teamId: id }, path: '/teams/' + id, ttlKey: 'team' }; },
   getTeamPlayers: function (id) { return { action: 'getTeamPlayers', params: { teamId: id }, path: '/teams/' + id + '/players', ttlKey: 'teamPlayers' }; },
+  // ★★ 2026-10-30（实测复核：**`getTeamMatches` 必须保留 EF**，勿再移除）：
+  //   串行实测（中转 sparkly）：直连全量 `X-Trim:0` **>90s 超时**（另两次 >60s），
+  //   同一时刻 EF `getTeamMatches` 200 / **8.25s / 627KB**（热缓存；冷缓存 13.9s / 22.7s）。
+  //   ⇒ 中转回源 OpenDota 取大包当前不可用，EF 是唯一能在 12s 口径内拿到全量的路径。
+  //   移除 EF 会让全量段：「耗时看似下降」但**数据永远拿不到**（直连必超时）。
+  //   ⇒ 全量段耗时的真正优化点在**串行排队**（见 team-detail.loadMatches 并行化），而非绕开 EF。
   getTeamMatches: function (id) { return { action: 'getTeamMatches', params: { teamId: id }, path: '/teams/' + id + '/matches', ttlKey: 'teamMatches' }; },
   getHeroes: function () { return { action: 'getHeroes', params: {}, path: '/heroes', ttlKey: 'heroes' }; },
   // ★ 2026-09-01（P0-1）：首页比赛流两大数据源接入云代理（国内加速 + 云端共享缓存）。
@@ -647,9 +654,50 @@ function getLeagueMatches(leagueId, force) {
 //   radiant_team_id, dire_team_id, league, leagueid,
 //   players: [{ account_id, hero_id, kills, deaths, assists,
 //               gold_per_min, xp_per_min, player_slot, team, personaname, name }]
-function getMatch(matchId) {
+// ★ 2026-10-29（P0-6 / A6 stale-first）：单场比赛缓存过期后「先旧后新」。
+//   - 已完赛（radiant_win != null）：数据不可变 ⇒ 旧值直接上屏（≤0.3s），后台刷新，
+//     成功后经 opts.onUpdate 回填；不再让用户对着骨架等 4–12s。
+//   - 直播中（radiant_win == null）：仍按原语义走网络，避免把陈旧比分当实时展示。
+//   - opts.force：跳过缓存直接回源（下拉刷新 / 重试）。
+//     ★ 2026-10-29（B2）：战报直播轮询也走 force（见 match-detail.js 的 fetchPoll）——
+//       中转侧 `/od/api/matches/{id}` 直播 TTL=30s（= 轮询间隔）⇒ 比分最多落后 30s，也不会放大上游 QPS。
+//   ⚠️ 用 cache.peek 而不是 getStale：getStale 在超过硬 TTL 时会 removeStorageSync，拿不到旧值。
+function matchCachedOrStale(matchId, opts) {
+  const path = '/matches/' + matchId;
+  const key = _v() + path + '|{}';
+  const ttlSec = config.cacheTTL.match;
+  const network = () => dedupFresh(key, () => request(path).then((data) => {
+    if (!validateResponse(path, data)) throw new Error('invalid response');
+    cache.set(key, data, ttlSec);
+    return data;
+  }));
+  if (opts.force) return network();
+  const meta = cache.peek(key);
+  const value = meta && meta.value;
+  if (!value) return network();
+  if ((Date.now() - (meta.fetchedAt || 0)) <= ttlSec * 1000) return Promise.resolve(value);
+  if (value.radiant_win != null) {
+    if (!refreshInFlight[key]) {
+      refreshInFlight[key] = true;
+      request(path)
+        .then((data) => {
+          if (!validateResponse(path, data)) return;
+          cache.set(key, data, ttlSec);
+          if (typeof opts.onUpdate === 'function') {
+            try { opts.onUpdate(data); } catch (e) { /* 隔离 UI 回调异常 */ }
+          }
+        })
+        .catch(() => {})
+        .then(() => { delete refreshInFlight[key]; });
+    }
+    return Promise.resolve(value);
+  }
+  return network();
+}
+
+function getMatch(matchId, opts) {
   return tryCloudOrDirect('getMatch', [matchId],
-    function () { return cached('/matches/' + matchId, null, config.cacheTTL.match); });
+    function () { return matchCachedOrStale(matchId, opts || {}); });
 }
 
 function transformSearchTeams(list) {
@@ -760,6 +808,7 @@ function getTeamMatches(teamId, opts) {
   if (recent) {
     return cached('/teams/' + teamId + '/matches?recent=' + recent, null, config.cacheTTL.teamMatches);
   }
+  // ★ 2026-10-30：EF 优先（实测 8.25s/627KB；直连全量 >90s 不可用），失败再直连。
   return tryCloudOrDirect('getTeamMatches', [teamId],
     function () {
       // ★ P0-1 C：显式声明「要全量」（`X-Trim: 0`）⇒ 豁免中转的默认裁剪白名单（DEFAULT_TEAM_TRIM）。

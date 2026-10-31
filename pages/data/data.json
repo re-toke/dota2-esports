@@ -1,6 +1,7 @@
 {
   "navigationBarTitleText": "资料库",
   "usingComponents": {
-    "t-icon": "tdesign-miniprogram/icon/icon"
+    "t-icon": "tdesign-miniprogram/icon/icon",
+    "page-header": "../../components/page-header/page-header"
   }
 }

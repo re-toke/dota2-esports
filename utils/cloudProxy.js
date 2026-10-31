@@ -211,6 +211,8 @@ const PARAM_MAP = {
   searchTeams: function (name) { return { q: name }; },
   getTeam: function (id) { return { teamId: id }; },
   getTeamPlayers: function (id) { return { teamId: id }; },
+  // ★ 2026-10-30（实测复核：必须保留）：直连全量 >90s 超时，EF 8.25s / 627KB
+  //   ⇒ `getTeamMatches` **不得移除**（与 api.js 的 ACTION_MAP 同步，详见 api.js 该处注释）。
   getTeamMatches: function (id) { return { teamId: id }; },
   getPlayer: function (id) { return { accountId: id }; },
   getPlayerMatches: function (id) { return { accountId: id }; },

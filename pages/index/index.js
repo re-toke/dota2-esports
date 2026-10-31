@@ -525,10 +525,55 @@ Page({
   onMatchCardTap(e) {
     const d = e.detail;
     if (d.matchId && Number(d.matchId) > 0) {
+      this._prefillMatch(d);
       wx.navigateTo({ url: '/subpackages/detail/match-detail/match-detail?matchId=' + d.matchId });
     } else if (d.leagueId && Number(d.leagueId) > 0) {
+      this._prefetchLeagueDetail(d.leagueId, '');
       wx.navigateTo({ url: '/subpackages/detail/league-detail/league-detail?leagueId=' + d.leagueId });
     }
+  },
+
+  // ★★ 2026-10-30（详情页首访提速）：点击赛事卡即预取详情页的两段网络 ——
+  //   ① api.getLeagueMatches（与详情页同一缓存键 + inflight 去重）
+  //   ② liquipedia.getScheduledMatches（与详情页同一 cacheKey）
+  //   详情页 load 时直接命中 → 首屏系列赛不必再等二段网络。失败静默，不影响原链路。
+  _prefetchLeagueDetail(id, name) {
+    const lid = Number(id);
+    if (!(lid > 0)) return;
+    try { api.getLeagueMatches(lid).catch(function () {}); } catch (e) {}
+    if (name) {
+      try { liquipedia.getScheduledMatches(name, { leagueId: lid }).catch(function () {}); } catch (e) {}
+    }
+  },
+
+  // ★ 2026-10-29（A5 战报预填）：卡片已在手队名/队徽/赛事/Tier，
+  //   暂存给战报页 onLoad 先渲染锚点卡（不增加任何请求）。
+  //   卡片中央是「系列胜局」≠ 战报的击杀数 ⇒ 不传比分（战报比分位显示「—」）。
+  _prefillMatch(d) {
+    const cards = this.data.matchCards || [];
+    let card = null;
+    for (let i = 0; i < cards.length; i++) {
+      if (d.key && cards[i].key === d.key) { card = cards[i]; break; }
+    }
+    if (!card) {
+      for (let i = 0; i < cards.length; i++) {
+        if (String(cards[i].matchId) === String(d.matchId)) { card = cards[i]; break; }
+      }
+    }
+    if (!card || !card.teamA || !card.teamB) return;
+    getApp().globalData.matchPrefill = {
+      matchId: d.matchId,
+      radiantName: card.teamA.name || '',
+      direName: card.teamB.name || '',
+      radiantTeamId: card.teamA.id || '',
+      direTeamId: card.teamB.id || '',
+      radiantLogo: card.teamA.logo || '',
+      direLogo: card.teamB.logo || '',
+      league: card.leagueName || '',
+      isLive: card.status === 'live',
+      exactScore: false,
+      at: Date.now()
+    };
   },
 
   // F1（2026-08-31）：比赛流入口（替代原 _loadMatchFlow 的入口职责）。
@@ -606,19 +651,14 @@ Page({
     //   且进行中/已结束段暂空不会闪现「暂无对局」空态。
     //   ★ S3（同轮落地）：LP 数据带 _stale 标记（缓存 >5min 旧）时，渲染旧值秒开后
     //   由 _refreshStaleLp 后台 force 重拉转新。
-    // 2026-10-28（首页冷启动第 3 步）：bundle（pro+live 一次 RTT）优先；
-    //   EF 未部署 / 失败 → 回退单路请求。bundle 的 live 可能为 null（EF 内 2.5s 超时）→ 单独补一次。
-    const bundleP = (typeof api.getHomeBundle === 'function')
-      ? api.getHomeBundle().catch(() => null)
-      : Promise.resolve(null);
-    const proP = bundleP.then((b) => {
-      if (b && b.pro && b.pro.length) return b.pro;
-      return api.getProMatches().catch(() => null);
-    });
-    const liveP = bundleP.then((b) => {
-      if (b && b.live) return b.live;
-      return api.getLiveMatches().catch(() => null);
-    });
+    // ★★ 2026-10-29（P0-3 复核）：首屏 pro / live **直接并行直连**，不再被 getHomeBundle gate。
+    //   实测：bundle 4.20 / 6.08 / 6.69s；单路 pro 1.44 / 2.56s（EF 热）。
+    //   原因：bundle 内部 live 最多等 2.5s（EF 超时返回 live:null），而原实现 proP 挂在 bundleP 上
+    //   ⇒ pro 首卡被 live 一起拖慢。「少一次 RTT」≠「更早首帧」。
+    //   bundle 不再参与首屏，也不后台补发：它不预热 getProMatches / getLiveMatches 的 EF 缓存，
+    //   补发只会与首屏抢并发配额。
+    const proP = api.getProMatches().catch(() => null);
+    const liveP = api.getLiveMatches().catch(() => null);
     // 2026-10-28（首页冷启动 P2）：首屏快照 —— 仅 pro，6h 内冷启动直接上屏（0 RTT），
     //   网络到达后由下方 settle 分支覆盖。LIVE 段不落快照（陈旧比分有误导性）。
     if (!this._lastPro) {
@@ -1946,6 +1986,7 @@ Page({
   openFollowCard(e) {
     const d = e.currentTarget.dataset;
     if (d.leagueid) {
+      this._prefetchLeagueDetail(d.leagueid, d.leaguename || '');
       wx.navigateTo({ url: '/subpackages/detail/league-detail/league-detail?leagueId=' + d.leagueid + '&name=' + encodeURIComponent(d.leaguename || '') });
     } else if (d.oppid) {
       wx.navigateTo({ url: '/subpackages/detail/team-detail/team-detail?teamId=' + d.oppid });

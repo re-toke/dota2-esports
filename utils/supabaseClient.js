@@ -129,9 +129,23 @@ function edge(name, data, opts) {
         }
       },
       fail: function (err) {
+        // ★★ 2026-10-30（steam-proxy 熔断级联修因）：**«迟到失败» 不计熔断，改向当前宿主补试一次**。
+        //   真机 Console：L539 `出口切换 hungry-pike → sparkly` 紧跟
+        //   `steam-proxy|steamProxy after 3..9 fails` 连续 7 行。而熔断 OPEN 后 `efAvailable`
+        //   会直接 reject 且**不再计数** ⇒ fails 4→9 只能来自「切换前已并发在途」的请求：
+        //   它们都发给了旧宿主，切换后必然同时失败，却全被算到同一个 action 桶上
+        //   ⇒ 一次出口切换就把该桶打穿 2min（实测 9 个在途 getTeamInfo 正好命中）。
+        //   处理：① 本次请求发出时的宿主**已被放弃**（`_usedHost !== current()`）⇒ 属宿主级失败，
+        //          **不计熔断**，向当前宿主补试一次（与 `utils/api.js` `request()` 的切出口重试对齐）；
+        //        ② 补试仍失败 / 宿主未切换 ⇒ 才计数（真正的网络或 EF 故障）。
+        var _switched = endpoints.count() > 1 && _usedHost !== endpoints.current();
+        if (_switched && !(opts && opts._hostRetried)) {
+          edge(name, data, Object.assign({}, opts || {}, { _hostRetried: true })).then(resolve, reject);
+          return;
+        }
         _countFail(_bkey);
         // ★ P1-2：传输层失败（未联通中转）⇒ 标记切出口，后续 EF/REST 请求自然走备出口。
-        //   仅在有备出口时生效（count()>1）；此处不重试（重试由上层调用方/熔断策略决定）。
+        //   仅在有备出口时生效（count()>1）。
         // ★ 2026-10-13：传入本次使用的宿主 ⇒ 迟到失败不再重复推进出口（修「切换过冲」）。
         // ★ P2-23（2026-10-14）：出口切换上报（此前切换在线上无可观测信号）。
         if (endpoints.count() > 1) { endpoints.failover(_usedHost); monitor.relayFailover(_usedHost, 'edge_fail'); }

@@ -10,11 +10,11 @@
       <image wx:if="{{logoA}}" class="ac-logo" src="{{logoA}}" mode="aspectFit" />
       <text class="ac-name">{{nameA}}</text>
       <text wx:if="{{winSide === 'A'}}" class="ac-win-badge">胜</text>
-      <text class="ac-num">{{live ? '—' : scoreA}}</text>
+      <text class="ac-num">{{(live || pending) ? '—' : scoreA}}</text>
     </view>
     <view class="ac-vs">{{live ? '进行中' : ':'}}</view>
     <view class="ac-team {{winSide === 'B' ? 'is-win' : ''}} side-b {{!live && winSide === 'B' ? 'ac-glow' : ''}}">
-      <text class="ac-num">{{live ? '—' : scoreB}}</text>
+      <text class="ac-num">{{(live || pending) ? '—' : scoreB}}</text>
       <image wx:if="{{logoB}}" class="ac-logo" src="{{logoB}}" mode="aspectFit" />
       <text class="ac-name">{{nameB}}</text>
       <text wx:if="{{winSide === 'B'}}" class="ac-win-badge">胜</text>

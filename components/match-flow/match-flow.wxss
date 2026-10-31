@@ -104,7 +104,7 @@
 }
 .mf-divider--upcoming .mf-divider-bar {
   background: var(--amber-bright);
-  box-shadow: 0 0 12rpx rgba(255, 207, 92, 0.4);
+  box-shadow: 0 0 12rpx var(--amber-a40);
 }
 .mf-divider--upcoming .mf-divider-text {
   color: var(--dota-gold-strong);

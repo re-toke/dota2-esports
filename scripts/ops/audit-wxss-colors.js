@@ -13,6 +13,7 @@
  *   node scripts/ops/audit-wxss-colors.js --list       # 逐条列出（file:line 色值）
  *   node scripts/ops/audit-wxss-colors.js --file <f>   # 只看某文件
  *   node scripts/ops/audit-wxss-colors.js --json       # 机器可读
+ *   node scripts/ops/audit-wxss-colors.js --fail-on-p0 # 门禁：仍有 P0 时 exit 1
  *
  * 分级（对齐「主题翻转八大陷阱」）：
  *   P0 浅文字色/近白 —— 亮底上不可读，暗色模式下同样会糊（如 #e6ebf2 / #fff 当文字）
@@ -150,9 +151,12 @@ function scan() {
 function main() {
   const argv = process.argv.slice(2);
   const rows = scan();
+  const failOnP0 = argv.includes('--fail-on-p0');
+  const p0Count = rows.reduce((n, r) => n + (r.level === 'P0' ? 1 : 0), 0);
 
   if (argv.includes('--json')) {
     process.stdout.write(JSON.stringify(rows, null, 2) + '\n');
+    if (failOnP0 && p0Count > 0) process.exitCode = 1;
     return;
   }
 
@@ -162,6 +166,10 @@ function main() {
   if (argv.includes('--list')) {
     for (const r of shown) console.log(r.level + '  ' + r.file + ':' + r.line + '  ' + r.value + '   | ' + r.text);
     console.log('\n合计 ' + shown.length + ' 处');
+    if (failOnP0 && p0Count > 0) {
+      console.log('\n✖ P0 门禁失败：仍有 ' + p0Count + ' 处');
+      process.exitCode = 1;
+    }
     return;
   }
 
@@ -196,6 +204,11 @@ function main() {
   const top = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 15);
   console.log('\n=== 高频色值 TOP15（替换优先做这些覆盖面最大）===');
   top.forEach(([v, n]) => console.log('  ' + v.padEnd(26) + n + ' 处'));
+
+  if (failOnP0 && p0Count > 0) {
+    console.log('\n✖ P0 门禁失败：仍有 ' + p0Count + ' 处（用 --list 查看明细）');
+    process.exitCode = 1;
+  }
 }
 
 main();

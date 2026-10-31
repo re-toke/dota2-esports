@@ -155,6 +155,9 @@ Page({
 
         let x = 0;
         let y = 0;
+        // ★ 2026-10-29（A5）：本页已有「局级」数据（击杀/胜负/赛事），
+        //   跳战报前把它压成预填，战报首帧即可出锚点卡 + 真实比分。
+        const prefillById = {};
         const history = vs
           .map((m) => {
             const won = m.radiant === m.radiant_win;
@@ -164,6 +167,20 @@ Page({
             const ownScore = m.radiant ? m.radiant_score : m.dire_score;
             const oppScore = m.radiant ? m.dire_score : m.radiant_score;
             const year = m.start_time ? new Date(m.start_time * 1000).getFullYear() : 0;
+            prefillById[m.match_id] = {
+              matchId: m.match_id,
+              // 战报的左右 = 天辉/夜魇，这里按 m.radiant 把 A/B 映射回边
+              radiantName: m.radiant ? teamA.name : teamB.name,
+              direName: m.radiant ? teamB.name : teamA.name,
+              radiantScore: m.radiant_score || 0,
+              direScore: m.dire_score || 0,
+              exactScore: true,
+              league: leagueDN,
+              startTime: m.start_time || 0,
+              duration: m.duration || 0,
+              isLive: m.radiant_win == null,
+              at: Date.now()
+            };
             return {
               match_id: m.match_id,
               league: leagueDN,
@@ -179,6 +196,7 @@ Page({
             };
           })
           .sort((p, q) => (q.match_id || 0) - (p.match_id || 0)); // 最近在前
+        this._prefillById = prefillById;
 
         // 3.2 按年份分组（保持最近在前），用于折叠面板
         const groupsMap = {};
@@ -274,6 +292,12 @@ Page({
   openMatch(e) {
     const id = e.currentTarget.dataset.id;
     if (!id) return;
+    // ★ 2026-10-29（A5）：本场数据已在手（局级击杀/赛事/双方队名）→ 预填给战报页首帧渲染
+    const p = this._prefillById && this._prefillById[id];
+    if (p) {
+      p.at = Date.now();
+      getApp().globalData.matchPrefill = p;
+    }
     wx.navigateTo({ url: '/subpackages/detail/match-detail/match-detail?matchId=' + id });
   },
 

@@ -1,17 +1,13 @@
 <view class="container with-tab-bar">
 
-  <!-- 品牌标识栏 + 搜索框（v4.1：合并为一行，logo+标题左置、搜索胶囊右置，首屏上移 ~80rpx） -->
-  <view class="brand-header">
-    <image class="brand-logo brand-logo--sm" src="/assets/brand-logo.png" mode="aspectFill" />
-    <view class="brand-text">
-      <text class="brand-title">DOTA2赛事</text>
-      <text class="brand-sub">赛事 · 战队 · 对战</text>
-    </view>
+  <!-- 品牌标识栏 + 搜索框（v4.1：合并为一行，logo+标题左置、搜索胶囊右置，首屏上移 ~80rpx）
+       C5：页头统一为 page-header 组件（slot 放行内搜索） -->
+  <page-header title="DOTA2赛事" sub="赛事 · 战队 · 对战" small="{{true}}">
     <view class="search-bar search-bar--inline" bindtap="openSearch" hover-class="search-bar--pressed">
       <t-icon name="search" size="26rpx" color="#6b7280" />
       <text class="search-placeholder">搜索赛事/战队/选手</text>
     </view>
-  </view>
+  </page-header>
 
   <!-- ===== v4.1：快捷入口三格（从页面底部上移到搜索框下方，常驻入口带） =====
        game-icons 剪影 PNG：战队=盾 / 英雄库=剑 / 物品库=书 -->

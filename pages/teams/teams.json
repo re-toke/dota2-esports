@@ -10,6 +10,7 @@
     "t-icon": "tdesign-miniprogram/icon/icon",
     "t-button": "tdesign-miniprogram/button/button",
     "t-skeleton": "tdesign-miniprogram/skeleton/skeleton",
+    "page-header": "../../components/page-header/page-header",
     "empty-state": "../../components/empty-state/empty-state"
   }
 }

@@ -11,7 +11,7 @@
   padding-top: 10rpx;
   padding-bottom: calc(12rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
-  background: rgba(248, 249, 250, 0.92);
+  background: var(--tabbar-bg);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }

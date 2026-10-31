@@ -25,6 +25,7 @@ function createSession(matchId, handlers) {
   let heartbeatTimer = null;
   let reconnectTimer = null;
   let pollTimer = null;
+  let pollingStarted = false;
   let reconnectCount = 0;
   let closed = false;
 
@@ -34,23 +35,31 @@ function createSession(matchId, handlers) {
   }
 
   function stopPolling() {
-    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
   }
 
   function send(obj) {
     try { if (socketTask) socketTask.send({ data: JSON.stringify(obj) }); } catch (e) {}
   }
 
+  // ★★ 2026-10-29（B2）：**轮询递归调度**（上一次请求 settle 后才排下一次）。
+  //   旧实现是 `setInterval(tick, 30s)`：单次请求若超过 30s（弱网 / EF 冷启动），
+  //   下一次 tick 会叠加在上一次之上 ⇒ 请求越积越多、页面越刷越慢。
+  //   现在：**串行**（永不叠请求）+ 失败也继续（间隔不变，避免退避导致比分停更）。
+  //   ⚠️ 调用方的 `fetchPoll` 必须**回源**（`{ force: true }`）—— 否则命中本地缓存时
+  //      永远看不到比分变化（见 match-detail.js 的 fetchPoll）。
   function startPolling() {
-    if (pollTimer || closed || !handlers.fetchPoll) return;
+    if (pollingStarted || closed || !handlers.fetchPoll) return;
+    pollingStarted = true;
     const tick = () => {
       if (closed) return;
-      Promise.resolve(handlers.fetchPoll())
-        .then((m) => { if (m) handlers.onUpdate && handlers.onUpdate(m); })
-        .catch(() => {});
+      Promise.resolve()
+        .then(() => handlers.fetchPoll())
+        .then((m) => { if (m && !closed) handlers.onUpdate && handlers.onUpdate(m); })
+        .catch(() => {})
+        .then(() => { if (!closed) pollTimer = setTimeout(tick, pollInterval); });
     };
     tick();
-    pollTimer = setInterval(tick, pollInterval);
   }
 
   function scheduleReconnect() {

@@ -1512,6 +1512,23 @@ check('names：★ 全库禁止再内联该规则（白名单外一律 FAIL）',
       'LP UA 必须含**可用邮箱**（ToS 要求 includes contact information）：' + mm);
   });
 
+// ★ 2026-10-30：slugmap 双份一致性闸门 —— 小程序 require 不支持 .json，
+//   客户端改读自动生成的 utils/liquipedia-slugmap.js；此处保证 JS 镜像与 JSON 源永不漂移。
+//   不一致时先跑 `npm run sync:slugmap`（该脚本会重新生成镜像）。
+check('slugmap: JS 镜像与 JSON 源逐键一致（先 npm run sync:slugmap）', function () {
+  const src = require('../../utils/liquipedia-slugmap.json');
+  const mirror = require('../../utils/liquipedia-slugmap.js');
+  assert(src && src.mappings && mirror && mirror.mappings, 'slugmap 结构缺失（缺 mappings）');
+  const a = Object.keys(src.mappings);
+  const b = Object.keys(mirror.mappings);
+  assert(a.length === b.length,
+    '条数不一致：JSON ' + a.length + ' vs JS 镜像 ' + b.length + '（先跑 npm run sync:slugmap）');
+  for (const k of a) {
+    assert(mirror.mappings[k] === src.mappings[k],
+      '映射不一致 key=' + k + '（先跑 npm run sync:slugmap）');
+  }
+});
+
 async function runAll() {
   for (const t of tests) {
     if (t.kind === 'section') { console.log(t.title); continue; }
