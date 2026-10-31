@@ -360,25 +360,34 @@ function layoutBracket(bracket, opts) {
     yOffset += HEADER_H + sectionHeight + SECTION_GAP;
   });
 
-  // ★ 2026-10-31（inline final）：总决赛卡 = 「最后一轮」同行的下一列。
-  //   上游：anchor 最后一轮（1 张 ⇒ 左侧实线直连；2 张 ⇒ 居中并画两条汇入线）
-  //   + 败者组决赛（画布最右通道折线右入），冠军路径一眼可见。
+  // ★ 2026-10-31（真机反馈 2）：总决赛定位重做。
+  //   旧方案「接在最后一轮右侧同一列」在双败赛制下会把总决赛塞进败者组半决赛那一列
+  //   （anchor 宽度 + 64 = lower 第 3 列），右侧还留着败者组决赛 ⇒ 视觉重心明显偏左。
+  //   新方案：
+  //   · 双败（存在 lower 分区）：总决赛放到所有上游分区右侧的独立一列（maxWidth + COL_GAP），
+  //     并垂直居中于「胜者组决赛 ↔ 败者组决赛」两点之间 —— 整张图视觉居中；
+  //     两个决赛各自一条手肘线（水平 → GF 左侧通道 → GF 左中）汇入。
+  //   · 单败（只有 main，如 EWC Playoffs）：保持 main 右侧一列、垂直居中于两场半决赛，
+  //     沿用两线汇入（_linesFor）。
   if (inlineFinal) {
     const anchorSec = sections.filter((s) => s.side === anchorSide)[0] || null;
     const lowerSec = sections.filter((s) => s.side === 'lower')[0] || null;
     const finGroups = groups.filter((g) => g.side === 'final').sort((a, b) => a.no - b.no);
-    const gfX = (anchorSec ? anchorSec.width : 0) + COL_GAP;
-    // anchor 最后一轮的全部卡片（按 y 排序）；单败半决赛是 2 张，双败胜者组决赛是 1 张
-    let lastCards = [];
-    if (anchorSec) {
-      const lastRn = (anchorSec.cards || []).reduce((m, c) => Math.max(m, c.roundNo || 0), 0);
-      lastCards = (anchorSec.cards || [])
+    const _lastRoundCards = (sec) => {
+      if (!sec) return [];
+      const lastRn = (sec.cards || []).reduce((m, c) => Math.max(m, c.roundNo || 0), 0);
+      return (sec.cards || [])
         .filter((c) => (c.roundNo || 0) === lastRn)
         .sort((a, b) => a.y - b.y);
-    }
-    // 1 张 ⇒ 与「决赛」同一行；多张 ⇒ 取中心平均（单败半决赛的两位胜者汇入）
-    const gfY = lastCards.length
-      ? ((lastCards.reduce((sum, c) => sum + c.y + H / 2, 0) / lastCards.length) - H / 2)
+    };
+    const lastAnchor = _lastRoundCards(anchorSec);
+    const lastLower = _lastRoundCards(lowerSec);
+    const dual = !!lowerSec;
+    const gfX = dual ? (maxWidth + COL_GAP) : ((anchorSec ? anchorSec.width : 0) + COL_GAP);
+    // 垂直：上游决赛中心平均（双败 ⇒ 上/败者组决赛中点；单败 ⇒ 两场半决赛中点）
+    const srcCards = dual ? lastAnchor.concat(lastLower) : lastAnchor;
+    const gfY = srcCards.length
+      ? ((srcCards.reduce((sum, c) => sum + c.y + H / 2, 0) / srcCards.length) - H / 2)
       : ((anchorSec ? anchorSec.y + HEADER_H : 0));
     const finCards = [];
     const finRounds = [];
@@ -390,31 +399,36 @@ function layoutBracket(bracket, opts) {
       finCards.push.apply(finCards, cards);
     });
     const finSec = {
-      side: 'final', label: '', y: (anchorSec ? anchorSec.y : 0), height: 0,
+      side: 'final', label: '',
+      // ★ 轮次表头跟卡走：WXML 用 sec.y + 24 画轮次表头（原取分区顶部 ⇒ 标题与卡飘在两端）
+      y: Math.max(0, gfY - 60),
+      height: 0,
       width: gfX + CARD_W, rounds: finRounds, cards: finCards, lines: []
     };
-    if (lastCards.length === 1 && finCards.length) {
-      const last = lastCards[0];
+    if (dual) {
+      // 两条手肘线：源卡右中 → GF 左侧通道 → GF 左中（共享最后一段水平入卡）
+      const laneX = gfX - COL_GAP / 2;
+      const gfMid = gfY + H / 2;
+      srcCards.forEach((c) => {
+        const sx = c.x + CARD_W;
+        const sy = c.y + H / 2;
+        finSec.lines.push({ left: sx, top: sy - 1, width: Math.max(1, laneX - sx), height: 2 });
+        if (Math.abs(gfMid - sy) > 1) {
+          finSec.lines.push({ left: laneX - 1, top: Math.min(gfMid, sy), width: 2, height: Math.abs(gfMid - sy) });
+        }
+      });
+      if (srcCards.length && finCards.length) {
+        finSec.lines.push({ left: laneX, top: gfMid - 1, width: Math.max(1, gfX - laneX), height: 2 });
+      }
+    } else if (lastAnchor.length === 1 && finCards.length) {
+      const last = lastAnchor[0];
       anchorSec.lines.push({
         left: last.x + CARD_W, top: last.y + H / 2 - 1,
         width: Math.max(1, gfX - (last.x + CARD_W)), height: 2
       });
-    } else if (lastCards.length > 1 && finCards.length) {
+    } else if (lastAnchor.length > 1 && finCards.length) {
       // 2 张（单败半决赛）→ 两张卡各一条线汇入总决赛左中
-      anchorSec.lines.push.apply(anchorSec.lines, _linesFor(lastCards, [finCards[0]]));
-    }
-    const lastLower = lowerSec
-      ? lowerSec.cards.slice().sort((a, b) => ((b.roundNo || 0) - (a.roundNo || 0)) || (a.y - b.y))[0]
-      : null;
-    if (lastLower && finCards.length) {
-      const laneX = Math.max(maxWidth, gfX + CARD_W) + COL_GAP / 2;
-      const aMid = lastLower.y + H / 2;
-      const bMid = finCards[0].y + H / 2;
-      const aRight = lastLower.x + CARD_W;
-      finSec.lines.push({ left: aRight, top: aMid - 1, width: Math.max(1, laneX - aRight), height: 2 });
-      finSec.lines.push({ left: laneX - 1, top: Math.min(aMid, bMid), width: 2, height: Math.max(1, Math.abs(aMid - bMid)) });
-      finSec.lines.push({ left: gfX + CARD_W, top: bMid - 1, width: Math.max(1, laneX - (gfX + CARD_W)), height: 2 });
-      maxWidth = Math.max(maxWidth, laneX + 8);
+      anchorSec.lines.push.apply(anchorSec.lines, _linesFor(lastAnchor, [finCards[0]]));
     }
     sections.push(finSec);
     maxWidth = Math.max(maxWidth, finSec.width);

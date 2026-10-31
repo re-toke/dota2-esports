@@ -400,12 +400,16 @@ const tick = () => new Promise((r) => setTimeout(r, 20));
   assert(pcard('R5M1').empty === true && pcard('R5M1').team1 === '待定' && pcard('R5M1').team2 === '待定',
     'PARI：总决赛仍是待定卡（时间骨架保留）');
   const pariUpper = inst3.data.bracketView.sections.filter((s) => s.side === 'upper')[0];
+  const pariLower = inst3.data.bracketView.sections.filter((s) => s.side === 'lower')[0];
   const pariFinal = inst3.data.bracketView.sections.filter((s) => s.side === 'final')[0];
   const pariUf = pariUpper.cards.filter((c) => c.key === 'R4M1')[0];
+  const pariLf = pariLower && pariLower.cards.filter((c) => c.key === 'R4M2')[0];
   const pariGf = pariFinal.cards.filter((c) => c.key === 'R5M1')[0];
-  assert(!!pariUf && !!pariGf && pariGf.y === pariUf.y && pariGf.x > pariUf.x,
-    'PARI：总决赛卡在「决赛」右侧同一行（不再另起一段）');
-  assert(pariFinal.label === '' && pariFinal.y === pariUpper.y, 'PARI：总决赛分区无标题、不新起段');
+  assert(!!pariLf && !!pariGf && pariGf.x === pariLf.x + 280 + 64,
+    'PARI：总决赛在最右列（败者组决赛右侧一列）');
+  assert(!!pariUf && !!pariGf && pariGf.y === (pariUf.y + pariLf.y) / 2,
+    'PARI：总决赛垂直居中于上/败者组决赛之间');
+  assert(pariFinal.label === '', 'PARI：总决赛分区无标题、不新起段');
 
   // ----- 场景 4：源码守卫（WXML 分支与 handler 接线） -----
   const wxml = fs.readFileSync(path.join(PAGE_DIR, 'league-detail.wxml'), 'utf8');

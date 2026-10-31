@@ -71,8 +71,11 @@ const d = bl.layoutBracket(de);
 assert(d.sections.map((x) => x.side).join(',') === 'upper,lower,final', '双败：upper/lower/final 三个分区');
 assert(d.sections[1].y > d.sections[0].y + d.sections[0].height - 1, 'lower 分区在 upper 下方');
 // ★ 2026-10-31（其他赛制）：inline final 不再依赖 drops 映射 —— 未知 type 只要有 upper/main 也内联
-assert(d.sections[2].y === d.sections[0].y && d.sections[2].label === '',
-  'inline final：无分区标题、与 upper 同高（未知 type 不再另起一段）');
+assert(d.sections[2].label === '' &&
+  d.sections[2].cards[0].x === d.sections[1].cards.filter((c) => c.key === 'R2M3')[0].x + 280 + 64 &&
+  d.sections[2].cards[0].y === (d.sections[0].cards.filter((c) => c.key === 'R2M1')[0].y +
+    d.sections[1].cards.filter((c) => c.key === 'R2M3')[0].y) / 2,
+  'inline final：无分区标题、最右列、垂直居中于上/败者组决赛（未知 type 不再另起一段）');
 assert(d.sections[2].rounds[0].short === '总决赛', 'inline final：轮次表头保留「总决赛」');
 // 2026-10-28：分区标题 / 轮次表头中文化（方案 §12 缺口 10）
 assert(d.sections[0].label === '胜者组' && d.sections[1].label === '败者组', '分区标题：Upper/Lower → 胜者组/败者组');
@@ -142,21 +145,29 @@ assert(!!lowerR2 && lowerR2.y === lowerR1.y, 'P4：败者组同数轮 1:1 对齐
 const pglNoFinal = bl.layoutBracket({ type: 'Bracket/8U4L2DSL1D', rounds: pglRounds().filter((r) => !(r.side === 'lower' && r.no === 4)) });
 assert(pglNoFinal.crossLines.length === 6 * 3, `P4：缺目标槽 ⇒ 少一条边（实际 ${pglNoFinal.crossLines.length}）`);
 
-// ===== ★ 2026-10-31（真机反馈）：inline final —— 总决赛接在「决赛」右侧同一行，不再另起一段 =====
+// ===== ★ 2026-10-31（真机反馈 2）：inline final —— 总决赛放到最右列、垂直居中于上/败者组决赛 =====
 const NOW = 1793400000;
 const pglUpperSec = pgl.sections[0];
 const pglFinalSec = pgl.sections[2];
 const ufCard = pglUpperSec.cards.filter((c) => c.key === 'R4M1')[0];   // 胜者组决赛（决赛）
+const lfCard = pgl.sections[1].cards.filter((c) => c.key === 'R4M2')[0]; // 败者组决赛
 const gfCard = pglFinalSec.cards.filter((c) => c.key === 'R5M1')[0];
-assert(!!ufCard && !!gfCard && gfCard.y === ufCard.y, 'inline final：总决赛与「决赛」同一行（不再另起一行）');
-assert(!!gfCard && gfCard.x === ufCard.x + 280 + 64, 'inline final：总决赛在「决赛」右侧一列（间距 64）');
-assert(pglFinalSec.label === '' && pglFinalSec.y === pglUpperSec.y, 'inline final：无分区标题、占位不新起一段');
+assert(!!lfCard && !!gfCard && gfCard.x === lfCard.x + 280 + 64,
+  `inline final：总决赛在败者组决赛右侧一列（最右列，实际 x=${gfCard && gfCard.x}）`);
+assert(!!ufCard && !!gfCard && gfCard.y === (ufCard.y + lfCard.y) / 2,
+  'inline final：总决赛垂直居中于胜者组决赛 / 败者组决赛之间');
+assert(pglFinalSec.label === '', 'inline final：无分区标题');
+assert(Math.abs(gfCard.y - (pglFinalSec.y + 24)) === 36,
+  'inline final：轮次表头紧跟卡上方（原飘在分区顶部）');
 assert(pglFinalSec.height === 0, 'inline final：不占额外垂直空间（画布不为它增高）');
 assert(pglFinalSec.rounds.length === 1 && pglFinalSec.rounds[0].roundNo === 5 &&
   pglFinalSec.rounds[0].short === '总决赛', 'inline final：轮次表头 roundNo=5 / short=总决赛');
-assert(pglUpperSec.lines.some((l) => l.left === ufCard.x + 280 && l.top === ufCard.y + 51 && l.width === 64),
-  'inline final：胜者组决赛 → 总决赛 水平实线');
-assert(pglFinalSec.lines.length === 3, 'inline final：败者组决赛 → 总决赛 三段折线（走画布最右通道）');
+const gfLane = gfCard.x - 64 / 2;
+assert(pglFinalSec.lines.some((l) => l.left === ufCard.x + 280 && l.top === ufCard.y + 51 && l.width === gfLane - (ufCard.x + 280)),
+  'inline final：胜者组决赛 → 总决赛 手肘线（水平段）');
+assert(pglFinalSec.lines.some((l) => l.left === lfCard.x + 280 && l.top === lfCard.y + 51),
+  'inline final：败者组决赛 → 总决赛 手肘线（水平段）');
+assert(pglFinalSec.lines.length === 5, `inline final：两源各 2 段 + 共享入卡段（实际 ${pglFinalSec.lines.length}）`);
 assert(ufCard.y > 0 && gfCard.y > 0, 'inline final：坐标已含 PAD_TOP（不与标题重叠）');
 
 // 时间骨架（总决赛双方待定但已排期）也必须显示开赛时分
@@ -230,11 +241,14 @@ const blastView = bl.layoutBracket({
 assert(blastView.sections.map((x) => x.side).join(',') === 'upper,lower,final', '未知双败：upper/lower/final 分区');
 assert(blastView.crossLines.length === 0, '未知双败：仍不画降级线（不臆测）');
 const blastUf = blastView.sections[0].cards.filter((c) => c.key === 'R2M1')[0];
+const blastLf = blastView.sections[1].cards.filter((c) => c.key === 'R2M2')[0];
 const blastGf = blastView.sections[2].cards.filter((c) => c.key === 'R3M1')[0];
-assert(!!blastUf && !!blastGf && blastGf.y === blastUf.y && blastGf.x === blastUf.x + 280 + 64,
-  '未知双败：总决赛内联到胜者组决赛右侧同行（不再另起一段）');
+assert(!!blastUf && !!blastLf && !!blastGf && blastGf.x === blastLf.x + 280 + 64,
+  '未知双败：总决赛在败者组决赛右侧独立一列（不再夹在两半区中间）');
+assert(!!blastGf && blastGf.y === (blastUf.y + blastLf.y) / 2,
+  '未知双败：总决赛垂直居中于上/败者组决赛之间');
 assert(blastView.sections[1].cards[0].x === 12, '未知双败：败者组不位移（仅 PAD_X）');
-assert(blastView.sections[2].lines.length === 3, '未知双败：败者组决赛 → 总决赛折线（最右通道）');
+assert(blastView.sections[2].lines.length === 5, '未知双败：上/败者组决赛两条手肘线汇入总决赛');
 
 // ===== ★ 2026-10-31（其他赛制）：Survival（Bracket/8L4D-4Q）—— 同数轮 1:1 晋级 =====
 // 修复前：R1/R2 都是 4 场，按 2:1 中心平均 ⇒ R2 前两张挤在两卡之间、后两张被甩到下方。
