@@ -70,11 +70,12 @@ const de = {
 const d = bl.layoutBracket(de);
 assert(d.sections.map((x) => x.side).join(',') === 'upper,lower,final', '双败：upper/lower/final 三个分区');
 assert(d.sections[1].y > d.sections[0].y + d.sections[0].height - 1, 'lower 分区在 upper 下方');
-// ★ 2026-10-31：inline final 只在「有降级线映射的双败」生效；未知 type 仍按常规分段（不臆测结构）
-assert(d.sections[2].y > d.sections[1].y, 'final 分区在 lower 下方（未知 type 不走 inline final）');
+// ★ 2026-10-31（其他赛制）：inline final 不再依赖 drops 映射 —— 未知 type 只要有 upper/main 也内联
+assert(d.sections[2].y === d.sections[0].y && d.sections[2].label === '',
+  'inline final：无分区标题、与 upper 同高（未知 type 不再另起一段）');
+assert(d.sections[2].rounds[0].short === '总决赛', 'inline final：轮次表头保留「总决赛」');
 // 2026-10-28：分区标题 / 轮次表头中文化（方案 §12 缺口 10）
 assert(d.sections[0].label === '胜者组' && d.sections[1].label === '败者组', '分区标题：Upper/Lower → 胜者组/败者组');
-assert(d.sections[2].label === '总决赛', '分区标题：Grand Final → 总决赛');
 assert(bl.localizeRoundLabel('Upper Bracket Quarterfinals') === '胜者组¼决赛', '轮名：Upper Bracket Quarterfinals');
 assert(bl.localizeRoundLabel('Lower Bracket Round 2') === '败者组第2轮', '轮名：Lower Bracket Round N');
 assert(bl.localizeRoundLabel('Grand Final') === '总决赛', '轮名：Grand Final');
@@ -104,10 +105,13 @@ const compact = {
 };
 const cView = bl.layoutBracket(compact);
 const lCards = cView.sections[0].cards;
+const r1m5 = lCards.filter((c) => c.key === 'R1M5')[0];
 const r1m6 = lCards.filter((c) => c.key === 'R1M6')[0];
+const r2m3 = lCards.filter((c) => c.key === 'R2M3')[0];
 const r2m4 = lCards.filter((c) => c.key === 'R2M4')[0];
-assert(r2m4.y - r1m6.y === bl.CARD_H + bl.CARD_GAP,
-  '紧凑排布：上一轮不够配对时只下移一个卡位（原指数间距为 4 个卡位）');
+// ★ 2026-10-31（其他赛制）：上下轮数量相同 ⇒ 1:1 晋级，同排对齐（原 2j/2j+1 会阶梯错位）
+assert(r2m3.y === r1m5.y && r2m4.y === r1m6.y,
+  '紧凑排布：同数轮 1:1 对齐（R2M3/R2M4 与 R1M5/R1M6 同排，不再错位下移）');
 assert(cView.height < bl.CARD_H * 6, '紧凑排布：画布高度不指数膨胀');
 
 // ===== P4：Upper→Lower 降级线（Bracket/8U4L2DSL1D，与 PGL S9 / TI 2026 同构）=====
@@ -133,6 +137,8 @@ assert(upperR1 && upperR1.x === 12, 'P4：upper 分区不位移（仅 PAD_X）')
 const lane = pgl.crossLines.filter((l) => l.width === 2 && l.left === 323)[0];
 assert(!!lane, 'P4：降级竖线走 source 右侧通道（left=323）');
 assert(pgl.crossLines.some((l) => l.left === 292), 'P4：降级线起点为 upper 卡右边缘（292）');
+const lowerR2 = pgl.sections[1].cards.filter((c) => c.key === 'R2M3')[0];
+assert(!!lowerR2 && lowerR2.y === lowerR1.y, 'P4：败者组同数轮 1:1 对齐（R2M3 与 R1M5 同排）');
 const pglNoFinal = bl.layoutBracket({ type: 'Bracket/8U4L2DSL1D', rounds: pglRounds().filter((r) => !(r.side === 'lower' && r.no === 4)) });
 assert(pglNoFinal.crossLines.length === 6 * 3, `P4：缺目标槽 ⇒ 少一条边（实际 ${pglNoFinal.crossLines.length}）`);
 
@@ -180,6 +186,76 @@ assert(se8.crossLines.length === 0, 'P4：单败 Bracket/8 无降级线');
 const unknown = bl.layoutBracket({ type: 'Bracket/16U8L4D', rounds: pglRounds() });
 assert(unknown.crossLines.length === 0, 'P4：未知 type 不画降级线（不臆测）');
 assert(unknown.sections[1].cards[0].x === 12, 'P4：无降级线时 lower 分区不位移（仅 PAD_X）');
+
+// ===== ★ 2026-10-31（其他赛制）：单败 + 季军赛（EWC Playoffs Bracket/8 同构）=====
+// 修复前：Grand Final / Third Place 各自单独占一段，全部堆在画布左下角、无连线。
+const ewcView = bl.layoutBracket({
+  type: 'Bracket/8',
+  rounds: [
+    { no: 1, side: 'main', label: 'Quarterfinals', matches: [
+      slot(1, 1, 'main', 'A', 'B'), slot(1, 2, 'main', 'C', 'D'),
+      slot(1, 3, 'main', 'E', 'F'), slot(1, 4, 'main', 'G', 'H')] },
+    { no: 2, side: 'main', label: 'Semifinals', matches: [slot(2, 1, 'main', 'A', 'C'), slot(2, 2, 'main', 'E', 'G')] },
+    { no: 3, side: 'final', label: 'Grand Final', matches: [slot(3, 1, 'final', 'A', 'E')] },
+    { no: 1, side: 'third', label: 'Third Place Match', matches: [slot(0, 1, 'third', 'B', 'F')] }
+  ]
+});
+assert(ewcView.sections.map((x) => x.side).join(',') === 'main,third,final', '单败+季军：main/third/final 分区');
+const ewcMain = ewcView.sections[0];
+const ewcThird = ewcView.sections[1];
+const ewcFinal = ewcView.sections[2];
+const ewcSf1 = ewcMain.cards.filter((c) => c.key === 'R2M1')[0];
+const ewcSf2 = ewcMain.cards.filter((c) => c.key === 'R2M2')[0];
+const ewcGf = ewcFinal.cards.filter((c) => c.key === 'R3M1')[0];
+assert(!!ewcSf1 && !!ewcSf2 && !!ewcGf, '单败+季军：半决赛 / 总决赛卡齐全');
+assert(ewcGf.x === ewcSf1.x + 280 + 64, '单败：总决赛接在半决赛右侧一列');
+assert(Math.abs(ewcGf.y - (ewcSf1.y + ewcSf2.y) / 2) < 1, '单败：总决赛垂直居中于两场半决赛');
+const ewcGfLines = ewcMain.lines.filter((l) => l.width === 2 && l.left === ewcGf.x - 64 / 2 - 1);
+assert(ewcGfLines.length === 2, `单败：两场半决赛各一条竖线汇入总决赛（实际 ${ewcGfLines.length}）`);
+assert(ewcThird.y > ewcMain.y + ewcMain.height - 1, '季军赛：独立分段（不与冠军路径混排）');
+assert(ewcView.crossLines.length === 0, '单败：无降级线');
+
+// ===== ★ 2026-10-31（其他赛制）：未知 type 的双败（BLAST Bracket/4L2DS 同构）=====
+// 修复前：没有 drops 映射 ⇒ 总决赛仍被推到最下方另起一段。
+const blastView = bl.layoutBracket({
+  type: 'Bracket/4L2DS',
+  rounds: [
+    { no: 1, side: 'upper', label: 'Upper Bracket Semifinals', matches: [slot(1, 1, 'upper', 'A', 'B'), slot(1, 2, 'upper', 'C', 'D')] },
+    { no: 2, side: 'upper', label: 'Upper Bracket Final', matches: [slot(2, 1, 'upper', 'A', 'C')] },
+    { no: 1, side: 'lower', label: 'Lower Bracket Round 1', matches: [slot(1, 3, 'lower', 'B', 'D')] },
+    { no: 2, side: 'lower', label: 'Lower Bracket Final', matches: [slot(2, 2, 'lower', 'B', 'A')] },
+    { no: 3, side: 'final', label: 'Grand Final', matches: [slot(3, 1, 'final', 'A', 'B')] }
+  ]
+});
+assert(blastView.sections.map((x) => x.side).join(',') === 'upper,lower,final', '未知双败：upper/lower/final 分区');
+assert(blastView.crossLines.length === 0, '未知双败：仍不画降级线（不臆测）');
+const blastUf = blastView.sections[0].cards.filter((c) => c.key === 'R2M1')[0];
+const blastGf = blastView.sections[2].cards.filter((c) => c.key === 'R3M1')[0];
+assert(!!blastUf && !!blastGf && blastGf.y === blastUf.y && blastGf.x === blastUf.x + 280 + 64,
+  '未知双败：总决赛内联到胜者组决赛右侧同行（不再另起一段）');
+assert(blastView.sections[1].cards[0].x === 12, '未知双败：败者组不位移（仅 PAD_X）');
+assert(blastView.sections[2].lines.length === 3, '未知双败：败者组决赛 → 总决赛折线（最右通道）');
+
+// ===== ★ 2026-10-31（其他赛制）：Survival（Bracket/8L4D-4Q）—— 同数轮 1:1 晋级 =====
+// 修复前：R1/R2 都是 4 场，按 2:1 中心平均 ⇒ R2 前两张挤在两卡之间、后两张被甩到下方。
+const survivalView = bl.layoutBracket({
+  type: 'Bracket/8L4D-4Q',
+  rounds: [
+    { no: 1, side: 'main', label: 'Round 1', matches: [
+      slot(1, 1, 'main', 'A', 'B'), slot(1, 2, 'main', 'C', 'D'),
+      slot(1, 3, 'main', 'E', 'F'), slot(1, 4, 'main', 'G', 'H')] },
+    { no: 2, side: 'main', label: 'Round 2', matches: [
+      slot(2, 1, 'main', 'A', 'C'), slot(2, 2, 'main', 'E', 'G'),
+      slot(2, 3, 'main', 'I', 'J'), slot(2, 4, 'main', 'K', 'L')] }
+  ]
+});
+const svR1 = survivalView.sections[0].cards.filter((c) => (c.roundNo || 0) === 1);
+const svR2 = survivalView.sections[0].cards.filter((c) => (c.roundNo || 0) === 2);
+assert(svR1.length === 4 && svR2.length === 4, 'Survival：R1/R2 各 4 场');
+assert(svR2[0].y === svR1[0].y && svR2[3].y === svR1[3].y, 'Survival：R2 与 R1 同排对齐（1:1 晋级）');
+assert(svR2[0].x === 356 && svR1[2].x === 12, 'Survival：两列正常列距（无额外位移）');
+assert(!survivalView.sections[0].lines.some((l) => l.width === 2), 'Survival：1:1 只需水平连线（无竖向折线）');
+assert(survivalView.height < bl.CARD_H * 9, 'Survival：画布高度不膨胀（2 轮 4 卡同排）');
 
 // ===== 2026-10-28（第 4 步 · 真机截图复盘）：轮次标题去重（分区标题已表明 upper/lower）=====
 assert(pgl.sections[0].rounds[0].label === '胜者组¼决赛', '轮次标题：导航 chip 保留全名（跨分区可区分）');

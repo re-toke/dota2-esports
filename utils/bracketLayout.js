@@ -124,16 +124,23 @@ function _placeRound(cards, prevCards, roundIndex) {
     if (roundIndex === 0) {
       y = j * baseGap;
     } else if (prevCards && prevCards.length) {
-      const c1 = prevCards[j * 2];
-      const c2 = prevCards[j * 2 + 1];
-      if (c1 && c2) y = ((c1.y + H / 2) + (c2.y + H / 2)) / 2 - H / 2;
-      else if (c1) y = c1.y;
-      else {
-        // ★ 2026-10-28（真机 UI 复盘）：原实现 `j * baseGap * 2^roundIndex` 在败者组这类
-        //   「卡片数 > 上一轮 × 2」的分区会制造巨大空白（实测一屏只放得下 2 轮）。
-        //   改为紧接上一轮最后一张卡下方一个卡位，画布高度随卡片数线性增长。
-        const last = prevCards[prevCards.length - 1];
-        y = last.y + baseGap * (j - Math.floor(prevCards.length / 2) + 1);
+      if (prevCards.length === cards.length) {
+        // ★ 2026-10-31（其他赛制）：上下轮数量相同 ⇒ 一定是 1:1 晋级（Survival 的
+        //   「R1 winner → R2」、败者组 R1→R2 同数轮），同排对齐。
+        //   原按 2j/2j+1 中心平均会把第 1 张卡塞到两卡之间、第 2 张卡甩到下方，形成阶梯错位。
+        y = prevCards[j].y;
+      } else {
+        const c1 = prevCards[j * 2];
+        const c2 = prevCards[j * 2 + 1];
+        if (c1 && c2) y = ((c1.y + H / 2) + (c2.y + H / 2)) / 2 - H / 2;
+        else if (c1) y = c1.y;
+        else {
+          // ★ 2026-10-28（真机 UI 复盘）：原实现 `j * baseGap * 2^roundIndex` 在败者组这类
+          //   「卡片数 > 上一轮 × 2」的分区会制造巨大空白（实测一屏只放得下 2 轮）。
+          //   改为紧接上一轮最后一张卡下方一个卡位，画布高度随卡片数线性增长。
+          const last = prevCards[prevCards.length - 1];
+          y = last.y + baseGap * (j - Math.floor(prevCards.length / 2) + 1);
+        }
       }
     } else {
       y = j * baseGap;   // 上一轮为空：按普通顺序排（不再指数放大）
@@ -171,10 +178,11 @@ function _crossLines(drops, sections) {
 /** 连线：子卡右中 → 父卡左中，两段折线（水平 + 垂直） */
 function _linesFor(prev, cur) {
   const lines = [];
+  const oneToOne = prev.length === cur.length;   // ★ 2026-10-31：同数轮 1:1（见 _placeRound）
   cur.forEach((p, j) => {
     const midX = p.x - COL_GAP / 2;
     const py = p.y + H / 2;
-    const kids = [prev[j * 2], prev[j * 2 + 1]].filter(Boolean);
+    const kids = (oneToOne ? [prev[j]] : [prev[j * 2], prev[j * 2 + 1]]).filter(Boolean);
     kids.forEach((c) => {
       const cy = c.y + H / 2;
       const cx = c.x + CARD_W;
@@ -292,9 +300,13 @@ function layoutBracket(bracket, opts) {
   const sides = Object.keys(sideSet).sort((a, b) => (SIDE_ORDER[a] == null ? 9 : SIDE_ORDER[a]) - (SIDE_ORDER[b] == null ? 9 : SIDE_ORDER[b]));
 
   // ★ 2026-10-31（真机反馈）：总决赛不再单独占一段（原来被推到最下方，视觉上整张图偏上、
-  //   底部悬空）。双败结构里把总决赛卡接在「决赛」右侧的同一行，用小折线把胜者组/败者组
-  //   冠军路径接进卡内：省一整段空白，冠军路径也一眼可见。
-  const inlineFinal = !!(drops.length && sides.indexOf('upper') >= 0 && sides.indexOf('final') >= 0);
+  //   底部悬空）。把总决赛卡接在「最后一轮」右侧的同一行，用小折线把冠军路径接进卡内：
+  //   省一整段空白，冠军路径也一眼可见。
+  //   ★ 2026-10-31（其他赛制）：不再只对双败（有 drops 映射）生效 —— 单败（main+final，
+  //   如 EWC Playoffs Bracket/8）、未知 type 的双败（BLAST Bracket/4L2DS）同样内联；
+  //   只有「既无 upper 也无 main」的孤立总决赛才退回常规分段。
+  const anchorSide = sides.indexOf('upper') >= 0 ? 'upper' : (sides.indexOf('main') >= 0 ? 'main' : null);
+  const inlineFinal = !!(anchorSide && sides.indexOf('final') >= 0);
 
   let yOffset = 0;
   let maxWidth = 0;
@@ -348,18 +360,26 @@ function layoutBracket(bracket, opts) {
     yOffset += HEADER_H + sectionHeight + SECTION_GAP;
   });
 
-  // ★ 2026-10-31（inline final）：总决赛卡 = 「胜者组决赛」同行的下一列。
-  //   上游：胜者组决赛（左侧实线直连）+ 败者组决赛（画布最右通道折线右入），冠军路径一眼可见。
-  //   ⚠️ 只对双败（有 drops 映射）生效；单败/未知 type 仍走上面的常规分段（不臆测结构）。
+  // ★ 2026-10-31（inline final）：总决赛卡 = 「最后一轮」同行的下一列。
+  //   上游：anchor 最后一轮（1 张 ⇒ 左侧实线直连；2 张 ⇒ 居中并画两条汇入线）
+  //   + 败者组决赛（画布最右通道折线右入），冠军路径一眼可见。
   if (inlineFinal) {
-    const upperSec = sections.filter((s) => s.side === 'upper')[0] || null;
+    const anchorSec = sections.filter((s) => s.side === anchorSide)[0] || null;
     const lowerSec = sections.filter((s) => s.side === 'lower')[0] || null;
     const finGroups = groups.filter((g) => g.side === 'final').sort((a, b) => a.no - b.no);
-    const lastOf = (sec) => (sec ? sec.cards.slice().sort((a, b) => ((b.roundNo || 0) - (a.roundNo || 0)) || (a.y - b.y))[0] : null);
-    const lastUpper = lastOf(upperSec);
-    const lastLower = lastOf(lowerSec);
-    const gfX = (upperSec ? upperSec.width : 0) + COL_GAP;
-    const gfY = lastUpper ? lastUpper.y : HEADER_H;   // 与「决赛」同一行
+    const gfX = (anchorSec ? anchorSec.width : 0) + COL_GAP;
+    // anchor 最后一轮的全部卡片（按 y 排序）；单败半决赛是 2 张，双败胜者组决赛是 1 张
+    let lastCards = [];
+    if (anchorSec) {
+      const lastRn = (anchorSec.cards || []).reduce((m, c) => Math.max(m, c.roundNo || 0), 0);
+      lastCards = (anchorSec.cards || [])
+        .filter((c) => (c.roundNo || 0) === lastRn)
+        .sort((a, b) => a.y - b.y);
+    }
+    // 1 张 ⇒ 与「决赛」同一行；多张 ⇒ 取中心平均（单败半决赛的两位胜者汇入）
+    const gfY = lastCards.length
+      ? ((lastCards.reduce((sum, c) => sum + c.y + H / 2, 0) / lastCards.length) - H / 2)
+      : ((anchorSec ? anchorSec.y + HEADER_H : 0));
     const finCards = [];
     const finRounds = [];
     finGroups.forEach((r) => {
@@ -370,15 +390,22 @@ function layoutBracket(bracket, opts) {
       finCards.push.apply(finCards, cards);
     });
     const finSec = {
-      side: 'final', label: '', y: (upperSec ? upperSec.y : 0), height: 0,
+      side: 'final', label: '', y: (anchorSec ? anchorSec.y : 0), height: 0,
       width: gfX + CARD_W, rounds: finRounds, cards: finCards, lines: []
     };
-    if (lastUpper && finCards.length) {
-      upperSec.lines.push({
-        left: lastUpper.x + CARD_W, top: lastUpper.y + H / 2 - 1,
-        width: Math.max(1, gfX - (lastUpper.x + CARD_W)), height: 2
+    if (lastCards.length === 1 && finCards.length) {
+      const last = lastCards[0];
+      anchorSec.lines.push({
+        left: last.x + CARD_W, top: last.y + H / 2 - 1,
+        width: Math.max(1, gfX - (last.x + CARD_W)), height: 2
       });
+    } else if (lastCards.length > 1 && finCards.length) {
+      // 2 张（单败半决赛）→ 两张卡各一条线汇入总决赛左中
+      anchorSec.lines.push.apply(anchorSec.lines, _linesFor(lastCards, [finCards[0]]));
     }
+    const lastLower = lowerSec
+      ? lowerSec.cards.slice().sort((a, b) => ((b.roundNo || 0) - (a.roundNo || 0)) || (a.y - b.y))[0]
+      : null;
     if (lastLower && finCards.length) {
       const laneX = Math.max(maxWidth, gfX + CARD_W) + COL_GAP / 2;
       const aMid = lastLower.y + H / 2;
