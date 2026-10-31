@@ -5,6 +5,7 @@
 
 const util = require('../../utils/util.js');
 const incremental = require('../../utils/incremental.js');
+const matchView = require('../../utils/matchView.js');
 
 let passed = 0, failed = 0;
 function check(label, fn) {
@@ -25,6 +26,21 @@ check('formatTime: 0 → ""', () => assert(util.formatTime(0) === ''));
 check('formatTime: unix → YYYY-MM-DD', () => {
   const r = util.formatTime(1704067200); // 2024-01-01
   assert(/^\d{4}-\d{2}-\d{2}$/.test(r), '格式应为 YYYY-MM-DD，实际: ' + r);
+});
+
+// ===== util.formatDateTime（★ 2026-10-31：淘汰赛对阵卡「MM-DD HH:mm」北京时间）=====
+check('formatDateTime: null → ""', () => assert(util.formatDateTime(null) === ''));
+check('formatDateTime: 固定北京时间 → MM-DD HH:mm', () => {
+  // UTC 2024-01-01 00:00 → 北京 2024-01-01 08:00
+  assert(util.formatDateTime(1704067200) === '01-01 08:00', '实际: ' + util.formatDateTime(1704067200));
+});
+check('formatDateTime: 跨午夜按北京时间取日期（UTC 前一日）', () => {
+  // UTC 2026-10-28 17:00 = 北京 2026-10-29 01:00（CET 晚间赛事的典型场景）
+  const unix = Math.floor(Date.UTC(2026, 9, 28, 17, 0) / 1000);
+  assert(util.formatDateTime(unix) === '10-29 01:00', '实际: ' + util.formatDateTime(unix));
+});
+check('formatDateTime: withYear → YYYY-MM-DD HH:mm', () => {
+  assert(util.formatDateTime(1704067200, { withYear: true }) === '2024-01-01 08:00');
 });
 
 // ===== util.winRate =====
@@ -111,18 +127,8 @@ check('buildH2h: 忽略无 oppId 比赛', () => {
   assert(buildH2h(ms).length === 1);
 });
 
-// ===== buildItems (比赛详情页出装) =====
-function buildItems(p, itemMap) {
-  const slots = ['item_0', 'item_1', 'item_2', 'item_3', 'item_4', 'item_5', 'item_neutral'];
-  const items = [];
-  slots.forEach((slot) => {
-    const id = p[slot];
-    if (id == null || id === 0) return;
-    const it = itemMap[id];
-    items.push(it || { name: 'item_' + id, img: '', dname: '物品' + id });
-  });
-  return items;
-}
+// ===== buildItems (比赛详情页出装；2026-10-30 C5 起直接测 utils/matchView.js) =====
+const buildItems = matchView.buildItems;
 
 const fakeItemMap = { 1: { name: 'blink', img: 'items/blink.png', dname: 'Blink Dagger' } };
 check('buildItems: 空槽位 → []', () => assert(buildItems({}, fakeItemMap).length === 0));

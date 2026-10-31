@@ -41,12 +41,14 @@ const sf1 = s.sections[0].cards.filter((c) => c.key === 'R2M1')[0];
 const gf = s.sections[0].cards.filter((c) => c.key === 'R3M1')[0];
 assert(qf.x === 0 && qf.y === s.sections[0].y + 56, 'QF1 位于首列首行（含 section 头偏移）');
 assert(sf1.x === 344, `SF1 x = 280+64（实际 ${sf1.x}）`);
-const _HALF_GAP = (bl.CARD_H + 24) / 2;
+const _HALF_GAP = (bl.CARD_H + bl.CARD_GAP) / 2;
 assert(sf1.y === s.sections[0].y + 56 + _HALF_GAP, `SF1 y = 两源中心平均（实际相对 ${sf1.y - s.sections[0].y - 56}）`);
 assert(gf.x === 688, `GF x 第三列（实际 ${gf.x}）`);
 assert(gf.y === s.sections[0].y + 56 + _HALF_GAP * 3, `GF y 居中（实际相对 ${gf.y - s.sections[0].y - 56}）`);
 // 2026-10-28（第 4 步）：三行压两行 → 卡片高度 132 → 104（BO/LIVE 走角标，不占行高）
 assert(bl.CARD_H === 104, `卡片高度：紧凑两行 = 104rpx（实际 ${bl.CARD_H}）`);
+// ★ 2026-10-31（P0-3）：卡间距 32rpx —— 卡下沿要放「MM-DD HH:mm」时间行（6+22=28rpx）
+assert(bl.CARD_GAP === 32, `卡片间距：时间行需要 32rpx（实际 ${bl.CARD_GAP}）`);
 assert(s.cardH === bl.CARD_H, '布局输出带 cardH（页面据此内联卡片高度，与 CSS 单一来源）');
 assert(s.sections[0].lines.length > 0, '单败：生成连线');
 assert(sf1.winner === 'A' && sf1.score1 === 2, '胜者/比分写入卡片');
@@ -101,7 +103,7 @@ const cView = bl.layoutBracket(compact);
 const lCards = cView.sections[0].cards;
 const r1m6 = lCards.filter((c) => c.key === 'R1M6')[0];
 const r2m4 = lCards.filter((c) => c.key === 'R2M4')[0];
-assert(r2m4.y - r1m6.y === bl.CARD_H + 24,
+assert(r2m4.y - r1m6.y === bl.CARD_H + bl.CARD_GAP,
   '紧凑排布：上一轮不够配对时只下移一个卡位（原指数间距为 4 个卡位）');
 assert(cView.height < bl.CARD_H * 6, '紧凑排布：画布高度不指数膨胀');
 
@@ -157,13 +159,46 @@ assert(_wxml.indexOf('brk-badge') > 0 && _wxml.indexOf('item.boType') > 0, '卡�
 assert(_wxml.indexOf('class="brk-badge">{{item.boType}}') > 0, '卡面：BO 徽标常显（不随「显示赛程」开关）');
 assert(_wxml.indexOf('{{bracketView.cardH}}') > 0, '卡面：卡片高度取 bracketView.cardH（与 CARD_H 单一来源）');
 assert(_wxml.indexOf('rd.short') > 0, '卡面：轮次标题用 short（不重复分区名）');
-assert(/showBracketSchedule:\s*false/.test(_js), '默认：赛程时间关闭（压缩后避免逐卡日期拥挤）');
+assert(/showBracketSchedule:\s*true/.test(_js), '默认：赛程时间开启（★ 2026-10-31 需要具体开赛时分）');
+assert(/leagueDetail\.brkSchedule/.test(_js), '持久化：赛程开关写入本地存储并回读');
 assert(/\.brk-card\s*\{[^}]*height:\s*104rpx/.test(_wxss), '样式：.brk-card 高度 104rpx');
 assert(/\.brk-card\.has-bo \.brk-team/.test(_wxss) && /\.brk-card\.has-live \.brk-team/.test(_wxss),
   '样式：徽标占位 → 两行比分统一内缩（左右同列）');
 assert(/\.standings-card\s*\{[^}]*border:\s*1rpx solid/.test(_wxss) &&
   /\.lp-group-card\s*\{[^}]*border:\s*1rpx solid/.test(_wxss),
   '视觉统一：小组积分卡 / 战绩卡 同容器（白底 + 1rpx 边框）');
+
+// ===== ★ 2026-10-31（P0-3）：赛程时间到「时:分」+ 状态配色 + 「下一场」选轮 =====
+const NOW = 1793400000;
+const tv = bl.layoutBracket({
+  rounds: [{ no: 1, side: 'main', label: 'R1', matches: [
+    slot(1, 1, 'main', 'A', 'B', { startTime: NOW - 7200, finished: true, score1: 2, score2: 1 }),
+    slot(1, 2, 'main', 'C', 'D', { startTime: NOW + 7200 })
+  ] }]
+}, { formatDateTime: (t) => 'T' + t, nowSec: NOW });
+const tc1 = tv.sections[0].cards.filter((c) => c.key === 'R1M1')[0];
+const tc2 = tv.sections[0].cards.filter((c) => c.key === 'R1M2')[0];
+assert(tc1.timeLabel === 'T' + (NOW - 7200) && tc1.timeCls === 'is-past', '时间：已开赛 → is-past + 格式化文案');
+assert(tc2.timeLabel === 'T' + (NOW + 7200) && tc2.timeCls === 'is-next', '时间：未开赛 → is-next');
+assert(tc1.startTime === NOW - 7200, '时间：卡片带 startTime（供「下一场」选轮）');
+
+const liveCard = bl.layoutBracket({
+  rounds: [{ no: 1, side: 'main', label: 'R1', matches: [
+    slot(1, 1, 'main', 'A', 'B', { startTime: NOW - 600, phase: 'live' })
+  ] }]
+}, { nowSec: NOW }).sections[0].cards[0];
+assert(liveCard.timeCls === 'is-live', '时间：LIVE → is-live 配色');
+
+const nextView = bl.layoutBracket({
+  type: 'Bracket/8U4L2DSL1D',
+  rounds: [
+    { no: 1, side: 'upper', label: 'UB R1', matches: [slot(1, 1, 'upper', 'A', 'B', { finished: true, score1: 2, score2: 0 })] },
+    { no: 2, side: 'upper', label: 'UB Final', matches: [slot(2, 1, 'upper', 'A', 'C', { startTime: NOW + 7200 })] },
+    { no: 4, side: 'lower', label: 'LB Final', matches: [slot(4, 1, 'lower', 'D', 'E', { startTime: NOW + 3600 })] }
+  ]
+});
+const nx = bl.findCurrentRound(nextView, NOW);
+assert(!!nx && nx.side === 'lower', '当前轮：优先选「最早未开赛」的一场（败者组决赛更早）');
 
 // ===== 空槽 =====
 const empty = bl.layoutBracket({

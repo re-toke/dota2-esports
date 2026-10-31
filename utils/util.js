@@ -60,6 +60,23 @@ function formatTime(unix) {
   return y + '-' + mo + '-' + da;
 }
 
+// ★ 2026-10-31（P0-4）：unix 秒 → "MM-DD HH:mm"（固定北京时间 UTC+8，不随设备时区漂移）。
+//   与 formatTime（UTC 日期，赛期/列表口径）语义分离：淘汰赛对阵卡需要「具体开赛时刻」。
+//   跨午夜按北京时间取日期：CET 晚间赛事在 UTC 已跨日，按 UTC 显示会差一天
+//   （实测 R2M2 02:55 北京 = UTC 前一日 18:55，旧 UI 只显示日期且是前一天）。
+function formatDateTime(unix, opts) {
+  if (!unix) return '';
+  const o = opts || {};
+  const off = (config.time && config.time.bjOffsetSec) || 8 * 3600;
+  const d = new Date((unix + off) * 1000);
+  const y = d.getUTCFullYear();
+  const mo = ('0' + (d.getUTCMonth() + 1)).slice(-2);
+  const da = ('0' + d.getUTCDate()).slice(-2);
+  const hh = ('0' + d.getUTCHours()).slice(-2);
+  const mi = ('0' + d.getUTCMinutes()).slice(-2);
+  return (o.withYear ? (y + '-' + mo + '-' + da) : (mo + '-' + da)) + ' ' + hh + ':' + mi;
+}
+
 // 胜率
 function winRate(wins, total) {
   if (!total) return '0%';
@@ -277,6 +294,7 @@ module.exports = {
   formatPrizePool,
   formatPrizeRaw,
   formatTime,
+  formatDateTime,   // ★ 2026-10-31：北京时间「MM-DD HH:mm」（淘汰赛对阵卡）
   unifiedTier,
   winRate,
   isCurrentMember,

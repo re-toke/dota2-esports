@@ -215,9 +215,9 @@ Page({
     bracketNav: [],            // 2026-10-28：轮次导航条（一列一个 chip → 点击横滑定位）
     bracketLoading: false,
     showGroups: false,         // 小组积分折叠态
-    showBracketSchedule: false, // P4：对战表「显示赛程」开关（控制 BO/时间行，LIVE 常显）
-    // ★ 2026-10-28（第 4 步真机复盘）：默认关闭 —— 卡片压缩到两行后，逐卡日期会贴在卡下沿、
-    //   与下一张卡只隔 24rpx，默认视图显得拥挤；用户点「显示赛程」再看时间即可。
+    showBracketSchedule: true,  // P4：对战表「显示赛程」开关（控制 BO/时间行，LIVE 常显）
+    // ★ 2026-10-31（P0-4）：默认开启 —— 用户需要看到具体开赛时间（时:分），且卡间距已加到 32rpx；
+    //   选择会持久化（onLoad 读、toggleBracketSchedule 写），关掉后下次进入仍保持关闭。
     bracketFocus: null,        // P4：当前轮焦点 { side, roundNo }（高亮 + 自动横滑定位）
     bracketScrollLeft: 0,      // P4：scroll-view 横向偏移（进入时定位到当前轮）
     // ===== 三段式分段计数（2026-07-28 新增） =====
@@ -269,12 +269,19 @@ Page({
     const legacyFake = (cur && cur.legacyFakeId != null) ? cur.legacyFakeId : null;
     const followedNow = follow.isFollowed('leagues', lid) ||
       (legacyFake != null && follow.isFollowed('leagues', String(legacyFake)));
+    // ★ 2026-10-31（P0-4）：读取「显示赛程」持久化开关（默认开启）
+    let showSchedule = true;
+    try {
+      const saved = wx.getStorageSync('leagueDetail.brkSchedule');
+      if (saved === '0' || saved === 0 || saved === false) showSchedule = false;
+    } catch (e) { /* 存储不可用 → 用默认值 */ }
     // F1 修复：合并为单次 setData（减少 1 次 Virtual DOM diff，约省 5ms）
     this.setData({
       leagueId: lid,
       name: name,
       displayName: name,
       followed: followedNow,
+      showBracketSchedule: showSchedule,
       _legacyFakeId: legacyFake  // 缓存供 toggleFollow 使用
     });
     wx.setNavigationBarTitle({ title: name || '赛事详情' });
@@ -576,10 +583,30 @@ Page({
     //     raw 无队名 → 「天辉/夜魇」占位名（LP 到达后主链路全量覆盖，无半状态残留）。
     const loadToken = this._loadToken = (this._loadToken || 0) + 1;
     this._lpResolved = false;
+    this._odResolved = false;
     this._fastRendered = false;
     // LP 到达（成功或失败）即取消快渲染：成功 → 主链路马上全量渲染；失败 → 走 catch 错误态
-    lpTask.then(() => { this._lpResolved = true; }, () => { this._lpResolved = true; });
+    // ★★ 2026-10-30（真机 Console 实测：lp 5ms 已到、od 3065ms 才到 → 详情页空等 3s）：
+    //   原快渲染只覆盖「OD 先到、LP 未到」，实测慢腿常常是 OpenDota（0 场也要 2.5s）。
+    //   改为：LP 到后 300ms 若 OD 仍未到 → 先用 LP 的 LIVE/UPCOMING 段上屏；
+    //   OD 到达后由主链路全量覆盖（最终数据不变）。300ms 宽限避免双源都快时重复渲染。
+    lpTask.then((scheduledObj) => {
+      this._lpResolved = true;
+      setTimeout(() => {
+        if (loadToken !== this._loadToken) return;   // 新一轮 load 取代
+        if (this._odResolved || this._fastRendered) return;  // OD 已到 / 已快渲染
+        this._renderScheduledOnly(scheduledObj);
+      }, 300);
+    }, () => { this._lpResolved = true; });
+    // ★ 2026-10-30（「详情页还是有点慢」定位用）：分别打出 od / lp 各自的到达时刻，
+    //   避免只看 `od+lp 并行段` 合计而不知道是哪一段在拖。
+    lpTask.then(
+      () => console.info('[detail][perf] lp 到达 ' + (Date.now() - this._perfLoadStart) + 'ms'),
+      () => console.info('[detail][perf] lp 失败 ' + (Date.now() - this._perfLoadStart) + 'ms')
+    );
     odTask.then((list) => {
+      this._odResolved = true;
+      console.info('[detail][perf] od 到达 ' + (Date.now() - this._perfLoadStart) + 'ms（' + ((list || []).length) + ' 场）');
       // ★ 2026-09-01（详情页 13s 修复 v2）：bundle 后台刷新（不阻塞主渲染）——
       //   命中后仅补 _teamIdNameMap（吸收方向解析用，getLeagueMatches 数据已足够渲染）。
       //   token 已定义，闭包捕获本轮代际；bundle 8s 超时静默，不影响主流程。
@@ -836,6 +863,48 @@ Page({
     } catch (e) {
       // 快渲染失败静默：主链路（LP 到达后）全量渲染兜底，无半状态残留
       console.info('[detail][perf] P1-2 快渲染跳过：', (e && e.message) || e);
+    }
+  },
+
+  // ★★ 2026-10-30：LP 先行快渲染（与 _renderRecentOnly 对称的另一半）——
+  //   OpenDota 冷缓存 2.5~3.1s（真机 Console 实测，0 场也要 2.5s），而 LP 常命中本地缓存（5ms）。
+  //   原实现只在「OD 先到、LP 未到」时快渲染 RECENT；反过来的慢腿场景会空等 OD。
+  //   本函数用 LP 的 LIVE / UPCOMING 段先上屏（raw 传空数组 = 纯 LP 构建，不涉跨源合并，
+  //   不会产生 LIVE 双卡），OD 到达后主链路全量覆盖（最终数据不变，不残留半状态）。
+  _renderScheduledOnly(scheduledObj) {
+    try {
+      const matches = (scheduledObj && scheduledObj.matches) || [];
+      if (!matches.length) return;
+      const boFormat = (scheduledObj && scheduledObj.boFormat) || null;
+      const built = this.buildSeriesFromSources([], matches, boFormat);
+      const live = built.liveList || [];
+      const upcoming = built.upcomingList || [];
+      if (!live.length && !upcoming.length) return;
+      const pageSize = this.data.pageSize || 20;
+      const all = built.allSeries || [];
+      const slice = all.slice(0, pageSize);
+      this._fastRendered = true;
+      this.setData({
+        loading: false,
+        scheduleLoading: false,     // LP 已到：关闭「赛程加载中」
+        page: 0,
+        hasMore: all.length > slice.length,
+        totalSeries: all.length,
+        series: slice,
+        liveCount: live.length,
+        upcomingCount: upcoming.length,
+        recentCount: 0,             // 已结束段等 OD 到达后由主链路补齐
+        recentCollapsed: false,
+        upcomingGroups: built.upcomingGroups || [],
+        farFutureCount: built.farFutureCount || 0,
+        hasFarFuture: !!(built.farFutureCount > 0),
+        hasPlayoffSeries: !!built.hasPlayoffSeries
+      });
+      console.info('[detail][perf] LP 先行渲染：LIVE ' + live.length + ' / UPCOMING ' + upcoming.length +
+        ' 卡先上（OD 未到，' + (Date.now() - this._perfLoadStart) + 'ms）');
+    } catch (e) {
+      // 静默：主链路（OD 到达后）全量渲染兜底，无半状态残留
+      console.info('[detail][perf] LP 先行渲染跳过：', (e && e.message) || e);
     }
   },
 
@@ -2835,7 +2904,8 @@ Page({
       brackets.forEach((b) => {
         (b.rounds || []).forEach((r) => {
           (r.matches || []).forEach((m) => {
-            m.timeLabel = m.startTime ? util.formatTime(m.startTime) : '';
+            // ★ 2026-10-31（P0-4）：淘汰赛时间需「日期 + 具体时分」（北京时间），不再只给 UTC 日期
+            m.timeLabel = m.startTime ? util.formatDateTime(m.startTime) : '';
             m.hasScore = (m.score1 > 0 || m.score2 > 0 || m.finished);
           });
         });
@@ -2874,7 +2944,10 @@ Page({
 
   // P4（2026-10-27）：对战表「显示赛程」开关 —— 只切 BO/时间行，LIVE 常显
   toggleBracketSchedule() {
-    this.setData({ showBracketSchedule: !this.data.showBracketSchedule });
+    const next = !this.data.showBracketSchedule;
+    this.setData({ showBracketSchedule: next });
+    // ★ 2026-10-31（P0-4）：记住用户选择（默认开启，关掉后下次进入保持关闭）
+    try { wx.setStorageSync('leagueDetail.brkSchedule', next ? '1' : '0'); } catch (e) { /* 忽略 */ }
   },
 
   // 2026-10-27：LP bracket 槽位多数不写 bestof（默认 BO1 占位），会导致全显示 BO1。
@@ -2909,10 +2982,61 @@ Page({
       const m = (this._teamIdNameMap || {})[Number(teamId)];
       return m || s;
     };
+    const allSeries = this._allSeriesFull || this.allSeries || [];
+    // ★ 2026-10-31（P0-2）：队名先 sanitize 再归一 —— 历史 payload 里残留
+    //   'LEGION (stack) |substitutes=...' 这类污染会让精确匹配永不命中。
+    const _normName = (raw, teamId) =>
+      names.normTeamNameCjk(names.sanitizeTeamName(_seriesName(raw, teamId)));
+    const _pairOfSeries = (s) => ({
+      s: s,
+      a: _normName(s.radiantName, s.radiantTeamId),
+      b: _normName(s.direName, s.direTeamId)
+    });
+    // ★ 2026-10-31（P0-2）：matchId 硬关联索引 —— LP mapN={{ApiMap|matchid=}} ↔ OD games[].match_id。
+    //   这是唯一可信的「对局 ↔ 系列赛」身份证据，优先于队名对 + 时间就近的软借位。
+    const seriesByMatchId = {};
+    allSeries.forEach((s) => {
+      (s.games || []).forEach((g) => {
+        const mid = Number(g && g.match_id);
+        if (mid <= 0) return;
+        const arr = seriesByMatchId[mid] || (seriesByMatchId[mid] = []);
+        if (arr.indexOf(s) < 0) arr.push(s);
+      });
+    });
+    // 由 matchIds 反查唯一系列（多候选时按开赛时间就近，>24h 宁缺勿错）
+    const _seriesOfIds = (ids, slotStart) => {
+      const cands = [];
+      (ids || []).forEach((id) => {
+        (seriesByMatchId[Number(id)] || []).forEach((s) => {
+          if (cands.indexOf(s) < 0) cands.push(s);
+        });
+      });
+      if (!cands.length) return null;
+      if (cands.length === 1) return cands[0];
+      const st = Number(slotStart) || 0;
+      if (!st) return null;
+      let best = null;
+      let bestD = Infinity;
+      cands.forEach((s) => {
+        const t = Number(s.lastTime || s.firstTime || 0);
+        if (!t) return;
+        const d = Math.abs(t - st);
+        if (d < bestD) { bestD = d; best = s; }
+      });
+      return bestD <= 24 * 3600 ? best : null;
+    };
+    // 系列赛制局数（优先 BO 引擎解析后的 boType，其次 OpenDota series_type）
+    const _boNumOf = (pr) => {
+      if (!pr || !pr.s) return 0;
+      const n = Number(String(pr.s.boType || '').replace(/[^\d]/g, '')) || 0;
+      if (n) return n;
+      const st = Number(pr.s.seriesType);
+      return st === 0 ? 1 : (st === 1 ? 3 : (st === 2 ? 5 : (st === 3 ? 2 : 0)));
+    };
     const pairMap = {};
-    (this._allSeriesFull || this.allSeries || []).forEach((s) => {
-      const a = names.normTeamNameCjk(_seriesName(s.radiantName, s.radiantTeamId));
-      const c = names.normTeamNameCjk(_seriesName(s.direName, s.direTeamId));
+    allSeries.forEach((s) => {
+      const a = _pairOfSeries(s).a;
+      const c = _pairOfSeries(s).b;
       if (!a || !c || a === c) return;
       if (a === '天辉' || a === '夜魇' || c === '天辉' || c === '夜魇') return;   // 解析不出真名 ⇒ 不参与
       const k = a < c ? a + '|' + c : c + '|' + a;
@@ -2954,50 +3078,119 @@ Page({
     const slots = b.slots.map((s) => {
       if (!s) return s;
       const out = Object.assign({}, s);
+      // ★ 2026-10-31（P0-2）：先清洗队名（解析层已 sanitize，这里兜底历史 payload）
+      const clean1 = names.sanitizeTeamName(out.team1Name);
+      const clean2 = names.sanitizeTeamName(out.team2Name);
+      if (clean1) out.team1Name = clean1;
+      if (clean2) out.team2Name = clean2;
       const t1n = names.normTeamNameCjk(out.team1Name);
       const t2n = names.normTeamNameCjk(out.team2Name);
       // 跨源命名差异：LP 缩写（NAVI）→ 规范名（Natus Vincere）再匹配
       const t1 = _aliasOf(out.team1Name, t1n);
       const t2 = _aliasOf(out.team2Name, t2n);
-      // 两向兜底：一侧用缩写（NAVI）一侧用全名（Natus Vincere）都要能对上
-      let x = t1;
-      let y = t2;
-      let cands = (x && y) ? pairMap[uniqKey(x, y)] : null;
-      if (!cands) { x = t1n; y = t2n; cands = (x && y) ? pairMap[uniqKey(x, y)] : null; }
-      cands = cands || [];
-      const pick = pickPair(cands, out.startTime);
-      const pair = pick ? pick.s : null;
+      // ① matchId 硬关联（LP map 页 ApiMap ↔ OD 局 id）—— 身份确定性最高，优先于队名借位
+      const directSeries = _seriesOfIds(out.matchIds, out.startTime);
+      let cands = [];
+      let pick = null;
+      let pair = null;
+      if (directSeries) {
+        const pr = _pairOfSeries(directSeries);
+        pair = { s: pr.s, a: pr.a, b: pr.b };
+      } else {
+        // ② 两向兜底：一侧用缩写（NAVI）一侧用全名（Natus Vincere）都要能对上
+        let x = t1;
+        let y = t2;
+        cands = (x && y) ? pairMap[uniqKey(x, y)] : null;
+        if (!cands) { x = t1n; y = t2n; cands = (x && y) ? pairMap[uniqKey(x, y)] : null; }
+        cands = cands || [];
+        pick = pickPair(cands, out.startTime);
+        pair = pick ? { s: pick.s, a: pick.a, b: pick.b } : null;
+      }
+      // ★ 2026-10-31（P0-2）：方向判定 —— 不再用 `pick.a === y`（只在队列名完全相等时成立），
+      //   改为「槽位 team1 是否对应 OD 的 radiant 方」，归一化名 + 别名两层比对，无法确定则为 null。
+      const _sameDir = (() => {
+        if (!pair || !pair.a || !pair.b) return null;
+        if (t1n === pair.a) return true;
+        if (t2n === pair.a) return false;
+        if (t1n === pair.b) return false;
+        if (t2n === pair.b) return true;
+        if (t1 === pair.a) return true;
+        if (t2 === pair.a) return false;
+        if (t1 === pair.b) return false;
+        if (t2 === pair.b) return true;
+        return null;
+      })();
+      // ★ 2026-10-31（P0-2）：startTime 缺失 / LP 只写日期（00:00 UTC 占位）时用 OD 首局时间
+      const stNum = Number(out.startTime) || 0;
+      const odFirst = pair ? (Number(pair.s.firstTime) || 0) : 0;
+      if (odFirst && (!stNum || (stNum % 86400 === 0 && Math.abs(odFirst - stNum) <= 24 * 3600))) {
+        out.startTime = odFirst;
+      }
       if (!out.boDeclared && out.boType) {
         // 赛制文本（curation/LP Format）为赛事级权威；对阵卡只作缺失时兜底。
         // 同一对队可能在赛中多次交手（pairMap 只能保留一条），因此不能让它覆盖赛制。
         const boFmt = (out.side === 'final')
           ? (finalInline || fmt.grandFinal || fmt.playoff || fmt.default)
           : (fmt.playoff || fmt.default);
-        const bo = boFmt || (pair && pair.boType) || (cands[0] && cands[0].s && cands[0].s.boType);
+        const bo = boFmt || (pair && pair.s.boType) || (cands[0] && cands[0].s && cands[0].s.boType);
         out.boType = bo || '';
       }
-      // ★ 2026-10-27：LP Match 页普遍不写比分（payload 恒 0:0）⇒ 同对阵已定赛程借位胜局数。
-      //   仅对「已结束且能唯一定位到某一场」的槽位生效，避免把小组赛/另一轮比分串错。
-      if (out.finished && pair &&
+      // ★ 2026-10-31（回归修正）：局数口径优先「本槽位已还原的 boType」——赛事赛制为权威
+      //   （EPL II 实测 OD 把上半区 2:0 的比赛也标成 BO5）；无信号时回退 OD 系列赛制。
+      const boNumOfSlot = (Number(String(out.boType || '').replace(/[^\d]/g, '')) || 0) || _boNumOf(pair);
+      const sc = pair ? seriesNormalize.scoresOf(pair.s) : null;   // 兼容 scoreA/scoreB 与 score1/score2
+      let q1 = sc ? (Number(sc.a) || 0) : 0;
+      let q2 = sc ? (Number(sc.b) || 0) : 0;
+      if (_sameDir === false) { const tmp = q1; q1 = q2; q2 = tmp; }
+      // ★ 2026-10-31（P0-2）：OD 终局派生 —— LP 的 finished/score 不可靠（实测 R3M1 打完 3 局
+      //   仍 finished=false、R2M2 只打 2 局却 true）。按赛制胜场/局数阈值判定：
+      //   BO1 1 胜 / BO2 2 局（可 1:1）/ BO3 2 胜 / BO5 3 胜。
+      const gcount = pair ? ((pair.s.games || []).length) : 0;
+      const hi = Math.max(q1, q2);
+      let odFinished = false;
+      //   方向无法确定时不派生终局（比分左右可能颠倒）
+      if (pair && _sameDir !== null && (q1 + q2) > 0) {
+        const boNum = boNumOfSlot;
+        if (boNum === 1) odFinished = hi >= 1;
+        else if (boNum === 2) odFinished = gcount >= 2 || (q1 + q2) >= 2;
+        else if (boNum === 3) odFinished = hi >= 2;
+        else if (boNum === 5) odFinished = hi >= 3;
+        else odFinished = hi >= 2;
+      }
+      // 比分采用口径：硬关联 → 直接用 OD（身份已由 matchId 证明）；
+      // 软借位 → 仍只补 LP 缺口（已结束且 0:0），避免把小组赛/另一轮比分串错。
+      let borrow = false;
+      if (pair && sc && _sameDir !== null && (q1 + q2) > 0) {
+        if (directSeries) borrow = true;
+        else if (out.finished &&
           (Number(out.score1) || 0) === 0 && (Number(out.score2) || 0) === 0) {
-        const sc = seriesNormalize.scoresOf(pair);   // 兼容 scoreA/scoreB 与 score1/score2
-        let q1 = sc.a || 0;
-        let q2 = sc.b || 0;
-        if (pick.a === y) { const tmp = q1; q1 = q2; q2 = tmp; }   // OD 主客方向与槽位相反时交换
-        // 借来的比分必须与赛制自洽：BO3 里不可能出现 1:1（平局）或 1:0（只打了半场）；
-        // 出现 3 胜则反过来证明该场至少 BO5（LP 赛制文本常滞后）。
-        const boNow = String(out.boType || (pair && pair.boType) || '');
-        const nBo = Number(boNow.replace(/[^\d]/g, '')) || 0;
-        const hi = Math.max(q1, q2);
-        const lo = Math.min(q1, q2);
-        const fits = !nBo ? true
-          : (nBo === 2 ? ((hi === 2 && lo <= 1) || (hi === 1 && lo === 1))
-            : (hi === Math.ceil(nBo / 2) && lo < hi));
-        if (q1 + q2 > 0 && (fits || hi >= 3)) {
-          out.score1 = q1;
-          out.score2 = q2;
-          // 自证：出现 3 胜 ⇒ 该场至少 BO5（否则「BO3 + 3:0」自相矛盾）
-          if (q1 >= 3 || q2 >= 3) out.boType = 'BO5';
+          // 软借位自洽校验：BO3 不可能 1:1 / 1:0；3 胜反证至少 BO5
+          const boNow = boNumOfSlot;
+          const lo = Math.min(q1, q2);
+          const fits = !boNow ? true
+            : (boNow === 2 ? ((hi === 2 && lo <= 1) || (hi === 1 && lo === 1))
+              : (hi === Math.ceil(boNow / 2) && lo < hi));
+          borrow = fits || hi >= 3;
+        }
+      }
+      if (borrow) {
+        out.score1 = q1;
+        out.score2 = q2;
+        if (hi >= 3 && !out.boDeclared) out.boType = 'BO5';   // 自证：3 胜 ⇒ 该场至少 BO5
+      }
+      if (odFinished) {
+        out.score1 = q1;
+        out.score2 = q2;
+        out.finished = true;
+        out.phase = 'recent';
+      } else if (pair && gcount > 0 && (q1 + q2) > 0 && !out.finished) {
+        // ★ LIVE 派生：已有局数据但未达终局阈值，且系列赛仍在活跃窗口（36h）→ 进行中。
+        //   LP phase 常滞后（跨午夜/未标 finished）⇒ 让 OD 的局数据补正。
+        const nowSec = Math.floor(Date.now() / 1000);
+        const lastT = Number(pair.s.lastTime || pair.s.firstTime || 0);
+        const stT = Number(out.startTime || pair.s.firstTime || 0);
+        if (stT && stT <= nowSec + 3600 && (nowSec - (lastT || stT)) < 36 * 3600) {
+          out.phase = 'live';
         }
       }
       // 仍无比分 → 置空（显示空白），不再误导成 0:0
@@ -3012,9 +3205,16 @@ Page({
 
   _renderBracket(b) {
     this._lastBracketPayload = b;   // 2026-10-28（第 5 步）：series 到齐后按此 payload 重算比分
-    const view = bracketLayout.layoutBracket(this._resolveBracketBo(b), { formatTime: (t) => util.formatTime(t) });
-    // P4：算当前轮 → 高亮该列并把 scroll-view 定位过去（LIVE 优先）
-    const cur = bracketLayout.findCurrentRound(view);
+    // ★ 2026-10-31（P0-3/P0-4）：格式化为「MM-DD HH:mm」（北京时间），并把 nowSec 传入布局层
+    //   （timeCls 配色 + 「下一场」选轮都依赖它）
+    const nowSec = util.nowSec();
+    const view = bracketLayout.layoutBracket(this._resolveBracketBo(b), {
+      formatTime: (t) => util.formatTime(t),
+      formatDateTime: (t) => util.formatDateTime(t),
+      nowSec: nowSec
+    });
+    // P4：算当前轮 → 高亮该列并把 scroll-view 定位过去（LIVE → 下一场 → 进度）
+    const cur = bracketLayout.findCurrentRound(view, nowSec);
     // 2026-10-28（真机 UI 复盘）：轮次导航条 —— 一列一个 chip，点击直接横滑到该轮，
     //   解决「14 槽双败要滑很久才知道有哪些轮次」的浏览问题。
     const nav = [];
@@ -3151,13 +3351,32 @@ Page({
   },
 
   // P3.1：对战表卡片点击 → match-detail（无 matchId 则提示待定）
+  // ★ 2026-10-29（A5 战报预填）：跳战报前把本页已在手的信息暂存到 globalData，
+  //   战报 onLoad 先渲染锚点卡（队名/赛事/Tier），再回源校正 —— 不增加任何请求。
+  //   exactScore=true 仅用于「局级」数据（系列赛小场）：那里的比分就是击杀数，与战报同义。
+  _prefillMatch(matchId, extra) {
+    const p = {
+      matchId: matchId,
+      league: this.data.name || '',
+      exactScore: false,
+      at: Date.now()
+    };
+    Object.keys(extra || {}).forEach((k) => { p[k] = extra[k]; });
+    getApp().globalData.matchPrefill = p;
+  },
+
   openBracketMatch(e) {
-    const id = e.currentTarget.dataset.id;
+    const ds = e.currentTarget.dataset;
+    const id = ds.id;
     if (!id) {
       wx.showToast({ title: '未开赛 / 对阵待定', icon: 'none' });
       return;
     }
-    wx.navigateTo({ url: '/subpackages/detail/match-detail/match-detail?id=' + id });
+    // ★ 2026-10-29（P0-6）：参数名必须是 matchId（战报页 onLoad 只读 options.matchId）；
+    //   原 `?id=` 使每次点击对战表卡片都报「缺少比赛 ID」。
+    // A5：对战表的比分区是「系列胜局」≠ 战报的击杀数 ⇒ 只预填队名，比分显示「—」。
+    this._prefillMatch(id, { radiantName: ds.t1, direName: ds.t2 });
+    wx.navigateTo({ url: '/subpackages/detail/match-detail/match-detail?matchId=' + id });
   },
 
   toggleGroups() {
@@ -3304,8 +3523,17 @@ Page({
 
   // 跳转战报二级页（B 风格 match-detail）
   openMatch(e) {
-    const id = e.currentTarget.dataset.id;
+    const ds = e.currentTarget.dataset;
+    const id = ds.id;
     if (!id) return;
+    // A5：系列赛小场的比分就是击杀数（局级）⇒ 可直出；队名沿用系列侧
+    this._prefillMatch(id, {
+      radiantName: ds.rn,
+      direName: ds.dn,
+      radiantScore: Number(ds.rs) || 0,
+      direScore: Number(ds.ds) || 0,
+      exactScore: true
+    });
     wx.navigateTo({ url: '/subpackages/detail/match-detail/match-detail?matchId=' + id });
   }
 });

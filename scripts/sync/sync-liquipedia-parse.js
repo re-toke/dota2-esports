@@ -38,6 +38,12 @@ function main() {
   // 镜像到云函数侧（独立部署，无法共享小程序 utils）
   fs.mkdirSync(path.dirname(CLOUD_JS), { recursive: true });
   fs.writeFileSync(CLOUD_JS, buf);
+  // ★ 2026-10-31：解析模块已依赖 utils/names.js（2026-09-25 引入）⇒ 临时镜像必须一并复制，
+  //   否则 require(MINI_JS/CLOUD_JS) 时 './names.js' 解析失败（功能漂移自检直接崩）。
+  fs.writeFileSync(
+    path.join(path.dirname(CLOUD_JS), 'names.js'),
+    fs.readFileSync(path.join(ROOT, 'utils', 'names.js'))
+  );
 
   // 断言两侧字节一致（核心不变量）—— 字节级对比，不经字符串转换
   const a = fs.readFileSync(MINI_JS);

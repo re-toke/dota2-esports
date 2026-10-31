@@ -134,11 +134,12 @@ const tick = () => new Promise((r) => setTimeout(r, 20));
   inst3.clearTeamSearch();
   assert(inst3.data.teamQuery === '' && inst3.data.teamVisibleCount === 3, '搜索：清空后恢复全部');
 
-  // P4：对战表「显示赛程」开关（2026-10-28 第 4 步：默认关闭，避免逐卡日期挤在卡下沿）
+  // P4：对战表「显示赛程」开关（★ 2026-10-31：默认开启 —— 对阵卡需显示具体开赛时分）
+  assert(inst3.data.showBracketSchedule === true, '赛程开关：默认开启（显示 MM-DD HH:mm）');
   inst3.toggleBracketSchedule();
-  assert(inst3.data.showBracketSchedule === true, '赛程开关：默认关 → 点击显示');
+  assert(inst3.data.showBracketSchedule === false, '赛程开关：点击 → 隐藏时间');
   inst3.toggleBracketSchedule();
-  assert(inst3.data.showBracketSchedule === false, '赛程开关：再次点击隐藏');
+  assert(inst3.data.showBracketSchedule === true, '赛程开关：再次点击 → 恢复显示');
 
   // P4：当前轮定位（渲染后写焦点 + 横滑偏移）
   inst3._renderBracket({
@@ -343,6 +344,56 @@ const tick = () => new Promise((r) => setTimeout(r, 20));
   });
   const drawCard = (inst3.data.bracketView.sections[0].cards.filter((c) => c.key === 'R1M6')[0]) || {};
   assert(drawCard.score1 === '' && drawCard.score2 === '', '借位自洽：BO3 槽位拒绝 1:1 平局比分');
+
+  // ----- 场景 3b：PARI UNIVERSE by FISSURE 真实 payload（2026-10-31 P0-1/P0-2 回归） -----
+  // fixture = LP bracket + 10 个 Match 页的真实合并快照（CI sync 抓取）：
+  //   · LP 侧 series 比分全空（Match 页只写 map 结果，不写 series score），finished 标记不可靠；
+  //   · 11/14 槽带 mapN={{ApiMap|matchid=}} ⇒ 客户端必须按 matchId 硬关联 OpenDota 补比分。
+  const util = require('../../utils/util.js');
+  const pariFix = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'pari-universe1-payload.json'), 'utf8'));
+  assert(pariFix.type === 'Bracket/8U4L2DSL1D' && pariFix.slots.length === 14, 'PARI fixture：14 槽双败骨架');
+  assert(pariFix.slots.filter((s) => (s.matchIds || []).length > 0).length === 11,
+    `PARI fixture：11 槽带 ApiMap matchid（实际 ${pariFix.slots.filter((s) => (s.matchIds || []).length > 0).length}）`);
+  assert(!pariFix.slots.some((s) => /substitutes|PlayerSubstitutions|\{\{/.test(String(s.team1Name) + String(s.team2Name))),
+    'PARI fixture：队名已清洗（嵌套模板污染不残留）');
+  const paiSlot = {};
+  pariFix.slots.forEach((s) => { paiSlot['R' + s.roundNo + 'M' + s.slotNo] = s; });
+  // 跨午夜 / 跨月：CET 晚间赛事的北京时间落在次日（这是旧实现「只有日期」的直接受害者）
+  assert(util.formatDateTime(paiSlot.R1M1.startTime) === '10-28 17:00', 'PARI：R1M1 北京时间 10-28 17:00');
+  assert(util.formatDateTime(paiSlot.R1M3.startTime) === '10-29 01:00', 'PARI：R1M3 跨午夜 → 10-29 01:00');
+  assert(util.formatDateTime(paiSlot.R2M2.startTime) === '10-30 02:55', 'PARI：R2M2 北京时间 10-30 02:55');
+  assert(util.formatDateTime(paiSlot.R4M1.startTime) === '10-31 21:00', 'PARI：R4M1 胜者组决赛 10-31 21:00');
+  assert(util.formatDateTime(paiSlot.R4M2.startTime) === '11-01 01:00', 'PARI：R4M2 跨月 → 11-01 01:00');
+
+  inst3.data.name = 'PARI UNIVERSE by FISSURE';
+  inst3.data.leagueId = 20395;
+  inst3.data.metadata = {};
+  inst3._bracketAlias = {};
+  const _gamesOf = (ids) => (ids || []).map((id) => ({ match_id: id }));
+  const _series = (k, s1, s2) => ({
+    radiantName: paiSlot[k].team1Name, direName: paiSlot[k].team2Name,
+    score1: s1, score2: s2, boType: 'BO3', games: _gamesOf(paiSlot[k].matchIds),
+    firstTime: paiSlot[k].startTime, lastTime: paiSlot[k].startTime + 2 * 3600
+  });
+  inst3._allSeriesFull = [
+    _series('R1M1', 2, 1),   // LP 侧 0:0 且 finished=false
+    _series('R1M4', 2, 0),   // LP 侧 0:0 但 finished=true
+    _series('R2M2', 2, 1),
+    _series('R3M1', 1, 2)
+  ];
+  inst3._renderBracket(pariFix);
+  const pariCards = inst3.data.bracketView.sections.reduce((a, s) => a.concat(s.cards), []);
+  const pcard = (k) => pariCards.filter((c) => c.key === k)[0] || {};
+  assert(pcard('R1M1').score1 === 2 && pcard('R1M1').score2 === 1,
+    `PARI：matchId 硬关联补比分（LP 0:0 → OD 2:1，实际 ${pcard('R1M1').score1}:${pcard('R1M1').score2}）`);
+  assert(pcard('R1M1').finished === true, 'PARI：OD 终局派生覆盖 LP finished=false');
+  assert(pcard('R1M4').score1 === 2 && pcard('R1M4').score2 === 0, 'PARI：已结束槽位按 matchId 补 2:0');
+  assert(pcard('R3M1').score1 === 1 && pcard('R3M1').score2 === 2,
+    'PARI：败者组 R3M1 按 matchId 补 1:2（LP finished=false 也判结束）');
+  assert(pcard('R1M1').timeLabel === '10-28 17:00' && pcard('R4M1').timeLabel === '10-31 21:00',
+    'PARI：卡片显示具体时分（10-28 17:00 / 10-31 21:00 北京时间）');
+  assert(pcard('R4M1').score1 === '' && pcard('R4M1').score2 === '',
+    'PARI：无 OD 系列可关联时比分置空（不显示 0:0）');
 
   // ----- 场景 4：源码守卫（WXML 分支与 handler 接线） -----
   const wxml = fs.readFileSync(path.join(PAGE_DIR, 'league-detail.wxml'), 'utf8');

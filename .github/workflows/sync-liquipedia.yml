@@ -14,6 +14,15 @@ on:
   schedule:
     - cron: '0 2,14 * * *'
   workflow_dispatch:
+  # ★ 2026-10-31：解析/合并逻辑变更后缓存必须重建，否则线上仍是旧 payload。
+  #   只给 bracket 链路加 push 触发，避免无关改动频繁打 LP（限速 1 req/2s）。
+  push:
+    branches: [master]
+    paths:
+      - 'scripts/sync/sync-liquipedia-brackets.js'
+      - 'scripts/sync/sync-liquipedia-parse.js'
+      - 'utils/liquipedia-parse.js'
+      - '.github/workflows/sync-liquipedia.yml'
 
 jobs:
   sync:

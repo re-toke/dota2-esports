@@ -704,11 +704,27 @@ function parseMatchFields(body, allowNoDate) {
       }
     }
   }
-  // ★ v3 优化项33（2026-08-03）：提取 matchid1/matchid2（P0b 关联 OpenDota 用）。
-  // Liquipedia {{Match}} 顶层字段，OpenDota 比赛 id，详情页据此剔除已收录对局（防重复）。
+  // ★ v3 优化项33（2026-08-03）：提取 OpenDota 比赛 id（P0b 关联 OpenDota 用）。
+  // ★ 2026-10-31（P0-1）：补 mapN={{ApiMap|matchid=...}} —— 实测 Match 页 14 槽中 12 槽
+  //   只在 map1..map5 内写 matchid，顶层 matchid1/matchid2 根本不存在 ⇒ 旧实现 matchIds 恒空，
+  //   对战表无法按 matchId 精确关联 OpenDota 系列（比分借位大面积失败的主因）。
+  //   顺序：先按局序收集 mapN，再补顶层显式字段；去重、忽略 0。
   var matchIds = [];
-  if (fields.matchid1) { var _m1 = parseInt(fields.matchid1, 10); if (_m1) matchIds.push(_m1); }
-  if (fields.matchid2) { var _m2 = parseInt(fields.matchid2, 10); if (_m2) matchIds.push(_m2); }
+  var _pushMatchId = function (v) {
+    var n = parseInt(v, 10);
+    if (n > 0 && matchIds.indexOf(n) < 0) matchIds.push(n);
+  };
+  var _mapKeysForIds = ['map1', 'map2', 'map3', 'map4', 'map5'];
+  for (var _ki = 0; _ki < _mapKeysForIds.length; _ki++) {
+    var _mapVal = fields[_mapKeysForIds[_ki]];
+    if (!_mapVal) continue;
+    var _idRe = /\bmatchid\s*=\s*(\d+)/gi;
+    var _idM;
+    while ((_idM = _idRe.exec(_mapVal))) _pushMatchId(_idM[1]);
+  }
+  if (fields.matchid) _pushMatchId(fields.matchid);
+  if (fields.matchid1) _pushMatchId(fields.matchid1);
+  if (fields.matchid2) _pushMatchId(fields.matchid2);
   // walkover（弃权）：0=无弃权, 1=team1弃权, 2=team2弃权
   var walkover = fields.walkover ? parseInt(fields.walkover, 10) : 0;
   // phase 判定（★ v3 优化项④：增加 24h 上界守卫，与 sources.js groupSeries 保持一致）
@@ -739,6 +755,40 @@ function parseMatchFields(body, allowNoDate) {
   };
 }
 
+// ★ 2026-10-31（P0-1）：CI bracket 同步的「槽位 + Match 页」合并（单一实现，供 sync 与测试共用）。
+//   合并口径为**兜底**而非覆盖：实测 Match 页常缺 date（startTime=0）、score 也未必写全
+//   （LP 的 finished/score 不可靠），而 bracket 内联槽位本身可能有队伍/时间/比分 ⇒ 覆盖会
+//   把这些信息抹掉。matchIds 取并集（内联槽位可能只有部分 ApiMap，Match 页另有）。
+function mergeMatchSlot(slot, wikitext) {
+  if (!slot) return slot;
+  if (!wikitext) return slot;
+  var body = wikitext.replace(/^\s*\{\{\s*/, '').replace(/\}\}\s*$/, '');
+  var rest = body.replace(/^MatchPage\s*\|\s*/, '');
+  var f = parseMatchFields('Match|' + rest, true);
+  if (!f) return slot;
+  var ids = [];
+  (slot.matchIds || []).concat(f.matchIds || []).forEach(function (n) {
+    var v = parseInt(n, 10);
+    if (v > 0 && ids.indexOf(v) < 0) ids.push(v);
+  });
+  var finished = !!(f.finished || slot.finished);
+  return Object.assign({}, slot, {
+    empty: false,
+    team1Name: f.team1Name || slot.team1Name,
+    team2Name: f.team2Name || slot.team2Name,
+    score1: f.score1 || slot.score1 || 0,
+    score2: f.score2 || slot.score2 || 0,
+    walkover: f.walkover || slot.walkover || 0,
+    startTime: f.startTime || slot.startTime || 0,
+    boType: (f.boDeclared || !slot.boDeclared) ? f.boType : slot.boType,
+    boDeclared: !!(f.boDeclared || slot.boDeclared),
+    finished: finished,
+    phase: finished ? 'recent' : (f.phase || slot.phase || 'upcoming'),
+    matchIds: ids,
+    mapSlots: f.mapSlots || slot.mapSlots || 0
+  });
+}
+
 // 从 {{TeamOpponent|队名|score=N}} 嵌套模板中提取队名和比分
 // ★ v3 优化项22：新增 score 提取，从 TeamOpponent 模板的 score=N 参数获取
 // 输入 '{{TeamOpponent|team falcons|score=2}}' → { name: 'team falcons', score: 2 }
@@ -749,25 +799,68 @@ function parseMatchFields(body, allowNoDate) {
 //   数字值（score=2）在 live 比赛中是当前小局分，不代表结束 —— 因此
 //   scoreAlpha 与 score（数字）严格分离，避免把 live 误判成 recent。
 // 输入 '{{TeamOpponent|team1|score=w}}' → { name: 'team1', score: 0, scoreAlpha: 'w' }
+// ★ 2026-10-31（P0-1）：嵌套安全解析（旧实现用 /\{\{TeamOpponent\s*\|([^}]*)\}\}/ 遇
+//   `{{TeamOpponent|LEGION|substitutes={{PlayerSubstitutions|...}}}}` 会在内层 `}}` 处截断，
+//   把 `|substitutes={{PlayerSubstitutions...` 整段当成队名（实测 R1M6/R3M1 队名污染）。
+//   改为：找模板起点 → findTemplateEnd 深度计数取完整模板 → splitTopLevel 取顶层参数。
+// 内部：返回 {{TeamOpponent|...}} 的完整模板体（不含外层 {{ }}），未找到返回 ''。
+function teamOpponentBody(raw) {
+  if (!raw) return '';
+  var startMatch = raw.match(/\{\{\s*TeamOpponent\b/i);
+  if (!startMatch) return '';
+  var start = startMatch.index;
+  var end = findTemplateEnd(raw, start);
+  if (end < 0) return '';
+  return raw.substring(start + 2, end);
+}
+
 function extractTeamOpponent(raw) {
   if (!raw) return { name: '', score: 0, scoreAlpha: '' };
-  var m = raw.match(/\{\{TeamOpponent\s*\|([^}]*)\}\}/i);
-  if (!m) return { name: '', score: 0, scoreAlpha: '' };
-  var inner = m[1].trim();
-  // 提取 score=N 参数（字母或数字）
-  var scoreMatch = inner.match(/\bscore\s*=\s*([a-zA-Z]+\d*|\d+)/i);
+  var body = teamOpponentBody(raw);
+  if (!body) return { name: '', score: 0, scoreAlpha: '' };
+  // 去掉模板名与紧随的 |，再按顶层 | 分割（内层模板/链接内的 | 不参与分割）
+  var rest = body.replace(/^\s*TeamOpponent\b/i, '').replace(/^\s*\|/, '');
+  var parts = splitTopLevel(rest, '|');
   var score = 0;
   var scoreAlpha = '';
-  if (scoreMatch) {
-    var sv = scoreMatch[1].toLowerCase();
-    if (/^\d+$/.test(sv)) {
-      score = parseInt(sv, 10);
-    } else {
-      scoreAlpha = sv;
+  var positional = '';
+  var namedTeam = '';
+  for (var i = 0; i < parts.length; i++) {
+    var part = (parts[i] || '').trim();
+    if (!part) continue;
+    var eq = part.indexOf('=');
+    if (eq >= 0) {
+      var key = part.substring(0, eq).trim().toLowerCase();
+      // 提取 score=N 参数（字母或数字）—— 仅顶层参数
+      if (key === 'score' && !score && !scoreAlpha) {
+        var sv = part.substring(eq + 1).trim().replace(/\s+/g, '');
+        var sm = sv.match(/^([a-zA-Z]+\d*|\d+)/);
+        if (sm) {
+          var v = sm[1].toLowerCase();
+          if (/^\d+$/.test(v)) score = parseInt(v, 10);
+          else scoreAlpha = v;
+        }
+      } else if (!namedTeam && (key === 'team' || key === 'name' || key === 'team1' || key === 'name1')) {
+        namedTeam = part.substring(eq + 1).trim();
+      }
+      continue;
     }
+    if (!positional) positional = part;
   }
-  // 提取队名（复用 extractTeamOpponentName 逻辑）
-  var name = extractTeamOpponentName(raw);
+  // 队名优先级：team=/name= 命名参数 > 第一个位置参数（兼容 |flag=ru|Team Spirit 写法）
+  var rawName = namedTeam || positional;
+  if (!rawName) return { name: '', score: score, scoreAlpha: scoreAlpha };
+  var tplIdx = rawName.indexOf('{{');   // 位置参数仍混入内层模板时截断保护
+  if (tplIdx >= 0) rawName = rawName.substring(0, tplIdx);
+  var linkMatch = rawName.match(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/);
+  var name;
+  if (linkMatch) {
+    name = linkMatch[2] ? linkMatch[2].trim() : linkMatch[1].split('/').pop().trim();
+  } else {
+    name = stripWikitextMarkup(rawName).trim();
+  }
+  // ★ 2026-10-31（P0-1）：统一走 names.sanitizeTeamName（剥系统文案/尾部括号，如 'LEGION (stack)' → 'LEGION'）
+  name = names.sanitizeTeamName(name);
   return { name: name, score: score, scoreAlpha: scoreAlpha };
 }
 
@@ -776,19 +869,7 @@ function extractTeamOpponent(raw) {
 // 输入 '{{TeamOpponent|[[Team Spirit|TS]]}}' → 'TS'
 // 输入 '{{TeamOpponent}}' → ''
 function extractTeamOpponentName(raw) {
-  if (!raw) return '';
-  // 匹配 {{TeamOpponent|...}} 模板
-  var m = raw.match(/\{\{TeamOpponent\s*\|([^}]*)\}\}/i);
-  if (!m) return '';
-  var inner = m[1].trim();
-  // 处理 [[链接|显示名]] 格式
-  var linkMatch = inner.match(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/);
-  if (linkMatch) {
-    return linkMatch[2] ? linkMatch[2].trim() : linkMatch[1].split('/').pop().trim();
-  }
-  // 纯文本队名（去掉 score= 参数后）
-  var namePart = inner.replace(/\|?\s*score\s*=\s*\w+/i, '').trim();
-  return stripWikitextMarkup(namePart).trim();
+  return extractTeamOpponent(raw).name;
 }
 
 // 解析 Liquipedia 日期格式为 unix 秒
@@ -1259,6 +1340,7 @@ module.exports = {
   parseLeagueMetadata: parseLeagueMetadata,
   parseScheduledMatches: parseScheduledMatches,
   parseMatchFields: parseMatchFields,         // P3.0：MatchPage 内容解析（供 CI bracket 同步）
+  mergeMatchSlot: mergeMatchSlot,             // 2026-10-31：槽位 + Match 页兜底合并（sync 与测试共用）
   parseGroupStandings: parseGroupStandings,   // P3（2026-08-31）：小组积分表（排名+晋级状态）
   parseBrackets: parseBrackets,               // P3（2026-08-31）：淘汰赛对阵树
   parseBoFormat: parseBoFormat,   // ★ 2026-08-04：Format 段 BO 声明解析（BO 判定引擎 S2）

@@ -127,29 +127,6 @@ function slotTitle(bracketId, slot) {
     '-M' + String(slot.slotNo).padStart(3, '0');
 }
 
-function mergeMatchFields(slot, wikitext) {
-  if (!wikitext) return slot;
-  const body = wikitext.replace(/^\s*\{\{\s*/, '').replace(/\}\}\s*$/, '');
-  const rest = body.replace(/^MatchPage\s*\|\s*/, '');
-  const f = LP.parseMatchFields('Match|' + rest, true);
-  if (!f) return slot;
-  return Object.assign({}, slot, {
-    empty: false,
-    team1Name: f.team1Name,
-    team2Name: f.team2Name,
-    score1: f.score1,
-    score2: f.score2,
-    walkover: f.walkover,
-    startTime: f.startTime,
-    boType: f.boType,
-    boDeclared: f.boDeclared,
-    finished: f.finished,
-    phase: f.phase,
-    matchIds: f.matchIds,
-    mapSlots: f.mapSlots
-  });
-}
-
 async function syncEvent(ev, dry) {
   const cands = candidateSlugs(ev);
   let found = null;
@@ -181,7 +158,7 @@ async function syncEvent(ev, dry) {
     }
     const slots = b.slots.map((s) => {
       if (s.side === 'third') return s;
-      return mergeMatchFields(s, pageMap[slotTitle(b.id, s)]);
+      return LP.mergeMatchSlot(s, pageMap[slotTitle(b.id, s)]);
     });
     const filled = slots.filter((s) => !s.empty).length;
     const payload = {

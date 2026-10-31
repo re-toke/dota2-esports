@@ -308,7 +308,7 @@ module.exports.match = function (name, tag, q) {
                     </view>
                   </view>
                 </view>
-                <view class="report-link" catchtap="openMatch" data-id="{{g.match_id}}">
+                <view class="report-link" catchtap="openMatch" data-id="{{g.match_id}}" data-rn="{{s.radiantName}}" data-dn="{{s.direName}}" data-rs="{{g.radiantScore}}" data-ds="{{g.direScore}}">
                   <text>查看完整战报（KDA 表 / GPM / XPM）</text>
                   <t-icon name="chevron-right" size="32rpx" color="var(--link)" />
                 </view>
@@ -396,8 +396,9 @@ module.exports.match = function (name, tag, q) {
             <view class="brk-card {{item.empty ? 'is-empty' : ''}} {{item.noScore ? 'no-score' : ''}} {{item.live ? 'has-live' : (item.boType ? 'has-bo' : '')}} {{bracketFocus && bracketFocus.side === item.side && bracketFocus.roundNo === item.roundNo ? 'is-current' : ''}}"
                   wx:for="{{sec.cards}}" wx:for-item="item" wx:key="key"
                   style="left:{{item.x}}rpx;top:{{item.y}}rpx;height:{{bracketView.cardH}}rpx"
-                  aria-role="button" aria-label="{{item.team1}} 对 {{item.team2}}"
-                  catchtap="openBracketMatch" data-id="{{item.matchId}}">
+                  aria-role="button" aria-label="{{item.team1}} 对 {{item.team2}}{{showBracketSchedule && item.timeLabel ? '，' + item.timeLabel + ' 北京时间' : ''}}"
+                  catchtap="openBracketMatch" data-id="{{item.matchId}}"
+                  data-t1="{{item.tbd1 ? '' : item.team1}}" data-t2="{{item.tbd2 ? '' : item.team2}}">
               <view class="brk-team {{item.winner === 'A' ? 'win' : ''}}">
                 <text class="brk-name {{item.tbd1 ? 'tbd' : ''}}">{{item.team1}}</text>
                 <text class="brk-score">{{item.score1}}</text>
@@ -410,8 +411,8 @@ module.exports.match = function (name, tag, q) {
                    BO 常显（属赛制信息，不随「显示赛程」开关）；时间才是赛程，默认关闭。 -->
               <text wx:if="{{item.live}}" class="brk-badge brk-live">● LIVE</text>
               <text wx:elif="{{item.boType}}" class="brk-badge">{{item.boType}}</text>
-              <!-- 赛程时间挪到卡片下方（落在卡片间距里，不撑高卡片） -->
-              <text wx:if="{{showBracketSchedule && item.timeLabel}}" class="brk-time">{{item.timeLabel}}</text>
+              <!-- 赛程时间挪到卡片下方（落在卡片间距里，不撑高卡片）→ 2026-10-31：显示到具体时分 -->
+              <text wx:if="{{showBracketSchedule && item.timeLabel}}" class="brk-time {{item.timeCls}}">{{item.timeLabel}}</text>
               <!-- 2026-10-28：两源都取不到终局比分 → 显式「无数据」 -->
               <text wx:if="{{item.noScore}}" class="brk-no-data">无数据</text>
             </view>
@@ -419,6 +420,8 @@ module.exports.match = function (name, tag, q) {
         </view>
       </scroll-view>
       <view class="brk-hint" wx:if="{{bracketView.width > 700}}">左右滑动查看后续轮次</view>
+      <!-- ★ 2026-10-31（P0-4）：时间口径统一为北京时间（固定 UTC+8，不随设备时区变化） -->
+      <view class="brk-hint" wx:if="{{showBracketSchedule}}">时间为北京时间（UTC+8）</view>
     </view>
     <view wx:elif="{{lpStructureError}}" class="hint-card-enhanced">
       <view class="hint-title">淘汰赛加载失败</view>

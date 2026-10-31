@@ -177,7 +177,7 @@
 .quality-pill .q-src { font-size: var(--fs-caption); opacity: 0.85; }
 .quality-high { background: rgba(95, 211, 168, 0.12); color: var(--status-verified); }
 .quality-high .q-dot { background: var(--status-verified); }
-.quality-medium { background: rgba(255, 207, 92, 0.12); color: var(--dota-gold-strong); }
+.quality-medium { background: var(--amber-a12); color: var(--dota-gold-strong); }
 .quality-medium .q-dot { background: var(--amber-bright); }
 .quality-low { background: rgba(107, 114, 128, 0.16); color: var(--text-2); }
 .quality-low .q-dot { background: var(--text-2); }
@@ -263,9 +263,9 @@
 }
 /* B 点缀：近 2h 内结束（黄色高亮 + 左边框） */
 .series-card.series-recent {
-  border-color: rgba(255, 207, 92, 0.35);
+  border-color: var(--amber-a35);
   border-left: 4rpx solid var(--amber-bright);
-  box-shadow: 0 2rpx 10rpx rgba(255, 207, 92, 0.08);
+  box-shadow: 0 2rpx 10rpx var(--amber-a08);
 }
 
 /* 系列头部：队A · 大比分 · 队B */
@@ -382,8 +382,8 @@
   font-size: var(--fs-badge);
   font-weight: 700;
   color: var(--dota-gold-strong);
-  background: rgba(255, 207, 92, 0.2);
-  border: 1rpx solid rgba(255, 207, 92, 0.5);
+  background: var(--amber-a20);
+  border: 1rpx solid var(--amber-a50);
   border-radius: var(--radius-pill, 999rpx);
   padding: 2rpx 10rpx;
   line-height: var(--lh-normal);
@@ -423,7 +423,7 @@
 .series-live .score-radiant { color: var(--radiant, #5fd35f); font-weight: 700; }
 .series-live .score-dire    { color: var(--dire, #e8443b);   font-weight: 700; }
 .series-recent .series-score {
-  border-color: rgba(255, 207, 92, 0.25);
+  border-color: var(--amber-a25);
 }
 /* v11 聚光灯：LIVE 标签脉冲呼吸（pulse-glow 定义在 app.wxss） */
 .series-live .series-live-tag {
@@ -454,7 +454,7 @@
   font-weight: 600;
   letter-spacing: 0.5rpx;
   color: var(--dota-gold-strong);
-  background: rgba(255, 207, 92, 0.12);
+  background: var(--amber-a12);
   padding: 2rpx 12rpx;
   border-radius: var(--radius-pill, 999rpx);
   white-space: nowrap;
@@ -634,7 +634,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  background: rgba(255, 207, 92, 0.10);
+  background: var(--amber-a10);
   border-radius: var(--radius-md, 12rpx);
   padding: var(--space-1-5) var(--space-2);
   margin-bottom: var(--space-1-5);
@@ -644,7 +644,7 @@
   font-size: var(--fs-caption);
   color: var(--dota-gold-strong);
   font-weight: 700;
-  background: rgba(255, 207, 92, 0.2);
+  background: var(--amber-a20);
   padding: var(--space-0-5) var(--space-1-5);
   border-radius: var(--radius-pill, 999rpx);
 }
@@ -1086,7 +1086,7 @@
 /* UPCOMING 段：黄色色条 */
 .phase-divider-upcoming .phase-divider-bar {
   background: var(--amber-bright);
-  box-shadow: 0 0 12rpx rgba(255, 207, 92, 0.4);
+  box-shadow: 0 0 12rpx var(--amber-a40);
 }
 .phase-divider-upcoming .phase-divider-text {
   color: var(--dota-gold-strong);
@@ -1570,18 +1570,29 @@
   font-family: var(--font-numeric, "SF Pro Display", sans-serif);
   letter-spacing: 0;
 }
-/* 赛程时间：卡片下方，落在 24rpx 卡间距内（不撑高布局）
-   2026-10-28 真机复盘：原 margin-top 2rpx 时会被「当前轮」2rpx 高亮环压住 ⇒ 加到 6rpx 并压小字号 */
+/* 赛程时间：卡片下方，落在卡间距内（不撑高布局）
+   2026-10-28 真机复盘：原 margin-top 2rpx 时会被「当前轮」2rpx 高亮环压住 ⇒ 加到 6rpx 并压小字号
+   2026-10-30（C2）：字号下限 22rpx（原 18rpx 文字过小）
+   2026-10-31（P0-3/P0-4）：卡间距 24→32rpx（时间行 6+22=28rpx），并显示到「MM-DD HH:mm」；
+   颜色按状态区分：已开赛/已结束弱化、未开赛金色、进行中红色。 */
 .brk-time {
   position: absolute;
   top: 100%;
+  left: 6rpx;
   right: 6rpx;
   margin-top: 6rpx;
-  font-size: 18rpx;
-  line-height: 18rpx;
+  font-size: var(--fs-badge);
+  line-height: 22rpx;
+  font-family: var(--font-numeric, "SF Pro Display", sans-serif);
+  font-variant-numeric: tabular-nums;
   color: var(--text-4);
+  text-align: right;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+.brk-time.is-next { color: var(--dota-gold-strong); }
+.brk-time.is-live { color: var(--status-live, #EF4444); }
 .brk-team.win { font-weight: 700; color: var(--dota-gold-strong); }
 .brk-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .brk-name.tbd { color: var(--text-4); font-style: italic; }

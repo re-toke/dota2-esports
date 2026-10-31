@@ -13,7 +13,9 @@ const COL_GAP = 64;
 // BO / LIVE 改为右上角徽标（绝对定位，不占行高），赛程时间在卡外汇总在卡片下方。
 // ⚠️ 改本常量必须同步 `league-detail.wxss` 的 `.brk-card` 高度（页面用 `bracketView.cardH` 内联覆盖）
 const H = 104;
-const G = 24;
+// ★ 2026-10-31（P0-3）：G 24 → 32 —— 卡下沿要放「MM-DD HH:mm」两行时间（6+22=28rpx），
+//   24 会让时间贴到下一张卡上沿。改本常量须同步 `test-bracket-layout` 的 CARD_GAP 守卫。
+const G = 32;
 const SECTION_GAP = 24;
 const HEADER_H = 56;   // 分区标题 24 + 轮次表头 24 + 间距（视觉验证修正：原 44 导致标题重叠）
 
@@ -181,7 +183,9 @@ function _linesFor(prev, cur) {
   return lines;
 }
 
-function _cardFromSlot(s, formatTime) {
+function _cardFromSlot(s, opts) {
+  const o = opts || {};
+  const nowSec = Number(o.nowSec) || Math.floor(Date.now() / 1000);
   const empty = !!s.empty;
   const t1 = s.team1Name || 'TBD';
   const t2 = s.team2Name || 'TBD';
@@ -189,6 +193,13 @@ function _cardFromSlot(s, formatTime) {
   const tbd2 = /^(tbd|tba|待定|待公布|unknown)$/i.test(t2);
   const finished = !!s.finished;
   const winner = finished && s.score1 !== s.score2 ? (s.score1 > s.score2 ? 'A' : 'B') : '';
+  const startTime = Number(s.startTime) || 0;
+  // ★ 2026-10-31（P0-3）：时间显示到「时:分」（优先 formatDateTime，兼容旧 formatTime）
+  const fmtTime = o.formatDateTime || o.formatTime;
+  const live = s.phase === 'live' && !finished;
+  // 时间文字配色：进行中（实时高亮）/ 已开赛或已结束（弱化）/ 未开赛（提示色）
+  let timeCls = '';
+  if (startTime) timeCls = live ? 'is-live' : (startTime <= nowSec ? 'is-past' : 'is-next');
   return {
     key: s.key || ('R' + s.roundNo + 'M' + s.slotNo),
     side: s.side || 'main',
@@ -206,9 +217,11 @@ function _cardFromSlot(s, formatTime) {
     winner: winner,
     finished: finished,
     boType: s.boType || '',
-    timeLabel: s.startTime ? (formatTime ? formatTime(s.startTime) : '') : '',
+    startTime: startTime,
+    timeLabel: startTime && fmtTime ? fmtTime(startTime) : '',
+    timeCls: timeCls,
     matchId: (s.matchIds && s.matchIds.length) ? s.matchIds[0] : 0,
-    live: s.phase === 'live' && !finished
+    live: live
   };
 }
 
@@ -286,7 +299,7 @@ function layoutBracket(bracket, opts) {
     const roundHeaders = [];
     rs.forEach((r, idx) => {
       const list = (r.matches || []).slice().sort((a, b) => (a.slotNo || 0) - (b.slotNo || 0));
-      const cards = _placeRound(list.map((s) => _cardFromSlot(s, o.formatTime)), prev, idx);
+      const cards = _placeRound(list.map((s) => _cardFromSlot(s, o)), prev, idx);
       if (prev.length) lines.push.apply(lines, _linesFor(prev, cards));
       placedRounds.push(cards);
       const _secLabel = SIDE_LABEL[side] || side;
@@ -346,9 +359,10 @@ function _maxFinishedRound(sec) {
   return m;
 }
 
-function findCurrentRound(view) {
+function findCurrentRound(view, nowSec) {
   const sections = (view && view.sections) || [];
   if (!sections.length) return null;
+  const now = Number(nowSec) || Math.floor(Date.now() / 1000);
   const played = (s) => (s.cards || []).filter((c) => !c.empty);
   let sec = null;
   let target = null;
@@ -358,7 +372,20 @@ function findCurrentRound(view) {
     target = played(sections[i]).filter((c) => c.live)[0] || null;
     if (target) sec = sections[i];
   }
-  // 2) 进度最靠前的未完成分区：取 maxFinishedRound 之后第一个有队伍的轮
+  // 2) ★ 2026-10-31（P0-3）：次优先「下一场」—— 未完成卡里 startTime 最早且晚于现在。
+  //    原逻辑按「进度最靠前的分区」选轮，会把焦点停在败者组（R4 比胜者组决赛 R2 编号更大），
+  //    实测 10-31 应聚焦胜者组决赛（21:00 北京）而不是当天的败者组决赛。
+  if (!target) {
+    let best = null;
+    sections.forEach((s) => {
+      played(s).forEach((c) => {
+        if (c.finished || !c.startTime || c.startTime <= now) return;
+        if (!best || c.startTime < best.card.startTime) best = { sec: s, card: c };
+      });
+    });
+    if (best) { sec = best.sec; target = best.card; }
+  }
+  // 3) 进度最靠前的未完成分区：取 maxFinishedRound 之后第一个有队伍的轮
   if (!target) {
     const pending = sections.filter((s) => {
       const cs = played(s);
@@ -374,7 +401,7 @@ function findCurrentRound(view) {
       target = next[0] || rest[0] || null;
     }
   }
-  // 3) 全部完赛：取最后一个分区（决赛/季军所在分区）
+  // 4) 全部完赛：取最后一个分区（决赛/季军所在分区）
   if (!target) {
     sec = sections[sections.length - 1];
     const cs = played(sec);
@@ -393,5 +420,6 @@ module.exports = {
   localizeRoundLabel: localizeRoundLabel,   // 2026-10-28：轮名中文化（未知保留原文）
   CARD_W: CARD_W,
   CARD_H: H,
+  CARD_GAP: G,     // ★ 2026-10-31：卡间距（测试守卫；时间行高 28rpx 需 32）
   COL_GAP: COL_GAP
 };
