@@ -390,8 +390,10 @@ module.exports.match = function (name, tag, q) {
           <!-- P4：Upper→Lower 降级线（画在卡片之下） -->
           <view class="brk-cross" wx:for="{{bracketView.crossLines}}" wx:for-item="cl" wx:key="index" style="left:{{cl.left}}rpx;top:{{cl.top}}rpx;width:{{cl.width}}rpx;height:{{cl.height}}rpx"></view>
           <block wx:for="{{bracketView.sections}}" wx:for-item="sec" wx:key="side">
-            <view class="brk-section-head" style="top:{{sec.y}}rpx">{{sec.label}}</view>
-            <view class="brk-round-head {{bracketFocus && bracketFocus.side === sec.side && bracketFocus.roundNo === ridx + 1 ? 'is-current' : ''}}" wx:for="{{sec.rounds}}" wx:for-item="rd" wx:for-index="ridx" wx:key="label" wx:if="{{rd.short}}" style="left:{{rd.x}}rpx;top:{{sec.y + 24}}rpx">{{rd.short}}</view>
+            <!-- ★ 2026-10-31：inline final 分区无标题（label 为空）→ 不再留一条空标题占位 -->
+            <view wx:if="{{sec.label}}" class="brk-section-head" style="top:{{sec.y}}rpx">{{sec.label}}</view>
+            <!-- ★ 2026-10-31：轮号会跳号（胜者组 R1/R2/R4）⇒ 高亮按真实 roundNo 匹配，不能用索引 -->
+            <view class="brk-round-head {{bracketFocus && bracketFocus.side === sec.side && bracketFocus.roundNo === rd.roundNo ? 'is-current' : ''}}" wx:for="{{sec.rounds}}" wx:for-item="rd" wx:for-index="ridx" wx:key="label" wx:if="{{rd.short}}" style="left:{{rd.x}}rpx;top:{{sec.y + 24}}rpx">{{rd.short}}</view>
             <view class="brk-line" wx:for="{{sec.lines}}" wx:for-item="ln" wx:key="index" style="left:{{ln.left}}rpx;top:{{ln.top}}rpx;width:{{ln.width}}rpx;height:{{ln.height}}rpx"></view>
             <view class="brk-card {{item.empty ? 'is-empty' : ''}} {{item.noScore ? 'no-score' : ''}} {{item.live ? 'has-live' : (item.boType ? 'has-bo' : '')}} {{bracketFocus && bracketFocus.side === item.side && bracketFocus.roundNo === item.roundNo ? 'is-current' : ''}}"
                   wx:for="{{sec.cards}}" wx:for-item="item" wx:key="key"

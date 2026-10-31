@@ -394,6 +394,18 @@ const tick = () => new Promise((r) => setTimeout(r, 20));
     'PARI：卡片显示具体时分（10-28 17:00 / 10-31 21:00 北京时间）');
   assert(pcard('R4M1').score1 === '' && pcard('R4M1').score2 === '',
     'PARI：无 OD 系列可关联时比分置空（不显示 0:0）');
+  // ★ 2026-10-31（真机反馈）：总决赛「双方待定但已排期」必须显示开赛时分，且内联在「决赛」右侧
+  assert(pcard('R5M1').timeLabel === '11-01 21:00',
+    `PARI：总决赛显示开赛时间（实际 ${pcard('R5M1').timeLabel}）`);
+  assert(pcard('R5M1').empty === true && pcard('R5M1').team1 === '待定' && pcard('R5M1').team2 === '待定',
+    'PARI：总决赛仍是待定卡（时间骨架保留）');
+  const pariUpper = inst3.data.bracketView.sections.filter((s) => s.side === 'upper')[0];
+  const pariFinal = inst3.data.bracketView.sections.filter((s) => s.side === 'final')[0];
+  const pariUf = pariUpper.cards.filter((c) => c.key === 'R4M1')[0];
+  const pariGf = pariFinal.cards.filter((c) => c.key === 'R5M1')[0];
+  assert(!!pariUf && !!pariGf && pariGf.y === pariUf.y && pariGf.x > pariUf.x,
+    'PARI：总决赛卡在「决赛」右侧同一行（不再另起一段）');
+  assert(pariFinal.label === '' && pariFinal.y === pariUpper.y, 'PARI：总决赛分区无标题、不新起段');
 
   // ----- 场景 4：源码守卫（WXML 分支与 handler 接线） -----
   const wxml = fs.readFileSync(path.join(PAGE_DIR, 'league-detail.wxml'), 'utf8');

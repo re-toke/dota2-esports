@@ -130,6 +130,25 @@ assert(LP.parseBrackets(null).length === 0, 'null 输入 → 空 bracket');
 assert(LP.parseGroupStandings('==Results==\n{{Match|date=January 1, 2026 00:00 {{Abbr/CST}}}}').length === 0,
   '无积分表页面 → 空组（不误报）');
 
+// ===== ★ 2026-10-31（真机）：总决赛「双方待定但已排期」必须保留时间骨架 =====
+// 根因：parseMatchFields 在双方 TeamOpponent 均空时直接 return null ⇒ 总决赛卡永远没有开赛时分
+//   （实测 PARI R5M1 写明「November 1, 2026 - 14:00 CET」却整槽被丢）。现在：有日期才保留 empty 骨架。
+const skeleton = LP.parseMatchFields(
+  'Match|opponent1={{TeamOpponent|}}|opponent2={{TeamOpponent|}}|date=November 1, 2026 - 14:00 {{Abbr/CET}}', true);
+assert(!!skeleton && skeleton.empty === true && skeleton.startTime > 0,
+  '时间骨架：双方待定 + 有日期 → 保留 empty 且带 startTime');
+assert(!!skeleton && skeleton.team1Name === 'TBD' && skeleton.team2Name === 'TBD', '时间骨架：队名归一 TBD');
+assert(LP.parseMatchFields('Match|opponent1={{TeamOpponent|}}|opponent2={{TeamOpponent|}}', true) === null,
+  '时间骨架：无日期空壳仍丢弃（不制造无时间的空卡）');
+const skSlot = { key: 'R5M1', side: 'final', roundNo: 5, slotNo: 1, empty: true, team1Name: '', team2Name: '',
+  startTime: 0, boType: 'BO1', boDeclared: false, finished: false, phase: 'upcoming', matchIds: [], mapSlots: 0 };
+const skMerged = LP.mergeMatchSlot(skSlot,
+  '{{MatchPage|opponent1={{TeamOpponent|}}|opponent2={{TeamOpponent|}}|date=November 1, 2026 - 14:00 {{Abbr/CET}}}}');
+assert(skMerged.empty === true && skMerged.startTime === skeleton.startTime,
+  '时间骨架：Match 页合并补上 startTime 且保持 empty');
+assert(skMerged.team1Name === '' && skMerged.team2Name === '',
+  '时间骨架：页面 TBD 不覆盖槽位队名（保持空）');
+
 // ===== G14 双源镜像：云函数侧输出一致 =====
 const groupsCloud = LPCloud.parseGroupStandings(ewc);
 const bracketsCloud = LPCloud.parseBrackets(ewc);

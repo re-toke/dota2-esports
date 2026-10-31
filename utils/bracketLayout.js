@@ -16,8 +16,13 @@ const H = 104;
 // ★ 2026-10-31（P0-3）：G 24 → 32 —— 卡下沿要放「MM-DD HH:mm」两行时间（6+22=28rpx），
 //   24 会让时间贴到下一张卡上沿。改本常量须同步 `test-bracket-layout` 的 CARD_GAP 守卫。
 const G = 32;
-const SECTION_GAP = 24;
+// ★ 2026-10-31（真机反馈「视觉偏上/局促」）：分区之间加大呼吸，画布四边留白。
+//   原来 24 让败者组紧贴胜者组、卡片贴左右边框，整张图显得顶在上沿。
+const SECTION_GAP = 40;
 const HEADER_H = 56;   // 分区标题 24 + 轮次表头 24 + 间距（视觉验证修正：原 44 导致标题重叠）
+const PAD_X = 12;      // 画布左右留白（卡片不贴边框）
+const PAD_TOP = 12;    // 分区标题距画布上沿
+const PAD_BOTTOM = 16; // 底部留白（原来画布高度正好切在最后一张卡的下沿）
 
 // ===== P4：Upper→Lower 降级线映射（match 级：from 场败者 → to 场）=====
 // 8U4L2DSL1D（8 队标准双败，PGL Wallachia S9 / TI 2026 Main Event 同构）：
@@ -286,10 +291,16 @@ function layoutBracket(bracket, opts) {
   groups.forEach((g) => { sideSet[g.side] = 1; });
   const sides = Object.keys(sideSet).sort((a, b) => (SIDE_ORDER[a] == null ? 9 : SIDE_ORDER[a]) - (SIDE_ORDER[b] == null ? 9 : SIDE_ORDER[b]));
 
+  // ★ 2026-10-31（真机反馈）：总决赛不再单独占一段（原来被推到最下方，视觉上整张图偏上、
+  //   底部悬空）。双败结构里把总决赛卡接在「决赛」右侧的同一行，用小折线把胜者组/败者组
+  //   冠军路径接进卡内：省一整段空白，冠军路径也一眼可见。
+  const inlineFinal = !!(drops.length && sides.indexOf('upper') >= 0 && sides.indexOf('final') >= 0);
+
   let yOffset = 0;
   let maxWidth = 0;
   const sections = [];
   sides.forEach((side) => {
+    if (side === 'final' && inlineFinal) return;   // 交给下方 inline 布局
     const rs = groups.filter((g) => g.side === side).sort((a, b) => a.no - b.no);
     const xOff = (shiftX && side !== 'upper') ? shiftX : 0;
     const placedRounds = [];
@@ -307,6 +318,7 @@ function layoutBracket(bracket, opts) {
       roundHeaders.push({
         label: _fullLabel,                                   // 导航 chip 用（跨分区可区分）
         short: _shortRoundLabel(_fullLabel, _secLabel),       // 画布用（去掉与分区标题重复的前缀）
+        roundNo: r.no,                                       // ★ 2026-10-31：轮号可能跳号（R1/R2/R4），不能再用索引
         x: xOff + idx * (CARD_W + COL_GAP)
       });
       cards.forEach((c) => { sectionHeight = Math.max(sectionHeight, c.y + H); });
@@ -327,6 +339,7 @@ function layoutBracket(bracket, opts) {
       label: SIDE_LABEL[side] || side,
       y: yOffset,
       height: HEADER_H + sectionHeight + 8,
+      width: width,
       rounds: roundHeaders,
       cards: cards,
       lines: shiftedLines
@@ -335,9 +348,62 @@ function layoutBracket(bracket, opts) {
     yOffset += HEADER_H + sectionHeight + SECTION_GAP;
   });
 
+  // ★ 2026-10-31（inline final）：总决赛卡 = 「胜者组决赛」同行的下一列。
+  //   上游：胜者组决赛（左侧实线直连）+ 败者组决赛（画布最右通道折线右入），冠军路径一眼可见。
+  //   ⚠️ 只对双败（有 drops 映射）生效；单败/未知 type 仍走上面的常规分段（不臆测结构）。
+  if (inlineFinal) {
+    const upperSec = sections.filter((s) => s.side === 'upper')[0] || null;
+    const lowerSec = sections.filter((s) => s.side === 'lower')[0] || null;
+    const finGroups = groups.filter((g) => g.side === 'final').sort((a, b) => a.no - b.no);
+    const lastOf = (sec) => (sec ? sec.cards.slice().sort((a, b) => ((b.roundNo || 0) - (a.roundNo || 0)) || (a.y - b.y))[0] : null);
+    const lastUpper = lastOf(upperSec);
+    const lastLower = lastOf(lowerSec);
+    const gfX = (upperSec ? upperSec.width : 0) + COL_GAP;
+    const gfY = lastUpper ? lastUpper.y : HEADER_H;   // 与「决赛」同一行
+    const finCards = [];
+    const finRounds = [];
+    finGroups.forEach((r) => {
+      const list = (r.matches || []).slice().sort((a, b) => (a.slotNo || 0) - (b.slotNo || 0));
+      const cards = list.map((s, i) => Object.assign(_cardFromSlot(s, o), { x: gfX, y: gfY + i * (H + G) }));
+      const _fullLabel = localizeRoundLabel(r.label) || ('R' + r.no);
+      finRounds.push({ label: _fullLabel, short: _fullLabel, roundNo: r.no, x: gfX });
+      finCards.push.apply(finCards, cards);
+    });
+    const finSec = {
+      side: 'final', label: '', y: (upperSec ? upperSec.y : 0), height: 0,
+      width: gfX + CARD_W, rounds: finRounds, cards: finCards, lines: []
+    };
+    if (lastUpper && finCards.length) {
+      upperSec.lines.push({
+        left: lastUpper.x + CARD_W, top: lastUpper.y + H / 2 - 1,
+        width: Math.max(1, gfX - (lastUpper.x + CARD_W)), height: 2
+      });
+    }
+    if (lastLower && finCards.length) {
+      const laneX = Math.max(maxWidth, gfX + CARD_W) + COL_GAP / 2;
+      const aMid = lastLower.y + H / 2;
+      const bMid = finCards[0].y + H / 2;
+      const aRight = lastLower.x + CARD_W;
+      finSec.lines.push({ left: aRight, top: aMid - 1, width: Math.max(1, laneX - aRight), height: 2 });
+      finSec.lines.push({ left: laneX - 1, top: Math.min(aMid, bMid), width: 2, height: Math.max(1, Math.abs(aMid - bMid)) });
+      finSec.lines.push({ left: gfX + CARD_W, top: bMid - 1, width: Math.max(1, laneX - (gfX + CARD_W)), height: 2 });
+      maxWidth = Math.max(maxWidth, laneX + 8);
+    }
+    sections.push(finSec);
+    maxWidth = Math.max(maxWidth, finSec.width);
+  }
+
+  // ★ 2026-10-31：画布四边留白 —— 原图卡片贴边、底部正好切在最后一张卡的下沿（视觉偏上/局促）
+  sections.forEach((sec) => {
+    sec.y += PAD_TOP;
+    (sec.cards || []).forEach((c) => { c.x += PAD_X; c.y += PAD_TOP; });
+    (sec.rounds || []).forEach((r) => { r.x += PAD_X; });
+    (sec.lines || []).forEach((l) => { l.left += PAD_X; l.top += PAD_TOP; });
+  });
+
   return {
-    width: maxWidth,
-    height: yOffset,
+    width: maxWidth + PAD_X * 2,
+    height: yOffset + PAD_TOP + PAD_BOTTOM,
     sections: sections,
     crossLines: _crossLines(drops, sections),
     cardW: CARD_W,
@@ -410,8 +476,12 @@ function findCurrentRound(view, nowSec) {
   if (!sec || !target) return null;
   const rounds = sec.rounds || [];
   if (!rounds.length) return null;
-  const idx = Math.max(0, Math.min(rounds.length - 1, (target.roundNo || 1) - 1));
-  return { side: sec.side, roundNo: idx + 1, x: rounds[idx].x, left: Math.max(0, rounds[idx].x - 24) };
+  // ★ 2026-10-31：轮号会跳号（如胜者组 R1/R2/R4，没有 R3）⇒ 按真实 roundNo 找列，
+  //   原来用「roundNo - 1」当下标会让导航 chip 与卡片高亮全部错位。
+  const rn = target.roundNo || 1;
+  const hit = rounds.findIndex((r) => (r.roundNo || 0) === rn);
+  const idx = hit >= 0 ? hit : 0;
+  return { side: sec.side, roundNo: rounds[idx].roundNo || rn, x: rounds[idx].x, left: Math.max(0, rounds[idx].x - 24) };
 }
 
 module.exports = {

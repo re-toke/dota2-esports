@@ -598,6 +598,7 @@ function parseScheduledMatches(wikitext, nowSec) {
     // 解析参数
     var fields = parseMatchFields(body);
     if (!fields) continue;
+    if (fields.empty) continue;   // 2026-10-31：双方待定的时间骨架不进赛程列表（bracket 专用）
     // ★ v3 优化项23：注入 section 上下文
     fields.section = currentSection;
     fields.subsection = currentSubsection;
@@ -640,12 +641,20 @@ function parseMatchFields(body, allowNoDate) {
   //   LP 用空字符串表示未确认方（非 TBD 字样）→ 归一为 TBD 占位，交给显示层按「至少一方确定」规则处理；
   //   双方均空（空壳模板，无任何对手信息）→ 仍丢弃（原行为，无展示价值）。
   var missing1 = !team1Name, missing2 = !team2Name;
-  if (missing1 && missing2) return null;   // 空壳模板（无任何对手信息）→ 丢弃（原行为）
-  if (missing1) team1Name = 'TBD';
-  if (missing2) team2Name = 'TBD';
-  // 解析日期
+  // 解析日期（提前到空壳判定之前：总决赛等「双方待定但已排期」的槽位必须保留开赛时间）
   var startTime = parseLiquipediaDate(fields.date || '');
-  if (!startTime && !allowNoDate) return null;  // 日期解析失败，跳过（bracket 骨架模式除外）
+  if (missing1 && missing2) {
+    // ★ 2026-10-31：双方均空 = 待定阶段。旧实现直接丢弃 ⇒ 总决赛卡永远没有开赛时分
+    //   （实测 PARI R5M1 写明「November 1, 2026 - 14:00 CET」却整槽被丢）。
+    //   只在「有日期」时保留时间骨架；无日期空壳仍丢弃（无展示价值，原行为）。
+    if (!startTime) return null;
+    team1Name = 'TBD';
+    team2Name = 'TBD';
+  } else {
+    if (missing1) team1Name = 'TBD';
+    if (missing2) team2Name = 'TBD';
+    if (!startTime && !allowNoDate) return null;  // 日期解析失败，跳过（bracket 骨架模式除外）
+  }
   // bestof
   var bo = fields.bestof ? parseInt(fields.bestof, 10) : 1;
   var boType = 'BO' + (isNaN(bo) || bo < 1 ? 1 : bo);
@@ -742,6 +751,7 @@ function parseMatchFields(body, allowNoDate) {
   return {
     team1Name: team1Name,
     team2Name: team2Name,
+    empty: missing1 && missing2,   // ★ 2026-10-31：双方待定的「时间骨架」槽位（仅 date 存在时保留）
     score1: opp1.score,   // ★ v3 优化项22：从 TeamOpponent|score=N 提取
     score2: opp2.score,
     walkover: walkover,   // ★ v3 优化项22：弃权标记
@@ -772,10 +782,13 @@ function mergeMatchSlot(slot, wikitext) {
     if (v > 0 && ids.indexOf(v) < 0) ids.push(v);
   });
   var finished = !!(f.finished || slot.finished);
+  // ★ 2026-10-31：两侧都无队伍（总决赛待定）时保持 empty，且不让页面的 'TBD' 覆盖槽位队名；
+  //   Match 页仍可能补上 date/bestof（时间骨架槽位就是在这一步拿到时分的）。
+  var isEmpty = !!(f.empty && slot.empty);
   return Object.assign({}, slot, {
-    empty: false,
-    team1Name: f.team1Name || slot.team1Name,
-    team2Name: f.team2Name || slot.team2Name,
+    empty: isEmpty,
+    team1Name: (f.empty ? '' : f.team1Name) || slot.team1Name,
+    team2Name: (f.empty ? '' : f.team2Name) || slot.team2Name,
     score1: f.score1 || slot.score1 || 0,
     score2: f.score2 || slot.score2 || 0,
     walkover: f.walkover || slot.walkover || 0,
@@ -1265,7 +1278,7 @@ function parseBrackets(wikitext) {
           var side = classifyBracketSide(lastComment || header);
           slots.push({
             slotNo: slotNo, roundNo: roundNo, key: slotKey,
-            header: header, comment: lastComment, side: side, empty: !fields,
+            header: header, comment: lastComment, side: side, empty: !fields || !!fields.empty,
             team1Name: fields ? fields.team1Name : 'TBD',
             team2Name: fields ? fields.team2Name : 'TBD',
             score1: fields ? fields.score1 : 0,

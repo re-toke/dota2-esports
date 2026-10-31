@@ -3219,11 +3219,12 @@ Page({
     //   解决「14 槽双败要滑很久才知道有哪些轮次」的浏览问题。
     const nav = [];
     (view.sections || []).forEach((sec) => {
-      (sec.rounds || []).forEach((rd, i) => {
+      (sec.rounds || []).forEach((rd) => {
+        // ★ 2026-10-31：轮号会跳号（upper 只有 R1/R2/R4）⇒ chip 与高亮必须用真实 roundNo
         nav.push({
-          key: sec.side + '-' + (i + 1),
+          key: sec.side + '-' + rd.roundNo,
           side: sec.side,
-          roundNo: i + 1,
+          roundNo: rd.roundNo,
           label: rd.label,
           x: rd.x
         });
