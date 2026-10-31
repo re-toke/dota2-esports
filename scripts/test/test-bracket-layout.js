@@ -416,6 +416,78 @@ const curView5 = bl.layoutBracket({
 });
 assert(bl.findCurrentRound(curView5).side === 'lower', '当前轮：双败取未完成分区');
 
+// ===== ★ 2026-10-31（其他赛制全面回归）：16 队单败 / 16 队双败 / 无 final 标记 / 多场总决赛 =====
+// 16 队单败 + 季军：总决赛接在半决赛右侧一列、垂直居中于两场半决赛
+const se16 = bl.layoutBracket({
+  type: 'Bracket/16',
+  rounds: [
+    { no: 1, side: 'main', label: 'Round of 16', matches: Array.from({ length: 8 }, (_, i) => slot(1, i + 1, 'main')) },
+    { no: 2, side: 'main', label: 'Quarterfinals', matches: Array.from({ length: 4 }, (_, i) => slot(2, i + 1, 'main')) },
+    { no: 3, side: 'main', label: 'Semifinals', matches: [slot(3, 1, 'main'), slot(3, 2, 'main')] },
+    { no: 99, side: 'third', label: 'Third Place Match', matches: [slot(99, 1, 'third')] },
+    { no: 4, side: 'final', label: 'Grand Final', matches: [slot(4, 1, 'final')] }
+  ]
+});
+assert(se16.sections.map((s) => s.side).join(',') === 'main,third,final', '16 队单败：main/third/final 分区');
+const s16sf1 = se16.sections[0].cards.filter((c) => c.key === 'R3M1')[0];
+const s16sf2 = se16.sections[0].cards.filter((c) => c.key === 'R3M2')[0];
+const s16gf = se16.sections[2].cards[0];
+assert(!!s16gf && s16gf.x === s16sf1.x + 344 && s16gf.y === (s16sf1.y + s16sf2.y) / 2,
+  '16 队单败：总决赛在半决赛右侧一列、垂直居中');
+assert(se16.sections[1].y > se16.sections[0].y + se16.sections[0].height - 1, '16 队单败：季军赛独立分段');
+
+// 16 队双败（未知 type）：总决赛在最右列、垂直居中；多轮 lower 1:1 对齐不溢出
+const de16 = bl.layoutBracket({
+  type: 'Bracket/16U8L4D',
+  rounds: [
+    { no: 1, side: 'upper', label: 'Upper Round 1', matches: Array.from({ length: 8 }, (_, i) => slot(1, i + 1, 'upper')) },
+    { no: 2, side: 'upper', label: 'Upper Round 2', matches: Array.from({ length: 4 }, (_, i) => slot(2, i + 1, 'upper')) },
+    { no: 3, side: 'upper', label: 'Upper Round 3', matches: [slot(3, 1, 'upper'), slot(3, 2, 'upper')] },
+    { no: 4, side: 'upper', label: 'Upper Final', matches: [slot(4, 1, 'upper')] },
+    { no: 1, side: 'lower', label: 'Lower Round 1', matches: [1, 2, 3, 4].map((i) => slot(1, i + 4, 'lower')) },
+    { no: 2, side: 'lower', label: 'Lower Round 2', matches: [1, 2, 3, 4].map((i) => slot(2, i + 8, 'lower')) },
+    { no: 3, side: 'lower', label: 'Lower Round 3', matches: [slot(3, 1, 'lower'), slot(3, 2, 'lower')] },
+    { no: 4, side: 'lower', label: 'Lower Round 4', matches: [slot(4, 5, 'lower'), slot(4, 6, 'lower')] },
+    { no: 5, side: 'lower', label: 'Lower Round 5', matches: [slot(5, 1, 'lower')] },
+    { no: 6, side: 'lower', label: 'Lower Final', matches: [slot(6, 1, 'lower')] },
+    { no: 7, side: 'final', label: 'Grand Final', matches: [slot(7, 1, 'final')] }
+  ]
+});
+assert(de16.sections.map((s) => s.side).join(',') === 'upper,lower,final', '16 队双败：upper/lower/final 分区');
+const d16uf = de16.sections[0].cards.filter((c) => c.key === 'R4M1')[0];
+const d16lf = de16.sections[1].cards.filter((c) => c.key === 'R6M1')[0];
+const d16gf = de16.sections[2].cards[0];
+assert(!!d16gf && d16gf.x === d16lf.x + 344 && d16gf.y === (d16uf.y + d16lf.y) / 2,
+  '16 队双败：总决赛在最右列、垂直居中于上/败者组决赛');
+assert(de16.sections[2].lines.length === 5 && de16.crossLines.length === 0,
+  '16 队双败（未知 type）：两条手肘线汇入、不臆测降级线');
+assert(d16gf.x + 280 <= de16.width - 12 && d16gf.y + 104 <= de16.height, '16 队双败：总决赛不越界');
+
+// final 标记缺失（末轮就叫 "Final"）：照常作为 main 最后一列，不单独内联
+const noFinalTag = bl.layoutBracket({
+  type: 'Bracket/8',
+  rounds: [
+    { no: 1, side: 'main', label: 'Quarterfinals', matches: [1, 2, 3, 4].map((i) => slot(1, i, 'main')) },
+    { no: 2, side: 'main', label: 'Semifinals', matches: [slot(2, 1, 'main'), slot(2, 2, 'main')] },
+    { no: 3, side: 'main', label: 'Final', matches: [slot(3, 1, 'main')] }
+  ]
+});
+assert(noFinalTag.sections.length === 1 && noFinalTag.sections[0].cards.length === 7,
+  '无 final 标记：全部并入 main 分区（7 张卡）');
+
+// 多场总决赛（bracket reset 的第二场）必须顺序下排，不叠在同一坐标
+const resetView = bl.layoutBracket({
+  type: 'Bracket/8U4L2DSL1D',
+  rounds: pglRounds().map((r) => (r.side === 'final'
+    ? Object.assign({}, r, { matches: [slot(5, 1, 'final'), slot(5, 2, 'final')] })
+    : r))
+});
+const resetCards = resetView.sections[2].cards;
+assert(resetCards.length === 2 && resetCards[1].y === resetCards[0].y + 136,
+  `多场总决赛：顺序下排（间距 ${bl.CARD_H + bl.CARD_GAP}，实际 ${resetCards[1] && (resetCards[1].y - resetCards[0].y)}）`);
+assert(resetView.height >= resetCards[1].y + 104 + 16,
+  `多场总决赛：画布高度容纳第二场（height=${resetView.height}）`);
+
 // ===== 无数据 =====
 assert(bl.layoutBracket(null).sections.length === 0, 'null 输入 → 空布局');
 

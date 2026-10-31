@@ -391,9 +391,10 @@ function layoutBracket(bracket, opts) {
       : ((anchorSec ? anchorSec.y + HEADER_H : 0));
     const finCards = [];
     const finRounds = [];
+    let finSeq = 0;   // ★ 2026-10-31：多轮总决赛（如 bracket reset 的「Grand Final Reset」）必须顺序下排
     finGroups.forEach((r) => {
       const list = (r.matches || []).slice().sort((a, b) => (a.slotNo || 0) - (b.slotNo || 0));
-      const cards = list.map((s, i) => Object.assign(_cardFromSlot(s, o), { x: gfX, y: gfY + i * (H + G) }));
+      const cards = list.map((s) => Object.assign(_cardFromSlot(s, o), { x: gfX, y: gfY + (finSeq++) * (H + G) }));
       const _fullLabel = localizeRoundLabel(r.label) || ('R' + r.no);
       finRounds.push({ label: _fullLabel, short: _fullLabel, roundNo: r.no, x: gfX });
       finCards.push.apply(finCards, cards);
@@ -442,9 +443,18 @@ function layoutBracket(bracket, opts) {
     (sec.lines || []).forEach((l) => { l.left += PAD_X; l.top += PAD_TOP; });
   });
 
+  // ★ 2026-10-31（其他赛制）：多场总决赛（bracket reset 的第二场）向下叠加时，
+  //   画布高度要跟着长，否则第二张卡（及其时间行）会被裁掉。
+  let height = yOffset + PAD_TOP + PAD_BOTTOM;
+  const finSecAll = sections.filter((s) => s.side === 'final')[0];
+  if (finSecAll && finSecAll.cards && finSecAll.cards.length) {
+    const lastFin = finSecAll.cards[finSecAll.cards.length - 1];
+    height = Math.max(height, lastFin.y + H + PAD_BOTTOM + 28);   // 28 = 卡下时间行（6 + 22）
+  }
+
   return {
     width: maxWidth + PAD_X * 2,
-    height: yOffset + PAD_TOP + PAD_BOTTOM,
+    height: height,
     sections: sections,
     crossLines: _crossLines(drops, sections),
     cardW: CARD_W,
