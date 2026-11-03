@@ -5,9 +5,9 @@
 // cannot load .json directly).
 module.exports = {
   "version": 3,
-  "generatedAt": "2026-10-28T13:49:20.671Z",
+  "generatedAt": "2026-11-03T11:15:22.920Z",
   "source": "utils/curation.js#CURATED_EVENTS",
-  "eventCount": 327,
+  "eventCount": 329,
   "map": {
     "theinternational2025": "The International 2025",
     "ti2025": "The International 2025",
@@ -115,6 +115,7 @@ module.exports = {
     "ewcdota2026": "Esports World Cup 2026",
     "eplmastersi": "EPL Masters I",
     "eplmastersii": "EPL Masters II",
+    "eplmastersiii": "EPL Masters III",
     "resunchained5blastslamviiieuropequalifier": "RES Unchained 5: BLAST SLAM VIII Europe Qualifier",
     "resunchained5eu": "RES Unchained 5: BLAST SLAM VIII Europe Qualifier",
     "resunchained5europe": "RES Unchained 5: BLAST SLAM VIII Europe Qualifier",
@@ -292,7 +293,7 @@ module.exports = {
     "19893": "The International 2026 - Regional Qualifier China",
     "19894": "The International 2026 - Regional Qualifier Southeast Asia",
     "19917": "Games of the Future 2026",
-    "19944": "EPL Masters II",
+    "19944": "EPL Masters III",
     "20009": "1win Essence II",
     "20142": "RES Unchained 5: BLAST SLAM VIII Europe Qualifier",
     "20143": "RES Unchained 5: BLAST SLAM VIII SEA Qualifier",
@@ -300,5 +301,5 @@ module.exports = {
     "20208": "BLAST SLAM IX",
     "20395": "PARI UNIVERSE by FISSURE"
   },
-  "dataVersion": "1793195360668"
+  "dataVersion": "1793704522913"
 };

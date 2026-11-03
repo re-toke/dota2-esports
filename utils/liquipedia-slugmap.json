@@ -1,6 +1,7 @@
 {
   "generatedAt": "2026-08-31T08:30:00.000Z",
   "mappings": {
+    "EPL Masters III": "EPL/Masters/3",
     "EPL Masters II": "EPL/Masters/2",
     "EPL Masters II: Play-In": "EPL/Masters/2",
     "ExitLag ChampZ: Dota 2": "ExitLagChampZ",

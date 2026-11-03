@@ -153,23 +153,25 @@ function main() {
   //   G4 的核心不变量（内容由 utils/curation.js 单一来源生成）改由 CI 校验一文件
   //   （见 .github/workflows/ci.yml：跑完脚本后 git diff --quiet -- utils/curation-shared.js）。
 
-  // EPL 覆盖自检（2026-07-27 修复后语义变更；2026-08-31 P0 判届升级）：
-  // 现保留窄别名 'epl masters i' / 'epl masters ii' + leagueId 精确 pin（19944）。
-  // 19944 被 Masters I/II 复用：leagueIdMap 采用「最新届覆盖」语义（last-write wins，
-  // 条目按时间顺序排列 → II 在后），供云函数推送文案取当届名；客户端多届判届
+  // EPL 覆盖自检（2026-07-27 修复后语义变更；2026-08-31 判届升级；2026-11-03 III 事故加固）：
+  // 现保留窄别名 'epl masters i/ii/iii' + leagueId 精确 pin（19944）。
+  // 19944 被 Masters I/II/III 复用：leagueIdMap 采用「最新届覆盖」语义（last-write wins，
+  // 条目按时间顺序排列 → III 在后），仅供推送文案取当届名；客户端多届判届
   // 由 curation.js 的 leagueIdWindow（pinLookup）负责，与本静态 map 无关。
-  // 1) canonical 自映射：I / II 均必须映射回自身；
-  // 2) leagueId pin：19944 必须命中最新届（当前 = EPL Masters II）；
+  // 1) canonical 自映射：I / II / III 均必须映射回自身；
+  // 2) leagueId pin：19944 必须命中最新届（当前 = EPL Masters III）；
   // 3) 回归防护：过宽别名 'epl2026' / 'eplmasters2026' 不得映射到任何 EPL 届。
-  const eplSelfOk = map['eplmastersi'] === 'EPL Masters I' && map['eplmastersii'] === 'EPL Masters II';
-  const eplPinOk = leagueIdMap[19944] === 'EPL Masters II';
-  const eplOverBroad = ['epl2026', 'eplmasters2026'].filter((k) => map[k] === 'EPL Masters I' || map[k] === 'EPL Masters II');
+  const eplSelfOk = map['eplmastersi'] === 'EPL Masters I' && map['eplmastersii'] === 'EPL Masters II' &&
+    map['eplmastersiii'] === 'EPL Masters III';
+  const eplPinOk = leagueIdMap[19944] === 'EPL Masters III';
+  const eplOverBroad = ['epl2026', 'eplmasters2026'].filter((k) =>
+    map[k] === 'EPL Masters I' || map[k] === 'EPL Masters II' || map[k] === 'EPL Masters III');
   if (!eplSelfOk) {
-    console.error('[sync-canon-map] 致命：EPL canonical 自映射缺失（eplmastersi / eplmastersii）');
+    console.error('[sync-canon-map] 致命：EPL canonical 自映射缺失（eplmastersi / eplmastersii / eplmastersiii）');
     process.exit(1);
   }
   if (!eplPinOk) {
-    console.error('[sync-canon-map] 致命：EPL leagueId pin 缺失（19944 -> 最新届 EPL Masters II）');
+    console.error('[sync-canon-map] 致命：EPL leagueId pin 缺失（19944 -> 最新届 EPL Masters III）');
     process.exit(1);
   }
   if (eplOverBroad.length) {
@@ -177,7 +179,50 @@ function main() {
     process.exit(1);
   }
 
-  console.log('[sync-canon-map] OK · 事件覆盖 ' + count + ' 条 · 两侧 curation-shared.js 内容一致 · EPL pin+映射完整' + diffSummary);
+  // ★ 2026-11-03（EPL Masters III 事故的**通用结构防线**）：一 ID 多届的赛事必须
+  //   ① 每届都带 leagueIdWindow（缺窗的届会被「回退最新届」逻辑吞掉/错判）；
+  //   ② 窗口按届次首尾衔接、互不重叠（漏填一届 = 那届落入空档 → 判错届）；
+  //   ③ 每届拥有独立的 liquipediaSlug（共用 slug ⇒ 详情页永远打开上一届的页面）。
+  //   本检查对全部 curation 条目生效，不只 EPL —— 同类事故不再依赖人工自觉。
+  const multiIdErrors = [];
+  const eventsById = {};
+  const _events = require(path.join(ROOT, 'utils', 'curation.js')).CURATED_EVENTS || [];
+  _events.forEach((ev) => {
+    if (!ev || ev.leagueId == null) return;
+    (eventsById[ev.leagueId] = eventsById[ev.leagueId] || []).push(ev);
+  });
+  Object.keys(eventsById).forEach((id) => {
+    const list = eventsById[id];
+    if (list.length < 2) return;
+    const wins = [];
+    list.forEach((ev) => {
+      const w = ev.leagueIdWindow;
+      if (!w || w.from == null || w.to == null) {
+        multiIdErrors.push('leagueId ' + id + '（' + list.length + ' 届）的「' + ev.canonical +
+          '」缺 leagueIdWindow —— 一 ID 多届必须逐届声明时间窗');
+        return;
+      }
+      wins.push({ canonical: ev.canonical, from: w.from, to: w.to, slug: ev.liquipediaSlug || '' });
+    });
+    wins.sort((a, b) => a.from - b.from);
+    for (let i = 1; i < wins.length; i++) {
+      // 首尾衔接允许相等（I.to == II.from 这类边界），只拦真正的重叠
+      if (wins[i - 1].to > wins[i].from) {
+        multiIdErrors.push('leagueId ' + id + ' 时间窗重叠：' + wins[i - 1].canonical + ' 与 ' + wins[i].canonical);
+      }
+      if (wins[i - 1].slug && wins[i - 1].slug === wins[i].slug) {
+        multiIdErrors.push('leagueId ' + id + ' 的 ' + wins[i - 1].canonical + ' 与 ' + wins[i].canonical +
+          ' 共用 liquipediaSlug=' + wins[i].slug + ' —— 详情页会渲染成同一届');
+      }
+    }
+  });
+  if (multiIdErrors.length) {
+    console.error('[sync-canon-map] 致命：一 ID 多届结构不变量被破坏\n  - ' + multiIdErrors.join('\n  - '));
+    process.exit(1);
+  }
+
+  console.log('[sync-canon-map] OK · 事件覆盖 ' + count + ' 条 · 两侧 curation-shared.js 内容一致 · EPL pin+映射完整' +
+    ' · 多届窗口/独立 slug 校验通过' + diffSummary);
 }
 
 main();

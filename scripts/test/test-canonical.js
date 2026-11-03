@@ -119,20 +119,26 @@ check('EPL 不再含过宽别名 epl2026 / eplmasters2026（2026-07-27 修复回
 //       取代模糊别名。下面是「修复 A 比赛却影响 B 比赛」的回归场景：
 section('\n--- G10 leagueId 精确 pin + 跨游戏隔离（防"修A影响B"回归）---');
 
-check('G10: 19944（EPL Masters league entity）经 leagueId pin + dota2 ctx 解析为当届（II，判届窗口）', () => {
-  // 2026-08-31 P0：19944 被 Masters I/II 复用，pin 按调用时刻判届。
-  // 当前（08-31）落在 II 窗口（8/13~9/13）→ Masters II；窗口结束后回退最新届（仍 II），
-  // 因此本断言长期稳定。Masters I 的判届由下方 G10-window 专项测试用 ctx.now 锁定。
-  const r = sources.canonicalLeagueName('EPL Masters 2026 ', { leagueId: 19944, game: 'dota2' });
-  assert(r === 'EPL Masters II', 'leagueId=19944 pin 应判届命中 EPL Masters II，实际: ' + r);
+check('G10: 19944（EPL Masters league entity）经 leagueId pin + 显式时间解析为 II', () => {
+  // ★ 2026-11-03（EPL Masters III 事故）：断言必须**显式给 now**。
+  //   原实现依赖「当前时间」，2026-11-03 补录 III 后几乎必然失败（跨届后测试自坏）；
+  //   更严重的是，这种「按看页面此刻判届」的写法正是线上把 III 判成 II 的同一根因。
+  const r = sources.canonicalLeagueName('EPL Masters 2026 ', {
+    leagueId: 19944, game: 'dota2', now: Math.floor(Date.UTC(2026, 8, 1) / 1000)
+  });
+  assert(r === 'EPL Masters II', 'leagueId=19944 + 9/1 应判届命中 EPL Masters II，实际: ' + r);
 });
 check('G10: 19080（同名低级别联赛）经 leagueId 上下文不应被 EPL pin 命中', () => {
   const r = sources.canonicalLeagueName('EPL 2026', { leagueId: 19080, game: 'dota2' });
   assert(r === 'EPL 2026', 'leagueId=19080 不在 EPL pin 内，应原样返回，实际: ' + r);
 });
-check('G10: leagueDisplayName 自动从 league 对象抽取 leagueId → pin 判届命中（当届 II）', () => {
-  const r = sources.leagueDisplayName({ name: 'EPL Masters 2026 ', leagueid: 19944 });
-  assert(r === 'EPL Masters II', '自动抽取 leagueid=19944 应判届命中 EPL Masters II，实际: ' + r);
+check('G10: leagueDisplayName 自动抽取 leagueId + 按对象自身 start_time 判届（II / III 各归各届）', () => {
+  // ★ 2026-11-03：一 ID 多届时按「对局自身时间」判届 —— 这是 III 事故的根治点：
+  //   若仍按「看页面的此刻」，同一天打开页面，II 与 III 的所有对局都会被贴上同一个名字。
+  const ii = sources.leagueDisplayName({ name: 'EPL Masters 2026 ', leagueid: 19944, start_time: Math.floor(Date.UTC(2026, 8, 5) / 1000) });
+  const iii = sources.leagueDisplayName({ name: 'EPL Masters 2026 ', leagueid: 19944, start_time: Math.floor(Date.UTC(2026, 9, 25) / 1000) });
+  assert(ii === 'EPL Masters II', 'II 赛期的对局应判届 EPL Masters II，实际: ' + ii);
+  assert(iii === 'EPL Masters III', 'III 赛期的对局应判届 EPL Masters III（不得再错判为 II），实际: ' + iii);
 });
 check('G10: 跨游戏隔离 — cs2 ctx 下，DOTA2 EPL 条目不得命中（pin 失败）', () => {
   const r = sources.canonicalLeagueName('EPL Masters 2026 ', { leagueId: 19944, game: 'cs2' });
@@ -160,9 +166,11 @@ check('G10: 修复 A 比赛时不影响 B 比赛 — 其它 leagueId 不会被�
   });
 });
 check('G10: leagueId pin 命中后会返回完整元数据（prizePool / status / tier）', () => {
-  const c = remoteCuration.curatedEventFor('EPL Masters 2026 ', { leagueId: 19944, game: 'dota2' });
+  const c = remoteCuration.curatedEventFor('EPL Masters 2026 ', {
+    leagueId: 19944, game: 'dota2', now: Math.floor(Date.UTC(2026, 8, 1) / 1000)
+  });
   assert(c, '应返回 curation entry');
-  assert(c.canonical === 'EPL Masters II', 'canonical 不对（判届当届 II）: ' + c.canonical);
+  assert(c.canonical === 'EPL Masters II', 'canonical 不对（9/1 判届 II）: ' + c.canonical);
   assert(c.prizePool === '$100,000', 'prizePool 应为 DOTA2 实际值 $100,000（非 CS2 $1M），实际: ' + c.prizePool);
   assert(c.status === '进行中', 'status 应为 进行中（Masters II 2026-08-30~09-10），实际: ' + c.status);
   const t = c.tier || {};
@@ -175,6 +183,8 @@ check('G10: leagueId pin 命中后会返回完整元数据（prizePool / status 
 section('\n--- G16 一 ID 多届判届（leagueIdWindow）---');
 const EPL_I_WIN = { from: Math.floor(Date.UTC(2026, 6, 13) / 1000), to: Math.floor(Date.UTC(2026, 7, 13) / 1000) };
 const EPL_II_WIN = { from: Math.floor(Date.UTC(2026, 7, 13) / 1000), to: Math.floor(Date.UTC(2026, 8, 12) / 1000) };
+// ★ 2026-11-03 P0：III 届（Liquipedia EPL/Masters/3：2026-10-18 ~ 11-05）
+const EPL_III_WIN = { from: Math.floor(Date.UTC(2026, 8, 12) / 1000), to: Math.floor(Date.UTC(2026, 10, 7) / 1000) };
 check('G16: ctx.now 落在 I 窗口（2026-08-01）→ 解析为 EPL Masters I', () => {
   const c = remoteCuration.curatedEventFor('EPL Masters 2026 ', { leagueId: 19944, game: 'dota2', now: Math.floor(Date.UTC(2026, 7, 1) / 1000) });
   assert(c && c.canonical === 'EPL Masters I', '8/1 应判届为 Masters I，实际: ' + (c && c.canonical));
@@ -187,9 +197,46 @@ check('G16: ctx.now 早于全部窗口（2026-06-01）→ 回退窗口最早的�
   const c = remoteCuration.curatedEventFor('EPL Masters 2026 ', { leagueId: 19944, game: 'dota2', now: Math.floor(Date.UTC(2026, 5, 1) / 1000) });
   assert(c && c.canonical === 'EPL Masters I', '6/1（两窗口前）应回退 Masters I，实际: ' + (c && c.canonical));
 });
-check('G16: ctx.now 晚于全部窗口（2026-10-01）→ 回退最新届（II）', () => {
-  const c = remoteCuration.curatedEventFor('EPL Masters 2026 ', { leagueId: 19944, game: 'dota2', now: Math.floor(Date.UTC(2026, 9, 1) / 1000) });
-  assert(c && c.canonical === 'EPL Masters II', '10/1（两窗口后）应回退最新届 Masters II，实际: ' + (c && c.canonical));
+check('G16: ctx.now 落在 III 窗口（2026-10-20 / 11-01）→ 解析为 EPL Masters III（事故主场景）', () => {
+  // ★ 2026-11-03 P0：用户反馈「III 的对局全部显示成 II」—— 以下两组时间正是 III 的赛期
+  //   （10/18 小组赛起、11/2 起季后赛），必须判成 III，绝不能落到 II。
+  const a = remoteCuration.curatedEventFor('EPL Masters 2026 ', { leagueId: 19944, game: 'dota2', now: Math.floor(Date.UTC(2026, 9, 20) / 1000) });
+  const b = remoteCuration.curatedEventFor('EPL Masters 2026 ', { leagueId: 19944, game: 'dota2', now: Math.floor(Date.UTC(2026, 10, 1) / 1000) });
+  assert(a && a.canonical === 'EPL Masters III', '10/20（III 小组赛）应判届 III，实际: ' + (a && a.canonical));
+  assert(b && b.canonical === 'EPL Masters III', '11/1（III 季后赛）应判届 III（不得错判为 II），实际: ' + (b && b.canonical));
+});
+check('G16: 赛期结束后 7 天容差内（2026-11-10）仍判当届 III（覆盖延迟结算）', () => {
+  const c = remoteCuration.curatedEventFor('EPL Masters 2026 ', { leagueId: 19944, game: 'dota2', now: Math.floor(Date.UTC(2026, 10, 10) / 1000) });
+  assert(c && c.canonical === 'EPL Masters III', '11/10 仍应在 III 容差内，实际: ' + (c && c.canonical));
+});
+check('G16: ctx.now 晚于全部窗口且超容差（2026-12-20）→ 不判届（返回 null，不猜上一届）', () => {
+  // ★ 2026-11-03 P0（防止再次发生）：原实现无条件「回退末条」—— 新一届未补录时，
+  //   会把整届数据错判成上一届（III→II 事故的机制）。现在必须返回 null：
+  //   名称匹配/原始名兜底，宁可少信息也不给错届（错届会连带错 slug/赛期/参赛队）。
+  const c = remoteCuration.curatedEventFor('EPL Masters 2026 ', { leagueId: 19944, game: 'dota2', now: Math.floor(Date.UTC(2026, 11, 20) / 1000) });
+  assert(c === null, '12/20 已超全部窗口 + 容差，不应再回退任何一届，实际: ' + (c && c.canonical));
+});
+check('G16-III: III 元数据完整性（Liquipedia EPL/Masters/3 实锤：赛期/奖金/独立 slug/16 队）', () => {
+  const c = remoteCuration.curatedEventFor('EPL Masters III', { game: 'dota2' });
+  assert(c, '应能按 canonical 精确命中 EPL Masters III');
+  assert(c.liquipediaSlug === 'EPL/Masters/3', 'III 必须使用自己的 Liquipedia slug（共用 II 的 slug = 详情页渲染成 II），实际: ' + c.liquipediaSlug);
+  assert(c.start === Math.floor(Date.UTC(2026, 9, 18) / 1000) && c.end === Math.floor(Date.UTC(2026, 10, 5) / 1000),
+    'III 赛期应为 2026-10-18 ~ 2026-11-05');
+  assert(c.prizePool === '$100,000', 'III 奖金池应为 $100,000，实际: ' + c.prizePool);
+  assert(c.participants.length === 16, 'III 参赛队应为 16 支，实际: ' + c.participants.length);
+  // 防跨届串队：19944 混有 I/II/III 数据，III 的名单里不能出现只在 I/II 出现过的队
+  const names = c.participants.map((p) => p.name);
+  assert(names.indexOf('Team Jenz') < 0 && names.indexOf('PuckChamp') < 0 && names.indexOf('MOUZ') < 0,
+    'III 参赛队名单不得混入 I/II 的独有队伍（跨届串队）: ' + names.join(','));
+});
+check('G16-III: 19944 的历史时间仍归各届（7/1→I / 8/1→II / 9/20→III）', () => {
+  const at = (y, m, d) => Math.floor(Date.UTC(y, m, d) / 1000);
+  const i = remoteCuration.curatedEventFor('EPL Masters 2026 ', { leagueId: 19944, game: 'dota2', now: at(2026, 7, 1) });
+  const ii = remoteCuration.curatedEventFor('EPL Masters 2026 ', { leagueId: 19944, game: 'dota2', now: at(2026, 8, 1) });
+  const iii = remoteCuration.curatedEventFor('EPL Masters 2026 ', { leagueId: 19944, game: 'dota2', now: at(2026, 9, 20) });
+  assert(i && i.canonical === 'EPL Masters I', '7/1（I 窗口前）应判 I，实际: ' + (i && i.canonical));
+  assert(ii && ii.canonical === 'EPL Masters II', '8/1（II 窗口内）应判 II，实际: ' + (ii && ii.canonical));
+  assert(iii && iii.canonical === 'EPL Masters III', '10/20（III 窗口内）应判 III，实际: ' + (iii && iii.canonical));
 });
 check('G16: 单届条目（20142 RES Unchained 5 EU）不受判届影响，pin 直接命中', () => {
   const c = remoteCuration.curatedEventFor('RES Unchained - A Blast Dota Slam VIII Qualifier EU', { leagueId: 20142, game: 'dota2' });
@@ -199,8 +246,25 @@ check('G16: 名称碎片归一 — OpenDota 原名 "RES Unchained - A Blast Dota
   const r = sources.canonicalLeagueName('RES Unchained - A Blast Dota Slam VIII Qualifier EU');
   assert(r === 'RES Unchained - A Blast Dota Slam VIII Qualifier EU', '无 ctx 不应猜（需 pin），实际: ' + r);
 });
-check('G16: 判届窗口数据完整性 — I/II 两届 leagueIdWindow 无缝衔接（I.to == II.from）', () => {
+check('G16: 判届窗口数据完整性 — I/II/III 三届 leagueIdWindow 无缝衔接（I.to == II.from、II.to == III.from）', () => {
   assert(EPL_I_WIN.to === EPL_II_WIN.from, 'I/II 窗口应首尾衔接，不留判届空洞: I.to=' + EPL_I_WIN.to + ' II.from=' + EPL_II_WIN.from);
+  assert(EPL_II_WIN.to === EPL_III_WIN.from, 'II/III 窗口应首尾衔接，不留判届空洞: II.to=' + EPL_II_WIN.to + ' III.from=' + EPL_III_WIN.from);
+});
+check('G16: 一 ID 多届结构不变量 — 每届都有窗口 + 独立 slug（同类事故的结构防线）', () => {
+  // ★ 2026-11-03：不依赖人工自觉的静态防线（sync-canon-map.js 亦在 CI 拦截）：
+  //   ① 19944 的每一届都必须声明 leagueIdWindow；
+  //   ② 每届的 liquipediaSlug 必须独立（共用 slug ⇒ 详情页永远渲染成同一届）。
+  const LOCAL = require(path.join(SRC, 'curation.js'));
+  const evs = (LOCAL.CURATED_EVENTS || []).filter((e) => e && e.leagueId === 19944);
+  assert(evs.length === 3, '19944 应登记 I/II/III 三届，实际: ' + evs.length);
+  const slugs = {};
+  evs.forEach((e) => {
+    assert(e.leagueIdWindow && e.leagueIdWindow.from != null && e.leagueIdWindow.to != null,
+      e.canonical + ' 必须带 leagueIdWindow（否则判届会回退到别的届）');
+    assert(e.liquipediaSlug, e.canonical + ' 必须有独立 liquipediaSlug');
+    assert(!slugs[e.liquipediaSlug], e.canonical + ' 的 slug 与其它届重复: ' + e.liquipediaSlug);
+    slugs[e.liquipediaSlug] = true;
+  });
 });
 
 // ===== G11：子模块数据完整性（参赛队伍/对阵/排名）—— 防"修复A影响B"在子模块重现 =====
@@ -210,8 +274,11 @@ check('G11: 详情页 leagueId 纠偏 — 传入 wrong leagueId(19080)+correct n
   assert(c === null, '19080 不在 EPL pin 内，不应返回 curation entry（详情页应走 openLeague 重定向到 19944）');
 });
 check('G11: 详情页 leagueId 纠偏 — 传入 correct leagueId(19944)+name 应命中 pin（判届当届）', () => {
-  const c = remoteCuration.curatedEventFor('EPL Masters 2026 ', { leagueId: 19944, game: 'dota2' });
-  assert(c && c.canonical === 'EPL Masters II', '19944 应判届命中 EPL Masters II，实际: ' + (c && c.canonical));
+  // ★ 2026-11-03：显式给 now（II 赛期）。原断言依赖「此刻」判届，III 补录后即失效。
+  const c = remoteCuration.curatedEventFor('EPL Masters 2026 ', {
+    leagueId: 19944, game: 'dota2', now: Math.floor(Date.UTC(2026, 8, 1) / 1000)
+  });
+  assert(c && c.canonical === 'EPL Masters II', '19944 + 9/1 应判届命中 EPL Masters II，实际: ' + (c && c.canonical));
 });
 check('G11: 子模块数据来源 — 19944 的 matches 应推导出 13 支参赛队（非占位 16 队）', () => {
   // 模拟 league-detail 的 refreshMetadataDerived 逻辑：从 raw match 数据提取 team_id
@@ -644,10 +711,15 @@ check('★ leagueId 判届路径**未被缓存**（它依赖 now，缓存会导�
   Object.keys(byLid).forEach((k) => { if (multi === null && byLid[k].length >= 2) multi = Number(k); });
   assert(multi !== null, 'curation 中应存在至少一个「一 ID 多届」的 leagueId（本断言自身的前提）');
   // 同一实例、同一 leagueId、**不同 now** ⇒ 必须能取到不同届
+  // ★ 2026-11-03：末届时间点改用「该 leagueId 最后一个窗口内」的 now。
+  //   极晚（2100 年）在新策略下会返回 null（疑似新一节未策展 ⇒ 不猜），不能再用来验证判届。
   const lk = curationRaw.buildLookups(curationRaw.CURATED_EVENTS, curationRaw.CURATED_TEAMS);
-  const early = lk.eventFor('', { leagueId: multi, now: 1 });              // 极早 → 回退首届
-  const late = lk.eventFor('', { leagueId: multi, now: 4102444800 });      // 极晚 → 回退末届
-  assert(early && late, 'leagueId ' + multi + ' 应能命中共 2 届');
+  const wins = (byLid[multi] || []).map((e) => e.leagueIdWindow).filter((w) => w && w.from != null && w.to != null)
+    .sort((a, b) => a.from - b.from);
+  assert(wins.length === byLid[multi].length, 'leagueId ' + multi + ' 的每一届都必须带窗口');
+  const early = lk.eventFor('', { leagueId: multi, now: 1 });                        // 极早 → 回退首届
+  const late = lk.eventFor('', { leagueId: multi, now: wins[wins.length - 1].from + 86400 });  // 末届窗口内
+  assert(early && late, 'leagueId ' + multi + ' 应能命中届次（实际 early=' + !!early + ' late=' + !!late + '）');
   assert(sigOf(early) !== sigOf(late),
     '不同 now 取到同一届 ⇒ leagueId 判届路径被错误缓存了（leagueId ' + multi + '）');
 });

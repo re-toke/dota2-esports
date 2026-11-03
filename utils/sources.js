@@ -709,13 +709,19 @@ function getMatchTier(leagueName) {
 //    改本体会影响推送行为，留待云开发下线观察期结束后统一评估。
 //
 // @param {string} leagueName 赛事名（OpenDota / LP 原始名，curation 内部会做归一名匹配）
-// @param {number} [leagueId]  可选，用于「一 ID 多届」的精确 pin（如 EPL Masters I/II）
-function getMatchTierForHome(leagueName, leagueId) {
+// @param {number} [leagueId]  可选，用于「一 ID 多届」的精确 pin（如 EPL Masters I/II/III）
+// @param {number} [at]        可选，对局/系列开赛时间（Unix 秒或毫秒）——「一 ID 多届」判届时钟。
+//   ★ 2026-11-03（EPL Masters III 事故）：不传则按「此刻」判届 ⇒ 当届未补录时新一届会被
+//   贴成上一届的名字。首页卡片调用方应传 series.startTime / match.start_time。
+function getMatchTierForHome(leagueName, leagueId, at) {
   const name = leagueName || '';
   const lid = (typeof leagueId === 'number' && leagueId > 0) ? leagueId : undefined;
   if (!name && !lid) return null;
+  let now = Number(at);
+  if (!isFinite(now) || now <= 0) now = null;
+  else if (now > 1e12) now = Math.floor(now / 1000);   // 毫秒 → 秒 容错
   // ① curation 优先（人工策展，权威源；leagueId 启用精确 pin + 跨游戏隔离）
-  const cu = curation.curatedEventFor(name, { leagueId: lid, game: 'dota2' });
+  const cu = curation.curatedEventFor(name, { leagueId: lid, game: 'dota2', now: now });
   if (cu && cu.tier && cu.tier.grade) {
     // ★ 2026-09-25：**curation 的 tier 也必须过预选赛降级闸门**（补口径漏洞）。
     //   原实现直接返回 `cu.tier` ⇒ 2026-09-19 拍板的「预选赛保留但降级 B 级」在 curation 路径**静默失效**：
@@ -908,6 +914,20 @@ function leagueDisplayName(league, ctx) {
       : (league.league_id != null ? league.league_id
       : (league.league && (league.league.id != null ? league.league.id : league.league.leagueid)));
     if (lid != null && !isNaN(Number(lid))) mergedCtx.leagueId = Number(lid);
+  }
+  // ★ 2026-11-03 P0（EPL Masters III 事故）：leagueId 被多届复用时，必须**按对局自身的时间**判届。
+  //   原实现只按「看页面的此刻」判届 ⇒ ①当届尚未补录时，新一届对局全部被贴上上一届的名字
+  //   （EPL 19944：III 的对局全显示成 II）；②翻看往届数据时也会统一显示成最新一届。
+  //   传入的对象（OpenDota match / 系列）通常自带 start_time ⇒ 用它作为判届时钟，
+  //   调用方显式传 ctx.now 时仍以调用方为准（不覆盖）。
+  if (mergedCtx.now == null && league && typeof league === 'object') {
+    const rawTs = league.start_time != null ? league.start_time
+      : (league.startTime != null ? league.startTime : league.begin_at);
+    let ts = Number(rawTs);
+    if (isFinite(ts) && ts > 0) {
+      if (ts > 1e12) ts = Math.floor(ts / 1000);   // 毫秒 → 秒 容错
+      mergedCtx.now = ts;
+    }
   }
   const display = canonicalLeagueName(raw, mergedCtx);
   // G8：若仍未命中 curation（展示名==原始名），上报以便发现「应补进 curation 的赛事」

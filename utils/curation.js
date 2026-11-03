@@ -458,6 +458,53 @@ const CURATED_EVENTS = [
     status: '进行中', liquipediaSlug: 'EPL/Masters/2',
     valve: false, topThirdParty: true },
 
+  // ── 2026-11-03 P0 补录：EPL Masters III（19944 第三次复用，时间窗判届）──
+  // 事故（用户反馈）：首页对局 / 赛事详情页把 EPL Masters III 全部显示成 EPL Masters II，
+  //   且没有 III 的详情页。根因链：
+  //   ① OpenDota league 19944 被 I/II/III 三届复用（/leagues/19944/matches 实测 484 场，
+  //      2026-10 有 135 场 / 2026-11 有 9 场 —— 全部属于 III）；
+  //   ② curation 只有 I/II ⇒ pinLookup(19944, 现在) 在 now 晚于末届窗口（II.to=09-12）时
+  //      「回退最新届」⇒ 10/18 起的 III 对局一律判成 II；
+  //   ③ 详情页按 II 的 slug / 赛期 / 参赛队渲染，III 的比赛落在 II 窗口外 → 无页面/错数据。
+  // 数据实锤（Liquipedia EPL/Masters/3，pageid=195265）：sdate=2026-10-18 / edate=2026-11-05 /
+  //   team_number=16 / prizepoolusd=100,000 / liquipediatier=3 / Online / 2×6 小组 + 双败季后赛。
+  { canonical: 'EPL Masters III', tier: { grade: 'A', rank: 2, label: 'A-Tier' },
+    leagueId: 19944,
+    // 窗口与 II 共用边界（09-12 衔接，判届取先命中者 = II）、至 edate 后 2 天（11-07），
+    // 与 I/II 首尾衔接、不留空洞（结构防线见 sync-canon-map.js 的多届不变量检查）。
+    leagueIdWindow: { from: Math.floor(Date.UTC(2026, 8, 12) / 1000), to: Math.floor(Date.UTC(2026, 10, 7) / 1000) },
+    game: 'dota2',
+    aliases: ['epl masters iii'], year: 2026,
+    start: Math.floor(Date.UTC(2026, 9, 18) / 1000), end: Math.floor(Date.UTC(2026, 10, 5) / 1000),
+    prizePool: '$100,000', organizer: 'EPL', region: '欧洲/CIS · 线上',
+    format: '小组赛(2×6 Bo3 循环) + 双败淘汰(Bo3/Bo5决赛)',
+    // participants 必填：19944 混有 I/II/III 三届数据，交由 OpenDota 推导会跨届串队。
+    // 名单 = Liquipedia EPL/Masters/3 官方 16 队（Group A/B 按官方 GroupStandings；
+    // Playoff Seed 为邀请制 4 队）。region 为预估（非 LP 字段），与 II 条目同口径。
+    participants: [
+      // ── Group A（Liquipedia GroupStandings 实锤）──
+      { name: 'HULIGANI', region: 'CIS/多国', group: 'A' },
+      { name: 'Power Rangers', region: '欧洲/俄罗斯', group: 'A' },
+      { name: 'Team Lynx', region: '欧洲/俄罗斯', group: 'A' },
+      { name: 'Nemiga Gaming', region: '欧洲/白俄罗斯', group: 'A' },
+      { name: 'Inner Circle', region: '欧洲/多国', group: 'A' },
+      { name: 'salamit', region: '欧洲/俄罗斯', group: 'A' },
+      // ── Group B（Liquipedia GroupStandings 实锤）──
+      { name: 'Team Synapse', region: '欧洲/多国', group: 'B' },
+      { name: 'TheBot$', region: '欧洲/多国', group: 'B' },
+      { name: 'Yellow Submarine', region: '欧洲/俄罗斯', group: 'B' },
+      { name: 'CyberHero', region: 'CIS/多国', group: 'B' },
+      { name: 'Dawn Bulls', region: 'CIS/多国', group: 'B' },
+      { name: 'Zero Tenacity', region: 'CIS/多国', group: 'B' },
+      // ── Playoff Seed（邀请制）──
+      { name: 'GamerLegion', region: '欧洲/德国', group: 'Playoff' },
+      { name: 'LEGION (stack)', region: '欧洲/多国', group: 'Playoff' },
+      { name: 'Natus Vincere', region: '欧洲/乌克兰', group: 'Playoff' },
+      { name: 'OG', region: '欧洲/多国', group: 'Playoff' }
+    ],
+    status: '进行中', liquipediaSlug: 'EPL/Masters/3',
+    valve: false, topThirdParty: true },
+
   // ── 2026-08-31 P0 补录：RES Unchained 5（BLAST SLAM VIII 预选赛，一 ID 一届无复用）──
   // 用户报告「App 显示 RES Unchained 5EU 进行中，但 Liquipedia 搜不到」根因：
   //   OpenDota 名 "RES Unchained - A Blast Dota Slam VIII Qualifier EU"（leagueid 20142）
@@ -998,21 +1045,46 @@ function buildLookups(events, teams) {
   });
   // leagueId 判届命中：时间窗命中返回该届。未命中窗时的回退策略：
   //   now 早于首届窗口（历史上该 league 尚无第二届数据）→ 回退首届（最早届）；
-  //   其余（now 晚于末届窗 / 窗数据缺失）→ 回退末条（最新届）。
+  //   now 晚于末届窗 ≤ 容差 → 回退末届（覆盖赛期结束后几天的延迟结算数据）；
+  //   now 晚于末届窗 > 容差 → **返回 null（不猜）**。
+  //   ★ 2026-11-03 P0（EPL Masters III 事故）：原实现无条件「回退末条（最新届）」，
+  //     遇上 19944 这种被 I/II/III 复用的 league 时，未登记的新一届（III）会被整届
+  //     判成上一届（II）—— 首页卡片标题、详情页 slug/赛期/参赛队全部错，且看起来"正常"，
+  //     比查不到更危险（用户反馈「没有 III 的详情页，首页全是 II 的对局」即此）。
+  //     新一届未策展时必须不猜：回退 null → 名称匹配/原始名兜底，并打一条一次性告警
+  //     便于第一时间发现「又出了一届还没补录」。
+  //   ⚠️ 容差刻意很短（7 天）：EPL 届间隔约 5~7 周，容差放大会重新吞掉未登记的新届。
+  const EDITION_LINGER_SEC = 7 * 86400;
+  const _pinGapWarned = {};
   const pinLookup = (leagueId, now) => {
     const arr = LEAGUE_ID_INDEX[leagueId];
     if (!arr || !arr.length) return null;
     if (arr.length === 1) return arr[0];
-    const withWin = arr.filter((e) => e && e.leagueIdWindow);
-    for (let i = 0; i < arr.length; i++) {
-      const w = arr[i].leagueIdWindow;
-      if (w && w.from != null && w.to != null && now != null && now >= w.from && now <= w.to) return arr[i];
+    // 按窗口起点排序：人工录入顺序 ≠ 届次顺序时也不会判错届
+    const wins = arr.filter((e) => e && e.leagueIdWindow &&
+      e.leagueIdWindow.from != null && e.leagueIdWindow.to != null)
+      .sort((a, b) => a.leagueIdWindow.from - b.leagueIdWindow.from);
+    if (now != null) {
+      for (let i = 0; i < wins.length; i++) {
+        const w = wins[i].leagueIdWindow;
+        if (now >= w.from && now <= w.to) return wins[i];
+      }
     }
-    if (now != null && withWin.length) {
-      const firstWin = withWin[0].leagueIdWindow;
-      if (firstWin.from != null && now < firstWin.from) return arr[0];
+    // 无时间线索 / 无窗口数据 ⇒ 保持旧行为（最新届）
+    if (now == null || !wins.length) return arr[arr.length - 1];
+    const first = wins[0].leagueIdWindow;
+    const last = wins[wins.length - 1].leagueIdWindow;
+    if (now < first.from) return wins[0];                 // 早于首届 ⇒ 历史回填
+    if (now > last.to) {
+      if (now <= last.to + EDITION_LINGER_SEC) return wins[wins.length - 1];
+      if (!_pinGapWarned[leagueId]) {
+        _pinGapWarned[leagueId] = true;
+        console.warn('[curation] leagueId ' + leagueId + ' 超出全部已登记届次窗口（now=' +
+          Math.floor(now) + ' / lastTo=' + last.to + '）：疑似新一届未策展，本次不判届');
+      }
+      return null;
     }
-    return arr[arr.length - 1];
+    return wins[wins.length - 1];                          // 窗口之间的人工空档 ⇒ 旧行为
   };
   // 战队名 -> id 反向索引（用于按名查询）
   const NAME_INDEX = {};
