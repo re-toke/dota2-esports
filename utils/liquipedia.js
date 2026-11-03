@@ -309,6 +309,11 @@ function attempt(params, retryCount) {
 //   （表由 GH Actions 每日灌，会话期间不会变）→ 记住它直接跳过 EF，省掉这笔开销。
 var _efMissMemo = {};
 var EF_MISS_MEMO_MAX = 200;   // 简单容量上限，防无限增长
+// ★ 2026-11-03（EPL Masters III 首页卡缺失事故）：未命中备忘必须**带时效**。
+//   原实现是「会话级永久」⇒ 若在缓存灌表前打开过页面，即使表已补灌，
+//   同一进程内也会永久跳过 EF（实测：EPL/Masters/3 未命中后，表补齐仍需重启小程序才可见）。
+//   TTL 与 _wtMemo 同口径（10min）⇒ 灌表后最长 10min 自动恢复，无需重启。
+var EF_MISS_MEMO_TTL = 10 * 60 * 1000;
 
 // ★ 2026-09-11：**会话级 wikitext 备忘（10min TTL）**。
 //   动机：同一页面的 wikitext 会被多个功能消费（元数据/等级/赛制/参赛队/结构），
@@ -331,7 +336,8 @@ function fetchPageWikitext(pageName) {
   if (!pageName) return Promise.resolve(null);
   var memo = _wtMemo[pageName];
   if (memo && Date.now() - memo.ts < WT_MEMO_TTL) return Promise.resolve(memo.wikitext);
-  var knownMiss = !!_efMissMemo[pageName];
+  var missAt = _efMissMemo[pageName];
+  var knownMiss = !!(missAt && Date.now() - missAt < EF_MISS_MEMO_TTL);
 
   // 云代理优先：通过 EF（got + UA + redirects:1）代理抓取 raw wikitext，
   // 规避 wx.request 禁设 User-Agent 的限制（Liquipedia 要求合规 UA 才返回数据）。
@@ -348,8 +354,8 @@ function fetchPageWikitext(pageName) {
 
     return cloudProxy.liquipediaFetchRawWikitextProxy(pageName, true).then(function (remote) {
       if (remote && remote.wikitext) return _wtRemember(pageName, remote.wikitext);
-      // 记住这次未命中（会话内不再重试 EF），随后回落到本地兜底
-      if (Object.keys(_efMissMemo).length < EF_MISS_MEMO_MAX) _efMissMemo[pageName] = 1;
+      // 记住这次未命中（EF_MISS_MEMO_TTL 内不再重试 EF），随后回落到本地兜底
+      if (Object.keys(_efMissMemo).length < EF_MISS_MEMO_MAX) _efMissMemo[pageName] = Date.now();
       return fetchPageWikitextLocal(pageName).then(function (w) { return _wtRemember(pageName, w); });
     }).catch(function () {
       return fetchPageWikitextLocal(pageName).then(function (w) { return _wtRemember(pageName, w); });
