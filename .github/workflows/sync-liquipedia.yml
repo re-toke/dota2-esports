@@ -15,7 +15,8 @@ on:
     - cron: '0 2,14 * * *'
   workflow_dispatch:
   # ★ 2026-10-31：解析/合并逻辑变更后缓存必须重建，否则线上仍是旧 payload。
-  #   只给 bracket 链路加 push 触发，避免无关改动频繁打 LP（限速 1 req/2s）。
+  #   push 触发只挂「解析逻辑」与「赛事清单（curation/slugmap）」两类，
+  #   避免无关改动频繁打 LP（限速 1 req/2s）。
   push:
     branches: [master]
     paths:
@@ -23,6 +24,13 @@ on:
       - 'scripts/sync/sync-liquipedia-parse.js'
       - 'utils/liquipedia-parse.js'
       - '.github/workflows/sync-liquipedia.yml'
+      # ★ 2026-11-03（EPL Masters III 首页卡缺失事故）：新增/改名赛事页只在 curation 与
+      #   slugmap 里出现 ⇒ 仅这两个文件变更时也必须重建缓存，否则新赛事的 LP 页
+      #   （lp:w:<slug>）**不在表里** → 客户端 EF 恒 miss → 首页「即将开始」无对局卡
+      #   （实测：EPL/Masters/3 cache-miss，而 EPL/Masters/2 命中 53994B）。
+      - 'utils/curation.js'
+      - 'utils/liquipedia-slugmap.json'
+      - 'utils/liquipedia-slugmap.js'
 
 jobs:
   sync:

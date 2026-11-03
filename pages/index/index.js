@@ -1276,8 +1276,10 @@ Page({
     //   传 leagueId 以支持「一 ID 多届」的精确 pin。
     // ★ 2026-11-03（EPL Masters III 事故）：补第 3 参「对局时间」—— 一 ID 多届时按系列自身
     //   开赛时间判届（避免当届未补录时，新一届的对局被贴成上一届的名字）。
+    // ★ 2026-11-03：LP upcoming 系列（games=[]）的时间字段是 firstTime/lastTime（无 startTime），
+    //   判届时钟必须一并取它，否则回退到「此刻」判届。
     const tier = sources.getMatchTierForHome(s.leagueName || g0.league_name || '', s.leagueId || g0.leagueid,
-      s.startTime || g0.start_time);
+      s.startTime || s.firstTime || g0.start_time);
     const bo = s.boType || 'BO1';
     const boMeta = BO_META[bo] || BO_META.BO1;
     // 队名兜底：groupSeries 对 null 队名回退 '天辉'/'夜魇'，组内找首个真实名替换
