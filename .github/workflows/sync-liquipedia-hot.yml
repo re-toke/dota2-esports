@@ -1,0 +1,44 @@
+# Liquipedia 热点赛事高频同步（2026-11-04）
+#
+# 背景（EPL Masters III 数据滞后事故）：
+#   全量同步 sync-liquipedia.yml 每天 2 次（02:00 / 14:00 UTC），单次约 200 页 / 8min；
+#   GH Actions 定时任务常延迟数小时（实测 14:00Z 的 run 20:19Z 才启动）⇒
+#   进行中赛事的对阵/比分最多滞后 8h+（LP 已出 TBD→实队、新对阵，缓存仍是旧版）。
+#
+# 本 workflow 只同步「进行中 / 2 天内开赛」赛事的页面与 bracket（实测当前 2 赛事 3 页），
+# 每 2 小时一次，成本可忽略；全量同步（含索引/队标）仍由 sync-liquipedia.yml 负责。
+name: Sync Liquipedia Hot
+
+on:
+  schedule:
+    - cron: '0 */2 * * *'
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/sync-liquipedia-hot.yml'
+      - 'scripts/sync-liquipedia-cache.js'
+      - 'scripts/sync/sync-liquipedia-brackets.js'
+      - 'utils/curation.js'
+
+jobs:
+  hot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Sync hot brackets
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node scripts/sync/sync-liquipedia-brackets.js --active
+
+      - name: Sync hot pages
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node scripts/sync-liquipedia-cache.js --active

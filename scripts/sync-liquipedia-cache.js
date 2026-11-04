@@ -64,7 +64,30 @@ const curatedSlugs = [];
 // 注意：slugmap 的值与 curation 的 slug 均为 LP 页面标题形态（下划线分隔、含 `/`），
 // 与 EF 侧 `slugFor()` 的产出、以及缓存 key `lp:w:<slug>` 完全同口径 —— 不可做任何归一化改写，
 // 否则 EF 会查不到（这是 v8.21「斜杠保留」修过的同一类坑）。
-const slugs = Array.from(new Set(baseSlugs.concat(curatedSlugs)));
+let slugs = Array.from(new Set(baseSlugs.concat(curatedSlugs)));
+
+// ★★ 2026-11-04（EPL Masters III 数据滞后事故）：`--active` 热点模式。
+//   背景：本脚本全量约 200 页、2.2s/页 ≈ 8min，只能 2 次/天；而 GH Actions 定时
+//   常延迟数小时（实测 14:00Z 的 run 20:19Z 才启动）⇒ 进行中赛事的对阵/比分
+//   最多滞后 8h+（EPL III 淘汰赛今晨已出新对阵，缓存里仍是 TBD）。
+//   热点模式只同步「进行中 / 2 天内开赛」赛事的页面（实测当前仅 3 条），
+//   由 sync-liquipedia-hot.yml 每 2h 跑一次；全量同步仍保留在 sync-liquipedia.yml。
+const ACTIVE_MODE = process.argv.indexOf('--active') >= 0;
+if (ACTIVE_MODE) {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const hot = new Set();
+  (curation.CURATED_EVENTS || []).forEach((ev) => {
+    if (!ev || !ev.start || !ev.end) return;
+    if (ev.start - 2 * 86400 > nowSec || nowSec > ev.end + 86400) return;
+    ['scheduledMatchesSlug', 'structureSlug', 'bracketSlug', 'liquipediaSlug'].forEach((f) => {
+      if (typeof ev[f] === 'string' && ev[f]) hot.add(ev[f]);
+    });
+    const mapped = (slugmap.mappings || {})[ev.canonical];
+    if (mapped) hot.add(mapped);
+  });
+  slugs = slugs.filter((s) => hot.has(s));
+  console.log('[--active] 热点赛事页面', slugs.length, '条（其余页面由每日全量同步负责）');
+}
 
 console.log('抓取范围：slugmap 主 slug', baseSlugs.length,
             '+ curation 子页面/补充 slug', curatedSlugs.length,
@@ -335,8 +358,11 @@ async function syncTeamLogos() {
     }
   }
   console.log('同步完成:', ok, '成功 /', empty, '空页面 /', fail, '失败, 耗时', Math.round((Date.now() - t0) / 1000) + 's');
-  await syncIndexes();
-  await syncTeamLogos();
+  // 热点模式只刷赛事页（索引/队标由每日全量同步负责，避免每 2h 重复 5min 抓取）
+  if (!ACTIVE_MODE) {
+    await syncIndexes();
+    await syncTeamLogos();
+  }
 
   if (fail > slugs.length * 0.5) {
     console.error('失败率超 50%——查看上方 ✗ 行的具体错误（403/429=被限流，需加长退避）');

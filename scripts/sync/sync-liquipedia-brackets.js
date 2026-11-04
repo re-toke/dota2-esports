@@ -195,6 +195,12 @@ async function main() {
     const q = String(args[evIdx + 1]).toLowerCase();
     evs = evs.filter((e) => String(e.canonical || '').toLowerCase().indexOf(q) >= 0);
   }
+  // ★ 2026-11-04：热点模式 —— 只重建「进行中 / 2 天内开赛」赛事的 bracket
+  //   （由 sync-liquipedia-hot.yml 每 2h 调用；全量重建仍在每日 workflow）
+  if (args.includes('--active')) {
+    const now = Math.floor(Date.now() / 1000);
+    evs = evs.filter((e) => e.start && e.end && e.start - 2 * 86400 <= now && now <= e.end + 86400);
+  }
   if (limit > 0) evs = evs.slice(0, limit);
   console.log('赛事数:', evs.length, '| dry=' + dry);
   if (listOnly) {
