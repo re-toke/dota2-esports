@@ -116,7 +116,7 @@
 | `ci.yml` | push / PR | 全量门禁（`test:all` 等）|
 | `deploy-admin.yml` | push `admin/**` / 手动 | 构建并发布 admin 到 GitHub Pages |
 | `sync-upcoming.yml` | 定时 | 刷新**队徽快照**并 commit；抓 LP 写 Supabase `upcoming_schedule`（★ 赛程/联赛内置快照已移除） |
-| `sync-liquipedia.yml` | 定时 | LP slug / 解析产物同步 |
+| `sync-liquipedia.yml` | **纯手动**（★ 2026-11-05 定时与 push 均已下线） | LP slug / 解析产物重建。定时迁到 **Deno worker `infra/proxy/lp-sync.mjs`**（cron-job.org 每 15min 增量 / 60min 淘汰赛）——GitHub runner 出口抓 LP **首条请求即 429**，详见技术文档 §19 |
 | `discover-tournaments.yml` | 定时 | 赛事发现 |
 | `ops-maintenance.yml` | 每日 | 清 `aggregation_cache` 过期行 + 快照新鲜度 + 配额探针（失败 → Webhook 二级告警）|
 | `ef-health.yml` | 每 6h | 打 EF 健康检查（保活 + 失败告警）|

@@ -74,7 +74,7 @@ dota2-esports/
 │   │   └── team-logo-local-data.js   ★ 队徽快照（P2-21 已移出主包）
 │   └── data/                 分包：hero / hero-detail / item / item-detail
 ├── utils/                    客户端模块（api / sources / config / endpoints / cloudProxy / image / …）
-├── infra/proxy/              中转：worker.mjs + DEPLOY.md + test.mjs（断言套件）
+├── infra/proxy/              中转 worker.mjs + test.mjs（断言套件）；LP 同步 worker（lp-sync.mjs / lp-probe.mjs / build-lp-sync.cjs）
 ├── supabase/
 │   ├── functions/            12 个 Edge Function + _shared
 │   └── migrations/           001 ~ 007（索引 / 安全加固 / 限流触发器）
@@ -142,6 +142,7 @@ node scripts/ops/check-snapshot-freshness.js  # 队徽快照新鲜度（★ 2026
 | 目标 | 方式 |
 |---|---|
 | **中转**（`infra/proxy/worker.mjs`）| `[2]` 随 push 自动；`[0]`/`[1]` 为 **Deno 手贴副本**，改完须**同步重贴三台**（否则版本漂移）。步骤见 `infra/proxy/DEPLOY.md`。自检：`/healthz?deep=1` + 三台灰度和 |
+| **LP 缓存同步**（`infra/proxy/lp-sync.mjs`）| **Deno Playground 手贴部署**（项目 `crazy-mantis-7950.re-toke.deno.net`；环境变量 `SB_SERVICE_KEY` / `SYNC_TOKEN`）；**cron-job.org** 每 15min（`/sync` 增量）/ 60min（`?brackets=1`）触发。GitHub `sync-liquipedia` 已**下线定时与 push 触发**（出口 429），现为**纯手动兜底**。⚠️ 改 curation/slugmap 后须先 `node infra/proxy/build-lp-sync.cjs` 再重贴 |
 | **Edge Functions** | `supabase functions deploy <name> --project-ref gkticzdaicpdtxheyxsd --no-verify-jwt`，再用 `functions list` 核 VERSION（**命令不报错 ≠ 部署生效**）|
 | **admin 后台** | `.github/workflows/deploy-admin.yml` → **GitHub Pages**：`https://re-toke.github.io/dota2-esports/`（哈希路由 `#/events`）。详见 `admin/README.md` |
 | **快照** | `.github/workflows/sync-upcoming.yml` 定时刷新**队徽快照**（`utils/team-logo-map.json` + `subpackages/detail/team-logo-local-data.js`）并 commit；赛程写 Supabase `upcoming_schedule`。**★ 2026-10-24：内置「赛程 / 联赛」快照已移除**（改为纯联网） |

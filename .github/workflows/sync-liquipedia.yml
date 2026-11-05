@@ -8,7 +8,7 @@
 #   · scheduled workflow 本身延迟严重：02:00Z 的 cron 实测 08:39Z 才启动（+6.6h）。
 #   ⇒ 现由 Deno Deploy worker `infra/proxy/lp-sync.mjs` 承担：
 #     每 15 分钟增量（RecentChanges 差集）、每小时淘汰赛结构，由 cron-job.org 触发。
-#   本 workflow 仅保留 `workflow_dispatch` 手动兜底 + push 触发的缓存重建。
+#   ★ 2026-11-05 二次修订：**push 触发也已移除** ⇒ 本 workflow 现在是**纯手动兜底**。
 #
 # 前置配置（GitHub 仓库 → Settings → Secrets and variables → Actions）：
 #   SUPABASE_URL          https://gkticzdaicpdtxheyxsd.supabase.co
@@ -19,24 +19,18 @@
 name: Sync Liquipedia Cache
 
 on:
+  # ★ 2026-11-05：**push 触发也已移除** —— 本 workflow 现在是**纯手动**。
+  #
+  #   原 push.paths 覆盖「解析逻辑 + curation/slugmap」两类，动机是"这些文件变更后
+  #   缓存必须重建"。但 GitHub 出口此刻抓 LP 必 429，push 触发的运行同样会失败并空转
+  #   75 分钟 ⇒ 只产生噪音，不能重建任何东西。
+  #
+  #   取而代之：**curation/slugmap 变更后改走 Deno worker**
+  #     ① `node infra/proxy/build-lp-sync.cjs`（把新 slug 烘进 worker）
+  #     ② 重新粘贴 `infra/proxy/lp-sync.mjs` 到 Deno Playground
+  #     ③ `curl ".../sync?token=<SYNC_TOKEN>&full=1"` 触发一次全量重建
+  #   详见技术文档 §19。
   workflow_dispatch:
-  # ★ 2026-10-31：解析/合并逻辑变更后缓存必须重建，否则线上仍是旧 payload。
-  #   push 触发只挂「解析逻辑」与「赛事清单（curation/slugmap）」两类，
-  #   避免无关改动频繁打 LP（限速 1 req/2s）。
-  push:
-    branches: [master]
-    paths:
-      - 'scripts/sync/sync-liquipedia-brackets.js'
-      - 'scripts/sync/sync-liquipedia-parse.js'
-      - 'utils/liquipedia-parse.js'
-      - '.github/workflows/sync-liquipedia.yml'
-      # ★ 2026-11-03（EPL Masters III 首页卡缺失事故）：新增/改名赛事页只在 curation 与
-      #   slugmap 里出现 ⇒ 仅这两个文件变更时也必须重建缓存，否则新赛事的 LP 页
-      #   （lp:w:<slug>）**不在表里** → 客户端 EF 恒 miss → 首页「即将开始」无对局卡
-      #   （实测：EPL/Masters/3 cache-miss，而 EPL/Masters/2 命中 53994B）。
-      - 'utils/curation.js'
-      - 'utils/liquipedia-slugmap.json'
-      - 'utils/liquipedia-slugmap.js'
 
 jobs:
   sync:
