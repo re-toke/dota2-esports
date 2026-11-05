@@ -1003,7 +1003,10 @@ check('names：★ 全库禁止再内联该规则（白名单外一律 FAIL）',
     'utils/league-canon-map.js': '★ 2026-10-13（P1-17）：`normalizeKey` 已改调 `names.normAsciiKey`（规则逐字相同）⇒ 本豁免已不再命中；条目保留作历史备查',
     'cloudfunctions/aggregation/league-canon-map.js': '同上（镜像对另一半）',
     'cloudfunctions/aggregation/names.js': '**镜像**（与 utils/names.js 同实现；云端 bundle 无法 require 主包）\n      —— 云函数 index.js 已于 2026-09-21 迁移完成、不再豁免；本条目随该目录退役一并失效',
-    'scripts/ops/discover-tournaments.js': 'consensus.js 加载失败时的**刻意内联回退**实现'
+    'scripts/ops/discover-tournaments.js': 'consensus.js 加载失败时的**刻意内联回退**实现',
+    // 2026-11-05：`<BUILD:SCOPE>` 内联进 Deno 单文件 worker，物理上无法 require utils/names.js；
+    //   `eventKey` 只作事件名去重键（不参与展示/匹配），规则与 normAsciiKey 无关
+    'utils/lp-scope.js': 'Deno worker 构建期内联（单文件无法 require 主包）'
   };
   const SKIP_DIR = /(^|[\\/])(node_modules|miniprogram_npm|dist|rollback|tmp)([\\/]|$)/;
   const PATTERN = /toLowerCase\(\)\.replace\(\/\[\^a-z0-9\]\/g/;

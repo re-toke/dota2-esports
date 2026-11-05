@@ -5,9 +5,14 @@
 // 作用：把 curation / slugmap 里的「要同步哪些 LP 页面」烘进
 //      `infra/proxy/lp-sync.mjs`（Deno Deploy 单文件部署，不能 import 仓库模块）。
 //
-// 为什么需要：worker 必须知道 205 个 slug 的完整集合才能做增量差集，
+// 为什么需要：worker 必须知道完整 slug 集合才能做增量差集，
 //   而 curation 是 JS 模块，无法在部署后的边缘运行时里直接 require。
-//   ⇒ 构建时生成数组，粘贴部署；**curation 变更后必须重跑本脚本并重新部署**。
+//   ⇒ 构建时生成数组，粘贴部署。
+//
+// ⚠️ 2026-11-05 起：本地烘焙只是**基线 + 兜底**。worker 每轮会从 Supabase
+//   `curation_events` 派生增量范围（见 utils/lp-scope.js），所以
+//   **admin 新增赛事 / 改 slug 不再需要重跑本脚本、也不需要重新部署**；
+//  只有 slugmap 或推导逻辑（utils/lp-scope.js）变更时才需要重跑 + 重新粘贴。
 //
 // 用法：node infra/proxy/build-lp-sync.cjs
 // 校验：node infra/proxy/build-lp-sync.cjs --check（只打印范围，不改文件）
@@ -126,6 +131,10 @@ src = inject(src, 'SLUGS', fmtArray('SLUGS', all));
 src = inject(src, 'HOT', fmtHot(hot));
 src = inject(src, 'BRACKETS', fmtBrackets(brEvents));
 src = inject(src, 'PARSER', parser);
+
+// 同步范围推导模块内联：worker 与本地脚本共用同一实现，避免双份口径漂移
+const scopeSrc = fs.readFileSync(path.join(ROOT, 'utils', 'lp-scope.js'), 'utf8');
+src = inject(src, 'SCOPE', wrapModule(scopeSrc, 'LP_SCOPE'));
 fs.writeFileSync(TARGET, src, 'utf8');
 console.log('✅ 已写入', TARGET, '(' + Math.round(src.length / 1024) + 'KB)');
 console.log('⚠️ 部署后必须重新粘贴该文件到 Deno Playground 才会生效');

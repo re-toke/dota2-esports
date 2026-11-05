@@ -1646,12 +1646,257 @@ const BATCH = 40;           // MediaWiki 单次 titles 上限（普通用户 50�
 const TTL_SEC = 26 * 3600;  // 与 GitHub 侧同步脚本一致
 const MAX_RC_PAGES = 3;     // 增量最多翻 3 页 RecentChanges（1500 条），防止单次过久
 
-const BUILD_ID = 'v3-2026-11-05';   // healthz 回显，用于确认部署的确实是当前版本
+// ★ 2026-11-05：v3 → v4 —— 增量差集归一化（SLUG_SET 统一转下划线形态）。
+//   重新部署后 `/healthz` 必须回 `buildId: v4-...` 且 `slugSet: 189`（= 烘焙 205 去重后的真实页面数）；
+//   若仍回 v3，说明 Playground 里还是旧代码。
+//   v5 —— 范围运行期从 Supabase 派生（/sync?scope=1 干跑、scopeVersion / rcScope 可观测）。
+const BUILD_ID = 'v8-2026-11-05-scope4';
 const SB_URL = (Deno.env.get('SB_URL') || 'https://gkticzdaicpdtxheyxsd.supabase.co').replace(/\/+$/, '');
 const SB_KEY = Deno.env.get('SB_SERVICE_KEY') || '';
 const SYNC_TOKEN = Deno.env.get('SYNC_TOKEN') || '';
 
-const SLUG_SET = new Set(SLUGS);
+// ★ 2026-11-05（复核发现）：RecentChanges 返回的标题用**空格**，而 rcChanged() 里会把标题
+//   统一 `replace(/ /g,'_')` 之后再查集合；但烘焙 SLUGS 里 205 条中有 128 条是空格形态
+//   （如 `BLAST/SLAM/8/Southeast Asia`）⇒ 其中 112 条在增量差集里**永远不命中**。
+//   ⇒ 集合侧统一转下划线形态（与 rcChanged 同一口径），去重后 189 条。
+//   （归一的实现已收敛到 utils/lp-scope.js，此处只保留状态变量）
+//
+// <BUILD:SCOPE>
+const LP_SCOPE = (function () {
+  const module = { exports: {} };
+  const exports = module.exports;
+'use strict';
+/**
+ * Liquipedia 同步范围的**单一推导实现**。
+ *
+ * 调用方：
+ *   1) `infra/proxy/lp-sync.mjs`（Deno worker）——构建时通过 `<BUILD:SCOPE>` 标记内联；
+ *   2) `scripts/test/test-lp-scope.js`——node 单测。
+ *
+ * 输入两侧来源：
+ *   - `baked`：构建期烘焙的本地常量（slugmap ∪ 本地 curation.js），见 build-lp-sync.cjs；
+ *   - `events`：Supabase `curation_events` 里的事件（admin 新增/编辑即时生效）。
+ *
+ * 输出四组口径（刻意分开，不要合并成一组）：
+ *   - `fullPages`：`full=1` 抓取的页面。**只取烘焙**——远端并入会让 full 请求数膨胀，
+ *     2.2s/批的 ToS 间隔下会顶到定时器超时。
+ *   - `rcSlugs`：增量差集过滤口径。烘焙 ∪ 远端全部 slug，只做集合匹配、不产生额外 LP 请求，
+ *     所以可以放心并入（新赛事从下一轮增量起就能被捕获）。
+ *   - `hot`：`hot=1` 轮询口径。烘焙 ∪ 远端「时间窗口内」的赛事，上限受 `maxHotEvents` 约束。
+ *   - `brackets`：`brackets=1` 口径。烘焙优先，远端只补窗口内且确实带 bracket/主页面 slug 的赛事，
+ *     远端新增量受 `maxBracketEvents - 烘焙条数` 约束。
+ *
+ * 任何形如空值、`|`（MediaWiki 多标题分隔符）、超长、控制字符的 slug 一律丢弃，计入 `dropped`。
+ */
+
+const MAX_SLUG_LEN = 160;
+const BAD_CHAR_RE = /[|\u0000-\u001f]/;
+
+const DEFAULTS = {
+  maxSlugs: 5000,           // rcSlugs 上限：仅作防御（远端全量约 2-4k，正常不会触发）
+  maxUrgentSlugs: 120,      // 待补抓队列上限（只收「进行中 / 4 个月内开赛」的页面）
+  maxHotEvents: 8,          // 热点赛事上限（含烘焙）
+  maxBracketEvents: 5,      // 淘汰赛赛事上限（含烘焙）
+  hotLeadSec: 2 * 86400,    // 开赛前 2 天进入热点窗口
+  hotTailSec: 86400,        // 结束后 1 天内仍在窗口
+  urgentDays: 120           // 「近期」窗口：用于新赛事页面的首次补抓
+};
+
+/** slug 归一：MediaWiki 标题中空格与下划线等价，但缓存键 `lp:w:<title>` 区分两者 */
+function normSlug(v) {
+  if (typeof v !== 'string') return '';
+  const s = v.trim();
+  if (!s || s.length > MAX_SLUG_LEN || BAD_CHAR_RE.test(s)) return '';
+  // 连续空白/下划线折叠成单个下划线（与 MediaWiki 的标题归一一致）
+  return s.replace(/[\s]+/g, '_').replace(/_+/g, '_');
+}
+
+function uniqSlugs(list) {
+  const seen = new Set();
+  const out = [];
+  (list || []).forEach((v) => {
+    const s = normSlug(v);
+    if (!s || seen.has(s)) return;
+    seen.add(s);
+    out.push(s);
+  });
+  return out;
+}
+
+const SLUG_FIELDS = ['scheduledMatchesSlug', 'structureSlug', 'bracketSlug', 'liquipediaSlug'];
+
+function eventSlugs(ev) {
+  const arr = [];
+  if (!ev) return arr;
+  SLUG_FIELDS.forEach((f) => { if (ev[f]) arr.push(ev[f]); });
+  return arr;
+}
+
+/** 与 build-lp-sync.cjs 的 BRACKET_EVENTS 候选顺序保持一致 */
+function bracketCandidates(ev) {
+  const base = normSlug(ev && ev.liquipediaSlug);
+  return uniqSlugs([
+    ev && ev.bracketSlug,
+    ev && ev.structureSlug,
+    ev && ev.scheduledMatchesSlug,
+    base ? base + '/Main Event' : '',
+    base ? base + '/Playoffs' : '',
+    base
+  ]);
+}
+
+function num(v) {
+  const n = Number(v);
+  return isFinite(n) && n > 0 ? n : 0;
+}
+
+function eventKey(name) {
+  return String(name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function deriveScope(input) {
+  const baked = (input && input.baked) || {};
+  const events = (input && input.events) || [];
+  const nowSec = num(input && input.nowSec) || Math.floor(Date.now() / 1000);
+  const limits = Object.assign({}, DEFAULTS, (input && input.limits) || {});
+
+  let dropped = 0;
+  const drop = (n) => { dropped += (n || 0); };
+
+  // ① 全量抓取口径：仅烘焙（宁可让远端新页面走 bootstrap，也不放大 full 的请求数）
+  const fullPages = uniqSlugs(baked.slugs);
+
+  // ② 增量差集口径：烘焙 ∪ 远端四个 slug 字段
+  //    排序刻意分层：烘焙 → 「近期/在赛」事件 → 其余按开赛时间倒序，
+  //    保证 maxSlugs 截断时丢的是最老的历史页面，绝不会丢掉新赛事
+  //    （curation_events 没有 updated_at，按主键顺序截断会随机丢赛事，这是 v5 的实测问题）。
+  const urgentCutoff = nowSec + limits.urgentDays * 86400;
+  const isUrgent = (ev) => {
+    const s = num(ev.start);
+    const e = num(ev.end);
+    if (!s || !e) return false;
+    return nowSec <= e + limits.hotTailSec && s <= urgentCutoff;
+  };
+  const urgentEvents = events.filter(isUrgent);
+  const restEvents = events.filter((ev) => !isUrgent(ev))
+    .slice().sort((a, b) => num(b.start) - num(a.start));
+
+  const rcRaw = [];
+  (baked.slugs || []).forEach((s) => rcRaw.push(s));
+  urgentEvents.forEach((ev) => eventSlugs(ev).forEach((s) => rcRaw.push(s)));
+  restEvents.forEach((ev) => eventSlugs(ev).forEach((s) => rcRaw.push(s)));
+  let rcSlugs = uniqSlugs(rcRaw);
+  if (rcSlugs.length > limits.maxSlugs) {
+    drop(rcSlugs.length - limits.maxSlugs);
+    rcSlugs = rcSlugs.slice(0, limits.maxSlugs);
+  }
+
+  // 待补抓队列候选：只取「进行中 / 4 个月内开赛」的事件页面。
+  // 历史页面不进队列——它们由 full=1 或详情页按需回源覆盖，避免为历史页面烧掉几小时的 LP 预算。
+  const urgentRaw = [];
+  urgentEvents.forEach((ev) => eventSlugs(ev).forEach((s) => urgentRaw.push(s)));
+  let urgentSlugs = uniqSlugs(urgentRaw);
+  if (urgentSlugs.length > limits.maxUrgentSlugs) {
+    drop(urgentSlugs.length - limits.maxUrgentSlugs);
+    urgentSlugs = urgentSlugs.slice(0, limits.maxUrgentSlugs);
+  }
+
+  // ③ 热点：烘焙（不按其窗口裁剪，窗口在 runHot 里按时间过滤）∪ 远端窗口内赛事
+  const hot = [];
+  const hotKeys = new Set();
+  (baked.hot || []).forEach((ev) => {
+    if (!ev) return;
+    const slugs = uniqSlugs(ev.slugs);
+    if (!slugs.length) return;
+    const key = eventKey(ev.n);
+    if (hotKeys.has(key)) return;
+    hotKeys.add(key);
+    hot.push({ n: String(ev.n || ''), s: num(ev.s), e: num(ev.e), slugs });
+  });
+  const hotRoom = Math.max(0, limits.maxHotEvents - hot.length);
+  let hotAdded = 0;
+  for (const ev of events) {
+    if (hotAdded >= hotRoom) break;
+    const s = num(ev.start);
+    const e = num(ev.end);
+    if (!s || !e) continue;
+    if (s - limits.hotLeadSec > nowSec || nowSec > e + limits.hotTailSec) continue;
+    const key = eventKey(ev.canonical);
+    if (!key || hotKeys.has(key)) continue;
+    const slugs = uniqSlugs(eventSlugs(ev));
+    if (!slugs.length) continue;
+    hotKeys.add(key);
+    hot.push({ n: String(ev.canonical || ''), s, e, slugs });
+    hotAdded += 1;
+  }
+
+  // ④ 淘汰赛：烘焙优先，远端只补窗口内的（候选页顺序与构建脚本一致）
+  const brackets = [];
+  const brKeys = new Set();
+  (baked.brackets || []).forEach((ev) => {
+    if (!ev) return;
+    const slugs = uniqSlugs(ev.slugs);
+    if (!slugs.length) return;
+    const key = eventKey(ev.n);
+    if (brKeys.has(key)) return;
+    brKeys.add(key);
+    brackets.push({ n: String(ev.n || ''), id: ev.id == null ? null : ev.id, slugs });
+  });
+  const brRoom = Math.max(0, limits.maxBracketEvents - brackets.length);
+  let brAdded = 0;
+  for (const ev of events) {
+    if (brAdded >= brRoom) break;
+    const s = num(ev.start);
+    const e = num(ev.end);
+    if (!s || !e) continue;
+    if (s - limits.hotLeadSec > nowSec || nowSec > e + limits.hotTailSec) continue;
+    if (!ev.bracketSlug && !ev.liquipediaSlug) continue;
+    const key = eventKey(ev.canonical);
+    if (!key || brKeys.has(key)) continue;
+    const slugs = bracketCandidates(ev);
+    if (!slugs.length) continue;
+    brKeys.add(key);
+    brackets.push({ n: String(ev.canonical || ''), id: ev.leagueId == null ? null : ev.leagueId, slugs });
+    brAdded += 1;
+  }
+
+  return { rcSlugs, urgentSlugs, fullPages, hot, brackets, dropped };
+}
+
+module.exports = { deriveScope, normSlug, uniqSlugs, bracketCandidates, DEFAULTS, MAX_SLUG_LEN };
+
+  return module.exports;
+})();
+// </BUILD:SCOPE>
+
+const SCOPE_KEY = 'lp:scope:snapshot';       // 生效范围的快照（跨冷启动 / 保存待补抓队列）
+const SCOPE_TTL_MS = 30 * 60 * 1000;         // 版本未变时也最多 30 分钟重算一次（bump 失败时的兜底）
+const SCOPE_BOOT_MAX = 40;                   // 每轮最多补抓的新增页面数（= 1 个 LP 批次）
+
+const BAKED_SCOPE = { slugs: SLUGS, hot: HOT, brackets: BRACKET_EVENTS };
+const SCOPE_LIMITS = (LP_SCOPE && LP_SCOPE.DEFAULTS) || {};
+
+function nowSec() { return Math.floor(Date.now() / 1000); }
+
+/** 当前生效范围（烘焙兜底；resolveScope 成功后替换为 烘焙 ∪ 远端） */
+let SCOPE = deriveBakedScope();
+let SLUG_SET = new Set(SCOPE.rcSlugs);
+
+function deriveBakedScope() {
+  return LP_SCOPE.deriveScope({ baked: BAKED_SCOPE, events: [], nowSec: nowSec(), limits: SCOPE_LIMITS });
+}
+
+/** 快照 ↔ 内存对象（快照里 hot/brackets 已经是推导结果，直接复用） */
+function scopeFromSnapshot(snap) {
+  if (!snap || !Array.isArray(snap.rc)) return null;
+  return {
+    rcSlugs: snap.rc,
+    fullPages: Array.isArray(snap.full) ? snap.full : SCOPE.fullPages,
+    hot: Array.isArray(snap.hot) ? snap.hot : SCOPE.hot,
+    brackets: Array.isArray(snap.brackets) ? snap.brackets : SCOPE.brackets,
+    dropped: Number(snap.dropped) || 0
+  };
+}
 
 let _lastLp = 0;
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
@@ -1712,14 +1957,15 @@ async function lpPages(titles) {
 }
 
 /** 写库：数组批量 upsert（每批 25 行，避免单个请求体过大） */
-async function sbUpsert(rows) {
+async function sbUpsert(rows, ttlSec) {
   let written = 0;
+  const ttl = Number(ttlSec) > 0 ? Number(ttlSec) : TTL_SEC;
   for (let i = 0; i < rows.length; i += 25) {
     const chunk = rows.slice(i, i + 25);
     const body = chunk.map((r) => ({
       key: r.key,
       payload: r.payload,
-      expire_at: new Date(Date.now() + TTL_SEC * 1000).toISOString(),
+      expire_at: new Date(Date.now() + ttl * 1000).toISOString(),
       updated_at: new Date().toISOString()
     }));
     const r = await fetch(SB_URL + '/rest/v1/aggregation_cache', {
@@ -1749,6 +1995,190 @@ async function sbGet(key) {
   if (r.status !== 200) return null;
   const rows = await r.json().catch(() => []);
   return (rows && rows[0] && rows[0].payload) || null;
+}
+
+// ============================================================
+// 同步范围：运行期从 Supabase 派生（烘焙常量仅作基线/兜底）
+//   目标：admin 新增赛事 / 改 slug 后，≤ 一个同步周期（15 min）自动纳入，
+//        不再需要重跑 build-lp-sync.cjs、也不需要重新粘贴部署。
+// ============================================================
+
+/** curation 版本号（admin-write 每次写入都 bump，但失败时静默 ⇒ 另有 SCOPE_TTL_MS 兜底） */
+async function sbCurationVersion() {
+  const r = await fetch(
+    SB_URL + '/rest/v1/curation_meta?key=eq.version&select=value',
+    { headers: { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY }, signal: AbortSignal.timeout(15000) }
+  );
+  if (r.status !== 200) throw new Error('curation_meta HTTP ' + r.status);
+  const rows = await r.json().catch(() => []);
+  const v = rows && rows[0] && rows[0].value && rows[0].value.v;
+  return v == null ? '' : String(v);
+}
+
+/**
+ * 全量 curation_events（只取推导所需的 8 个字段，避免整行 data 的 ~600KB 传输）。
+ * 任一页失败即抛错（all-or-nothing），调用方沿用上一版范围，防止「范围缩小 + 游标前进」丢更新。
+ */
+async function sbCurationEvents() {
+  const PAGE = 400;
+  const out = [];
+  for (let off = 0; off < 40000; off += PAGE) {
+    const q = '/rest/v1/curation_events?select=canonical_key,league_id' +
+      ',ls:data->>liquipediaSlug,sms:data->>scheduledMatchesSlug' +
+      ',ss:data->>structureSlug,bs:data->>bracketSlug' +
+      ',st:data->>start,en:data->>end' +
+      '&limit=' + PAGE + '&offset=' + off;
+    const r = await fetch(SB_URL + q, {
+      headers: { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY }, signal: AbortSignal.timeout(20000)
+    });
+    if (r.status !== 200) throw new Error('curation_events HTTP ' + r.status + ' @offset=' + off);
+    const rows = await r.json();
+    if (!Array.isArray(rows)) throw new Error('curation_events 返回非数组');
+    rows.forEach((row) => {
+      out.push({
+        canonical: row.canonical_key,
+        leagueId: row.league_id,
+        liquipediaSlug: row.ls,
+        scheduledMatchesSlug: row.sms,
+        structureSlug: row.ss,
+        bracketSlug: row.bs,
+        start: Number(row.st) || 0,
+        end: Number(row.en) || 0
+      });
+    });
+    if (rows.length < PAGE) break;
+  }
+  return out;
+}
+
+let _snapLoaded = false;
+let _snap = null;
+let _scopeVer = '';
+let _scopeAt = 0;
+
+/**
+ * 解析当前同步范围。
+ * - 版本未变且快照 < 30min ⇒ 直接用快照（冷启动只花一次 ~15KB 读）；
+ * - 否则重算（1 次版本探针 + 分页拉 curation_events），成功后写快照；
+ * - 任一步失败 ⇒ 沿用上一版（快照 / 烘焙），绝不部分采纳。
+ * - 范围内新增的 slug 进入 local 待补抓队列（快照持久化，每轮最多 40 页），
+ *   避免「新赛事详情页要等有人手动 full=1 才有内容」。
+ */
+async function resolveScope(opts) {
+  const o = opts || {};
+  const t0 = Date.now();
+
+  if (!_snapLoaded) {
+    _snapLoaded = true;
+    try { _snap = await sbGet(SCOPE_KEY); } catch (e) { _snap = null; }
+    if (_snap) {
+      _scopeVer = _snap.ver == null ? '' : String(_snap.ver);
+      _scopeAt = Date.parse(_snap.at) || 0;
+      const s = scopeFromSnapshot(_snap);
+      if (s) { SCOPE = s; SLUG_SET = new Set(SCOPE.rcSlugs); }
+    }
+  }
+
+  let ver;
+  try { ver = await sbCurationVersion(); } catch (e) { ver = undefined; }
+  const unknownVer = ver === undefined;
+  const fresh = !o.force && !unknownVer && ver === _scopeVer && _scopeAt &&
+    Number(_snap && _snap.v) >= 3 &&   // 旧格式快照（v2 的 800 截断 + 611 条历史队列）一律重算
+    (Date.now() - _scopeAt < SCOPE_TTL_MS);
+
+  if (fresh) {
+    // 版本未变也要排空上一轮遗留的补抓队列，否则「已入队但未抓」的页面会一直卡住
+    const drained = await drainPending(o.dry);
+    return {
+      source: 'snapshot', version: _scopeVer || null,
+      rc: SCOPE.rcSlugs.length, full: SCOPE.fullPages.length,
+      hot: SCOPE.hot.length, brackets: SCOPE.brackets.length,
+      pending: drained.pending, boot: drained.boot, ms: Date.now() - t0
+    };
+  }
+
+  let events;
+  try {
+    events = await sbCurationEvents();
+  } catch (e) {
+    return {
+      source: _snap ? 'snapshot' : 'baked', version: _scopeVer || null,
+      rc: SCOPE.rcSlugs.length, full: SCOPE.fullPages.length,
+      hot: SCOPE.hot.length, brackets: SCOPE.brackets.length,
+      error: String((e && e.message) || e), ms: Date.now() - t0
+    };
+  }
+
+  const derived = LP_SCOPE.deriveScope({
+    baked: BAKED_SCOPE, events, nowSec: nowSec(), limits: SCOPE_LIMITS
+  });
+
+  // 差集 → 待补抓队列：
+  //   · 只收「本轮新发现 + 近期事件」的页面（历史页面不走补抓，避免烧掉几个小时的 LP 预算）；
+  //   · 快照 v<3 的遗留队列（v5 实测积压了 611 条历史页面）直接作废，避免继续空转。
+  const prevSet = new Set(SCOPE.rcSlugs);
+  const urgentSet = new Set(derived.urgentSlugs);
+  const carryOver = (_snap && Number(_snap.v) >= 3 && Array.isArray(_snap.pending)) ? _snap.pending : [];
+  const pendingAll = [];
+  const seenPending = new Set();
+  derived.rcSlugs.filter((s) => !prevSet.has(s) && urgentSet.has(s))
+    .concat(carryOver)
+    .forEach((s) => {
+      if (!s || seenPending.has(s)) return;
+      seenPending.add(s);
+      pendingAll.push(s);
+    });
+
+  SCOPE = {
+    rcSlugs: derived.rcSlugs, fullPages: derived.fullPages,
+    hot: derived.hot, brackets: derived.brackets, dropped: derived.dropped
+  };
+  SLUG_SET = new Set(SCOPE.rcSlugs);
+  if (!unknownVer) _scopeVer = ver;
+  _scopeAt = Date.now();
+
+  const prevLastBoot = (_snap && _snap.lastBoot) || null;
+  const snapOut = {
+    v: 3, ver: _scopeVer || null, at: new Date().toISOString(),
+    rc: SCOPE.rcSlugs, full: SCOPE.fullPages, hot: SCOPE.hot, brackets: SCOPE.brackets,
+    urgent: derived.urgentSlugs, dropped: SCOPE.dropped, pending: pendingAll,
+    lastBoot: prevLastBoot   // 最近一次补抓的实证（tried/fetched/written/error），跨冷启动保留
+  };
+  _snap = snapOut;
+  try { await sbUpsert([{ key: SCOPE_KEY, payload: snapOut }], 90 * 24 * 3600); } catch (e) { /* 快照写失败不影响本轮 */ }
+
+  const drained = await drainPending(o.dry);
+  return {
+    source: unknownVer ? 'remote(no-version)' : 'remote', version: _scopeVer || null,
+    rc: SCOPE.rcSlugs.length, full: SCOPE.fullPages.length,
+    hot: SCOPE.hot.length, brackets: SCOPE.brackets.length,
+    added: derived.rcSlugs.length - prevSet.size, pending: drained.pending,
+    dropped: SCOPE.dropped, boot: drained.boot, ms: Date.now() - t0
+  };
+}
+
+/**
+ * 排空待补抓队列（每轮最多 SCOPE_BOOT_MAX 页，避免突破 LP 速率预算）。
+ * 无论抓取成功与否，本轮的尝试项都从队列移除：失败时下一轮继续，不会卡在同一批上。
+ */
+async function drainPending(dry) {
+  const pending = (_snap && Array.isArray(_snap.pending)) ? _snap.pending : [];
+  if (dry || !pending.length) return { pending: pending.length, boot: null };
+  const bootNow = pending.slice(0, SCOPE_BOOT_MAX);
+  let boot = null;
+  try {
+    const pages = await lpPages(bootNow);
+    const rows = Object.keys(pages).map((s) => ({ key: 'lp:w:' + s, payload: pages[s] }));
+    const written = rows.length ? await sbUpsert(rows) : 0;
+    boot = { tried: bootNow.length, fetched: rows.length, written };
+  } catch (e) {
+    boot = { tried: bootNow.length, fetched: 0, error: String((e && e.message) || e) };
+  }
+  _snap.pending = pending.slice(bootNow.length);
+  // 持久化「本轮补抓实证」：队列被移除 ≠ 抓取成功，只有这里的 written/error 能证明实际结果
+  _snap.lastBoot = Object.assign({ at: new Date().toISOString() }, boot || {});
+  try { await sbUpsert([{ key: SCOPE_KEY, payload: _snap }], 90 * 24 * 3600); } catch (e) { /* 忽略 */ }
+  return { pending: _snap.pending.length, boot };
 }
 
 /** RecentChanges 差集：返回本次需要刷新的 slug（只保留属于同步范围的页面） */
@@ -1783,21 +2213,23 @@ async function rcChanged(sinceIso) {
   return { titles, newest, oldest, scanned, truncated: !!cont };
 }
 
-async function runFull() {
+async function runFull(titles) {
   const t0 = Date.now();
-  const pages = await lpPages(SLUGS);
+  const pages_ = (titles && titles.length) ? titles : SCOPE.fullPages;
+  const pages = await lpPages(pages_);
   const rows = Object.keys(pages).map((s) => ({ key: 'lp:w:' + s, payload: pages[s] }));
   const written = rows.length ? await sbUpsert(rows) : 0;
   // 全量成功后所有页面都是最新的 ⇒ 游标直接推到当前时刻，避免增量再从 24h 前回扫
   await sbUpsert([{ key: 'lp:rc:cursor', payload: { ts: isoZ(Date.now()), at: new Date().toISOString() } }]);
-  return { mode: 'full', fetched: rows.length, written, slugs: SLUGS.length, ms: Date.now() - t0 };
+  return { mode: 'full', fetched: rows.length, written, slugs: pages_.length, ms: Date.now() - t0 };
 }
 
-async function runHot() {
+async function runHot(hotList) {
   const t0 = Date.now();
   const now = Date.now() / 1000;
+  const list = (hotList && hotList.length) ? hotList : SCOPE.hot;
   const slugs = [];
-  HOT.forEach((ev) => {
+  list.forEach((ev) => {
     if (ev.s - 2 * 86400 > now || now > ev.e + 86400) return;
     ev.slugs.forEach((s) => { if (slugs.indexOf(s) < 0) slugs.push(s); });
   });
@@ -1805,7 +2237,7 @@ async function runHot() {
   const pages = await lpPages(slugs);
   const rows = Object.keys(pages).map((s) => ({ key: 'lp:w:' + s, payload: pages[s] }));
   const written = rows.length ? await sbUpsert(rows) : 0;
-  return { mode: 'hot', events: HOT.length, pages: slugs.length, fetched: rows.length, written, ms: Date.now() - t0 };
+  return { mode: 'hot', events: list.length, pages: slugs.length, fetched: rows.length, written, ms: Date.now() - t0 };
 }
 
 async function runIncremental() {
@@ -1842,12 +2274,13 @@ function slotTitleOf(bracketId, slot) {
 }
 
 /** 淘汰赛结构 + Match 页 → lp:br:<bracketId> / lp:brl:<leagueId>（与 GitHub 脚本同口径） */
-async function runBrackets() {
+async function runBrackets(bracketList) {
   const t0 = Date.now();
+  const list = (bracketList && bracketList.length) ? bracketList : BRACKET_EVENTS;
   const stats = { mode: 'brackets', events: 0, brackets: 0, written: 0, skipped: 0 };
   const filledOf = (bb) => ((bb.slots || []).filter((s) => !s.empty).length);
 
-  for (const ev of BRACKET_EVENTS) {
+  for (const ev of list) {
     let found = null;
     for (const slug of ev.slugs) {
       try {
@@ -1898,14 +2331,40 @@ export default {
   async fetch(req) {
     const url = new URL(req.url);
     if (url.pathname === '/healthz') {
+      // ?snap=1：额外读一次持久化快照（Supabase）。isolate 是易失的，内存里的 SCOPE
+      // 可能来自「从未跑过 /sync」的新实例，只有快照能证明同步真的执行过。
+      let snap = null;
+      if (url.searchParams.get('snap') === '1') {
+        try {
+          const s = await sbGet(SCOPE_KEY);
+          snap = s && {
+            v: s.v, ver: s.ver == null ? null : String(s.ver), at: s.at,
+            rc: (s.rc || []).length, full: (s.full || []).length,
+            pending: (s.pending || []).length, dropped: Number(s.dropped) || 0,
+            hot: (s.hot || []).length, brackets: (s.brackets || []).length,
+            lastBoot: s.lastBoot || null
+          };
+        } catch (e) {
+          snap = { error: String((e && e.message) || e) };
+        }
+      }
       return json({
         ok: true,
         buildId: BUILD_ID,
         hasServiceKey: !!SB_KEY,
         hasToken: !!SYNC_TOKEN,
         slugs: SLUGS.length,
+        // ★ 2026-11-05：归一化后的集合大小（205 → 189）。与 slugs 对照即可确认「补丁是否已生效」。
+        slugSet: SLUG_SET.size,
+        // ★ 2026-11-05：运行期范围（烘焙 ∪ 远端 curation）——scope 版本与各口径条数
+        rcScope: SCOPE.rcSlugs.length,
+        fullPages: SCOPE.fullPages.length,
+        scopeVersion: _scopeVer || null,
+        scopePending: ((_snap && _snap.pending) || []).length,
+        scopeDropped: (_snap && Number(_snap.dropped)) || 0,
         hotEvents: HOT.length,
         bracketEvents: BRACKET_EVENTS.length,
+        snap,
         ts: new Date().toISOString()
       });
     }
@@ -1914,12 +2373,18 @@ export default {
     if (!SB_KEY) return json({ error: 'missing SB_SERVICE_KEY' }, 500);
 
     try {
+      const dry = url.searchParams.get('scope') === '1';
+      const scope = await resolveScope({
+        force: url.searchParams.get('refresh') === '1',
+        dry
+      });
+      if (dry) return json({ ok: true, mode: 'scope', scope });
       let out;
-      if (url.searchParams.get('brackets') === '1') out = await runBrackets();
+      if (url.searchParams.get('brackets') === '1') out = await runBrackets(SCOPE.brackets);
       else if (url.searchParams.get('full') === '1') out = await runFull();
       else if (url.searchParams.get('hot') === '1') out = await runHot();
       else out = await runIncremental();
-      return json(Object.assign({ ok: true }, out));
+      return json(Object.assign({ ok: true, scope }, out));
     } catch (e) {
       return json({ ok: false, error: String((e && e.message) || e), rateLimited: !!(e && e.rateLimited) }, 502);
     }
