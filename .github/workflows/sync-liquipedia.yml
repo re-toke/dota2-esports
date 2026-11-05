@@ -1,6 +1,14 @@
 # ============================================================
-# Liquipedia 缓存定时同步（方案 2：绕开 Supabase 出口被 LP Cloudflare 拦）
-# 每日 02:00 / 14:00 UTC（北京时间 10:00 / 22:00）各同步一次
+# Liquipedia 缓存同步（**手动兜底**，定时已迁移到 Deno Deploy）
+#
+# ★ 2026-11-05：**定时调度已移除**。原因（实测）：
+#   · GitHub 托管 runner 的 Azure 共享出口抓 LP 时 100% 返回 HTTP 429，
+#     且**第一条请求就 429**（说明是来源 IP 被限流，不是请求频率问题）；
+#     连续 4 次定时任务均 exit 2，单次空转 75 分钟。
+#   · scheduled workflow 本身延迟严重：02:00Z 的 cron 实测 08:39Z 才启动（+6.6h）。
+#   ⇒ 现由 Deno Deploy worker `infra/proxy/lp-sync.mjs` 承担：
+#     每 15 分钟增量（RecentChanges 差集）、每小时淘汰赛结构，由 cron-job.org 触发。
+#   本 workflow 仅保留 `workflow_dispatch` 手动兜底 + push 触发的缓存重建。
 #
 # 前置配置（GitHub 仓库 → Settings → Secrets and variables → Actions）：
 #   SUPABASE_URL          https://gkticzdaicpdtxheyxsd.supabase.co
@@ -11,8 +19,6 @@
 name: Sync Liquipedia Cache
 
 on:
-  schedule:
-    - cron: '0 2,14 * * *'
   workflow_dispatch:
   # ★ 2026-10-31：解析/合并逻辑变更后缓存必须重建，否则线上仍是旧 payload。
   #   push 触发只挂「解析逻辑」与「赛事清单（curation/slugmap）」两类，
