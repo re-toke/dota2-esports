@@ -64,6 +64,26 @@ const form = reactive({
 const rules = {
   canonical: [{ required: true, message: '请输入规范名', trigger: 'blur' }],
   grade: [{ required: true, message: '请选择等级', trigger: 'change' }],
+  // ★ 2026-11-05：LP 标题允许空格，但缓存键 `lp:w:<slug>` 区分空格/下划线 ——
+  //   worker 落库时把标题空格统一转成下划线，admin 若存空格形态 → 读侧永远 miss。
+  //   故提交前归一（见 normalizeSlugInput），并挡住会破坏 MediaWiki titles 参数的字符。
+  liquipediaSlug: [{
+    validator: (_rule, value, cb) => {
+      const v = String(value || '').trim()
+      if (!v) return cb()
+      if (v.length > 120) return cb(new Error('Liquipedia Slug 过长（≤120 字符）'))
+      if (v.indexOf('|') >= 0) return cb(new Error('不能包含 "|"：它是 MediaWiki 多标题分隔符'))
+      return cb()
+    },
+    trigger: 'blur',
+  }],
+}
+
+/** 提交前把 slug 归一成「下划线形态」（LP 请求对两种形态等价，但缓存键不等价） */
+function normalizeSlugInput(v) {
+  // 连续空白/下划线折叠成单个下划线：MediaWiki 本身就这样归一标题，
+  // 若存成 `A__B` 而 worker 落库键是 `A_B`，读侧仍会 miss。
+  return String(v || '').trim().replace(/[ \t\r\n]+/g, '_').replace(/_+/g, '_')
 }
 
 // 用 event 填充表单
@@ -120,6 +140,12 @@ async function handleSubmit() {
     const start = form.dateRange && form.dateRange[0] ? Math.floor(Number(form.dateRange[0]) / 1000) : 0
     const end = form.dateRange && form.dateRange[1] ? Math.floor(Number(form.dateRange[1]) / 1000) : 0
     const payload = {
+      // ★ 2026-11-05：以原事件为底再覆盖表单字段。
+      //   根因：admin-write 是**整行 data upsert**，而本表单只覆盖部分字段；
+      //   原实现只组装表单字段 ⇒ 编辑任一赛事都会抹掉表单未覆盖的
+      //   scheduledMatchesSlug / structureSlug / bracketSlug（对阵页/淘汰赛结构页 slug），
+      //   赛程随后静默回退到赛事主页面（主页面没有 {{Match}} 列表）。
+      ...(isEdit.value && props.event ? props.event : {}),
       _id: isEdit.value ? props.event._id : normalizeEventName(form.canonical),
       canonical: form.canonical,
       aliases: form.aliases || [],
@@ -127,7 +153,7 @@ async function handleSubmit() {
       year: form.year,
       start,
       end,
-      liquipediaSlug: form.liquipediaSlug,
+      liquipediaSlug: normalizeSlugInput(form.liquipediaSlug),
       prizePool: form.prizePool,
       organizer: form.organizer,
       region: form.region,
