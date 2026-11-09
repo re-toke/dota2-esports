@@ -9,14 +9,14 @@
 // 刷新：npm run fetch:logos
 
 module.exports = {
-  "generatedAt": 1794165744,
+  "generatedAt": 1794221960,
   "source": "opendota",
   "note": "build-time team logo snapshot (active leagues + top rated), refresh via scripts/sync/fetch-team-logos.js",
   "stats": {
     "leaguesCrawled": 20,
     "activeTeamIds": 318,
-    "byIdCount": 589,
-    "byNameCount": 603
+    "byIdCount": 593,
+    "byNameCount": 609
   },
   "byId": {
     "3": {
@@ -710,10 +710,6 @@ module.exports = {
     "5028104": {
       "name": "VGJ Storm",
       "logo": "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/team_logos/5028104.png"
-    },
-    "5031582": {
-      "name": "2Be.Dota2",
-      "logo": "https://cdn.steamusercontent.com/ugc/806619761216522702/A5258FF4D3BD72F19FE436B158B3867B067A7675/"
     },
     "5040783": {
       "name": "Immortals",
@@ -1843,6 +1839,10 @@ module.exports = {
       "name": "TeamWaska",
       "logo": "https://cdn.steamusercontent.com/ugc/2376297984889887726/F2376446D05157B080B5D506473EE2F1D43097BF/"
     },
+    "9254408": {
+      "name": "The Immortal",
+      "logo": "https://cdn.steamusercontent.com/ugc/2363896044787382613/22481094AB9EA0ACC639C483812E052C15820186/"
+    },
     "9255039": {
       "name": "enjoy",
       "logo": "https://cdn.steamusercontent.com/ugc/14410915104676115574/85F6E2C9BBB26A11B37E55AF05BE507E94B06863/"
@@ -2354,6 +2354,22 @@ module.exports = {
     "10232231": {
       "name": "Klim Sani4",
       "logo": "https://cdn.steamusercontent.com/ugc/17154379317387244703/A3F526268CFCE8F90DC4AC49D48D69ACE33ACEB5/"
+    },
+    "10241776": {
+      "name": "Recrent Club",
+      "logo": "https://cdn.steamusercontent.com/ugc/14600983343195536527/555A99A787F4022A9B46043B53EEE7EB315DDBF0/"
+    },
+    "10241804": {
+      "name": "Cooman Club",
+      "logo": "https://cdn.steamusercontent.com/ugc/14416228886044945821/448B8448EF03CEF03D1FC942CF96C5A503BE4529/"
+    },
+    "10242397": {
+      "name": "Xipto",
+      "logo": "https://cdn.steamusercontent.com/ugc/17074887661599315084/D616C97FCA693C12C950FFD4373EE09E5F2B493C/"
+    },
+    "10251056": {
+      "name": "Dawn Bulls",
+      "logo": "https://cdn.steamusercontent.com/ugc/18321342822735815187/9A2544DA4DBE19928F2F8444B34833377ADCF9CE/"
     },
     "10251974": {
       "name": "Inner Circle x Insanity",
@@ -2952,9 +2968,6 @@ module.exports = {
     },
     "vgjstorm": {
       "logo": "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/team_logos/5028104.png"
-    },
-    "2bedota2": {
-      "logo": "https://cdn.steamusercontent.com/ugc/806619761216522702/A5258FF4D3BD72F19FE436B158B3867B067A7675/"
     },
     "immortals": {
       "logo": "https://cdn.steamusercontent.com/ugc/872993216721628296/3840921B905A5B28840C85C6449D1447073A16E5/"
@@ -3835,6 +3848,9 @@ module.exports = {
     "teamwaska": {
       "logo": "https://cdn.steamusercontent.com/ugc/2376297984889887726/F2376446D05157B080B5D506473EE2F1D43097BF/"
     },
+    "theimmortal": {
+      "logo": "https://cdn.steamusercontent.com/ugc/2363896044787382613/22481094AB9EA0ACC639C483812E052C15820186/"
+    },
     "enjoy": {
       "logo": "https://cdn.steamusercontent.com/ugc/14410915104676115574/85F6E2C9BBB26A11B37E55AF05BE507E94B06863/"
     },
@@ -4170,6 +4186,24 @@ module.exports = {
     },
     "klimsani4": {
       "logo": "https://cdn.steamusercontent.com/ugc/17154379317387244703/A3F526268CFCE8F90DC4AC49D48D69ACE33ACEB5/"
+    },
+    "recrentclub": {
+      "logo": "https://cdn.steamusercontent.com/ugc/14600983343195536527/555A99A787F4022A9B46043B53EEE7EB315DDBF0/"
+    },
+    "recrent": {
+      "logo": "https://cdn.steamusercontent.com/ugc/14600983343195536527/555A99A787F4022A9B46043B53EEE7EB315DDBF0/"
+    },
+    "coomanclub": {
+      "logo": "https://cdn.steamusercontent.com/ugc/14416228886044945821/448B8448EF03CEF03D1FC942CF96C5A503BE4529/"
+    },
+    "cooman": {
+      "logo": "https://cdn.steamusercontent.com/ugc/14416228886044945821/448B8448EF03CEF03D1FC942CF96C5A503BE4529/"
+    },
+    "xipto": {
+      "logo": "https://cdn.steamusercontent.com/ugc/17074887661599315084/D616C97FCA693C12C950FFD4373EE09E5F2B493C/"
+    },
+    "dawnbulls": {
+      "logo": "https://cdn.steamusercontent.com/ugc/18321342822735815187/9A2544DA4DBE19928F2F8444B34833377ADCF9CE/"
     },
     "innercirclexinsanity": {
       "logo": "https://cdn.steamusercontent.com/ugc/15496490739818356237/6A117ECD33D95220324DB6122E3A0BAB805C8F6A/"
