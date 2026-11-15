@@ -5,6 +5,8 @@
 
 const SAFE_HOSTS = ['cdn.opendota.com', 'opendota.com'];
 const config = require('./config');
+// ★ 2026-11-15：取「当前中转出口」用于 LP 队标反代（endpoints.js 无 utils 依赖，可安全引入）
+const endpoints = require('./endpoints.js');
 
 // ★ 2026-09-01（v8.5 Fix-G）：Logo URL 规范化 —— 修复详情页参赛队伍/即将开始对局队标加载失败。
 //   根因（用户实测 EPL Masters II 队标不显示）：微信 downloadFile 合法域名白名单仅配了
@@ -41,6 +43,26 @@ const MIRROR_HOST_MAP = {
   'avatars.steamstatic.com': 'avatars.akamai.steamstatic.com'
 };
 
+// ★★ 2026-11-15：Liquipedia 图片「热链保护」→ 自有中转反代
+//   实测（决定性证据）：LP 对 `Referer: https://servicewechat.com/...` 返回
+//   **403 + 占位图**（"Sorry, hotlinking images is not allowed."，289×33，Content-Type 仍是 image/png）。
+//   小程序 `<image>` 必带该 Referer 且无法关闭（无 referrerpolicy 能力）⇒ LP 队标直连必然显示占位图；
+//   更隐蔽的是「403 带 PNG body」会让 <image> 认为加载成功，binderror 兜底也不会触发。
+//   修法：改写为 `<当前中转>/img?u=<encoded>`（服务端不带 Referer 取图 + 7 天缓存）。
+//   ⚠️ 中转必须部署带 `/img` 路由的版本（2026-11-15c+），否则图片会加载失败（回退首字母）。
+const LP_IMG_HOST = 'liquipedia.net';
+const LP_IMG_PATH_PREFIX = '/commons/images/';
+
+function lpImageProxyUrl(raw) {
+  let base = '';
+  try { base = endpoints.current() || ''; } catch (e) { base = ''; }
+  if (!base) {
+    try { base = (config.endpoints && config.endpoints.proxy && config.endpoints.proxy[0]) || ''; } catch (e) { base = ''; }
+  }
+  if (!base) return raw;   // 无中转配置 ⇒ 保持原 URL（行为不变）
+  return base.replace(/\/+$/, '') + '/img?u=' + encodeURIComponent(raw);
+}
+
 function normalizeLogoUrl(url) {
   if (!url || typeof url !== 'string') return '';
   let u = url.trim();
@@ -50,9 +72,15 @@ function normalizeLogoUrl(url) {
   const m = u.match(/^https?:\/\/([^/]+)/i);
   if (!m) return '';
   const host = m[1].toLowerCase();
-  // 2) 死域剔除（URL 必然加载失败，不留占位机会）
+  // 2) Liquipedia 图片 → 自有中转（热链保护绕行；见上方 LP_IMG_* 注释）
+  //    只看 path 前缀，避免把 `liquipedia.net/dota2/<页面>` 这类非图片 URL 也塞进反代。
+  const pathPart = u.slice(u.indexOf(host) + host.length);
+  if (host === LP_IMG_HOST && pathPart.indexOf(LP_IMG_PATH_PREFIX) === 0) {
+    return lpImageProxyUrl(u);
+  }
+  // 3) 死域剔除（URL 必然加载失败，不留占位机会）
   if (DEAD_HOSTS.indexOf(host) >= 0) return '';
-  // 3) 白名单镜像收敛（steamcdn-a → cloudflare，已白名单且 100% 同文件）
+  // 4) 白名单镜像收敛（steamcdn-a → cloudflare，已白名单且 100% 同文件）
   //    host 在 URL 中唯一出现，直接用 host 做替换（协议/路径不受影响）
   if (MIRROR_HOST_MAP[host]) {
     u = u.replace(host, MIRROR_HOST_MAP[host]);

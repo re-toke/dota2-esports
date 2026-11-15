@@ -5,7 +5,7 @@
  * - 查询/写入统一走 `@/api/supabase`（PostgREST 读 + EF admin-write 写）。
  */
 import { ref, computed, onMounted } from 'vue'
-import { fetchTeams, writeTeam, deleteTeam } from '@/api/supabase'
+import { fetchTeams, writeTeam, deleteTeam, displayLogoUrl } from '@/api/supabase'
 import TeamFormDialog from '@/components/TeamFormDialog.vue'
 
 // ===== 数据状态 =====
@@ -139,7 +139,7 @@ onMounted(loadTeams)
       <el-table-column prop="_id" label="ID" width="70" />
       <el-table-column label="队标" width="80">
         <template #default="{ row }">
-          <img v-if="row.logo" :src="row.logo" alt="logo" class="logo-thumb" />
+          <img v-if="row.logo" :src="displayLogoUrl(row.logo)" alt="logo" class="logo-thumb" />
           <span v-else>-</span>
         </template>
       </el-table-column>

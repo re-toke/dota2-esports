@@ -12,6 +12,9 @@
 //   - 用户可在 CURATED_EVENTS / CURATED_TEAMS 中自行增补，无需后端。
 
 const consensus = require('./consensus.js');
+// ★ 2026-11-15：人工覆盖队标需经 image.js 的展示规范化（LP 图片 → 中转反代，绕开热链保护；
+//   见 utils/image.js 的 LP_IMG_* 注释）。数据层存的是**原始 LP URL**，仅在出口改写。
+const imageUtil = require('./image.js');
 
 // ===== §10 已知脏数据黑名单（按 leagueid）（2026-08-21）=====
 // 痛点：OpenDota 的 tier=professional 审核宽松，社区赛/业余对局经常被打成 professional，
@@ -1322,7 +1325,8 @@ function curatedTeamLogo(teamId, name) {
     const byName = LOCAL.teamFor(name);
     if (byName) t = byName;
   }
-  return isHttpLogoUrl(t && t.logo) ? t.logo : '';
+  // 出口统一走 toLogoUrl：LP 原图 → 中转反代（见顶部 imageUtil 注释）
+  return isHttpLogoUrl(t && t.logo) ? imageUtil.toLogoUrl(t.logo) : '';
 }
 
 // 判断 team_id/队名 是否为高优先级战队（S-Tier 或 TI 参赛队）。

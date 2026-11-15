@@ -19,6 +19,8 @@ const curation = require('./curation.js');
 const consensus = require('./consensus.js');
 const cache = require('./cache.js');
 const config = require('./config.js');
+// ★ 2026-11-15：人工覆盖队标的展示规范化（LP 原图 → 中转反代；见 utils/image.js）
+const imageUtil = require('./image.js');
 const cloudProxy = require('./cloudProxy.js');
 
 const CACHE_KEY = 'remote_curation_v3';   // ★ 2026-08-11 bump v2→v3：buildEffective 改字段级合并，
@@ -172,7 +174,8 @@ function curatedTeamLogo(teamId, name) {
     const byName = lk.teamFor(name);
     if (byName) t = byName;
   }
-  return _isHttpLogo(t && t.logo) ? t.logo : '';
+  // 出口统一走 toLogoUrl：LP 原图 → 中转反代（绕开 LP 对 servicewechat referer 的 403 占位图）
+  return _isHttpLogo(t && t.logo) ? imageUtil.toLogoUrl(t.logo) : '';
 }
 
 // 判断 team_id 是否为历届 TI 参赛队

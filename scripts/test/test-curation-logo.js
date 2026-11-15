@@ -38,7 +38,11 @@ function check(label, fn) {
   }
 }
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
-function isLp(u) { return /^https:\/\/liquipedia\.net\/commons\/images\//.test(u); }
+// ★ 2026-11-15：覆盖 URL 出口已改为「中转反代」（LP 对 servicewechat referer 返回 403 占位图，
+//   见 utils/image.js）：原始 LP URL 会被编码进 `/img?u=...`。
+function isLp(u) {
+  return typeof u === 'string' && /\/img\?u=https%3A%2F%2Fliquipedia\.net%2Fcommons%2Fimages%2F/.test(u);
+}
 
 // ===== 1. 本地覆盖：按 id / 队名 / 别名 =====
 check('按 team_id 命中人工覆盖（Team Spirit）', () => {
@@ -86,7 +90,9 @@ check('云端 data.logo 覆盖本地 logo（热更契约）', () => {
 });
 check('远程 logo 缺失(null)时保留本地覆盖（防旧数据抹掉新值）', () => {
   const eff = remoteCuration.buildEffective({ events: [], teams: { 7119388: { logo: null } } });
-  assert(isLp(eff.teams[7119388].logo), '本地覆盖应保留: ' + eff.teams[7119388].logo);
+  // 注意：buildEffective 返回的是**数据层原值**（未做展示改写）；中转改写只发生在 curatedTeamLogo 出口。
+  assert(/^https:\/\/liquipedia\.net\/commons\/images\//.test(eff.teams[7119388].logo),
+    '本地覆盖应保留: ' + eff.teams[7119388].logo);
 });
 
 console.log('\n=== curation logo: PASS ' + passed + ' / FAIL ' + failed + ' ===');

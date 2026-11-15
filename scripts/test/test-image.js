@@ -86,6 +86,36 @@ check('死域经 toLogoUrl → 空串（视图回退首字母占位，不再尝�
   assert(toLogoUrl('https://steamusercontent-a.akamaihd.net/ugc/x/y/') === '', '死域应返回空');
 });
 
+// ===== ★ 2026-11-15：Liquipedia 热链保护 → 中转反代 =====
+// 根因（实测）：LP 对 `Referer: https://servicewechat.com/...` 返回 **403 + 占位图**
+//   （"Sorry, hotlinking images is not allowed."，Content-Type 仍是 image/png）。
+//   小程序 <image> 必带该 Referer 且无法关闭 ⇒ 直连必然显示占位图；且 403 带 PNG body
+//   会让 <image> 认为加载成功，连 binderror 兜底都不会触发。
+//   修法：把 LP commons 图片改写为 `<当前中转>/img?u=<encoded>`（服务端不带 Referer 取图）。
+section('\n--- ★ 2026-11-15 Liquipedia 热链保护 → 中转反代 ---');
+const PROXY0 = require('../../utils/config.js').endpoints.proxy[0];
+const LP_IMG = 'https://liquipedia.net/commons/images/thumb/f/f5/Team_Liquid_2024_full_lightmode.png/320px-Team_Liquid_2024_full_lightmode.png';
+
+check('LP commons 图片 → 中转 /img?u=<encoded>', () => {
+  const out = normalizeLogoUrl(LP_IMG);
+  assert(out === PROXY0 + '/img?u=' + encodeURIComponent(LP_IMG), '改写结果不符: ' + out);
+});
+
+check('★ 幂等：已是中转 URL → 原样返回（不会二次编码）', () => {
+  const once = normalizeLogoUrl(LP_IMG);
+  assert(normalizeLogoUrl(once) === once, '二次 normalize 必须不变: ' + normalizeLogoUrl(once));
+});
+
+check('不误伤：liquipedia 页面 URL（非 commons 图片）保持原样', () => {
+  const u = 'https://liquipedia.net/dota2/Team_Liquid';
+  assert(normalizeLogoUrl(u) === u, '页面 URL 不应被反代: ' + normalizeLogoUrl(u));
+});
+
+check('toLogoUrl 同样走反代（且不追加 OpenDota 尺寸参数）', () => {
+  const out = toLogoUrl(LP_IMG);
+  assert(out.indexOf(PROXY0 + '/img?u=') === 0 && out.indexOf('&w=') < 0, 'toLogoUrl 结果不符: ' + out);
+});
+
 // ===== 2026-09-21 队标本地化 utils/logoLocal.js =====
 // 背景：实测快照 89% 的队标来自 cdn.steamusercontent.com（UGC），响应头为
 //   **application/octet-stream**（字节是合法 PNG），而社区多篇记录小程序 <image> 遇

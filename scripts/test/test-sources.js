@@ -163,7 +163,8 @@ check('enrichTeamLogo ★ 人工覆盖优先于 existing', async () => {
     name: 'Team Spirit', id: 7119388, logo: 'https://cdn.steamusercontent.com/ugc/mock/'
   });
   assert(r && r.source === 'curation', 'source 应为 curation: ' + JSON.stringify(r));
-  assert(/^https:\/\/liquipedia\.net\//.test(r.logo), '应返回 LP 覆盖 URL: ' + r.logo);
+  // 出口已改写为「中转反代」（LP 对 servicewechat referer 返回 403 占位图，见 utils/image.js）
+  assert(/\/img\?u=https%3A%2F%2Fliquipedia\.net%2F/.test(r.logo), '应为中转后的 LP 覆盖 URL: ' + r.logo);
 });
 check('enrichTeamLogo 未覆盖队伍仍走原链路（existing 直出）', async () => {
   const r = await sources.enrichTeamLogo({ name: 'Unknown Team', id: 888888, logo: 'https://existing.example/logo2.png' });

@@ -7,6 +7,7 @@
  *   - 保存时仅 emit('saved', payload)，由父组件执行云函数写操作并控制关闭/loading。
  */
 import { ref, reactive, watch, computed } from 'vue'
+import { displayLogoUrl } from '@/api/supabase'
 
 const props = defineProps({
   // 是否可见（v-model）
@@ -164,7 +165,7 @@ async function handleSubmit() {
           clearable
         />
         <div v-if="form.logo" class="logo-preview">
-          <img :src="form.logo" alt="队标预览" />
+          <img :src="displayLogoUrl(form.logo)" alt="队标预览" />
         </div>
         <span class="form-hint">
           人工覆盖优先级最高：人工覆盖 &gt; OpenDota/Steam &gt; STRATZ &gt; Liquipedia 兜底

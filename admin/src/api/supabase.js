@@ -29,6 +29,20 @@ const authHeaders = () => ({
   Authorization: `Bearer ${ANON}`,
 })
 
+/**
+ * ★ 2026-11-15：队标「展示用」URL。
+ *   Liquipedia 对第三方 Referer（含浏览器 / 小程序）返回 403 + 占位图（"hotlinking not allowed"），
+ *   因此 LP 队标在网页/小程序都必须经中转 `/img` 反代；**存库的仍是原始 URL**。
+ *   BASE 不是中转形态（不以 /sb 结尾）时原样返回（本地直连 Supabase 的开发态）。
+ */
+export function displayLogoUrl(u) {
+  if (!u || typeof u !== 'string') return u
+  if (!/^https:\/\/liquipedia\.net\/commons\/images\//i.test(u)) return u
+  const base = String(BASE || '')
+  if (!/\/sb\/?$/.test(base)) return u
+  return base.replace(/\/sb\/?$/, '') + '/img?u=' + encodeURIComponent(u)
+}
+
 /** 分页读全量（绕过 PostgREST 单次上限） */
 async function restAll(table, select, extraQuery = '') {
   const PAGE = 1000
