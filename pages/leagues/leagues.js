@@ -531,6 +531,9 @@ Page({
       earliest: earliest,
       latest: latest,
       matchCount: w.count || 0,
+      // ★ 2026-11-15：阶段 1 不查 curation（性能约束），无法判定是否存在正赛前对局；
+      //   先给 false，等阶段 2 的 normalize 用 curation.start 精确判定并覆盖。
+      preMain: false,
       status: status,
       statusText: statusBadgeOf(status).text,
       statusColor: statusBadgeOf(status).color,
@@ -837,6 +840,9 @@ Page({
       earliest: mixed.earliest,
       latest: mixed.latest,
       matchCount: w.count || 0,
+      // ★ 2026-11-15：同 leagueid 下存在「正赛起点前 24h 以上」的对局 ⇒ 判定含预选赛/Play-In，
+      //   卡面场次需标注口径（详见阶段 1 同名字段注释）。
+      preMain: !!(cur && cur.start && mixed.earliest && mixed.earliest < Number(cur.start) - 86400),
       status: status,
       statusText: badge.text,
       statusColor: badge.color,

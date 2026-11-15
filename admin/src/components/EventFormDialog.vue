@@ -49,6 +49,11 @@ const form = reactive({
   rank: 0,
   label: '',
   year: new Date().getFullYear(),
+  // ★ 2026-11-15：OpenDota leagueid（可选）。
+  //   为什么要显式录入：详情页 `eventFor` 优先按 leagueId **pin 匹配**，可绕过别名漂移；
+  //   而 OpenDota 存在「同名多 id」（实证 1win Essence III 同时有 20177 / 20486），
+  //   只靠名称匹配会不稳定。admin-write 会把它写进 curation_events.league_id 列。
+  leagueId: null,
   dateRange: [], // [startMs, endMs]，毫秒
   liquipediaSlug: '',
   prizePool: '',
@@ -96,6 +101,9 @@ function fillForm(ev) {
   form.rank = tier.rank != null ? tier.rank : (GRADE_RANK[tier.grade] != null ? GRADE_RANK[tier.grade] : 0)
   form.label = tier.label || (GRADE_LABEL[tier.grade] || '')
   form.year = e.year || new Date().getFullYear()
+  // leagueId 兼容两种形状：data.leagueId（JSON）与 DB 列 league_id
+  form.leagueId = e.leagueId != null ? Number(e.leagueId)
+    : (e.league_id != null ? Number(e.league_id) : null)
   // DB 中 start/end 为 Unix 秒，转毫秒供 date-picker 使用
   const startMs = e.start ? e.start * 1000 : null
   const endMs = e.end ? e.end * 1000 : null
@@ -151,6 +159,8 @@ async function handleSubmit() {
       aliases: form.aliases || [],
       tier: { grade: form.grade, rank: form.rank, label: form.label },
       year: form.year,
+      leagueId: (form.leagueId != null && form.leagueId !== '' && isFinite(Number(form.leagueId)))
+        ? Number(form.leagueId) : null,
       start,
       end,
       liquipediaSlug: normalizeSlugInput(form.liquipediaSlug),
@@ -226,6 +236,11 @@ async function handleSubmit() {
           end-placeholder="结束日期"
           style="width: 100%"
         />
+      </el-form-item>
+
+      <el-form-item label="League ID">
+        <el-input-number v-model="form.leagueId" :min="0" :controls="false" placeholder="如 20486" style="width: 200px" />
+        <span class="form-hint">OpenDota leagueid（可选）。填写后按 id 精确归属，避免同名多 id 串赛事</span>
       </el-form-item>
 
       <el-form-item label="Liquipedia Slug">

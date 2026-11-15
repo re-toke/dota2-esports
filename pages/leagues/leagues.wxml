@@ -189,7 +189,7 @@
         <view class="league-sub">
           <view class="league-sub-info">
             <text class="date-range" wx:if="{{item.dateRange}}">{{item.dateRange}}</text>
-            <text wx:if="{{item.matchCount}}"> · {{item.matchCount}} 场</text>
+            <text wx:if="{{item.matchCount}}"> · {{item.matchCount}} 场{{item.preMain ? '（含预选赛）' : ''}}</text>
             <text wx:if="{{item.prizePool}}"> · {{item.prizePool}}</text>
           </view>
           <text class="src-inline src-{{item.source === 'community' ? 'curation' : (item.source === 'liquipedia' ? 'liquipedia' : (item.source === 'stratz' ? 'stratz' : 'opendota'))}}">{{item.source === 'community' ? '社区分级' : (item.source === 'liquipedia' ? 'Liquipedia' : (item.source === 'stratz' ? 'STRATZ' : 'OpenDota'))}}</text>
