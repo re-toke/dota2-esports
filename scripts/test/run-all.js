@@ -31,6 +31,7 @@ const TESTS = [
   { file: 'scripts/test/test-api-inflight.js' },
   { file: 'scripts/test/test-remote-curation.js' },
   { file: 'scripts/test/test-search-history.js' },
+  { file: 'scripts/test/test-cache-write-throttle.js' },
   { file: 'scripts/test/test-bo3-merge-split.js' },
   { file: 'scripts/test/test-haglund-circuit.js' },
   { file: 'scripts/test/test-image.js' },

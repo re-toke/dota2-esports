@@ -11,6 +11,15 @@ const PREFIX = 'dota2_cache_';
 const MAX_BYTES = 6 * 1024 * 1024;
 // LRU 淘汰批次：每次淘汰最旧的 20% 条目，避免频繁触发 prune
 const PRUNE_BATCH_RATIO = 0.2;
+// ★ 2026-11-15（写入路径节流）：原实现**每次 set 都**调 prune()（至少一次 getStorageInfoSync
+//   同步桥调用；超限时还会全量读+parse）。现改为：
+//     · 小值每 N 次写入检查一次；
+//     · 大值（序列化长度 ≥ 128KB）立即检查（防攒出突发超限）；
+//     · 写入抛错（多为超限）时必定检查并尝试腾空间。
+//   ⚠️ 未超限时 prune() 本身是「一次 getStorageInfoSync 后早退」，故节流收益主要体现在批量小写入。
+const PRUNE_EVERY_N_WRITES = 10;
+const BIG_VALUE_CHARS = 128 * 1024;
+let _writesSincePrune = 0;
 
 function get(key, ttlSec) {
   try {
@@ -205,16 +214,20 @@ function pruneIdle(chunkSize, onDone) {
 function set(key, value, ttlSec) {
   try {
     const expire = Date.now() + (ttlSec || 3600) * 1000;
-    wx.setStorageSync(PREFIX + key, JSON.stringify({
+    const body = JSON.stringify({
       value: value, expire: expire, fetchedAt: Date.now()
-    }));
-    // §6.4 写入后检测容量，超限则 LRU 淘汰
-    // 低频检查：仅在写入可能引发超限时才触发（setStorageSync 本身会在超 10MB 时抛错）
-    // 这里做主动 prune 避免触发 wx 的硬限制
-    prune();
+    });
+    wx.setStorageSync(PREFIX + key, body);
+    // ★ 2026-11-15：容量检查节流（见文件顶部参数注释）——不再每次写都跑 prune()
+    _writesSincePrune++;
+    if (_writesSincePrune >= PRUNE_EVERY_N_WRITES || body.length >= BIG_VALUE_CHARS) {
+      _writesSincePrune = 0;
+      prune();
+    }
   } catch (e) {
     // 存储空间不足等异常静默忽略，不影响主流程
-    // 额外兜底：try-catch 触发时再 prune 一次，释放空间后不重试（避免循环）
+    // 额外兜底：try-catch 触发时必定 prune 一次（多为超限；释放后不重试，避免循环）
+    _writesSincePrune = 0;
     prune();
   }
 }
