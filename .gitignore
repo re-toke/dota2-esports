@@ -33,6 +33,13 @@ supabase/.temp/
 # Netlify CLI 本地状态与 Edge Function 构建产物（`npx netlify deploy` 生成，机器相关）
 .netlify/
 
+# 历史归档与交付物（★ 2026-11-15：取消跟踪，文件保留在本地）
+#   理由：仓库只保留现行代码与权威文档（README / PROJECT_OVERVIEW），
+#   发版材料、历史审计报告移出跟踪面，避免 100+ 非代码文件拖大仓库。
+#   ⚠️ 历史提交里仍有这些文件；若要彻底瘦身 .git 需 filter-repo（破坏性，另行评估）。
+archive/
+deliverables/
+
 # 临时脚手架（批量替换脚本 / 提交信息文件等）
 # ★ P2-22（2026-10-14）：由「仅 `_*`」收口为**整目录** —— `scripts/tmp/` 无任何跟踪文件（git ls-files = 0）
 scripts/tmp/

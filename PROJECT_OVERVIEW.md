@@ -3,6 +3,7 @@
 > **文档状态：现行有效** ｜ 最后更新 **2026-11-15** ｜ 代码基线 `2026-11-15`（服务端热更已部署，客户端待发版） ｜ 线上版本 **v1.3.0（2026-10-17 发布）**
 > 与 `README.md` 同为本仓库的**权威文档**；`CODE_WIKI.md` / 根 `DEPLOY.md` / `DOMAIN-NAMING-REFERENCE.md` 为历史文档（已归档）。
 > 生成口径：**逐条以当前工作树源码为准**；证据优先级 **代码 / `git log` > `deliverables/` > 本文 > 历史归档文档**。
+> ★ 2026-11-15：`deliverables/` 与 `archive/` 已**取消 git 跟踪**（文件仍保留在本地磁盘）；历史提交中仍可检索，彻底瘦身 `.git` 需另行评估 filter-repo。
 
 ---
 
@@ -119,7 +120,7 @@
 | `sync-liquipedia.yml` | **纯手动**（★ 2026-11-05 定时与 push 均已下线） | LP slug / 解析产物重建。定时迁到 **Deno worker `infra/proxy/lp-sync.mjs`**（cron-job.org 每 15min 增量 / 60min 淘汰赛）——GitHub runner 出口抓 LP **首条请求即 429**，详见技术文档 §19 |
 | `discover-tournaments.yml` | 定时 | 赛事发现 |
 | `ops-maintenance.yml` | 每日 | 清 `aggregation_cache` 过期行 + 快照新鲜度 + 配额探针（失败 → Webhook 二级告警）|
-| `ef-health.yml` | 每 6h | 打 EF 健康检查（保活 + 失败告警）|
+| `ef-health.yml` | 每 2h（`15 */2 * * *`）| 打 EF 健康检查（保活 + 失败告警）|
 
 ---
 
