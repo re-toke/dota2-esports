@@ -1,7 +1,7 @@
 /**
  * 数据访问层（阶段2-⑤：云开发 → Supabase）
  *
- * 由 api/cloudbase.js 直接 re-export（文件名保留以兼容 3 个视图的既有 import）。
+ * ★ 2026-11-15：原 `api/cloudbase.js` 兼容垫片已删除，视图 import 统一为本文件。
  *
  * ## 读：PostgREST 直连（anon key）
  *   · curation_* 三表已有 anon 读策略

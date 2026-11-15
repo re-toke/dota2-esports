@@ -2,11 +2,10 @@
 /**
  * 赛事列表页（阶段2-② / 阶段2-③）
  *
- * - 查询操作直接用 CloudBase JS SDK（读）。
- * - 写操作（新增/编辑/删除）经 aggregation 云函数 adminWriteCuration 中转。
+ * - 查询/写入统一走 `@/api/supabase`（PostgREST 读 + EF admin-write 写）。
  */
 import { ref, watch, onMounted } from 'vue'
-import { fetchEventsPage, writeEvent, deleteEvent } from '@/api/cloudbase'
+import { fetchEventsPage, writeEvent, deleteEvent } from '@/api/supabase'
 import EventFormDialog from '@/components/EventFormDialog.vue'
 
 // ===== 数据状态（★ 2026-10-16：**服务端分页**，不再把 3683 行全量拉回前端）=====

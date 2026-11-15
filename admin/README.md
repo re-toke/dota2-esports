@@ -33,7 +33,7 @@ DOTA2 电竞小程序的 curation 数据管理后台，用于在 Web 端管理 S
 - **Supabase PostgREST**（读：anon key + RLS）
 - **Supabase Edge Function `admin-write`**（写：管理令牌鉴权，EF 用 service key 写入）
 
-> ⚠️ **历史遗留**：`@cloudbase/js-sdk` 依赖与 `src/cloudbase/index.js` 是云开发时代的残留（已无任何 import 引用），可在后续清理时移除。`src/api/cloudbase.js` 是兼容垫片（`export * from './supabase.js'`），视图仍从该路径 import。
+> ✅ **2026-11-15 已清理**：`@cloudbase/js-sdk` 依赖、`src/cloudbase/` 与兼容垫片 `src/api/cloudbase.js` 均已移除；视图 import 统一为 `@/api/supabase`。
 
 ## 认证 / 权限模型
 
@@ -53,7 +53,7 @@ DOTA2 电竞小程序的 curation 数据管理后台，用于在 Web 端管理 S
 
 ## 数据访问层
 
-`src/api/supabase.js` 是**真实实现**；`src/api/cloudbase.js` 仅为 `export * from './supabase.js'` 的兼容垫片（视图仍从 `@/api/cloudbase` import，文件名保留以兼容既有 import）。
+`src/api/supabase.js` 是**唯一数据层实现**（PostgREST 读 + EF `admin-write` 写 + 纯函数工具）。
 
 - **读**：`restAll(table, select)` 用 `limit`/`offset` 查询参数**并行**分页拉全量（绕过 PostgREST 单次 max-rows 上限；⚠️ 经中转 `/sb` 时 `Range` 头**不被转发**，故改用 query 参数）。
   - `fetchEvents()` → `curation_events`（`canonical_key, league_id, data`）→ 统一转 `{ _id, ...data }`。
@@ -172,10 +172,7 @@ admin/
     ├── App.vue               # 根组件（router-view 出口）
     ├── main.js               # 应用入口（注册 Pinia / Router / 图标）
     ├── api/
-    │   ├── supabase.js       # ★ 真实数据层（PostgREST 读 + EF admin-write 写 + 纯函数工具）
-    │   └── cloudbase.js      # 兼容垫片：export * from './supabase.js'（视图仍从此 import）
-    ├── cloudbase/
-    │   └── index.js          # 历史残留（已无引用，可清理）
+    │   └── supabase.js       # ★ 唯一数据层（PostgREST 读 + EF admin-write 写 + 纯函数工具）
     ├── stores/               # Pinia store（预留）
     ├── router/
     │   └── index.js          # 路由配置（events / teams / meta）
@@ -194,4 +191,4 @@ admin/
 
 - **阶段2-②**：CRUD 界面就绪，读走 CloudBase，写仅 UI（待云函数）。
 - **阶段2-⑤**：数据层从 CloudBase 迁移到 Supabase（PostgREST 读 + EF `admin-write` 写），写操作真实生效。
-- **P2-15 待办**：补 CI 静态托管部署（Vercel/Netlify/Pages），移除 `@cloudbase/js-sdk` 依赖与 `src/cloudbase/` 残留，把视图 import 从 `@/api/cloudbase` 重命名到 `@/api/supabase`。
+- **P2-15（2026-11-15 完成）**：CI 静态托管已由 `.github/workflows/deploy-admin.yml`（GitHub Pages）落地；`@cloudbase/js-sdk` 依赖与 `src/cloudbase/` 残留已移除，视图 import 已统一到 `@/api/supabase`。

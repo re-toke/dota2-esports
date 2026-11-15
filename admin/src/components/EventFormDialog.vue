@@ -8,7 +8,7 @@
  *     这样保存失败时对话框可保持打开，便于用户修改后重试。
  */
 import { ref, reactive, watch, computed } from 'vue'
-import { normalizeEventName } from '@/api/cloudbase'
+import { normalizeEventName } from '@/api/supabase'
 
 const props = defineProps({
   // 是否可见（v-model）

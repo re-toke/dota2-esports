@@ -2,11 +2,10 @@
 /**
  * 战队列表页（阶段2-② / 阶段2-③）
  *
- * - 查询操作直接用 CloudBase JS SDK（读）。
- * - 写操作（新增/编辑/删除）经 aggregation 云函数 adminWriteCuration 中转。
+ * - 查询/写入统一走 `@/api/supabase`（PostgREST 读 + EF admin-write 写）。
  */
 import { ref, computed, onMounted } from 'vue'
-import { fetchTeams, writeTeam, deleteTeam } from '@/api/cloudbase'
+import { fetchTeams, writeTeam, deleteTeam } from '@/api/supabase'
 import TeamFormDialog from '@/components/TeamFormDialog.vue'
 
 // ===== 数据状态 =====

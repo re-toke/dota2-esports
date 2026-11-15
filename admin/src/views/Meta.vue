@@ -15,7 +15,7 @@
  *   ⇒ 本页只发 2 个「单行读」请求（`curation_meta` 的 `ti_contestant_ids` + `version`），**不再触碰 events/teams**。
  */
 import { ref, computed, onMounted } from 'vue'
-import { fetchMeta, fetchCurationVersion, updateMeta } from '@/api/cloudbase'
+import { fetchMeta, fetchCurationVersion, updateMeta } from '@/api/supabase'
 
 // ===== 数据状态 =====
 const meta = ref(null)
