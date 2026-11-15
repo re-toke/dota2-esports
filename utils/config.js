@@ -88,6 +88,11 @@ module.exports = {
     teamMatches: 30 * 60,     // 战队比赛历史（新鲜窗口 10min）
     search: 5 * 60,           // 战队搜索（O-4：与 searchTeams direct 硬编码 5min 对齐）
     heroes: 24 * 3600,        // 英雄表（几乎不变）
+    // ★ 2026-11-15：正赛口径组数（getLeagueMainCounts）——与 api.js 直连侧
+    //   `cached(path, null, 10 * 60)` 对齐。⚠️ 本键同时被 tryCloudOrDirect 的 writeThrough
+    //   守卫读取：**缺键 = 云路径写穿静默跳过**（断网/EF 熔断时该 action 无本地兜底）。
+    //   新增 ACTION_MAP 映射时请同步登记，门禁见 scripts/ops/check-edge-actions.js。
+    leagueMainCounts: 10 * 60,
     proMatches: 5 * 60,       // 近 100 场职业赛（批次2 首页比赛流主体；已结束比分）
     // ★ 2026-10-13（方案 A · 口径对齐）：**60 → 120**。原注释「60s 与页面轮询同频」是**错的**——
     //   首页 `_startMatchPolling` 的基础间隔是 `POLL_BASE_MS = 120s`（`pages/index/index.js`），
@@ -117,6 +122,7 @@ module.exports = {
   //     | getLeagues            | 5min | 1h / 6h        | GET 30min        | 10min | 6h       | **EF 6h**（下注①）    |
   //     | getLeagueWindows      | 5min | 2h / 2h        | GET default 120s | 10min | 30min*   | EF 30min*            |
   //     | getLeagueMatches      | —    | 10min / 30min  | GET default 120s | 10min | 30min    | EF 30min             |
+  //     | getLeagueMainCounts   | —    | 10min / 10min  | GET default 120s | 10min | 10min    | EF 10min             |
   //     | proMatches            | 5min | 5min / 5min    | GET 60s          | 10min | 5min     | EF 5min              |
   //     | liveMatches           | 5min | 2min / 2min    | GET 20s          | 10min | 60s      | EF 60s               |
   //     | team                  | —    | 15min / 6h     | —                | 10min | 6h       | EF 6h（下注①）        |

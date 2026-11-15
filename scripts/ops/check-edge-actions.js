@@ -42,6 +42,7 @@ const path = require('path');
 const ROOT = path.resolve(__dirname, '..', '..');
 const API_JS = path.join(ROOT, 'utils', 'api.js');
 const CLOUDPROXY_JS = path.join(ROOT, 'utils', 'cloudProxy.js');
+const CONFIG_JS = path.join(ROOT, 'utils', 'config.js');
 
 let failed = 0;
 function ok(cond, msg) {
@@ -68,6 +69,35 @@ function extractKeys(src, declName, fileLabel) {
 }
 
 function uniq(arr) { return Array.from(new Set(arr)); }
+
+/** 取 `cacheTTL: { ... }` 的顶层键（该对象在本项目里为 4 空格缩进的平铺字面量） */
+function extractCacheTtlKeys(src) {
+  const i = src.indexOf('cacheTTL: {');
+  if (i < 0) throw new Error('utils/config.js：未找到 `cacheTTL: {`');
+  const start = src.indexOf('{', i);
+  const end = src.indexOf('\n  },', start);
+  if (start < 0 || end < 0) throw new Error('utils/config.js：`cacheTTL` 对象体解析失败');
+  const body = src.slice(start + 1, end);
+  const out = [];
+  const re = /^ {4}([A-Za-z0-9_$]+)\s*:/gm;
+  let m;
+  while ((m = re.exec(body)) !== null) out.push(m[1]);
+  return out;
+}
+
+/** 取 `ACTION_MAP` 对象体内声明的 `ttlKey: '...'` 字面量 */
+function literalTtlKeys(src) {
+  const i = src.indexOf('ACTION_MAP = {');
+  if (i < 0) return [];
+  const end = src.indexOf('\n};', i);
+  if (end < 0) return [];
+  const body = src.slice(i, end);
+  const out = [];
+  const re = /ttlKey:\s*'([A-Za-z0-9_$]+)'/g;
+  let m;
+  while ((m = re.exec(body)) !== null) out.push(m[1]);
+  return out;
+}
 
 /** 递归收集目录下所有 .js 文件（跳过 node_modules / .git / tmp 备份区） */
 function walkJs(dir, out) {
@@ -181,8 +211,30 @@ function missing(edgeKeys, subKeys) {
           .map(function (c) { return c.file; })).join(', ') + '）'
       : ''));
 
+  // ── ttlKey ⊆ config.cacheTTL（★ 2026-11-15 新增）─────────────────────────────
+  //  背景：`tryCloudOrDirect` 的写穿守卫是 `if (m.path && m.ttlKey && config.cacheTTL[m.ttlKey])`
+  //  —— 未登记的 ttlKey 会让**云路径写穿静默跳过**（断网/EF 熔断时该 action 无本地兜底）。
+  //  实例：`getLeagueMainCounts` 曾声明 ttlKey 但 config 缺键。
+  ok(literalTtlKeys("ACTION_MAP = {\n  a: function () { return { ttlKey: 'x' }; }\n};").join(',') === 'x',
+    '★ 自检：ttlKey 字面量抽取');
+  ok(literalTtlKeys("ACTION_MAP = {\n  a: function () { return { path: '/x' }; }\n};").length === 0,
+    '★ 自检：无 ttlKey 时不误报');
+  let cacheTtlKeys = [];
+  try {
+    cacheTtlKeys = uniq(extractCacheTtlKeys(fs.readFileSync(CONFIG_JS, 'utf8')));
+  } catch (e) {
+    failed++;
+    console.log('FAIL  解析失败：' + (e && e.message));
+  }
+  ok(cacheTtlKeys.length > 0, '解析到 config.cacheTTL 键（非空）');
+  const ttlKeys = uniq(literalTtlKeys(apiSrc));
+  ok(ttlKeys.length > 0, '解析到 ACTION_MAP.ttlKey（非空）');
+  const missTtl = missing(cacheTtlKeys, ttlKeys);
+  ok(missTtl.length === 0,
+    'ACTION_MAP.ttlKey ⊆ config.cacheTTL' + (missTtl.length ? '（缺：' + missTtl.join(', ') + '）' : ''));
+
   console.log('\n=== 结果 ===');
-  console.log('（缺口 ' + (missAction.length + missParam.length + missCall.length) + ' 项）');
+  console.log('（缺口 ' + (missAction.length + missParam.length + missCall.length + missTtl.length) + ' 项）');
   if (failed) {
     console.log('存在失败 ❌');
     process.exitCode = 1;

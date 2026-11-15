@@ -653,7 +653,10 @@ async function _handle(request, env, ctx) {
     m = /^\/sb\/rest\/v1\/([A-Za-z0-9_]+)\/?$/.exec(path);
     if (m) {
       if (method !== 'GET') return json({ error: 'rest is read-only here' }, 405);
-      const ck = 'rest|' + path + (url.search || '');
+      // ★ 2026-11-15（复核修复）：**Range 必须进缓存键** —— 客户端 curation 直读按
+      //   `utils/remoteCuration.js` 每页 400 用 Range 头翻页，而 Range 是**头**不是 query：
+      //   若不入键，第 2 页起会命中第 1 页缓存（连 `Content-Range` 一起），分页被静默截断。
+      const ck = 'rest|' + path + (url.search || '') + '|r:' + (request.headers.get('Range') || '');
       const hit = _cache.get(ck);
       if (hit && hit.exp > Date.now()) {
         console.log('[proxy] REST ' + m[1] + ' → 缓存命中');
@@ -732,7 +735,11 @@ async function _handle(request, env, ctx) {
         return staleResponse(stale, label);
       }
 
-      // `/leagues` 轻量裁剪：丢 tier=excluded（形状不变）
+      // `/leagues` 轻量裁剪：丢 tier=excluded，**保持裸数组形状**。
+      // ★ 2026-11-15（契约修复）：原实现包成 `{kept,dropped,data}`，而客户端
+      //   `utils/api.js` 的 `validateResponse()` 对 `/leagues` 要求 `Array.isArray` ——
+      //   EF 不可用回落直连（经本中转 `/od/api/leagues`）时会被判「畸形响应」，
+      //   只能返回旧缓存、列表在 EF 故障期无法刷新。⇒ 裁剪统计改走 `X-Proxy-Trim` 回执头。
       if (rest === 'leagues' && r.ok) {
         let txt = '';
         try { txt = await readText(r, bodyMs); } catch (e) { if (stale) return staleResponse(stale, label); throw e; }
@@ -740,9 +747,11 @@ async function _handle(request, env, ctx) {
         try { data = JSON.parse(txt); } catch (e) { data = null; }
         if (Array.isArray(data)) {
           const kept = data.filter((x) => !x || x.tier !== 'excluded');
-          const body = JSON.stringify({ kept: kept.length, dropped: data.length - kept.length, data: kept });
+          const body = JSON.stringify(kept);
           _cache.set(ck, { at: Date.now(), exp: Date.now() + ttl, body: body, status: 200, ct: 'application/json', cr: null });
-          return textResponse(body, 200, 'application/json', null, 'MISS');
+          const receipt = kept.length === data.length ? null
+            : { 'X-Proxy-Trim': 'leagues:' + kept.length + '/' + (data.length - kept.length) };
+          return textResponse(body, 200, 'application/json', null, 'MISS', receipt);
         }
         // 非数组（异常响应）⇒ 原样透传，别自作主张
         return textResponse(txt, r.status, r.headers.get('content-type') || 'application/json', null, 'MISS');

@@ -30,7 +30,8 @@ scripts/ops/output/
 # Supabase CLI 本地状态（机器相关，CLI 自行清理 —— 2026-09-22：此前误提交，导致 CLI 一跑工作区就变脏）
 supabase/.temp/
 
-# Supabase CLI 本地状态（机器相关，CLI 自行清理 —— 2026-09-22：此前误提交，导致 CLI 一跑工作区就变脏）
+# Netlify CLI 本地状态与 Edge Function 构建产物（`npx netlify deploy` 生成，机器相关）
+.netlify/
 
 # 临时脚手架（批量替换脚本 / 提交信息文件等）
 # ★ P2-22（2026-10-14）：由「仅 `_*`」收口为**整目录** —— `scripts/tmp/` 无任何跟踪文件（git ls-files = 0）

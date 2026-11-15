@@ -296,14 +296,29 @@ async function handleHomeBundle(force?: boolean): Promise<{ data?: any; error?: 
 }
 
 // ===== HTTP 请求（原生 fetch 替代 got） =====
+// ★ 2026-11-15（复核修复）：**必须带超时**。原实现裸 `fetch` 无 signal —— 上游挂起时
+//   EF 会一直占用实例到平台 wall-clock 上限（客户端 25s / 中转 12s 只是"客户端放弃"，
+//   服务端请求仍在跑，并发被白白吃掉）。
+//   取 30s：实测 `getTeamMatches` 冷缓存最坏 22.7s（见 utils/api.js 的实测记录），
+//   低于该值会误杀合法慢请求；30s 足以收敛"挂死"。
+const OD_FETCH_TIMEOUT_MS = 30000;
+
 async function fetchOd(path: string): Promise<any> {
-  const res = await fetch(OD_BASE + path, {
-    headers: { "User-Agent": "DOTA2-Esports-Hub/1.0" }
-  });
-  if (!res.ok) {
-    throw new Error(`OpenDota ${res.status}: ${await res.text()}`);
+  const ac = new AbortController();
+  const timer = setTimeout(() => { try { ac.abort(); } catch (e) { /* 静默 */ } }, OD_FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(OD_BASE + path, {
+      headers: { "User-Agent": "DOTA2-Esports-Hub/1.0" },
+      signal: ac.signal
+    });
+    if (!res.ok) {
+      throw new Error(`OpenDota ${res.status}: ${await res.text()}`);
+    }
+    return await res.json();
+  } finally {
+    // 覆盖到 body 读完为止（AbortController 同样能中断停滞的 body 流）
+    clearTimeout(timer);
   }
-  return await res.json();
 }
 
 // ===== Action 处理 =====

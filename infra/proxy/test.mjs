@@ -105,6 +105,17 @@ const textOf = async (r) => { try { return await r.clone().text(); } catch (e) {
   const r = await handle(req('/sb/rest/v1/curation_events', { method: 'POST', body: '{}' }), ENV);
   ok('REST 拒绝写操作（最小权限，405）', r.status === 405, String(r.status));
 }
+{
+  // ★ 2026-11-15：Range 必须进缓存键 —— 客户端 curation 分页（每页 400）依赖，
+  //   若不入键，第 2 页起会命中第 1 页缓存，分页被静默截断。
+  _cache.clear();
+  calls.length = 0;
+  await textOf(await handle(req('/sb/rest/v1/curation_events?select=team_id,data',
+    { headers: { Range: '0-399' } }), ENV));
+  await textOf(await handle(req('/sb/rest/v1/curation_events?select=team_id,data',
+    { headers: { Range: '400-799' } }), ENV));
+  ok('★ REST 分页：不同 Range 各回源一次（不共享缓存）', calls.length === 2, 'calls=' + calls.length);
+}
 
 // ── ④ OpenDota 路由 + /leagues 裁剪 ─────────────────────────────────────────
 {
@@ -114,11 +125,15 @@ const textOf = async (r) => { try { return await r.clone().text(); } catch (e) {
     calls[0] && calls[0].url === 'https://api.opendota.com/api/proMatches', calls[0] && calls[0].url);
 }
 {
+  _cache.clear();
   calls.length = 0;
   const r = await handle(req('/od/api/leagues'), ENV);
   const b = JSON.parse(await textOf(r));
-  ok('★ /leagues 裁剪：丢掉 tier=excluded', b.data && b.data.length === 2 && b.dropped === 1, JSON.stringify(b));
-  ok('★ 裁剪后**形状不变**（仍是数组元素结构，客户端可原样消费）', Array.isArray(b.data) && b.data[0].leagueid === 1);
+  ok('★ /leagues 裁剪：丢掉 tier=excluded', Array.isArray(b) && b.length === 2, JSON.stringify(b));
+  ok('★ 裁剪后仍是裸数组（客户端 validateResponse 要求 Array）',
+    Array.isArray(b) && b[0] && b[0].leagueid === 1);
+  ok('★ 裁剪统计走响应头 X-Proxy-Trim', /leagues:2\/1/.test(r.headers.get('X-Proxy-Trim') || ''),
+    String(r.headers.get('X-Proxy-Trim')));
 }
 {
   calls.length = 0;

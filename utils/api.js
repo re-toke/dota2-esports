@@ -76,6 +76,16 @@ function acquireSlot() {
 function rawRequest(path, data, headers) {
   return new Promise((resolve, reject) => {
     let settled = false;
+    let watchdog = null;
+    // ★ 2026-11-15（复核修复）：统一结算入口 —— 成功/失败时**清掉兜底超时定时器**。
+    //   原实现只在超时分支里跑定时器、成功后从不清除 ⇒ 每个请求残留一个 ~20.5s 的定时器
+    //   （虽有 `settled` 守卫无副作用，但持续持有闭包与页面实例引用，属无谓开销）。
+    function settle(fn, val) {
+      if (settled) return;
+      settled = true;
+      if (watchdog) { clearTimeout(watchdog); watchdog = null; }
+      fn(val);
+    }
     const task = wx.request({
       // ★ P1-2：每次请求动态取当前出口（主不可达时 endpoints 已切到备 ⇒ 下次自然走备）
       url: endpoints.odBase() + path,
@@ -88,34 +98,27 @@ function rawRequest(path, data, headers) {
       //   会对**已发布老版本**也生效、一旦不兼容即全站白屏。带上本头 = 明确"我（这一版）能解"。
       header: Object.assign({ 'content-type': 'application/json', 'X-Gzip-Ok': '1' }, headers || {}),
       success: (res) => {
-        if (settled) return;
-        settled = true;
         if (res.statusCode >= 200 && res.statusCode < 300) {
-          resolve(res.data);
+          settle(resolve, res.data);
         } else if (res.statusCode === 429) {
           // 触发限流，交由外层重试
           const err = new Error('HTTP 429');
           err.statusCode = 429;
-          reject(err);
+          settle(reject, err);
         } else {
           // 5xx/其他非 2xx：带 statusCode 抛出，供外层按状态码决定是否退避重试
           const err = new Error('HTTP ' + res.statusCode);
           err.statusCode = res.statusCode;
-          reject(err);
+          settle(reject, err);
         }
       },
-      fail: (err) => {
-        if (settled) return;
-        settled = true;
-        reject(err);
-      }
+      fail: (err) => settle(reject, err)
     });
     // 额外超时兜底（部分基础库 timeout 不触发 fail）
-    setTimeout(() => {
+    watchdog = setTimeout(() => {
       if (settled) return;
-      settled = true;
       try { task && task.abort && task.abort(); } catch (e) {}
-      reject(new Error('request timeout'));
+      settle(reject, new Error('request timeout'));
     }, REQUEST_TIMEOUT_MS + 500);
   });
 }
