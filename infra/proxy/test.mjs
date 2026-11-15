@@ -2,7 +2,7 @@
 //   做法：mock 全局 fetch（拦截上游请求），把 worker 的 handle() 当成纯函数调用，
 //   逐条断言：① 路由命中 ② **服务端确实覆盖了客户端的错 key** ③ /leagues 裁剪 ④ 最小权限/健康检查
 // 运行：node infra/proxy/test.mjs
-import { handle, EF_ALLOW, EF_CACHE, TTL, _cache, keepWarmOnce, KEEP_WARM_EFS } from './worker.mjs';
+import { handle, EF_ALLOW, EF_CACHE, TTL, _cache, CACHE_MAX_ENTRIES, keepWarmOnce, KEEP_WARM_EFS } from './worker.mjs';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 
@@ -44,6 +44,8 @@ const textOf = async (r) => { try { return await r.clone().text(); } catch (e) {
   const b = JSON.parse(await textOf(r));
   ok('健康检查返回 200 + ok:true', r.status === 200 && b.ok === true, JSON.stringify(b));
   ok('健康检查报出「key 已配置」', b.hasKey === true, JSON.stringify(b));
+  ok('★ 部署指纹：build 与 cacheMax 已回显（三台可据此判断是否同版）',
+    b.build === '2026-11-15b' && b.cacheMax === CACHE_MAX_ENTRIES, JSON.stringify({ build: b.build, cacheMax: b.cacheMax }));
   ok('健康检查带 CORS（可在浏览器直接打开）', r.headers.get('Access-Control-Allow-Origin') === '*');
 }
 {
@@ -115,6 +117,21 @@ const textOf = async (r) => { try { return await r.clone().text(); } catch (e) {
   await textOf(await handle(req('/sb/rest/v1/curation_events?select=team_id,data',
     { headers: { Range: '400-799' } }), ENV));
   ok('★ REST 分页：不同 Range 各回源一次（不共享缓存）', calls.length === 2, 'calls=' + calls.length);
+}
+
+// ── 缓存容量上限（★ 2026-11-15：键空间含客户端可控查询串，必须有界）────────────
+{
+  _cache.clear();
+  calls.length = 0;
+  const N = CACHE_MAX_ENTRIES + 30;
+  for (let i = 0; i < N; i++) {
+    await textOf(await handle(req('/od/api/explorer?sql=select%20' + i), ENV));
+  }
+  ok('★ 缓存容量上限：条目数不超过 cap（' + _cache.size + '/' + CACHE_MAX_ENTRIES + '）',
+    _cache.size <= CACHE_MAX_ENTRIES, 'size=' + _cache.size);
+  ok('★ 缓存容量上限：写满后确实发生 FIFO 淘汰（size 恰为 cap）',
+    calls.length === N && _cache.size === CACHE_MAX_ENTRIES,
+    'calls=' + calls.length + ' size=' + _cache.size);
 }
 
 // ── ④ OpenDota 路由 + /leagues 裁剪 ─────────────────────────────────────────

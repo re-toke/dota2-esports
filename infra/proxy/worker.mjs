@@ -105,6 +105,28 @@ const CORS = {
 // 模块级短路缓存（isolate 内有效）
 const _cache = new Map();          // key -> { at, exp, body, status, ct, cr }
 
+// ★★ 2026-11-15（复核修复）：**容量上限 + FIFO 淘汰**。
+//   原实现只有"读取时判 `exp`"，过期条目不删除、也从不淘汰 ⇒ isolate 生命周期内条目单调增长；
+//   而键空间含**客户端可控**的查询串（`/explorer?sql=`、`?vs=`、REST 的 `select`/`Range`）
+//   ⇒ 被刷时内存只涨不落。做法：写入前若已达上限，先清过期、再按插入顺序 FIFO 淘汰
+//   （与 `supabase/functions/_shared/l1cache.ts` 同策略）。
+const CACHE_MAX_ENTRIES = 200;
+
+function cacheSet(key, entry) {
+  if (_cache.size >= CACHE_MAX_ENTRIES && !_cache.has(key)) {
+    const now = Date.now();
+    for (const [k, v] of _cache) {
+      if (!v || !v.exp || v.exp <= now) _cache.delete(k);
+    }
+    while (_cache.size >= CACHE_MAX_ENTRIES) {
+      const oldest = _cache.keys().next().value;
+      if (oldest === undefined) break;
+      _cache.delete(oldest);
+    }
+  }
+  _cache.set(key, entry);
+}
+
 // ★★ 2026-10-29（B3）：EF 缓存**后台刷新去重** —— 同一 key 同时只刷一次（避免 STALE 窗口内
 //   多用户并发各触发一次后台刷新，反而把 EF 打热）。
 const _efRefreshing = new Set();
@@ -122,7 +144,7 @@ function keepAlive(p) {
 }
 
 function efCacheSet(key, body, status, policy) {
-  _cache.set(key, {
+  cacheSet(key, {
     at: Date.now(), exp: Date.now() + policy.fresh,
     body: body, status: status, ct: 'application/json', cr: null
   });
@@ -354,7 +376,7 @@ async function serveTeamMatches(rest, label, effTrim, vs, ck, ttl, bodyMs) {
     ? String(Math.max(0, Math.round((Date.now() - rawHit.at) / 1000))) : null;
   if (v) {
     if (status >= 200 && status < 300) {
-      _cache.set(ck, { at: Date.now(), exp: Date.now() + ttl, body: v.body, status: 200, ct: 'application/json', cr: null });
+      cacheSet(ck, { at: Date.now(), exp: Date.now() + ttl, body: v.body, status: 200, ct: 'application/json', cr: null });
     }
     console.log('[proxy] OD ' + rest + ' → ' + v.label + '（原始 ' +
       Math.round(byteLen(txt) / 1024) + 'KB，' + state + '）');
@@ -538,6 +560,11 @@ async function _handle(request, env, ctx) {
     const base = {
       ok: true, ts: new Date().toISOString(),
       hasKey: !!sbKey, ref: ref,
+      // ★ 2026-11-15：**部署指纹** —— 供「三台是否贴了同一份代码」的可验证性。
+      //   背景：此前只能靠 `/od/api/leagues` 形状间接判断版本，像「缓存上限」这类改动
+      //   没有任何外部可观测信号 ⇒ 「贴没贴」只能靠猜。改代码请**同步 bump build**。
+      build: '2026-11-15b',
+      cacheMax: CACHE_MAX_ENTRIES,
       routes: ['/sb/functions/v1/*', '/sb/rest/v1/*', '/od/api/*'],
       ipSource: _ci.source, ipMasked: maskIp(_ci.ip),
       rlMax: _rlMax, rlSrc: _rlEnv ? 'env' : (PROXY_RATE_LIMIT_MAX_FALLBACK ? 'fallback' : 'off'),
@@ -689,7 +716,7 @@ async function _handle(request, env, ctx) {
       }
       const ct = r.headers.get('content-type') || 'application/json';
       const cr = r.headers.get('content-range');
-      if (r.ok) _cache.set(ck, { at: Date.now(), exp: Date.now() + TTL['default'], body: body, status: r.status, ct: ct, cr: cr });
+      if (r.ok) cacheSet(ck, { at: Date.now(), exp: Date.now() + TTL['default'], body: body, status: r.status, ct: ct, cr: cr });
       return textResponse(body, r.status, ct, cr, 'MISS');
     }
 
@@ -748,7 +775,7 @@ async function _handle(request, env, ctx) {
         if (Array.isArray(data)) {
           const kept = data.filter((x) => !x || x.tier !== 'excluded');
           const body = JSON.stringify(kept);
-          _cache.set(ck, { at: Date.now(), exp: Date.now() + ttl, body: body, status: 200, ct: 'application/json', cr: null });
+          cacheSet(ck, { at: Date.now(), exp: Date.now() + ttl, body: body, status: 200, ct: 'application/json', cr: null });
           const receipt = kept.length === data.length ? null
             : { 'X-Proxy-Trim': 'leagues:' + kept.length + '/' + (data.length - kept.length) };
           return textResponse(body, 200, 'application/json', null, 'MISS', receipt);
@@ -785,7 +812,7 @@ async function _handle(request, env, ctx) {
           }
         }
       }
-      if (r.ok) _cache.set(ck, { at: Date.now(), exp: Date.now() + ttl, body: body, status: r.status, ct: ct, cr: null });
+      if (r.ok) cacheSet(ck, { at: Date.now(), exp: Date.now() + ttl, body: body, status: r.status, ct: ct, cr: null });
       return textResponse(body, r.status, ct, null, 'MISS',
         trimReceipt ? { 'X-Proxy-Trim': trimReceipt } : undefined);
     }
@@ -933,4 +960,4 @@ export default {
 };
 
 // 供 Pages Functions / 本地测试复用
-export { handle, EF_ALLOW, EF_CACHE, TTL, _cache, trimMatch, keepWarmOnce, KEEP_WARM_EFS };
+export { handle, EF_ALLOW, EF_CACHE, TTL, _cache, CACHE_MAX_ENTRIES, trimMatch, keepWarmOnce, KEEP_WARM_EFS };
