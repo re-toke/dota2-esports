@@ -191,5 +191,72 @@ if (typeof shouldShowLeague !== 'function') {
   assert('T6: 规范名变体（Essence 3）按名归并', out2.length === 1, '实际 ' + out2.length);
 })();
 
+// ===== T7：预选赛「家族归并」—— 父赛事名还原 =====
+// 方案 A（2026-11-15）：预选赛不再与正赛平铺，能按名归到正赛的挂到父卡下。
+// 这里的正则一旦放宽就会误并（如 DreamLeague Season 3 吃到 Season 30），故逐条锁定样例。
+(function () {
+  const tiers = require(path.resolve(__dirname, '..', '..', 'utils', 'tiers.js'));
+  const cases = [
+    ['BLAST Slam IX China Closed Qualifier', 'BLAST Slam IX'],
+    ['BLAST Slam IX: China Qualifier', 'BLAST Slam IX'],
+    ['DreamLeague Season 30 Qualifiers', 'DreamLeague Season 30'],
+    ['The International 2026 - Regional Qualifier Europe', 'The International 2026'],
+    ['PARI Universe by FISSURE Closed Qualifiers', 'PARI Universe by FISSURE'],
+    ['RES Unbounded Play-In', 'RES Unbounded'],
+    ['ESL One Bangkok 2026 Open Qualifier', 'ESL One Bangkok 2026']
+  ];
+  cases.forEach(function (c) {
+    const got = tiers.qualifierParentName(c[0]);
+    assert('T7: 「' + c[0] + '」→「' + c[1] + '」', got === c[1], '实际: ' + JSON.stringify(got));
+  });
+  assert('T7: 正赛名不返回父名（防把正赛当预选赛）',
+    tiers.qualifierParentName('BLAST SLAM IX') === '', '实际: ' +
+    JSON.stringify(tiers.qualifierParentName('BLAST SLAM IX')));
+  assert('T7: The International 2026（正赛）不返回父名',
+    tiers.qualifierParentName('The International 2026') === '');
+})();
+
+// ===== T8：家族归并的列表形态（父卡计数 / 展开 / 孤儿）=====
+(function () {
+  const attach = leagues.attachQualifierFamilies;
+  assert('T8: attachQualifierFamilies 已导出', typeof attach === 'function', '实际: ' + typeof attach);
+  if (typeof attach !== 'function') return;
+
+  function mkMains() {
+    return [
+      { leagueid: 20208, name: 'BLAST SLAM IX', displayName: 'BLAST SLAM IX', matchCount: 40, latest: 1794000000 },
+      { leagueid: 19719, name: 'The International 2026', displayName: 'The International 2026', matchCount: 80, latest: 1793000000 }
+    ];
+  }
+  function mkQuals() {
+    return [
+      { leagueid: 9001, name: 'BLAST Slam IX China Closed Qualifier', qualifier: true, matchCount: 10, latest: 1793900000 },
+      { leagueid: 9002, name: 'The International 2026 - Regional Qualifier Europe', qualifier: true, matchCount: 20, latest: 1792000000 },
+      { leagueid: 9003, name: 'MPGL Season 6 SEA Qualifier', qualifier: true, matchCount: 5, latest: 1791000000 }
+    ];
+  }
+
+  const r1 = attach(mkMains(), mkQuals(), false, null);
+  assert('T8: 开关关 → 只显示正赛卡', r1.list.length === 2, '实际 ' + r1.list.length);
+  assert('T8: 开关关 → 隐藏数 = 3（2 个归户 + 1 个孤儿）', r1.hidden === 3, '实际 ' + r1.hidden);
+  assert('T8: BLAST 父卡标记 1 个预选赛', r1.list[0].familyQualifierCount === 1,
+    '实际 ' + r1.list[0].familyQualifierCount);
+  assert('T8: TI 父卡标记 1 个预选赛', r1.list[1].familyQualifierCount === 1,
+    '实际 ' + r1.list[1].familyQualifierCount);
+
+  const r2 = attach(mkMains(), mkQuals(), true, null);
+  assert('T8: 开关开 → 主卡 + 子卡 + 孤儿 = 5 条', r2.list.length === 5, '实际 ' + r2.list.length);
+  assert('T8: 子卡紧跟父卡（BLAST 后是 9001）', r2.list[0].leagueid === 20208 && r2.list[1].leagueid === 9001,
+    '实际 ' + r2.list.map((x) => x.leagueid).join(','));
+  assert('T8: 子卡带 isFamilyChild 标记', r2.list[1].isFamilyChild === true);
+  assert('T8: 孤儿预选赛追加在末尾', r2.list[4].leagueid === 9003, '实际 ' + r2.list[4].leagueid);
+
+  const r3 = attach(mkMains(), mkQuals(), false, { 20208: true });
+  assert('T8: 单家族展开 → 只多出该家族的 1 张子卡', r3.list.length === 3, '实际 ' + r3.list.length);
+  assert('T8: 单家族展开 → 另一个家族仍收起', r3.list[1].leagueid === 9001 && r3.list[2].leagueid === 19719,
+    '实际 ' + r3.list.map((x) => x.leagueid).join(','));
+  assert('T8: 单家族展开 → 隐藏数 = 2', r3.hidden === 2, '实际 ' + r3.hidden);
+})();
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 if (fail > 0) process.exit(1);

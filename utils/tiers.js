@@ -133,6 +133,27 @@ function applyQualifierCap(tier, name) {
   return { grade: QUALIFIER_MAX_GRADE, rank: QUALIFIER_MAX_RANK, label: 'B级', qualifier: true };
 }
 
+// ===== ★ 2026-11-15（方案 A · 预选赛家族归并）：从预选赛名还原「父赛事名」 =====
+// 背景：OpenDota 里预选赛是与正赛并列的独立 leagueid（实测 90 天内 243 个名字含
+//   qualifier/play-in），平铺进列表会把正赛淹没；而它们本质是**同一赛事的资格赛阶段**
+//   （Liquipedia 也把预选赛作为赛事子页面，不单独进 Tier 列表）。
+// 用途：`attachQualifierFamilies` 按还原出的父赛事名做 key 比对，把预选赛挂到正赛卡下。
+// 规则（只做保守剥离，宁可归不上也不误并）：
+//   ① 命中 isQualifier 才处理（正赛名原样返回 ''）；
+//   ② 从第一个资格赛短语起整段丢弃（含其后的赛区 / 轮次 / 年份）；
+//   ③ 再剥掉尾部的赛区区名（"BLAST Slam IX China" → "BLAST Slam IX"）；
+//   ④ 剥离后过短（<3 字符）视作无效，返回 ''（交给调用方当「孤儿预选赛」处理）。
+const QUALIFIER_STRIP_RE = /[\s\-–—:：]*\b(?:(?:open|closed|regional|national|online|offline|last\s+chance)\s+)*(?:qualifiers?|qualification|play[-\s]?in)\b[\s\S]*$/i;
+const QUALIFIER_REGION_TAIL_RE = /[\s\-–—:：]*(?:china|europe|eu|north\s+america|na|south\s+america|sa|southeast\s+asia|sea|mena|cis|eastern\s+europe|western\s+europe|oceania|australia|japan|korea|india|brazil|peru|argentina|usa|canada|russia|ukraine)\s*$/i;
+
+function qualifierParentName(name) {
+  const raw = String(name || '');
+  if (!raw || !isQualifier(raw)) return '';
+  let s = raw.replace(QUALIFIER_STRIP_RE, '');
+  s = s.replace(QUALIFIER_REGION_TAIL_RE, '').replace(/[\s\-–—:：]+$/, '').trim();
+  return s.length >= 3 ? s : '';
+}
+
 // ===== 文档五档展示标签（与《DOTA2赛事级别分类全景》对齐）=====
 // 雾峰雪 v2.0：SSS 已并入 S（四级化），SSS 条目保留仅为向后兼容（与 S 同标签）
 //   S   → S-Tier（含原 SSS：TI / 顶级第三方 / DPC Major）
@@ -231,6 +252,7 @@ module.exports = {
   QUALIFIER_MAX_RANK: QUALIFIER_MAX_RANK,
   shouldExclude: shouldExclude,
   isQualifier: isQualifier,
+  qualifierParentName: qualifierParentName,
   applyQualifierCap: applyQualifierCap,
   communityTierFromName: communityTierFromName,
   DISPLAY_TIERS: DISPLAY_TIERS,

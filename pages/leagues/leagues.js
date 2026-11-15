@@ -76,6 +76,74 @@ function shouldShowLeague(item, showQualifiers) {
   return !isQ;
 }
 
+// ★ 2026-11-15（方案 A · 预选赛家族归并）：
+//   把「能按名称归到正赛」的预选赛从平铺列表里拿掉，挂到父赛事卡下：
+//     · 父卡标记 familyQualifierCount（= N），WXML 渲染「预选赛 N」入口；
+//     · 点入口 → 仅展开该家族的 N 张子卡（父卡下缩进展示）；
+//     · 全局开关 showQualifiers=true → **全部家族展开**；
+//     · 归不上父赛事的「孤儿预选赛」→ 仅在全局开关打开时追加到列表末尾。
+//   为什么放在排序/筛选之后：主列表顺序（时间/关注/S级）不能被插入的子卡打乱；
+//   子卡按自身时间倒序紧跟父卡，语义上等价于"正赛包含的预选赛阶段"。
+//   ⚠️ 约束 C5 不变：预选赛只做**展示**归并，绝不参与正赛的场次/队伍/赛期统计。
+//   ⚠️ 保守匹配：仅「剥掉资格赛短语 + 赛区尾词」后的名字 key **全等**才算同一家族，
+//      不做前缀/模糊匹配（防 DreamLeague Season 3 误吃 Season 30 的预选赛）。
+function attachQualifierFamilies(mains, quals, showQualifiers, expanded) {
+  const list = [];
+  let hidden = 0;
+  // 父赛事索引：归一化赛事名 → 主卡（同名多卡取场次多者，保证入口挂在信息最全的那张）
+  const parentByKey = {};
+  (mains || []).forEach((m) => {
+    const k = leagueKey(m.displayName || m.name);
+    if (!k) return;
+    const prev = parentByKey[k];
+    if (!prev || (m.matchCount || 0) > (prev.matchCount || 0)) parentByKey[k] = m;
+  });
+  const fam = {};
+  const orphans = [];
+  (quals || []).forEach((q) => {
+    if (!q || q.defunct) return;
+    const pName = tiers.qualifierParentName(q.name || q.displayName || '');
+    const pk = pName ? leagueKey(pName) : '';
+    const parent = pk ? parentByKey[pk] : null;
+    if (!parent) { orphans.push(q); return; }
+    const pid = String(parent.leagueid);
+    (fam[pid] = fam[pid] || []).push(q);
+  });
+  const byLatestDesc = (a, b) => (b.latest || b.startDate || 0) - (a.latest || a.startDate || 0);
+  (mains || []).forEach((m) => {
+    const pid = String(m.leagueid);
+    const kids = fam[pid] || [];
+    const expand = kids.length > 0 && (!!showQualifiers || !!(expanded && expanded[pid]));
+    m.familyQualifierCount = kids.length;
+    m.familyExpanded = expand;
+    m.isFamilyChild = false;
+    list.push(m);
+    if (expand) {
+      kids.slice().sort(byLatestDesc).forEach((k) => {
+        k.isFamilyChild = true;
+        k.familyParentId = m.leagueid;
+        k.familyQualifierCount = 0;
+        k.familyExpanded = false;
+        list.push(k);
+      });
+    } else {
+      hidden += kids.length;
+    }
+  });
+  if (showQualifiers) {
+    orphans.sort(byLatestDesc).forEach((q) => {
+      q.isFamilyChild = false;
+      q.familyParentId = 0;
+      q.familyQualifierCount = 0;
+      q.familyExpanded = false;
+      list.push(q);
+    });
+  } else {
+    hidden += orphans.length;
+  }
+  return { list: list, hidden: hidden };
+}
+
 // ★ 2026-09-01（P2-L5）：curatedEventFor 结果缓存（leagueid → curation event）。
 //   阶段 2 normalize 全量 300 条逐条调用（单条 1-3ms ≈ 300-900ms 主线程分批占用），
 //   同 leagueid 输入恒定 → 结果可缓存。模块级（跨页面实例共享），列表数据不变时零重算。
@@ -356,6 +424,11 @@ Page({
     //   _normalizeDone 表示全量 normalize 是否已完成（阶段 2 跑完置 true）。
     this._normalizeGen = 0;
     this._normalizeDone = true;   // 首次 loadLeagues 调用前先设 true，避免守卫拦截
+    // ★ 2026-11-15（方案 A · 预选赛家族归并）：单家族展开态缓存（leagueid → true）。
+    //   仅会话级：切 Tab 保留、重进页面重置为全部收起（全局开关仍持久化）。
+    this._expandedFamilies = {};
+    // ★ 2026-11-15：applyAndSlice 暂存的「当前 Tab 预选赛池」（主列表排完序后挂回父赛事）。
+    this._pendingQuals = null;
     // ★ 2026-11-15：还原「含预选赛」开关（持久化）—— 存储异常静默，保持默认关闭。
     //   必须在 loadLeagues 之前读入，否则首屏 applyAndSlice 会按默认 false 渲染后再重排（闪一下）。
     try {
@@ -933,6 +1006,18 @@ Page({
       title = (this.data.filter === 'upcoming') ? '「即将」暂无预选赛数据' : '本 Tab 没有可显示的预选赛';
     }
     try { wx.showToast({ title: title, icon: 'none', duration: 1600 }); } catch (e) { /* 非小程序环境 */ }
+  },
+
+  // ★ 2026-11-15（方案 A · 预选赛家族归并）：展开/收起某场赛事的预选赛子卡。
+  //   入口是父卡上的「预选赛 N」，与全局开关**互不覆盖**：
+  //   · 全局开关打开时所有家族都展开，点入口只影响该家族（关闭时也保持单家族展开）；
+  //   · 用 applyAndSlice(false) 保留当前分页位置，避免展开后列表跳回顶部。
+  onToggleFamily(e) {
+    const id = String((e && e.currentTarget && e.currentTarget.dataset.id) || '');
+    if (!id) return;
+    this._expandedFamilies = this._expandedFamilies || {};
+    this._expandedFamilies[id] = !this._expandedFamilies[id];
+    this.applyAndSlice(false);
   },
 
   // ★ 2026-11-15：正赛口径组数（series）—— 只对「同一 leagueid 混有预选赛」的赛事发起，
@@ -1698,23 +1783,16 @@ Page({
     //   ⚠️ 只影响列表展示：this.allLeagues / this._leagueMap / 关注态保持不变，
     //      点击详情跳转、关注数据、gradeCounts 统计口径均不受影响。
     const showQ = this.data.showQualifiers;
-    // ★ 2026-11-15（开关可感知）：先统计「当前 Tab 的预选赛总数」（与开关状态无关），
-    //   供筛选抽屉副标题 + 切换 Toast 使用 —— 用户能确切知道本 Tab 有没有预选赛、有多少。
-    //   成本：多一次 O(n) 纯内存遍历（n ≤ 800），相对渲染可忽略。
-    let _totalQ = 0;
-    arr.forEach((x) => { if (!shouldShowLeague(x, false)) _totalQ++; });
-    let _hiddenQ = 0;
+    // ★ 2026-11-15（方案 A · 预选赛家族归并）第一步：把预选赛从**排序池**里摘出来。
+    //   主列表仅对正赛排序/战队筛选/分页；预选赛稍后按「父赛事」挂回（attachQualifierFamilies）。
+    //   这样既不改变原排序语义，也不让 200+ 张预选赛卡参与分页。
+    const _isQ = (x) => !shouldShowLeague(x, false);
+    const _quals = [];
     arr = arr.filter((x) => {
-      const ok = shouldShowLeague(x, showQ);
-      if (!ok) _hiddenQ++;
-      return ok;
+      if (_isQ(x)) { _quals.push(x); return false; }
+      return true;
     });
-    // ★ 2026-11-15（可读性优化）：把预选赛数量显式告诉用户 ——
-    //   筛选抽屉里的开关副标题（已隐藏 N 个 / 正在显示 N 个）与切换 Toast 都读这里，
-    //   避免"打开了开关却看不出区别"（预选赛按时间排序多在列表后段）。
-    if (this.data.qualifierHidden !== _hiddenQ || this.data.qualifierCount !== _totalQ) {
-      this.setData({ qualifierHidden: _hiddenQ, qualifierCount: _totalQ });
-    }
+    this._pendingQuals = _quals;
     // 排序：默认按时间倒序；智能排序（关注置顶 + S级优先 + 时间）为高级模式
     if (this.data.sortMode === 'smart') {
       arr = sortSmart(arr);
@@ -1762,14 +1840,23 @@ Page({
       arr = arr.filter((x) => tl[x.leagueid]);
     }
 
-    this.filtered = arr;
-    // 2026-08-07（v1.2）：已停办赛事（defunct）不再展示归档区，直接从列表中剔除。
-    // 原因：归档区占位过大且用户关注度低，移除后主列表更聚焦有效赛事。
+    // ★ 2026-11-15（方案 A · 预选赛家族归并）第二步：在**最终排序 + 战队筛选 + 停办剔除**之后
+    //   把预选赛挂回父赛事（父卡显示「预选赛 N」入口；全局开关=全部展开；孤儿仅在开关打开时追加）。
+    //   放在这里的原因：主列表顺序不允许被插入的子卡打乱，且分页只应按最终列表计算。
     const active = arr.filter((x) => !x.defunct);
-    this.filtered = active;
+    const _grouped = attachQualifierFamilies(active, this._pendingQuals || [], showQ, this._expandedFamilies);
+    this._pendingQuals = null;
+    const _hiddenQ = _grouped.hidden;
+    const _totalQ = (_grouped.list.length - active.length) + _hiddenQ;   // 当前 Tab 预选赛总数（可见 + 隐藏）
+    // ★ 2026-11-15（可读性优化）：把预选赛数量显式告诉用户 ——
+    //   筛选抽屉里的开关副标题（已隐藏 N 个 / 正在显示 N 个）与切换 Toast 都读这里。
+    if (this.data.qualifierHidden !== _hiddenQ || this.data.qualifierCount !== _totalQ) {
+      this.setData({ qualifierHidden: _hiddenQ, qualifierCount: _totalQ });
+    }
+    this.filtered = _grouped.list;
     const pageSize = this.data.pageSize;
     const page = reset ? 0 : this.data.page;
-    const slice = active.slice(0, (page + 1) * pageSize);
+    const slice = this.filtered.slice(0, (page + 1) * pageSize);
     // 2026-08-07（v1.3）：重置 loadingMore——切 tab/筛选后，挂起的 appendPageSafe setTimeout
     // 回调会在检查 `if (!this.data.loadingMore) return;` 时自动跳过，避免用旧 page 切出两页。
     // v1.4：同时重置 armedMore——切 tab/筛选后 ARMED 确认态不再有意义。
@@ -1777,7 +1864,7 @@ Page({
     //   显示「共 N 个赛事 · 已显示 M」。为什么需要：`hasMore` 是**触底确认**式（需再点一下才加载），
     //   用户容易误以为"就这些了" ⇒ 「加载不全」的体感多半来自**不知道还有更多**，
     //   而不是"每页太少"（见 deliverables/加载性能-三项待拍板项意见-2026-09-27.md §2）。
-    this.setData({ list: slice, archived: [], page: page, filteredTotal: active.length, hasMore: active.length > slice.length, loadingMore: false, armedMore: false });
+    this.setData({ list: slice, archived: [], page: page, filteredTotal: this.filtered.length, hasMore: this.filtered.length > slice.length, loadingMore: false, armedMore: false });
     this._armedScrollTop = 0;
     this._armedMinScroll = 0;
     this.enhanceListMetadata();
@@ -2090,6 +2177,7 @@ Page({
 //   ⚠️ 小程序侧 Page() 已注册完毕，exports 不参与任何运行时逻辑。
 module.exports = {
   shouldShowLeague: shouldShowLeague,
+  attachQualifierFamilies: attachQualifierFamilies,
   dedupeByDisplayName: dedupeByDisplayName,
   // ★ 2026-11-15：导出供回归测试（同一赛事跨源重复卡片的防线，见 test-league-qualifier-filter T5/T6）
   mergeAllWithUpcoming: mergeAllWithUpcoming,

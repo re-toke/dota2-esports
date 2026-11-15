@@ -166,7 +166,7 @@
          倒计时胶囊（仅 upcoming，琥珀）。
          周轴视图已按 §10.3 移除（时间轴由新首页周日历承接）。 -->
     <view
-      class="league-item {{item.tierClass}} {{item.status === 'ongoing' ? 'league-item--ongoing' : (item.status === 'ended' ? 'league-item--ended' : '')}} anim-fade-up"
+      class="league-item {{item.tierClass}} {{item.status === 'ongoing' ? 'league-item--ongoing' : (item.status === 'ended' ? 'league-item--ended' : '')}} {{item.isFamilyChild ? 'league-item--qchild' : ''}} anim-fade-up"
       wx:for="{{list}}"
       wx:key="leagueid"
       bindtap="openLeague"
@@ -183,6 +183,12 @@
             <text wx:if="{{item.valve}}" class="hl-badge hl-valve">Valve官方</text>
             <!-- ★ 2026-09-19（收录严谨化 · 用户决策3）：预选赛保留但降级标注 -->
             <text wx:if="{{item.qualifier}}" class="hl-badge hl-qualifier">预选赛</text>
+            <!-- ★ 2026-11-15（方案 A · 家族归并）：父赛事卡上的预选赛入口（N=该家族的预选赛数）。
+                 catchtap 阻止冒泡到卡片跳转；展开后子卡紧跟父卡并缩进展示。 -->
+            <view wx:if="{{item.familyQualifierCount}}" class="q-family" data-id="{{item.leagueid}}" catchtap="onToggleFamily" hover-class="tap-scale">
+              <text class="q-family__text">预选赛 {{item.familyQualifierCount}}</text>
+              <text class="q-family__act">{{item.familyExpanded ? '收起' : '展开'}}</text>
+            </view>
             <text class="status-tag" style="color:{{item.statusColor}};border-color:{{item.statusColor}}">{{item.statusText}}</text>
           </view>
         </view>

@@ -429,6 +429,36 @@
 /* ★ 2026-09-19（收录严谨化 · 用户决策3）：预选赛标注 —— 中性灰，视觉强度弱于 Valve 金标 */
 .hl-qualifier { color: var(--text-3); background: var(--td-bg-color-component); border: 1rpx solid var(--td-border-level-1-color); }
 
+/* ★ 2026-11-15（方案 A · 预选赛家族归并）：
+   父赛事卡上的「预选赛 N 展开/收起」入口 + 子卡缩进引导线。
+   子卡只做视觉从属，不改任何数据口径（场次/队伍仍只算正赛）。 */
+.q-family {
+  display: inline-flex;
+  align-items: center;
+  gap: 6rpx;
+  margin-left: 4rpx;
+  padding: 2rpx 12rpx;
+  border-radius: 999rpx;
+  background: var(--td-bg-color-component);
+  border: 1rpx solid var(--td-border-level-1-color);
+}
+.q-family__text { font-size: var(--fs-micro); color: var(--text-2); }
+.q-family__act { font-size: var(--fs-micro); color: #C8A951; }
+.league-item--qchild {
+  margin-left: 28rpx;
+  padding-left: var(--space-3);
+}
+.league-item--qchild::before {
+  content: '';
+  position: absolute;
+  left: 8rpx;
+  top: 18rpx;
+  bottom: 18rpx;
+  width: 3rpx;
+  border-radius: 2rpx;
+  background: var(--white-a12);
+}
+
 /* ===== 焦点卡：重点运营节点（雾峰雪 v2.0 · 白卡 + 品牌金点缀） =====
    弃用暗色渐变 / 重阴影；改用白卡 + 金色径向晕染 + 极淡外阴影。 */
 .focus-card {
