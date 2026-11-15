@@ -348,6 +348,8 @@ Page({
     try {
       this.setData({ showQualifiers: !!wx.getStorageSync(QUALIFIER_KEY) });
     } catch (e) { /* 存储不可用：保持默认 false */ }
+    // ★ 2026-11-15：把持久化的预选赛开关计入「筛选」角标（否则重进页面角标与实际不符）。
+    this.syncFilterBadge();
     this.loadLeagues();
     this.buildFocusNode();
     // Phase 1-④：refreshTeamOptions 延迟到首次点击战队筛选按钮（openTeamFilter）
@@ -889,6 +891,7 @@ Page({
     const next = !this.data.showQualifiers;
     this.setData({ showQualifiers: next, page: 0 });
     try { wx.setStorageSync(QUALIFIER_KEY, next); } catch (e) { /* 存储异常：仅本次会话生效 */ }
+    this.syncFilterBadge();
     this.applyAndSlice(true);
   },
 
@@ -900,6 +903,9 @@ Page({
     if (d.gradeFilter !== 'all') n++;
     if (d.sortMode === 'smart') n++;   // 默认 time；smart 作为「高级模式」计入非默认
     n += (d.teamFilter && d.teamFilter.length) || 0;
+    // ★ 2026-11-15：显示预选赛属「非默认内容筛选」，计入角标 —— 用户关掉后角标归零，
+    //   不必再靠一条常驻横幅提示「你隐藏了东西」。
+    if (d.showQualifiers) n++;
     if (n !== d.activeFilterCount) this.setData({ activeFilterCount: n });
   },
 

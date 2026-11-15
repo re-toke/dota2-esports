@@ -917,33 +917,43 @@
   background: rgba(200,169,81,0.12);
   color: var(--text-1);
 }
-/* ★ 2026-11-15（可读性优化）：预选赛说明条 —— 与状态 chip 分离，做成一条自解释的
-   可点击说明（「已隐藏 N 个预选赛赛事 · 显示」），点整条区域即可切换。
-   颜色全部走既有变量（含金色高亮态），不新增色值；整条 88rpx 触达。 */
-.qualifier-bar {
+/* ★ 2026-11-15（筛选抽屉 · 内容分区）：开关行 —— 整行 88rpx 触达，右侧为自绘开关。
+   颜色全部走既有变量，不新增色值。 */
+.fp-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  margin: 0 var(--space-2-5) var(--space-1);
-  padding: var(--space-1-5) var(--space-2);
   min-height: 88rpx;
+  padding: var(--space-1) 0;
   box-sizing: border-box;
-  border-radius: var(--radius-sm, 8rpx);
-  background: var(--overlay-06);
-  font-size: var(--fs-caption);
-  color: var(--text-3);
 }
-.qualifier-bar--on {
-  background: var(--overlay-12);
-  color: var(--text-2);
-}
-.qb-text { flex: 1; min-width: 0; line-height: 1.4; }
-.qb-action {
+.fp-row-hover { opacity: 0.7; }
+.fp-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4rpx; }
+.fp-row-title { font-size: var(--fs-body); color: var(--text-1); font-weight: 500; }
+.fp-row-sub { font-size: var(--fs-caption); color: var(--text-3); }
+.fp-switch {
+  position: relative;
   flex-shrink: 0;
-  font-weight: 600;
-  color: var(--tier-s-text);
+  width: 76rpx;
+  height: 44rpx;
+  border-radius: var(--radius-pill);
+  background: var(--td-bg-color-component-active);
+  transition: background var(--dur-fast) var(--ease-out);
 }
+.fp-switch.on { background: var(--dota-gold); }
+.fp-switch-knob {
+  position: absolute;
+  top: 4rpx;
+  left: 4rpx;
+  width: 36rpx;
+  height: 36rpx;
+  border-radius: 50%;
+  background: var(--td-bg-color-container);
+  box-shadow: 0 1rpx 4rpx var(--overlay-12);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.fp-switch.on .fp-switch-knob { transform: translateX(32rpx); }
 .ft-text { font-weight: 600; }
 .filter-badge {
   min-width: 30rpx;
