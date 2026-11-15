@@ -393,7 +393,7 @@ export const config = { path: '/*' };   // ⚠️ 必须 '/*'；只写 '/' 会�
 
 ---
 
-### E4. 部署后自检（**三个，全部用你的本机/国内网络跑**）
+### E4. 部署后自检（**四个，全部用你的本机/国内网络跑**）
 
 只测 `/healthz` **不够** —— 它只证明"函数被调度起来了"，不证明**业务路径**能过。
 
@@ -402,10 +402,12 @@ export const config = { path: '/*' };   // ⚠️ 必须 '/*'；只写 '/' 会�
 | 1 | `curl -s https://<子域>/healthz` | `{"ok":true,"hasKey":true,...}`（`hasKey` 为 false ⇒ 环境变量名/生效问题） |
 | 2 | `curl -s "https://<子域>/healthz?deep=1"` | `deep.supabase.reachable=true` **且** `deep.opendota.reachable=true`（前=能连 Supabase 主路径；后=OpenDota 兜底通） |
 | 3 | `curl -s "https://<子域>/od/api/proMatches" \| head -c 200`<br>`curl -s -X POST https://<子域>/sb/functions/v1/opendota-proxy -H 'Content-Type: application/json' -d '{"action":"getProMatches","params":{}}' \| head -c 200` | 都返回 JSON 数据（不是 404/502） |
+| 4 | `curl.exe -sS -D - -o NUL "https://<子域>/img?u=https%3A%2F%2Fliquipedia.net%2Fcommons%2Fimages%2Fthumb%2Ff%2Ff5%2FTeam_Liquid_2024_full_lightmode.png%2F320px-Team_Liquid_2024_full_lightmode.png"` | `HTTP 200` + `Content-Type: image/png` + `X-Proxy-Cache: MISS`（★ 2026-11-15 队标反代：LP 对小程序 Referer 返回 403 占位图，必须走此路由） |
 
 - ❌ **整条命令超时/连接被重置** ⇒ **子域被阻断** ⇒ 换平台（这正是 `vercel.app` 的情况）。
 - ❌ `deep.supabase.reachable=false` ⇒ 载体出口连不上 Supabase ⇒ 换 Region 或换平台。
 - ❌ 第 3 条 404 ⇒ 路由没挂全（Netlify 方案检查 `config.path`）。
+- ❌ 第 4 条 404 ⇒ 该台仍是旧版 worker（`/img` 路由不存在）；`/healthz` 的 `build` 应为 `2026-11-15c` 或更高。
 - ⚠️ 证书必须是**有效 HTTPS**（微信只允许 https/wss）。
 
 ---

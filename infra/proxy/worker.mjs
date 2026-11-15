@@ -16,6 +16,7 @@
 //   /sb/functions/v1/<name>       → https://<ref>.supabase.co/functions/v1/<name>    （EF）
 //   /sb/rest/v1/<table>?<query>   → https://<ref>.supabase.co/rest/v1/<table>?<query>（PostgREST 只读）
 //   /od/api/<path>?<query>        → https://api.opendota.com/api/<path>?<query>
+//   /img?u=<encoded>              → https://liquipedia.net/commons/images/...（★ 2026-11-15 队标图片反代）
 //   /lp?<query>                   → https://liquipedia.net/dota2/api.php?<query>（可选）
 //
 // ## ★ v2 优化点（2026-10-10）
@@ -104,6 +105,80 @@ const CORS = {
 
 // 模块级短路缓存（isolate 内有效）
 const _cache = new Map();          // key -> { at, exp, body, status, ct, cr }
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ★★ 2026-11-15：**队标图片反代 `/img`** —— Liquipedia 热链保护的绕行通道
+//
+// 根因（2026-11-15 实测，决定性证据）：
+//   Liquipedia 对带 `Referer: https://servicewechat.com/...` 的图片请求返回
+//   **HTTP 403 + 一张占位 PNG**（内容："Sorry, hotlinking images is not allowed. Liquipedia.net"，
+//   289×33，Content-Type 仍是 image/png）。小程序 `<image>` **必定携带该 Referer 且无法关闭**
+//   （无 referrerpolicy 能力）⇒ LP 队标直连 100% 显示占位图，且因为"图片加载成功"（403 带 PNG
+//   body）连 binderror 兜底都不会触发 —— 比加载失败更隐蔽。
+// 对照实验（同 UA）：
+//   · 无 Referer            → 200 + 真实队标 PNG ✅
+//   · Referer: liquipedia…  → 200 + 真实队标 PNG ✅
+//   · Referer: servicewechat→ 403 + 占位图 ❌
+// 做法：由中转**服务端**取图（不带 Referer、带项目标识 UA）并回原样字节 + 7 天内存缓存。
+// 安全：只允许 https://liquipedia.net/commons/images/ 前缀（SSRF 白名单），其余一律 403；
+//       单图 ≤ 2MB、缓存 ≤ 120 条（FIFO）。
+const IMG_ALLOW_HOST = 'liquipedia.net';
+const IMG_ALLOW_PATH_PREFIX = '/commons/images/';
+const IMG_TTL_MS = 7 * 24 * 3600e3;
+const IMG_MAX_ENTRIES = 120;
+const IMG_MAX_BYTES = 2 * 1024 * 1024;
+// 合规 UA：Liquipedia 条款要求可识别的客户端标识（与 utils/lp-ua.js 同源口径）
+const IMG_UA = 'DOTA2-Esports-Hub/1.0 (+https://github.com/re-toke/dota2-esports; 295231347@qq.com)';
+const _imgCache = new Map();       // url -> { at, body: ArrayBuffer, ct }
+
+function imageResponse(buf, ct, cacheState) {
+  return new Response(buf, {
+    status: 200,
+    headers: Object.assign({}, CORS, {
+      'Content-Type': ct,
+      // 队标是低频变更资源：长缓存 + immutable ⇒ 小程序端二次加载零网络
+      'Cache-Control': 'public, max-age=604800, immutable',
+      'X-Proxy-Cache': cacheState
+    })
+  });
+}
+
+async function proxyImage(url) {
+  const raw = url.searchParams.get('u') || '';
+  let target = null;
+  try { target = new URL(raw); } catch (e) { return json({ error: 'bad u' }, 400); }
+  if (target.protocol !== 'https:' || target.hostname !== IMG_ALLOW_HOST ||
+      target.pathname.indexOf(IMG_ALLOW_PATH_PREFIX) !== 0) {
+    return json({ error: 'host/path not allowed' }, 403);
+  }
+  const key = target.toString();
+  const now = Date.now();
+  const hit = _imgCache.get(key);
+  if (hit && (now - hit.at) < IMG_TTL_MS) return imageResponse(hit.body, hit.ct, 'HIT');
+
+  const r = await fetchUpstream(key, {
+    method: 'GET',
+    headers: { 'User-Agent': IMG_UA, 'Accept': 'image/*' }
+  }, 'img ' + target.pathname.slice(0, 80));
+  if (!r.ok) {
+    try { r.body && r.body.cancel && await r.body.cancel(); } catch (e) { /* ignore */ }
+    return json({ error: 'upstream ' + r.status }, 502);
+  }
+  const ct = r.headers.get('content-type') || 'image/png';
+  if (ct.indexOf('image/') !== 0) {
+    try { r.body && r.body.cancel && await r.body.cancel(); } catch (e) { /* ignore */ }
+    return json({ error: 'upstream not image' }, 502);
+  }
+  let buf = null;
+  try { buf = await r.arrayBuffer(); } catch (e) { return json({ error: 'upstream read failed' }, 502); }
+  if (buf.byteLength > IMG_MAX_BYTES) return json({ error: 'image too large' }, 502);
+  _imgCache.set(key, { at: now, body: buf, ct: ct });
+  if (_imgCache.size > IMG_MAX_ENTRIES) {
+    const oldest = _imgCache.keys().next().value;
+    if (oldest !== undefined) _imgCache.delete(oldest);
+  }
+  return imageResponse(buf, ct, 'MISS');
+}
 
 // ★★ 2026-11-15（复核修复）：**容量上限 + FIFO 淘汰**。
 //   原实现只有"读取时判 `exp`"，过期条目不删除、也从不淘汰 ⇒ isolate 生命周期内条目单调增长；
@@ -563,9 +638,9 @@ async function _handle(request, env, ctx) {
       // ★ 2026-11-15：**部署指纹** —— 供「三台是否贴了同一份代码」的可验证性。
       //   背景：此前只能靠 `/od/api/leagues` 形状间接判断版本，像「缓存上限」这类改动
       //   没有任何外部可观测信号 ⇒ 「贴没贴」只能靠猜。改代码请**同步 bump build**。
-      build: '2026-11-15b',
+      build: '2026-11-15c',
       cacheMax: CACHE_MAX_ENTRIES,
-      routes: ['/sb/functions/v1/*', '/sb/rest/v1/*', '/od/api/*'],
+      routes: ['/sb/functions/v1/*', '/sb/rest/v1/*', '/od/api/*', '/img?u=*'],
       ipSource: _ci.source, ipMasked: maskIp(_ci.ip),
       rlMax: _rlMax, rlSrc: _rlEnv ? 'env' : (PROXY_RATE_LIMIT_MAX_FALLBACK ? 'fallback' : 'off'),
       // ★ B6：`registered:false` 说明当前运行时没有 `Deno.cron`（本地 / Netlify）⇒ keep-warm 未生效
@@ -588,6 +663,18 @@ async function _handle(request, env, ctx) {
     } catch (e) { out.deep.opendota = { reachable: false, error: String((e && e.message) || e) }; }
     out.ok = !!(out.deep.supabase.reachable || out.deep.opendota.reachable);
     return json(out);
+  }
+
+  // ── 队标图片反代（★ 2026-11-15；见文件顶 `proxyImage` 注释）──────────────────
+  //   ⚠️ 刻意放在**限流之前**：一页可加载 20+ 张队标，若计入 120/min 的 API 预算，
+  //   会把正常的数据请求挤成 429。滥用面已由 host/path 白名单 + 7 天内存缓存收敛。
+  if (path === '/img') {
+    try {
+      return await proxyImage(url);
+    } catch (e) {
+      console.log('[proxy] img 失败: ' + String((e && e.message) || e));
+      return json({ error: 'img proxy failed' }, 502);
+    }
   }
 
   try {

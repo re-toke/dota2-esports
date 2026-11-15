@@ -32,6 +32,12 @@ globalThis.fetch = async (target, init) => {
   if (String(target).indexOf('/functions/v1/') >= 0) {
     return new Response('{"data":{"ok":true},"source":"ef"}', { status: 200, headers: { 'Content-Type': 'application/json' } });
   }
+  // ★ 2026-11-15：/img 反代的上游（LP 队标）—— 返回可辨识的 PNG 字节
+  if (String(target).indexOf('liquipedia.net/commons/images/') >= 0) {
+    return new Response(new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]), {
+      status: 200, headers: { 'Content-Type': 'image/png' }
+    });
+  }
   return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
 };
 
@@ -45,13 +51,41 @@ const textOf = async (r) => { try { return await r.clone().text(); } catch (e) {
   ok('健康检查返回 200 + ok:true', r.status === 200 && b.ok === true, JSON.stringify(b));
   ok('健康检查报出「key 已配置」', b.hasKey === true, JSON.stringify(b));
   ok('★ 部署指纹：build 与 cacheMax 已回显（三台可据此判断是否同版）',
-    b.build === '2026-11-15b' && b.cacheMax === CACHE_MAX_ENTRIES, JSON.stringify({ build: b.build, cacheMax: b.cacheMax }));
+    b.build === '2026-11-15c' && b.cacheMax === CACHE_MAX_ENTRIES, JSON.stringify({ build: b.build, cacheMax: b.cacheMax }));
   ok('健康检查带 CORS（可在浏览器直接打开）', r.headers.get('Access-Control-Allow-Origin') === '*');
 }
 {
   const r = await handle(req('/healthz'), {});   // 未配 key 的环境
   const b = JSON.parse(await textOf(r));
   ok('未配置 key 时 hasKey=false（部署自检用）', b.hasKey === false, JSON.stringify(b));
+}
+
+// ── ①b ★ 2026-11-15：/img 队标图片反代（绕开 Liquipedia 热链保护）────────────────
+{
+  const LP = 'https://liquipedia.net/commons/images/thumb/f/f5/Team_Liquid_2024_full_lightmode.png/320px-Team_Liquid_2024_full_lightmode.png';
+  calls.length = 0;
+  const r = await handle(req('/img?u=' + encodeURIComponent(LP)), ENV);
+  ok('/img 命中并回源 LP', r.status === 200 && calls.length === 1, JSON.stringify({ status: r.status, calls: calls.length }));
+  const c = calls[0];
+  ok('★ /img 不回传小程序 Referer（否则 LP 403 + 占位图）',
+    c && !('Referer' in c.headers) && !('referer' in c.headers), JSON.stringify(c && c.headers));
+  ok('/img 返回 image/png + 长缓存 + CORS',
+    r.headers.get('Content-Type') === 'image/png' &&
+    /max-age=604800/.test(r.headers.get('Cache-Control') || '') &&
+    r.headers.get('Access-Control-Allow-Origin') === '*', JSON.stringify({
+      ct: r.headers.get('Content-Type'), cc: r.headers.get('Cache-Control')
+    }));
+  ok('/img 字节原样透传（PNG 头未被 gzip/文本化）',
+    new Uint8Array(await r.arrayBuffer())[0] === 137);
+  const r2 = await handle(req('/img?u=' + encodeURIComponent(LP)), ENV);
+  ok('★ /img 二次命中内存缓存（不再回源 LP）',
+    calls.length === 1 && r2.headers.get('X-Proxy-Cache') === 'HIT', 'calls=' + calls.length);
+  const badHost = await handle(req('/img?u=' + encodeURIComponent('https://evil.example/x.png')), ENV);
+  ok('★ /img 非白名单 host → 403（SSRF 防护）', badHost.status === 403, String(badHost.status));
+  const badPath = await handle(req('/img?u=' + encodeURIComponent('https://liquipedia.net/dota2/Team_Liquid')), ENV);
+  ok('★ /img 非 commons 图片路径 → 403（防把页面当图）', badPath.status === 403, String(badPath.status));
+  const badUrl = await handle(req('/img?u=not-a-url'), ENV);
+  ok('/img 非法 u → 400', badUrl.status === 400, String(badUrl.status));
 }
 
 // ── ② EF 路由 + ★ 服务端覆盖错 key ───────────────────────────────────────────
