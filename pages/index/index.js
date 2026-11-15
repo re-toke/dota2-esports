@@ -13,6 +13,7 @@ const logoCache = require('../../utils/logoCache.js');
 // ★ 2026-09-20：队名「形状归一」单一实现（原先内联，须与快照 byName 键逐字一致）
 const names = require('../../utils/names.js');
 const homeDedupe = require('../../utils/homeDedupe.js');
+const homeMatchFlow = require('../../utils/homeMatchFlow.js');   // ★ 2026-11-15（第三批）：三源采集 + series 聚合纯函数层
 const diagnostics = require('../../utils/diagnostics.js');
 const seriesStatus = require('../../utils/seriesStatus.js');   // ★ P0-A：终局判据单一纯实现
 const followBatch = require('../../utils/followBatch.js');   // ★ 2026-09-27：关注流三态/合并/编组纯逻辑
@@ -924,151 +925,14 @@ Page({
     const followTeamIds = {};
     (rows || []).forEach((r) => { followTeamIds[String(r.t.id)] = true; });
 
-    // —— 合并三源原始 match（groupSeries 输入为 OpenDota match 平铺结构）——
-    // 去重：match_id 有值按 id 去重；无 id（upcoming 排期赛）按
-    //   「leagueid|队ID对(不计顺序)|start_time」弱键去重，防同一场被多战队列表重复注入。
-    const raw = [];
-    const seenId = {};
-    const seenWeak = {};
-    const weakKeyOf = (m) => {
-      if (!m.leagueid || !m.radiant_team_id || !m.dire_team_id || !m.start_time) return null;
-      const a = Math.min(m.radiant_team_id, m.dire_team_id);
-      const b = Math.max(m.radiant_team_id, m.dire_team_id);
-      return m.leagueid + '|' + a + '|' + b + '|' + m.start_time;
-    };
-    // ★ 2026-09-02（双卡复现修复 1）：「pro 已结算 ↔ /live 进行中」矛盾数据的优先级裁决。
-    //   实测（2026-09-02 晚）：OpenDota 对进行中的 BO3 会把当前局提前写进 proMatches 且
-    //   radiant_win 已填（如 EPL s1137089 DYNASTY vs PuckChamp：pro radiant_win=true 但
-    //   /live 同 match_id 仍在打）。旧实现 ① pro 先入 seenId → ② /live 同 match_id 被丢 →
-    //   series 组内只剩已结算局 → groupSeries 按「比分未达胜场 + series_type≥1」强判 live
-    //   但 games 缺当前局 → 卡片信息退化（比分滞后/文案错局号）。
-    //   规则：同 match_id 双源并存时，**/live 版本优先**（实时性 > pro 的提前结算写入）。
-    //   实现：② 提前到 ① 之前入表；pro 同 match_id 后到 → 被去重跳过（pro 的旧结算数据
-    //   不再污染进行中系列；对真实已结束的比赛 /live 早已不返回，无副作用）。
-    const pushUnique = (m) => {
-      if (!m) return;
-      if (m.match_id) {
-        const k = String(m.match_id);
-        if (seenId[k]) return;
-        seenId[k] = true;
-        raw.push(m);
-        return;
-      }
-      const wk = weakKeyOf(m);
-      if (wk) {
-        if (seenWeak[wk]) return;
-        seenWeak[wk] = true;
-      }
-      raw.push(m);
-    };
-
-    // ② /live 职业场：进行中局（league_id > 0），normalize 成 OpenDota match 结构后并入。
-    //    series_id 缺失 → groupSeries 内建 patchNullSeriesId 借邻居机制把它并入
-    //    proMatches 的同队同系列（同队ID对 + 6h 窗口），聚合成「进行中 BO3 1:0」。
-    //    ★ 2026-09-02：提前到 ① pro 之前（见上 pushUnique 注释——/live 版本优先）。
-    //    ★ 2026-09-02（双卡复现修复 2）：league_name 空值回填 —— OpenDota /live 实测
-    //    league_name 恒为空字符串，旧实现直接透传 → 唯一数据源时卡头退化「职业赛事」。
-    //    回填来源：① proMatches 同 leagueid 的 league_name（实测有值，如 'EPL Masters 2026 '）；
-    //    ② curation canonicalLeagueName(leagueid)；仍无 → 保持空（_cardFromSeries 兜底）。
-    const proLeagueNameById = {};
-    (pro || []).forEach((m) => {
-      if (m && m.leagueid && m.league_name) {
-        if (!proLeagueNameById[m.leagueid]) proLeagueNameById[m.leagueid] = m.league_name;
-      }
-    });
-    (live || []).forEach((m) => {
-      if (!m || !m.league_id || m.league_id <= 0) return;
-      // ★★ 2026-09-27 修复「已结束的对局仍显示进行中 / 比分少算一局」（实测 LGD vs NAVI 真实 1:2 被显示成 live 1:1）：
-      //   OpenDota `/live` **在比赛结束后仍会残留该局** —— 全量实测 **28%（28/100）** 的条目
-      //   `deactivate_time ≠ 0`；本例该局残留 **≥2.7h**（`last_update_time` 已 93 分钟未变）。
-      //   而本函数让 `/live` **先入表**、`pushUnique` 按 `match_id` 去重 ⇒ 后到的 **pro 已结算版本被跳过**；
-      //   叠加 `_normalizeLiveMatch` 硬编码 `radiant_win: null` ⇒ 该局**永不计入胜场**
-      //   ⇒ 系列少算一局（1:2 → 1:1）⇒ 未达 BO 终局 ⇒ `sources.js` 强制 `isLive=true` ⇒ 卡片显示「进行中」。
-      //   ⇒ 判据用 `/live` 原生字段 **`deactivate_time`**（实测对照：已结束残留 = 非 0；真正进行中 = 0）。
-      //   ⚠️ 不能用 `game_time` 判（全量实测含 **-14** 等脏值）；也不宜用"最后活动时间阈值"
-      //     （本例 2.7h 未达既有 `isStaleLiveSeries` 的 3h 兜底）。
-      //   ⚠️ 已结束的局**不在此并入**，交给 pro 侧权威（含比分/胜负）——避免"未结算副本顶掉已结算数据"。
-      if (Number(m.deactivate_time) > 0) return;
-      const norm = indexCardHelpers.normalizeLiveMatch(m, now);
-      // league_name 空值回填（修复 2）
-      if (!norm.league_name) {
-        norm.league_name = proLeagueNameById[m.league_id] || '';
-        if (norm.league_name) norm._leagueNameFromPro = true;   // 审计标记
-      }
-      pushUnique(norm);
-    });
-    // ① proMatches：已结束局（近 ~100 场，覆盖近 2-3 天）
-    //    ★ 2026-09-02：移到 ② 之后 —— 同 match_id 时让 /live 版本优先入表。
-    (pro || []).forEach((m) => {
-      if (!m || !m.start_time) return;
-      pushUnique(m);
-    });
-    // ③ 关注战队比赛：upcoming + 6h 窗口内的「正在交锋」（已结束由 proMatches 覆盖）
-    (rows || []).forEach(({ t, ms }) => {
-      (ms || []).forEach((m) => {
-        if (!m || !m.start_time) return;
-        const isFollowMatch = (m.radiant_team_id != null && followTeamIds[String(m.radiant_team_id)]) ||
-                              (m.dire_team_id != null && followTeamIds[String(m.dire_team_id)]);
-        if (!isFollowMatch) return;
-        const started = m.start_time <= now;
-        const inLiveWindow = started && (now - m.start_time) < LIVE_WINDOW_SEC;
-        if (started && !inLiveWindow) return;
-        pushUnique(m);
-      });
+    // ★ 2026-11-15（第三批拆分）：三源采集/去重与 series 聚合已抽到 utils/homeMatchFlow.js（可单测）。
+    const raw = homeMatchFlow.collectHomeRawMatches({
+      pro, live, rows, followTeamIds, now, liveWindowSec: LIVE_WINDOW_SEC
     });
 
-    // ④ 系列聚合 + BO 判定（纯计算，失败不影响主流程）
-    let allSeries = [];
-    try {
-      allSeries = sources.groupSeries(raw);
-      const boCtx = sources.buildBoContext(allSeries, null);   // 无 Liquipedia 数据 → S2/S1 缺省，走 S3 series_type / S5 / S6
-      allSeries.forEach((s) => sources.applyBo(s, boCtx));
-      // ★ 2026-09-02（v8.8 A'）：合并前把 game 层真实队名写回 series（OpenDota /proMatches 的
-      //   radiant_name/dire_name 在 groupSeries 时被丢成「天辉/夜魇」占位——groupSeries 读
-      //   radiant_team_name 字段，proMatches 提供的是 radiant_name）。mergeSplittedBo3Series
-      //   要求真实队名才能可靠归并（占位名无法跨 team_id 判定同队）。
-      allSeries.forEach((s) => {
-        const games = s.games || [];
-        const g0 = games[0] || {};
-        const rn = (s.radiantName && s.radiantName !== '天辉' && s.radiantName !== '夜魇')
-          ? s.radiantName : (g0.radiant_name || s.radiantName || '');
-        const dn = (s.direName && s.direName !== '天辉' && s.direName !== '夜魇')
-          ? s.direName : (g0.dire_name || s.direName || '');
-        s.radiantName = rn; s.direName = dn;
-      });
-      // ★ 2026-09-02（v8.8 A'）：RECENT 段「OpenDota 拆裂 BO3」合并（与详情页共用纯函数）。
-      //   OpenDota 可能把同一真实 BO3 拆成多个 series_id（甚至同队多 team_id），
-      //   groupSeries 聚合成多张单局卡 → 首页「已结束」段显示多场 BO1。按解名队名合并回整场。
-      allSeries = sources.mergeSplittedBo3Series(allSeries);
-    } catch (e) { allSeries = []; }
-
-    // ★ 2026-09-02（v8.8c）：参赛队白名单过滤（跨联赛误标剔除，与详情页共用）。
-    //   首页是多联赛视图 → 按每个 series 的 leagueId（s.leagueId || games[0].leagueid）分组，
-    //   对 leagueId>0 且 curation 能命中参赛队的组执行 filterMisattributedRecentSeries：
-    //   「已结束 + 双方队名都不在该联赛参赛名单」→ 剔除（如 EPL Masters II 视图里
-    //   OpenDota 误标进来的 EPL World Series SEA 对局 Yangon vs Team Kinetix）。
-    //   守卫（函数内）：仅 recent、仅 curation 有 participants 的 league、占位名不判。
-    try {
-      const byLeague = {};     // lid → [series]
-      const unTagged = [];     // 无 leagueId 的系列（保持原样）
-      allSeries.forEach((s) => {
-        const g0 = (s.games && s.games[0]) || {};
-        const lid = Number(s.leagueId || g0.leagueid);
-        if (lid && lid > 0) {
-          if (!byLeague[lid]) byLeague[lid] = [];
-          byLeague[lid].push(s);
-        } else {
-          unTagged.push(s);
-        }
-      });
-      const keptAll = unTagged.slice();
-      Object.keys(byLeague).forEach((lidStr) => {
-        const lid = Number(lidStr);
-        const filtered = sources.filterMisattributedRecentSeries(byLeague[lidStr], lid);
-        keptAll.push.apply(keptAll, filtered);
-      });
-      allSeries = keptAll;
-    } catch (e) { /* 过滤失败不影响主流程 */ }
+    // ★ 2026-11-15（第三批拆分）：groupSeries + BO 判定 + 拆裂合并 + 参赛队白名单过滤
+    //   已抽到 utils/homeMatchFlow.js 的 buildHomeSeries（纯函数，可单测）。
+    const allSeries = homeMatchFlow.buildHomeSeries(raw);
 
     allSeries.forEach((s) => {
       const card = this._cardFromSeries(s, now, followTeamIds);

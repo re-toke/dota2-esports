@@ -567,6 +567,90 @@ function mkLp(id, sId, t1, t2, st, extra) {
     '系列数=' + unlinked.length + ' 打标=' + JSON.stringify(unlinked.map((s) => s.identitySource)));
 })();
 
+// ===== 第三批拆分：utils/homeMatchFlow.js（三源采集 + series 聚合纯函数层）=====
+const homeMatchFlow = require('../../utils/homeMatchFlow.js');
+(function () {
+  const now = Math.floor(Date.now() / 1000);
+  const LIVE_WINDOW = 6 * 3600;
+
+  // ① /live 版本优先：同 match_id 时 pro 的提前结算版本被丢弃
+  (function () {
+    const pro = mkPro(5001, 50, 1, true, 1, 2, 'Team A', 'Team B', now - 600);
+    const live = mkLive(5001, 1, 2, 'Team A', 'Team B', 1800, 100, { deactivate_time: 0 });
+    const raw = homeMatchFlow.collectHomeRawMatches({
+      pro: [pro], live: [live], rows: [], followTeamIds: {}, now, liveWindowSec: LIVE_WINDOW
+    });
+    assert('FLOW-1: 同 match_id 双源 ⇒ 只保留 1 条且取 /live 版本（radiant_win=null）',
+      raw.length === 1 && raw[0].radiant_win === null && raw[0]._isLiveSource === true,
+      JSON.stringify(raw.map((m) => ({ id: m.match_id, win: m.radiant_win }))));
+  })();
+
+  // ② deactivate_time > 0 的残留 live 局不并入
+  (function () {
+    const dead = mkLive(5002, 1, 2, 'Team A', 'Team B', 1800, 100, { deactivate_time: 12345 });
+    const raw = homeMatchFlow.collectHomeRawMatches({
+      pro: [], live: [dead], rows: [], followTeamIds: {}, now, liveWindowSec: LIVE_WINDOW
+    });
+    assert('FLOW-2: /live 残留局（deactivate_time>0）被剔除', raw.length === 0, '实际: ' + raw.length);
+  })();
+
+  // ③ league_name 空值从 pro 同 leagueid 回填
+  (function () {
+    const pro = mkPro(5003, 51, 1, true, 1, 2, 'Team A', 'Team B', now - 600,
+      { leagueid: 77, league_name: 'My League' });
+    const live = mkLive(5004, 1, 2, 'Team A', 'Team B', 1800, 100,
+      { league_id: 77, deactivate_time: 0 });
+    const raw = homeMatchFlow.collectHomeRawMatches({
+      pro: [pro], live: [live], rows: [], followTeamIds: {}, now, liveWindowSec: LIVE_WINDOW
+    });
+    const l = raw.filter((m) => m.match_id === 5004)[0];
+    assert('FLOW-3: /live league_name 从 proMatches 回填并打审计标记',
+      !!l && l.league_name === 'My League' && l._leagueNameFromPro === true,
+      'raw=' + (l && l.league_name) + ' flag=' + (l && l._leagueNameFromPro));
+  })();
+
+  // ④ 关注流：未关注战队丢弃；已开赛超窗口丢弃
+  (function () {
+    const rows = [
+      { t: { id: 1 }, ms: [mkPro(6001, null, 0, null, 1, 2, 'Team A', 'Team B', now - 10 * 3600)] },
+      { t: { id: 3 }, ms: [mkPro(6002, null, 0, null, 3, 4, 'Team C', 'Team D', now - 600)] },
+      { t: { id: 5 }, ms: [mkPro(6003, null, 0, null, 5, 6, 'Team E', 'Team F', now - 600)] }
+    ];
+    const raw = homeMatchFlow.collectHomeRawMatches({
+      pro: [], live: [], rows, followTeamIds: { '5': true }, now, liveWindowSec: LIVE_WINDOW
+    });
+    assert('FLOW-4: 关注流只保留「已关注 + 未超 LIVE 窗口」的场次',
+      raw.length === 1 && raw[0].match_id === 6003,
+      JSON.stringify(raw.map((m) => m.match_id)));
+  })();
+
+  // ⑤ 无 match_id 的排期赛：弱键（联赛+队ID对+时间）去重，与队序无关
+  (function () {
+    const w1 = { leagueid: 9, radiant_team_id: 11, dire_team_id: 22, start_time: now + 3600 };
+    const w2 = { leagueid: 9, radiant_team_id: 22, dire_team_id: 11, start_time: now + 3600 };
+    const raw = homeMatchFlow.collectHomeRawMatches({
+      pro: [], live: [],
+      rows: [{ t: { id: 11 }, ms: [w1] }, { t: { id: 22 }, ms: [w2] }],
+      followTeamIds: { '11': true, '22': true }, now, liveWindowSec: LIVE_WINDOW
+    });
+    assert('FLOW-5: 无 match_id 的同一排期赛被弱键去重（队序无关）', raw.length === 1, '实际: ' + raw.length);
+  })();
+
+  // ⑥ buildHomeSeries：BO3 三局 → 1 个系列（2:1 / BO3）
+  (function () {
+    const raw = [
+      mkPro(7001, 700, 1, true, 1, 2, 'Team A', 'Team B', now - 7200),
+      mkPro(7002, 700, 1, true, 2, 1, 'Team B', 'Team A', now - 5400),
+      mkPro(7003, 700, 1, true, 1, 2, 'Team A', 'Team B', now - 3600)
+    ];
+    const series = homeMatchFlow.buildHomeSeries(raw);
+    assert('FLOW-6: buildHomeSeries 三局聚为 1 系列（2:1 / BO3）',
+      series.length === 1 && series[0].boType === 'BO3' &&
+      series[0].scoreA === 2 && series[0].scoreB === 1,
+      JSON.stringify(series.map((s) => ({ bo: s.boType, a: s.scoreA, b: s.scoreB }))));
+  })();
+})();
+
 // ===== 收尾 =====
 console.log('\n===== test-home-series: ' + pass + ' passed, ' + fail + ' failed =====');
 if (fail > 0) process.exit(1);
