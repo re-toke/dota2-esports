@@ -85,13 +85,8 @@ function buildSourceBadges(srcArr) {
   return out;
 }
 
-// 状态 -> 中文标签 + 颜色（与赛事列表页 leagues.js 的 statusBadgeOf 保持一致）
-// 批次1 §9.2：LIVE/进行中统一红 --status-live
-function statusBadgeOf(status) {
-  if (status === 'ongoing') return { text: '进行中', color: '#EF4444' };
-  if (status === 'upcoming') return { text: '即将到来', color: '#ffcf5c' };
-  return { text: '已结束', color: '#6b7280' };
-}
+// 状态 -> 中文标签 + 颜色：**唯一实现**已收口到 utils/util.js 的 statusBadgeOf
+// （★ 2026-11-15：原副本「进行中 / #ffcf5c / 已结束」与列表页不一致，按产品决定以列表页为准）。
 
 // 生成 metadata 骨架：确保 KPI Strip 每个字段都有 key，无数据时统一展示 '--'。
 function buildMetadataSkeleton() {
@@ -503,7 +498,7 @@ Page({
         else if (start && start > nowSec) status = 'upcoming';
         else if (start && end && nowSec > end + 86400) status = 'ended';
       }
-      const badge = statusBadgeOf(status);
+      const badge = util.statusBadgeOf(status);
       const patch = {
         loading: false,          // 骨架阶段即视为"首屏可见"，网络数据到达后 F3 增量更新
         error: '',
@@ -809,7 +804,7 @@ Page({
         } else if (cur && cur.status === '即将到来') {
           if (util.isUpcoming(mixed)) status = 'upcoming';
         }
-        const badge = statusBadgeOf(status);
+        const badge = util.statusBadgeOf(status);
         // 赛期显示优先级（与列表页 leagues.js loadLeagueEntry 完全一致）：
         //   ① curation 完整周期（mixed.startDate/endDate）—— 人工策展，最高权威
         //   ② OpenDota 真实比赛窗口（mStart/mEnd）—— 非策展赛事兜底
@@ -1123,8 +1118,10 @@ Page({
               //     且 `placeholderCoveredByReal` 内部还要求「仅一方未定 + 共同方严格相等 + 时间差<2h」。
               if ((isTBD(m.team1Name) || isTBD(m.team2Name)) &&
                   placeholderCoveredByReal(m, openDotaKeys, openDotaTimeByKey)) {
-                console.log('[league-detail] 占位卡（含 TBD）已被实际比赛覆盖 → 剔除：' +
-                  (m.team1Name || '?') + ' vs ' + (m.team2Name || '?'));
+                if (config.debug && config.debug.verboseLog) {
+                  console.log('[league-detail] 占位卡（含 TBD）已被实际比赛覆盖 → 剔除：' +
+                    (m.team1Name || '?') + ' vs ' + (m.team2Name || '?'));
+                }
                 return false;
               }
               // ★ 2026-08-04（v1.1 实施，审核 R1）：LP live/upcoming 永不剔除 —— 它是 OpenDota 进行中系列唯一的 live 状态来源。
@@ -1294,7 +1291,7 @@ Page({
         const _part = seriesNormalize.partitionSeries(allSeries, {
           nowSec: fmtNowSec,
           bjOffsetSec: config.time.bjOffsetSec,
-          log: function (msg) { console.log(msg); }
+          log: function (msg) { if (config.debug && config.debug.verboseLog) console.log(msg); }
         });
         const liveList = _part.liveList;
         const upcomingList = _part.upcomingList;

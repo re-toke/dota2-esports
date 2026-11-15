@@ -102,7 +102,10 @@ function liquipediaSlugFor(name) {
   try { norm = require('./sources.js').leagueBaseName(name); } catch (e) { norm = null; }
   if (norm && norm !== name && mm && mm[norm]) {
     _slugHitCount++;
-    console.log('[liquipedia] slug 归一化命中：' + name + ' → ' + norm);
+    // 逐项命中日志走 verbose 开关（summary 见下方 miss 行）
+    if (config.debug && config.debug.verboseLog) {
+      console.log('[liquipedia] slug 归一化命中：' + name + ' → ' + norm);
+    }
     return mm[norm];
   }
   // ★★ 2026-09-25（用户线上日志定位）：③.5 查 **curation 登记表** —— 手工维护的权威来源 ✓

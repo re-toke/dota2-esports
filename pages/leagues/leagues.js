@@ -161,14 +161,8 @@ function tagThemeOf(grade) {
   return { theme: 'default', variant: 'light' };
 }
 
-// 状态 -> 中文标签 + 颜色（v11 品牌声音 §2.6：竞技场风格文案）
-// 批次1 §9.2：LIVE/进行中统一红 --status-live；已结束 --text-3
-// 批次3 §10.1：即将到来改琥珀 --status-upcoming #f0aa28（此前亮金与 LIVE 红难区分）
-function statusBadgeOf(status) {
-  if (status === 'ongoing') return { text: '正在交锋', color: '#EF4444' };
-  if (status === 'upcoming') return { text: '即将到来', color: '#f0aa28' };
-  return { text: '战局已定', color: '#6b7280' };
-}
+// 状态 -> 中文标签 + 颜色：**唯一实现**已收口到 utils/util.js 的 statusBadgeOf
+// （★ 2026-11-15：与 league-detail 的同名副本已漂移，按产品决定以本页文案/配色为准合并）。
 
 // 批次3（2026-08-30）· PRD §10.3：周轴视图（weekMondayOf/fmtMD/groupByWeek）已移除，
 // 时间轴浏览由新首页周日历承接。
@@ -317,7 +311,7 @@ function buildUpcomingCard(entry, ctx) {
   const name = entry.name || (matched && matched.name) || '';
   const daysToStart = Math.ceil((entry.start - now) / 86400);
   const cardStatus = upcomingCardStatus(entry, now);
-  const cardBadge = statusBadgeOf(cardStatus);
+  const cardBadge = util.statusBadgeOf(cardStatus);
   return {
     leagueid: Number(entry.id),
     name: name,
@@ -622,8 +616,8 @@ Page({
       curStart: 0,
       preMain: false,
       status: status,
-      statusText: statusBadgeOf(status).text,
-      statusColor: statusBadgeOf(status).color,
+      statusText: util.statusBadgeOf(status).text,
+      statusColor: util.statusBadgeOf(status).color,
       // 阶段 1 标记：表示此条尚未跑完整 normalize（阶段 2 会重写整个对象）。
       // 卡片渲染依赖的字段（name/grade/status/dateRange）阶段 1 已基本齐全，
       // 唯一缺失的是精确赛期 dateRange——先用混合窗口粗略日期兜底，阶段 2 修正。
@@ -908,7 +902,7 @@ Page({
     ]);
     let _drStart = _period ? _period.start : 0;
     let _drEnd = _period ? _period.end : 0;
-    const badge = statusBadgeOf(status);
+    const badge = util.statusBadgeOf(status);
     return {
       leagueid: l.leagueid,
       // 展示名走 curation 规范名覆盖（如 "EPL Masters 2026" → "EPL Masters I"）
@@ -1300,7 +1294,7 @@ Page({
         //   （earliest 在未来窗口但比赛已开始）仍标「即将到来」，用户困惑。
         //   upcomingCardStatus：start<=now<=end+1天 → ongoing；否则 upcoming。
         const cardStatus = upcomingCardStatus({ start: er, end: endT }, nowSec);
-        const cardBadge = statusBadgeOf(cardStatus);
+        const cardBadge = util.statusBadgeOf(cardStatus);
         const daysToStart = Math.ceil((er - nowSec) / 86400);
         results.push(Object.assign({}, item, {
           startDate: er,
@@ -1394,7 +1388,7 @@ Page({
                 _win: mixed,
                 status: 'upcoming',
                 statusText: '即将到来',
-                statusColor: statusBadgeOf('upcoming').color,
+                statusColor: util.statusBadgeOf('upcoming').color,
                 dateRange: util.formatDateRange(win.startDate, win.endDate),
                 daysToStart: daysToStart,
                 countdownText: util.countdownTextOf(daysToStart, false)
@@ -1440,7 +1434,7 @@ Page({
       const daysToStart = Math.ceil((ev.startDate - nowSec) / 86400);
       // 真实状态：已开赛的 curation 赛事（如 TI 主赛事开打）应归入「进行中」而非「即将到来」
       const cardStatus = (ev.startDate && ev.endDate && nowSec >= ev.startDate && nowSec <= ev.endDate + 86400) ? 'ongoing' : 'upcoming';
-      const cardBadge = statusBadgeOf(cardStatus);
+      const cardBadge = util.statusBadgeOf(cardStatus);
       // 基于 id 生成稳定的负数 id（避免与真实 leagueid 冲突）
       // 方案 E：curation 有真实 leagueId 时直接用，无则回退哈希 fakeId
       let hash = 0;
@@ -1632,7 +1626,7 @@ Page({
         const _winStart = (_curHit && _curHit.start) || ev.start;
         const _winEnd = (_curHit && _curHit.end) || ev.end;
         const cardStatus = upcomingCardStatus({ start: _winStart, end: _winEnd }, now);
-        const cardBadge = statusBadgeOf(cardStatus);
+        const cardBadge = util.statusBadgeOf(cardStatus);
         const daysToStart = Math.ceil((_winStart - now) / 86400);
         const t = tagThemeOf(grade);
         const cardId = (_curLeagueId != null) ? _curLeagueId : fakeId;

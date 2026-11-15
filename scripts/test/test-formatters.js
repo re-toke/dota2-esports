@@ -64,6 +64,22 @@ check('isCurrentMember: 1 → true', () => assert(util.isCurrentMember({ is_curr
 check('isCurrentMember: false → false（非现役）', () => assert(util.isCurrentMember({ is_current_team_member: false }) === false));
 check('isCurrentMember: undefined → false', () => assert(util.isCurrentMember({}) === false));
 
+// ===== util.statusBadgeOf（★ 2026-11-15：列表页/详情页统一口径，以列表页为准）=====
+check('statusBadgeOf: ongoing → 正在交锋 / #EF4444', () => {
+  const b = util.statusBadgeOf('ongoing');
+  assert(b.text === '正在交锋' && b.color === '#EF4444', JSON.stringify(b));
+});
+check('statusBadgeOf: upcoming → 即将到来 / #f0aa28', () => {
+  const b = util.statusBadgeOf('upcoming');
+  assert(b.text === '即将到来' && b.color === '#f0aa28', JSON.stringify(b));
+});
+check('statusBadgeOf: ended/未知 → 战局已定 / #6b7280', () => {
+  const a = util.statusBadgeOf('ended');
+  const b = util.statusBadgeOf(undefined);
+  assert(a.text === '战局已定' && a.color === '#6b7280', JSON.stringify(a));
+  assert(b.text === '战局已定', JSON.stringify(b));
+});
+
 // ===== util.formatDateRange =====
 check('formatDateRange: both → "4/22 - 4/28"', () =>
   assert(util.formatDateRange(1713744000, 1714262400) !== ''));

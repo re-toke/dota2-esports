@@ -95,7 +95,7 @@ function gqlDirect(query, variables) {
         success: (res) => {
           // 成功：200~299 + data.data 存在
           if (res.statusCode >= 200 && res.statusCode < 300 && res.data && res.data.data) {
-            if (retryCount === 0) console.log('[stratz] ✓', query);
+            if (retryCount === 0 && config.debug && config.debug.verboseLog) console.log('[stratz] ✓', query);
             resolve(res.data.data);
             return;
           }

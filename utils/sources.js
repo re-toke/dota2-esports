@@ -294,10 +294,12 @@ async function getLeagueWindow(league) {
 
   if (tasks.length) await Promise.all(tasks);
 
-  // 诊断日志：一次性输出全部源的查询结果
-  console.log('[sources.getLeagueWindow]', diag.name, '→',
-    'curation:', diag.curation, '| stratz:', diag.stratz, '| liquipedia:', diag.liquipedia,
-    '| 最终候选数:', startC.length + endC.length);
+  // 诊断日志：一次性输出全部源的查询结果（逐赛事调用 ⇒ 走 verbose 开关）
+  if (config.debug && config.debug.verboseLog) {
+    console.log('[sources.getLeagueWindow]', diag.name, '→',
+      'curation:', diag.curation, '| stratz:', diag.stratz, '| liquipedia:', diag.liquipedia,
+      '| 最终候选数:', startC.length + endC.length);
+  }
 
   const start = startC.length ? consensus.voteTime(startC).value : null;
   const end = endC.length ? consensus.voteTime(endC).value : null;

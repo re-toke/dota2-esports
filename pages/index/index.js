@@ -840,7 +840,9 @@ Page({
     } catch (e) { return Promise.resolve([]); }
     if (!events.length) { console.log('[index][⑥段] 候选为空（curation 无窗口内赛事）'); return Promise.resolve([]); }
     // ★ v8.28：⑥ 段候选透出（诊断 upcoming 卡缺失——候选名单决定查谁的排期）
-    console.log('[index][⑥段] 候选', events.length, '个:', events.map(e => e.name + '(' + e.leagueId + ')').join(' | '));
+    if (config.debug && config.debug.verboseLog) {
+      console.log('[index][⑥段] 候选', events.length, '个:', events.map(e => e.name + '(' + e.leagueId + ')').join(' | '));
+    }
     // ★ 2026-09-01 修复「卡头显示『职业赛事』」：
     //   parseScheduledMatches 的输出**不含 leagueName/leagueId**（只有 team1Name/team2Name/
     //   startTime/boType…），mergeLiquipediaGroup 与 buildLpUpcomingSeries 只是透传该空值，
@@ -1206,10 +1208,13 @@ Page({
       homeDedupe.applyKeepCard(keptCards, keep, drop);
       _idxDel(drop);
       _idxAdd(keep, homeDedupe.pairKeysOfCard(keep));
-      console.log('[index] 同一对局卡片合并：保留 ' + keep.status + '（' +
-        ((keep.teamA && keep.teamA.name) || '?') + ' vs ' + ((keep.teamB && keep.teamB.name) || '?') +
-        '），丢弃 ' + drop.status + '（key=' + drop.key + '，start 差 ' +
-        near.diff + 's，命中键=' + keys.join(' / ') + '）');
+      // 逐项合并日志走 verbose 开关（每轮可能有多次合并）
+      if (config.debug && config.debug.verboseLog) {
+        console.log('[index] 同一对局卡片合并：保留 ' + keep.status + '（' +
+          ((keep.teamA && keep.teamA.name) || '?') + ' vs ' + ((keep.teamB && keep.teamB.name) || '?') +
+          '），丢弃 ' + drop.status + '（key=' + drop.key + '，start 差 ' +
+          near.diff + 's，命中键=' + keys.join(' / ') + '）');
+      }
     });
     this._allMatches = keptCards;
     // ★★ 2026-09-26（P0-B）：**数据质量指标采集** —— 一行汇总**常开**，明细走 config.debug.verboseLog。
@@ -1315,13 +1320,17 @@ Page({
     //   （此前首页 / 详情页 / sources.js 各写一份，口径一漂移就出现"同一场对局两页状态矛盾"）。
     if (status === 'live' && seriesStatus.isDecidedByScore(s.scoreA, s.scoreB, bo)) {
       status = 'ended';
-      console.log('[index] 比分已达终局（' + s.scoreA + ':' + s.scoreB + '，' + bo +
-                  '）→ 状态修正为已结束：' + (s.teamA || '') + ' vs ' + (s.teamB || ''));
+      if (config.debug && config.debug.verboseLog) {
+        console.log('[index] 比分已达终局（' + s.scoreA + ':' + s.scoreB + '，' + bo +
+                    '）→ 状态修正为已结束：' + (s.teamA || '') + ' vs ' + (s.teamB || ''));
+      }
     }
     if (status === 'live' && sources.isStaleLiveSeries(s, now)) {
       status = 'ended';
-      console.log('[index] LIVE 超时降级为已结束（最后活动 >3h）：' + (s.teamA || s.team1Name || '') +
-                  ' vs ' + (s.teamB || s.team2Name || ''));
+      if (config.debug && config.debug.verboseLog) {
+        console.log('[index] LIVE 超时降级为已结束（最后活动 >3h）：' + (s.teamA || s.team1Name || '') +
+                    ' vs ' + (s.teamB || s.team2Name || ''));
+      }
     }
     // 分桶：进行中系列跟随「今天」（与 curation live 一致，防跨天角标漂移）；
     //   upcoming/ended 按系列最后一场时间（upcoming 的 lastTime 即开赛时间）。
@@ -1515,7 +1524,7 @@ Page({
     //   导致「角标 8 张 / 实际 4 张」的不一致（用户 2026-09-23 报告）。
     const beforeGrade = all.filter((c) => c.dateKey === selected);
     const dayMatches = beforeGrade.filter(homeDedupe.homePassGrade);
-    if (beforeGrade.length !== dayMatches.length) {
+    if (beforeGrade.length !== dayMatches.length && config.debug && config.debug.verboseLog) {
       console.log('[index] S/A 级别过滤：' + beforeGrade.length + ' → ' + dayMatches.length + ' 张（剔除 ' + (beforeGrade.length - dayMatches.length) + ' 张非 S/A）');
     }
     const counts = { live: 0, upcoming: 0, ended: 0 };

@@ -156,6 +156,16 @@ function statusOf(win, now) {
   return 'ended';
 }
 
+// 状态 -> 中文标签 + 颜色（赛事卡统一口径：列表页与详情页共用）。
+// ★ 2026-11-15：此前 leagues.js / league-detail.js 各有一份，且已漂移 ——
+//   列表页「正在交锋 / #f0aa28」vs 详情页「进行中 / #ffcf5c」，后者注释还写着「保持一致」。
+//   产品决定**以列表页为准**，两处统一收口到本函数（唯一实现）。
+function statusBadgeOf(status) {
+  if (status === 'ongoing') return { text: '正在交锋', color: '#EF4444' };
+  if (status === 'upcoming') return { text: '即将到来', color: '#f0aa28' };
+  return { text: '战局已定', color: '#6b7280' };
+}
+
 // 数据校验：归一化赛事窗口数据，确保列表页与详情页使用一致的数据源。
 // 检查项：
 //   1. earliest/latest/lastEnd 为正数（无效值置 0）
@@ -302,6 +312,7 @@ module.exports = {
   isOngoing,
   isUpcoming,
   statusOf,
+  statusBadgeOf,   // ★ 2026-11-15：状态标签+颜色（列表/详情统一，以列表页口径为准）
   validateLeagueWindow,
   formatDateRange,
   formatAgo,
