@@ -33,7 +33,9 @@ function LEAGUE_WINDOWS_SQL(nowSec) {
   return "SELECT leagueid, min(start_time) AS earliest, max(start_time) AS latest, " +
     "max(start_time + duration) AS last_end, count(*) AS n, " +
     // ★ 2026-11-15：组数（series）——列表卡面与详情页「N 组对阵」同单位，避免「85 场 vs 13 组」混淆。
-    "count(DISTINCT series_id) AS sn " +
+    //   ⚠️ 必须 COALESCE：OpenDota 存在 series_id 为 null 的对局（实测 20486 正赛段 30 场中 1 场），
+    //   直接 count(DISTINCT series_id) 会漏计（12 vs 详情页 13）；用负 match_id 兜底保证不与正 series_id 碰撞。
+    "count(DISTINCT COALESCE(series_id, -match_id)) AS sn " +
     "FROM matches WHERE start_time > " + floor + " GROUP BY leagueid";
 }
 
@@ -62,7 +64,7 @@ function LEAGUE_MAIN_COUNTS_SQL(plans, nowSec) {
     conds.push('(leagueid = ' + Math.floor(id) + ' AND start_time >= ' + Math.floor(from) + ')');
   });
   if (!conds.length) return null;
-  return "SELECT leagueid, count(DISTINCT series_id) AS sn " +
+  return "SELECT leagueid, count(DISTINCT COALESCE(series_id, -match_id)) AS sn " +
     "FROM matches WHERE start_time > " + floor + " AND (" + conds.join(' OR ') + ") GROUP BY leagueid";
 }
 

@@ -22,7 +22,7 @@ const NOW = 1794729600; // 2026-11-15 00:00:00 UTC
 // ① windows SQL：必须是整数秒下界 + 含 sn（组数）
 (function () {
   const sql = sqlFragments.LEAGUE_WINDOWS_SQL(NOW);
-  ok(/count\(DISTINCT series_id\) AS sn/.test(sql), '① windows SQL 含 count(DISTINCT series_id) AS sn');
+  ok(/count\(DISTINCT COALESCE\(series_id, -match_id\)\) AS sn/.test(sql), '① windows SQL 含 COALESCE 版组数（null series_id 不漏计）');
   ok(/count\(\*\) AS n/.test(sql), '① windows SQL 仍保留 count(*) AS n');
   const floor = Math.floor(NOW / 86400) * 86400 - 90 * 86400;
   ok(sql.indexOf('start_time > ' + floor) >= 0, '① 下界为对齐到日的整数常量（可走索引）');
@@ -38,7 +38,7 @@ const NOW = 1794729600; // 2026-11-15 00:00:00 UTC
   ok(/\(leagueid = 20486 AND start_time >= 1794441600\)/.test(sql), '② 含 leagueid 20486 的正赛条件');
   ok(/\(leagueid = 20009 AND start_time >= 1785369600\)/.test(sql), '② 含 leagueid 20009 的正赛条件');
   ok(/GROUP BY leagueid/.test(sql), '② 按 leagueid 聚合');
-  ok(/count\(DISTINCT series_id\) AS sn/.test(sql), '② 输出组数 sn（与详情页同单位）');
+  ok(/count\(DISTINCT COALESCE\(series_id, -match_id\)\) AS sn/.test(sql), '② 输出组数 sn（COALESCE 兜底 null series_id）');
 })();
 
 // ③ 输入防护：非法值丢弃、同 id 去重、超上限截断

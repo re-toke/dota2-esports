@@ -38,7 +38,9 @@ function leagueWindowsSql(nowSec?: number): string {
   return "SELECT leagueid, min(start_time) AS earliest, max(start_time) AS latest, " +
     "max(start_time + duration) AS last_end, count(*) AS n, " +
     // ★ 2026-11-15（G14 镜像同步）：组数（series）。列表卡面与详情页「N 组对阵」统一单位。
-    "count(DISTINCT series_id) AS sn " +
+    //   必须 COALESCE：存在 series_id 为 null 的对局（实测 20486 正赛段 30 场中 1 场），
+    //   直接 count(DISTINCT series_id) 会漏计（12 vs 13）。
+    "count(DISTINCT COALESCE(series_id, -match_id)) AS sn " +
     "FROM matches WHERE start_time > " + floor + " GROUP BY leagueid";
 }
 
@@ -64,7 +66,7 @@ function leagueMainCountsSql(plans: any[], nowSec?: number): string | null {
     conds.push("(leagueid = " + Math.floor(id) + " AND start_time >= " + Math.floor(from) + ")");
   });
   if (!conds.length) return null;
-  return "SELECT leagueid, count(DISTINCT series_id) AS sn " +
+  return "SELECT leagueid, count(DISTINCT COALESCE(series_id, -match_id)) AS sn " +
     "FROM matches WHERE start_time > " + floor + " AND (" + conds.join(" OR ") + ") GROUP BY leagueid";
 }
 
