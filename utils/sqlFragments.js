@@ -31,8 +31,43 @@ function LEAGUE_WINDOWS_SQL(nowSec) {
   const dayStart = Math.floor(now / 86400) * 86400;          // 当日 00:00 UTC
   const floor = dayStart - WINDOW_DAYS * 86400;
   return "SELECT leagueid, min(start_time) AS earliest, max(start_time) AS latest, " +
-    "max(start_time + duration) AS last_end, count(*) AS n " +
+    "max(start_time + duration) AS last_end, count(*) AS n, " +
+    // ★ 2026-11-15：组数（series）——列表卡面与详情页「N 组对阵」同单位，避免「85 场 vs 13 组」混淆。
+    "count(DISTINCT series_id) AS sn " +
     "FROM matches WHERE start_time > " + floor + " GROUP BY leagueid";
 }
 
-module.exports = { LEAGUE_WINDOWS_SQL: LEAGUE_WINDOWS_SQL, LEAGUE_WINDOWS_WINDOW_DAYS: WINDOW_DAYS };
+/**
+ * 正赛口径的组数（series）统计 SQL —— 仅用于「同一 leagueid 内混有 Play-In/海选」的少数赛事。
+ * 2026-11-15：OpenDota 把正赛与预选赛合并进同一 leagueid（实证 1win Essence III / 20486），
+ *   列表场次若用全量聚合会与详情页正赛口径矛盾；这里按每条赛事的**正赛起点**做条件计数。
+ * @param {Array<{leagueid:number, fromSec:number}>} plans 最多 25 条（防 SQL 过长）
+ * @param {number} [nowSec] 便于测试注入
+ * @returns {string|null} SQL；无有效 plan 时返回 null
+ */
+function LEAGUE_MAIN_COUNTS_SQL(plans, nowSec) {
+  const now = (typeof nowSec === 'number' && nowSec > 0) ? nowSec : Math.floor(Date.now() / 1000);
+  const dayStart = Math.floor(now / 86400) * 86400;
+  const floor = dayStart - WINDOW_DAYS * 86400;
+  const seen = {};
+  const conds = [];
+  (Array.isArray(plans) ? plans : []).forEach((p) => {
+    const id = Number(p && p.leagueid);
+    const from = Number(p && p.fromSec);
+    if (!isFinite(id) || id <= 0 || !isFinite(from) || from <= 0) return;
+    const key = String(id);
+    if (seen[key]) return;
+    seen[key] = true;
+    if (conds.length >= 25) return;
+    conds.push('(leagueid = ' + Math.floor(id) + ' AND start_time >= ' + Math.floor(from) + ')');
+  });
+  if (!conds.length) return null;
+  return "SELECT leagueid, count(DISTINCT series_id) AS sn " +
+    "FROM matches WHERE start_time > " + floor + " AND (" + conds.join(' OR ') + ") GROUP BY leagueid";
+}
+
+module.exports = {
+  LEAGUE_WINDOWS_SQL: LEAGUE_WINDOWS_SQL,
+  LEAGUE_MAIN_COUNTS_SQL: LEAGUE_MAIN_COUNTS_SQL,
+  LEAGUE_WINDOWS_WINDOW_DAYS: WINDOW_DAYS
+};

@@ -62,6 +62,7 @@ const TESTS = [
   { file: 'scripts/test/test-league-detail-retry.js' },
   // 2026-11-15：赛段分层 / 预选赛收录收紧 / 云同步撤回
   { file: 'scripts/test/test-stages.js' },
+  { file: 'scripts/test/test-sql-fragments.js' },
   { file: 'scripts/test/test-league-qualifier-filter.js' },
   { file: 'scripts/test/test-cloud-sync.js' },
   { file: 'scripts/test/test-observability.js' },

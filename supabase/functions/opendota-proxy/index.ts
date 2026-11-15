@@ -36,8 +36,36 @@ function leagueWindowsSql(nowSec?: number): string {
   const dayStart = Math.floor(now / 86400) * 86400;
   const floor = dayStart - LEAGUE_WINDOWS_WINDOW_DAYS * 86400;
   return "SELECT leagueid, min(start_time) AS earliest, max(start_time) AS latest, " +
-    "max(start_time + duration) AS last_end, count(*) AS n " +
+    "max(start_time + duration) AS last_end, count(*) AS n, " +
+    // ★ 2026-11-15（G14 镜像同步）：组数（series）。列表卡面与详情页「N 组对阵」统一单位。
+    "count(DISTINCT series_id) AS sn " +
     "FROM matches WHERE start_time > " + floor + " GROUP BY leagueid";
+}
+
+/**
+ * ★ 2026-11-15：正赛口径组数 —— 仅用于「同一 leagueid 混有 Play-In/海选」的少数赛事
+ * （实证 1win Essence III / 20486 把 11-07~11-11 的预选赛与 11-12 起的正赛合并）。
+ * ⚠️ G14 双源镜像：与 utils/sqlFragments.js 的 LEAGUE_MAIN_COUNTS_SQL 保持同源。
+ */
+function leagueMainCountsSql(plans: any[], nowSec?: number): string | null {
+  const now = (typeof nowSec === "number" && nowSec > 0) ? nowSec : Math.floor(Date.now() / 1000);
+  const dayStart = Math.floor(now / 86400) * 86400;
+  const floor = dayStart - LEAGUE_WINDOWS_WINDOW_DAYS * 86400;
+  const seen: Record<string, boolean> = {};
+  const conds: string[] = [];
+  (Array.isArray(plans) ? plans : []).forEach((p: any) => {
+    const id = Number(p && p.leagueid);
+    const from = Number(p && p.fromSec);
+    if (!isFinite(id) || id <= 0 || !isFinite(from) || from <= 0) return;
+    const key = String(id);
+    if (seen[key]) return;
+    seen[key] = true;
+    if (conds.length >= 25) return;
+    conds.push("(leagueid = " + Math.floor(id) + " AND start_time >= " + Math.floor(from) + ")");
+  });
+  if (!conds.length) return null;
+  return "SELECT leagueid, count(DISTINCT series_id) AS sn " +
+    "FROM matches WHERE start_time > " + floor + " AND (" + conds.join(" OR ") + ") GROUP BY leagueid";
 }
 
 function buildPath(action: string, params: any): string | null {
@@ -53,6 +81,11 @@ function buildPath(action: string, params: any): string | null {
     case "getHeroes":        return "/heroes";
     case "searchTeams":      return "/search?q=" + encodeURIComponent(p.q || "");
     case "getLeagueWindows": return "/explorer?sql=" + encodeURIComponent(leagueWindowsSql());
+    // ★ 2026-11-15：正赛口径组数（仅对含预选赛的少数赛事调用；无有效 plan 时按未知 action 处理）
+    case "getLeagueMainCounts": {
+      const sql = leagueMainCountsSql(p.plans);
+      return sql ? "/explorer?sql=" + encodeURIComponent(sql) : null;
+    }
     case "getProMatches":    return "/proMatches";
     case "getLiveMatches":   return "/live";
     default: return null;
@@ -72,6 +105,8 @@ function resolveTtl(action: string): number {
     case "getHeroes": return 24 * 3600 * 1000;
     case "getProMatches": return 5 * 60 * 1000;
     case "getLiveMatches": return 60 * 1000;
+    // ★ 2026-11-15：正赛组数随比赛增长，10 分钟足够且不至于过慢
+    case "getLeagueMainCounts": return 10 * 60 * 1000;
     default: return 30 * 60 * 1000;
   }
 }

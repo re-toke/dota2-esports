@@ -189,7 +189,10 @@
         <view class="league-sub">
           <view class="league-sub-info">
             <text class="date-range" wx:if="{{item.dateRange}}">{{item.dateRange}}</text>
-            <text wx:if="{{item.matchCount}}"> · {{item.matchCount}} 场{{item.preMain ? '（含预选赛）' : ''}}</text>
+            <!-- ★ 2026-11-15：优先显示「正赛 N 组」（与详情页「共 N 组对阵」同单位、同口径）；
+                 未取到正赛口径时回退「N 场」，并在含预选赛时标注，避免数字被误读。 -->
+            <text wx:if="{{item.mainSeries}}"> · 正赛 {{item.mainSeries}} 组</text>
+            <text wx:elif="{{item.matchCount}}"> · {{item.matchCount}} 场{{item.preMain ? '（含预选赛）' : ''}}</text>
             <text wx:if="{{item.prizePool}}"> · {{item.prizePool}}</text>
           </view>
           <text class="src-inline src-{{item.source === 'community' ? 'curation' : (item.source === 'liquipedia' ? 'liquipedia' : (item.source === 'stratz' ? 'stratz' : 'opendota'))}}">{{item.source === 'community' ? '社区分级' : (item.source === 'liquipedia' ? 'Liquipedia' : (item.source === 'stratz' ? 'STRATZ' : 'OpenDota'))}}</text>

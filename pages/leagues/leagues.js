@@ -531,8 +531,9 @@ Page({
       earliest: earliest,
       latest: latest,
       matchCount: w.count || 0,
-      // ★ 2026-11-15：阶段 1 不查 curation（性能约束），无法判定是否存在正赛前对局；
-      //   先给 false，等阶段 2 的 normalize 用 curation.start 精确判定并覆盖。
+      // ★ 2026-11-15：组数（series）；阶段 1 不查 curation，无法算正赛口径（等阶段 2）。
+      seriesCount: w.series || 0,
+      curStart: 0,
       preMain: false,
       status: status,
       statusText: statusBadgeOf(status).text,
@@ -671,6 +672,9 @@ Page({
               .map((k) => this._leagueMap[k])
               .filter((x) => x && x.rank >= 1);
             this._normalizeDone = true;
+            // ★ 2026-11-15：归一化完成后补一次「正赛口径组数」（仅含预选赛的赛事，通常 0~3 条）。
+            //   异步且失败静默：EF 未部署/网络失败时保留「N 场（含预选赛）」兜底，不阻塞列表。
+            this._loadMainCounts();
             this.updateGradeCounts();
             // 当前 tab 不是 upcoming 时才刷新（upcoming 走独立数据源 upcomingList）
             if (this.data.filter !== 'upcoming') {
@@ -840,6 +844,10 @@ Page({
       earliest: mixed.earliest,
       latest: mixed.latest,
       matchCount: w.count || 0,
+      // ★ 2026-11-15：组数（series）—— 与详情页「N 组对阵」同单位。
+      seriesCount: w.series || 0,
+      // ★ 2026-11-15：curation 正赛起点（供「正赛口径组数」二次查询用；0 = 无 curation 赛期）
+      curStart: (cur && cur.start) || 0,
       // ★ 2026-11-15：同 leagueid 下存在「正赛起点前 24h 以上」的对局 ⇒ 判定含预选赛/Play-In，
       //   卡面场次需标注口径（详见阶段 1 同名字段注释）。
       preMain: !!(cur && cur.start && mixed.earliest && mixed.earliest < Number(cur.start) - 86400),
@@ -899,6 +907,32 @@ Page({
     try { wx.setStorageSync(QUALIFIER_KEY, next); } catch (e) { /* 存储异常：仅本次会话生效 */ }
     this.syncFilterBadge();
     this.applyAndSlice(true);
+  },
+
+  // ★ 2026-11-15：正赛口径组数（series）—— 只对「同一 leagueid 混有预选赛」的赛事发起，
+  //   通常 0~3 条；一次 explorer 聚合按 leagueid 条件计数，返回 { leagueid: 组数 }。
+  //   失败（EF 未部署 / 网络）静默保留「N 场（含预选赛）」兜底，不影响列表可用性。
+  //   同一批 plans 只请求一次（sig 去重），避免 Tab 切换重复打网。
+  _loadMainCounts() {
+    const list = (this.allLeagues || []).filter((x) =>
+      x && x.preMain && x.curStart > 0 && Number(x.leagueid) > 0);
+    if (!list.length) return;
+    const plans = list.map((x) => ({ leagueid: Number(x.leagueid), fromSec: Number(x.curStart) }));
+    const sig = plans.map((p) => p.leagueid + ':' + p.fromSec).sort().join(',');
+    if (this._mainCountsSig === sig) return;
+    this._mainCountsSig = sig;
+    api.getLeagueMainCounts(plans).then((map) => {
+      if (!map) return;
+      let changed = false;
+      (this.allLeagues || []).forEach((x) => {
+        const v = map[x.leagueid];
+        if (v > 0 && x.mainSeries !== v) {
+          x.mainSeries = v;
+          changed = true;
+        }
+      });
+      if (changed && this.data.filter !== 'upcoming') this.applyAndSlice(true);
+    }).catch(() => { /* 旧 EF / 网络失败：保持兜底文案 */ });
   },
 
   // ===== B 版：筛选抽屉控制 =====

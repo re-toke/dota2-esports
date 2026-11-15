@@ -37,6 +37,8 @@ var EDGE_ACTIONS = {
   // OpenDota 11+ action → opendota-proxy
   getLeagues: 'opendota-proxy',
   getLeagueWindows: 'opendota-proxy',
+  // ★ 2026-11-15：正赛口径组数（含预选赛的赛事专用）
+  getLeagueMainCounts: 'opendota-proxy',
   getLeagueMatches: 'opendota-proxy',
   searchTeams: 'opendota-proxy',
   getTeam: 'opendota-proxy',

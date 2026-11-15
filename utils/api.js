@@ -411,6 +411,16 @@ function cloudFetch(action, params, force) {
 const ACTION_MAP = {
   getLeagues: function () { return { action: 'getLeagues', params: {}, path: '/leagues', ttlKey: 'leagues' }; },
   getLeagueWindows: function () { return { action: 'getLeagueWindows', params: {}, path: '/explorer?sql=' + encodeURIComponent(sqlFragments.LEAGUE_WINDOWS_SQL()), ttlKey: 'leagueWindows' }; },
+  // ★ 2026-11-15：正赛口径组数（仅含预选赛的少数赛事调用；plans = [{leagueid, fromSec}]）
+  getLeagueMainCounts: function (plans) {
+    const sql = sqlFragments.LEAGUE_MAIN_COUNTS_SQL(plans);
+    return {
+      action: 'getLeagueMainCounts',
+      params: { plans: plans },
+      path: '/explorer?sql=' + encodeURIComponent(sql || ''),
+      ttlKey: 'leagueMainCounts'
+    };
+  },
   getLeagueMatches: function (id) { return { action: 'getLeagueMatches', params: { leagueId: id }, path: '/leagues/' + id + '/matches', ttlKey: 'leagueMatches' }; },
   // ★ 2026-10-13（BUG-G 改法②）：**刻意移除 `getMatch`** —— `opendota-proxy` 的 `buildPath()`
   //   未实现该 action（`supabase/functions/opendota-proxy/index.ts` 的 switch 无 `getMatch`），
@@ -566,7 +576,9 @@ function transformLeagueWindows(data) {
         earliest: Number(r.earliest) || 0,
         latest: Number(r.latest) || 0,
         lastEnd: Number(r.last_end) || 0,   // 真实结束时间（start_time + duration 最大值）；0 = 未知
-        count: Number(r.n) || 0
+        count: Number(r.n) || 0,
+        // ★ 2026-11-15：组数（series）。旧 EF/SQL 未返回 sn 时为 0 → 调用方回退「场」口径。
+        series: Number(r.sn) || 0
       };
     }
   });
@@ -637,6 +649,28 @@ function getLeagueWindows() {
   return tryCloudOrDirect('getLeagueWindows', [],
     function () { return cached(path, null, config.cacheTTL.leagueWindows).then(transformLeagueWindows); },
     transformLeagueWindows);
+}
+
+// ★ 2026-11-15：正赛口径组数（series）—— 仅用于「同一 leagueid 混有预选赛」的少数赛事。
+//   plans = [{ leagueid, fromSec }]（fromSec = curation 正赛起点）。
+//   失败/旧 EF 未部署 → reject → 调用方保持「场（含预选赛）」兜底，不阻塞列表。
+function getLeagueMainCounts(plans) {
+  const sql = sqlFragments.LEAGUE_MAIN_COUNTS_SQL(plans);
+  if (!sql) return Promise.resolve({});
+  const path = '/explorer?sql=' + encodeURIComponent(sql);
+  return tryCloudOrDirect('getLeagueMainCounts', [plans],
+    function () { return cached(path, null, 10 * 60).then(transformMainCounts); },
+    transformMainCounts);
+}
+
+// rows [{leagueid, sn}] → { leagueid: seriesCount }
+function transformMainCounts(data) {
+  const rows = (data && data.rows) || [];
+  const map = {};
+  rows.forEach((r) => {
+    if (r && r.leagueid != null) map[r.leagueid] = Number(r.sn) || 0;
+  });
+  return map;
 }
 
 function getLeagueMatches(leagueId, force) {
@@ -1071,6 +1105,7 @@ module.exports = {
   getLiveMatches: getLiveMatches,
   getHomeBundle: getHomeBundle,   // 2026-10-28：pro+live 一次 EF 往返
   getLeagueWindows: getLeagueWindows,
+  getLeagueMainCounts: getLeagueMainCounts,
   getLeagueMatches: getLeagueMatches,
   getMatch: getMatch,
   searchTeams: searchTeams,
