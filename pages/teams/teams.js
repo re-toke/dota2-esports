@@ -3,6 +3,7 @@ const follow = require('../../utils/follow.js');
 const config = require('../../utils/config.js');
 const util = require('../../utils/util.js');
 const sources = require('../../utils/sources.js');
+const remoteCuration = require('../../utils/remoteCuration.js');   // ★ 2026-11-15：队标人工覆盖（搜索结果路径）
 const searchHistory = require('../../utils/searchHistory.js');
 const teamSearch = require('../../utils/teamSearch.js');
 const cloudCache = require('../../utils/cloudCache.js');
@@ -124,9 +125,12 @@ function enrichItem(item, t) {
   const wr = total ? Math.round((wins / total) * 100) : 0;
   const wrClass = wr >= 60 ? 'wr-high' : (wr >= 40 ? 'wr-mid' : 'wr-low');
   const last = t.last_match_time ? util.formatAgo(t.last_match_time * 1000) : '';
+  // ★ 2026-11-15：人工覆盖优先（热门榜走 enrichTeamInfo 已覆盖；**搜索结果**只走本函数，
+  //   此前会显示 OpenDota/Steam 旧队标 ⇒ 统一在此兜住，保证两条路径口径一致）。
+  const curatedLogo = remoteCuration.curatedTeamLogo(item.id, t.name || item.name);
   return Object.assign({}, item, {
     name: t.name || item.name,
-    logo: t.logo_url || item.logo || '',
+    logo: curatedLogo || t.logo_url || item.logo || '',
     country: t.country_code || item.country || '',
     rating: t.rating || 0,
     wins: wins,

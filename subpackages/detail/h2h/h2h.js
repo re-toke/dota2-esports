@@ -6,6 +6,8 @@
 const api = require('../../../utils/api.js');
 const util = require('../../../utils/util.js');
 const sources = require('../../../utils/sources.js');
+// ★ 2026-11-15：队标人工覆盖（本页 logo 直接取 api.getTeam，此前未接覆盖）
+const remoteCuration = require('../../../utils/remoteCuration.js');
 // ★ 2026-09-21：队标本地化兜底（绕开 UGC 的 octet-stream MIME；见 utils/logoLocal.js）
 const logoLocal = require('../../../utils/logoLocal.js');
 
@@ -133,16 +135,19 @@ Page({
         if (this._perfT0) console.info('[h2h][perf] 5 源 settle +' + (Date.now() - this._perfT0) + 'ms');
         const mA = ta || {};
         const mB = tb || {};
+        // ★ 2026-11-15：人工覆盖优先（与其它页口径一致；未覆盖的队伍仍用 api.getTeam 的 logo_url）
+        const ovA = remoteCuration.curatedTeamLogo(this.teamAId, mA.name || '');
+        const ovB = remoteCuration.curatedTeamLogo(this.teamBId, mB.name || '');
         const teamA = {
           id: this.teamAId,
           name: mA.name || '战队 A',
-          logo: mA.logo_url || '',
+          logo: ovA || mA.logo_url || '',
           tag: mA.tag || ''
         };
         const teamB = {
           id: this.teamBId,
           name: mB.name || '战队 B',
-          logo: mB.logo_url || '',
+          logo: ovB || mB.logo_url || '',
           tag: mB.tag || ''
         };
 
