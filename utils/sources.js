@@ -419,8 +419,11 @@ async function getLeagueMetadata(league) {
   return Object.keys(result).length > 1 ? result : null;
 }
 
-// 多源增强战队 logo：优先级 [本地缓存] -> [直连 existing] -> [stratz] -> [liquipedia 兜底]
+// 多源增强战队 logo：优先级 [人工覆盖] -> [本地缓存] -> [直连 existing] -> [stratz] -> [liquipedia 兜底]
 // P2-F：命中 logoCache 直接返回（秒出，跳过网络）；最终 URL 经 toLogoUrl（直连 CDN 缩放）。
+// ★ 2026-11-15：新增「人工覆盖」最高优先级（curation_teams.data.logo / CURATED_TEAMS.logo，
+//   见 utils/curation.js 的 curatedTeamLogo）。动机：主源 OpenDota/Steam 与 Liquipedia 队标
+//   本来就可能不同，需要按队指定以谁为准；覆盖是零网络静态数据，且必须压过缓存/负缓存。
 // §8.3 Liquipedia 兜底（2026-07-29）：前三源均派生自 Valve 数据（同源冗余），
 //   OpenDota logo_url 为空时 STRATZ 通常也无数据。Liquipedia 是独立人工策展源，
 //   可覆盖 OpenDota 无 logo 的队伍（如 10201538 / 10201970 / 10207521）。
@@ -437,6 +440,14 @@ async function enrichTeamLogo(team) {
   if (!id) {
     return null;
   }
+
+  // ⓪ 人工覆盖（最高优先级，零网络）：
+  //   放在负缓存/本地缓存之前 —— 覆盖必须压过历史缓存与「无队标」负命中。
+  //   ⚠️ 刻意**不写 logoCache**：缓存的是"自动解析结果"，人工覆盖若撤掉应立刻回落到原链路，
+  //      不能被旧缓存继续顶住。
+  const curatedLogo = curation.curatedTeamLogo(id, name);
+  if (curatedLogo) return { logo: curatedLogo, source: 'curation' };
+
   if (logoCache && logoCache.hasNegative(id)) {
     return null;  // 已缓存"无 logo"标记，避免重复打 Liquipedia
   }
@@ -599,6 +610,14 @@ async function enrichTeamInfo(team) {
         info.confidence = 'high';
       }
     } catch (e) { /* 隔离 */ }
+  }
+
+  // ★ 2026-11-15：人工覆盖队标最高优先级（放在 Steam 之后，确保压过 Steam 原生 logo）。
+  //   消费方：pages/teams 的 applyExtra（战队榜队标）/ team-detail（头部队标）。
+  const cuLogo = curation.curatedTeamLogo(team && team.id, team && team.name);
+  if (cuLogo) {
+    info.logo = cuLogo;
+    info.source = 'curation';
   }
 
   return Object.keys(info).length ? info : null;

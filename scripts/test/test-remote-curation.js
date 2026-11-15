@@ -151,13 +151,14 @@ function main() {
 
   // ★ 2026-10-29（第 6 步 / EWC 淘汰赛 2 张卡无比分）：云端旧战队条目不得抹掉本地新别名。
   //   根因：原实现整条覆盖 `tmMap[id] = remote.teams[id]`；云端旧条目无 aliases 时，
-  //   本地 8260824 的 'pvision' 别名被抹掉 → `curatedTeamFor('PVISION')` 失配 → 借位落空。
+  //   PARIVISION 的 'pvision' 别名被抹掉 → `curatedTeamFor('PVISION')` 失配 → 借位落空。
+  //   （★ 2026-11-15：team_id 8260824 → 9824702 校正后，本用例改用现 id）
   check('buildEffective: ★ 云端旧战队条目（无 aliases）不覆盖本地别名', function () {
     const eff = remoteCuration.buildEffective({
       events: [],
-      teams: { 8260824: { name: 'PARIVISION', tag: 'PARI', country: 'RU' } }
+      teams: { 9824702: { name: 'PARIVISION', tag: 'PARI', country: 'RU' } }
     });
-    const t = eff.teams[8260824];
+    const t = eff.teams[9824702];
     assert(t && t.name === 'PARIVISION', '远程有值字段仍应生效');
     assert((t.aliases || []).indexOf('pvision') >= 0, '本地别名 pvision 必须保留: ' + JSON.stringify(t.aliases));
   });
@@ -165,9 +166,9 @@ function main() {
   check('buildEffective: 云端别名与本地别名取并集', function () {
     const eff = remoteCuration.buildEffective({
       events: [],
-      teams: { 8260824: { aliases: ['pv'] } }
+      teams: { 9824702: { aliases: ['pv'] } }
     });
-    const al = eff.teams[8260824].aliases || [];
+    const al = eff.teams[9824702].aliases || [];
     assert(al.indexOf('pv') >= 0 && al.indexOf('pvision') >= 0, '应为并集: ' + JSON.stringify(al));
   });
 

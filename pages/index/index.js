@@ -7,6 +7,7 @@ const api = require('../../utils/api.js');
 const util = require('../../utils/util.js');
 const follow = require('../../utils/follow.js');
 const sources = require('../../utils/sources.js');
+const remoteCuration = require('../../utils/remoteCuration.js');   // ★ 2026-11-15：队标人工覆盖（最高优先级）
 const subscribe = require('../../utils/subscribe.js');
 const reminderStrategy = require('../../utils/reminderStrategy.js');
 const logoCache = require('../../utils/logoCache.js');
@@ -1283,8 +1284,10 @@ Page({
       // ★ 2026-09-01（进行中卡修复）：LP live 系列（buildLpLiveSeries）带 Steam 原生队标
       //   （team1Logo/team2Logo，UGC URL）。直出免 _enrichMatchLogos 查询；
       //   _enrichMatchLogos 的 `if (!team.logo) return` 会跳过已带 logo 的队，天然兼容。
-      teamA: { id: s.radiantTeamId, name: indexCardHelpers.teamFullName(aName), tag: indexCardHelpers.teamShortTag(aName), logo: logoUrlOf(s.team1Logo) },
-      teamB: { id: s.direTeamId, name: indexCardHelpers.teamFullName(bName), tag: indexCardHelpers.teamShortTag(bName), logo: logoUrlOf(s.team2Logo) },
+      // ★ 2026-11-15：队标优先级 —— 人工覆盖（curation，零网络）> LP/Steam 直出 > 懒加载查询。
+      //   `_enrichMatchLogos` 对已有 logo 的队直接跳过 ⇒ 覆盖值不会被后续网络结果顶掉。
+      teamA: { id: s.radiantTeamId, name: indexCardHelpers.teamFullName(aName), tag: indexCardHelpers.teamShortTag(aName), logo: remoteCuration.curatedTeamLogo(s.radiantTeamId, aName) || logoUrlOf(s.team1Logo) },
+      teamB: { id: s.direTeamId, name: indexCardHelpers.teamFullName(bName), tag: indexCardHelpers.teamShortTag(bName), logo: remoteCuration.curatedTeamLogo(s.direTeamId, bName) || logoUrlOf(s.team2Logo) },
       scoreA: s.scoreA || 0,           // ★ 系列胜局（非击杀）
       scoreB: s.scoreB || 0,
       subScoreText: subScoreText,      // 击杀标注（仅 live 卡渲染，模板按 status 过滤）
@@ -1545,6 +1548,15 @@ Page({
         if (t.name === '天辉' || t.name === '夜魇') return;
         const nk = norm(t.name);
         if (!nk || seen[nk]) return;
+        // ★ 2026-11-15：人工覆盖优先（curation 队名/别名，零网络），压过会话缓存与网络查询。
+        //   LP 排期卡无 team_id，只能按名查；这里是「按名」路径的唯一优先级入口。
+        const ov = remoteCuration.curatedTeamLogo(null, t.name);
+        if (ov) {
+          const patch = {};
+          patch['matchCards[' + idx + '].' + side + '.logo'] = ov;
+          this.setData(patch);
+          return;
+        }
         if (_nameLogoNeg[nk]) return;
         if (_nameLogoCache[nk]) {          // 会话缓存命中 → 同步回填
           const patch = {};

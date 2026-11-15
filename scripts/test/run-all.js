@@ -30,6 +30,8 @@ const TESTS = [
   { file: 'scripts/test/test-incremental.js' },
   { file: 'scripts/test/test-api-inflight.js' },
   { file: 'scripts/test/test-remote-curation.js' },
+  // 2026-11-15：队标人工覆盖（人工覆盖 > OpenDota/Steam > STRATZ > Liquipedia 兜底）
+  { file: 'scripts/test/test-curation-logo.js' },
   { file: 'scripts/test/test-search-history.js' },
   { file: 'scripts/test/test-cache-write-throttle.js' },
   { file: 'scripts/test/test-bo3-merge-split.js' },

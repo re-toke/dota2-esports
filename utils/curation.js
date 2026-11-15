@@ -934,18 +934,29 @@ const CURATED_EVENTS = [
 // ⚠️ 重要：team_id 为 OpenDota 当前真实 id（2026-07 经 /teams/{id} + proMatches 对手反查逐项核验）。
 // OpenDota 会**复用** team_id，旧 id 已指向完全不同的队（例如 1333179 现为 2017 死数据、
 // 2163 现为 Team Liquid、111474 实为 Alliance）。故每隔版本需重新核验，详见项目记忆。
-// 标注「⚠️待复核」的 2 支（BetBoom/PARIVISION）因 OpenDota /search 与 /teams 分页受限
-// 无法自动解析正确 id，其详情可能仍不准确，需手动补正。（Fnatic 1375614 已校正为 Newbee，HOT_TEAMS 替换为 TL 2163）
+// 标注「⚠️待复核」的 BetBoom 因 OpenDota /search 与 /teams 分页受限无法自动解析正确 id，
+// 其详情可能仍不准确，需手动补正。（PARIVISION 的 id 已于 2026-11-15 校正为 9824702；
+// Fnatic 1375614 已校正为 Newbee，HOT_TEAMS 替换为 TL 2163）
+//
+// ★ 2026-11-15 首批「人工覆盖队标」（logo 字段）：
+//   背景：队标主源 OpenDota/Steam 与 Liquipedia 本来就可能不同（不是"没更新"）。经人工比对
+//   （scripts/ops/diff-team-logos.js，Top20 活跃队）后，对重点队伍显式指定 Liquipedia 队标。
+//   优先级：人工覆盖 > OpenDota/Steam > STRATZ > Liquipedia 兜底（见 curatedTeamLogo）。
+//   ⚠️ 云端 curation_teams.data.logo 同名字段为**热更入口**（改库即生效，无需发版）；
+//      本处 logo 仅作离线兜底，两端建议保持一致。
 const CURATED_TEAMS = {
   10150538: { name: 'LGD Gaming', tag: 'LGD', country: 'CN', tier: { grade: 'S', label: 'S-Tier' },
               aliases: ['lgd', 'lgdgaming', 'psglgd'] },
   7119388:  { name: 'Team Spirit', tag: 'TS', country: 'RU', tier: { grade: 'SSS', label: 'TI 参赛' },
+              logo: 'https://liquipedia.net/commons/images/thumb/f/f2/Team_Spirit_2022_full_lightmode.png/320px-Team_Spirit_2022_full_lightmode.png',
               aliases: ['teamspirit', 'spirit'] },
   36:       { name: 'Natus Vincere', tag: 'NAVI', country: 'UA', tier: { grade: 'SSS', label: 'TI 参赛' },
+              logo: 'https://liquipedia.net/commons/images/thumb/3/3f/Natus_Vincere_2021_lightmode.png/320px-Natus_Vincere_2021_lightmode.png',
               aliases: ['natusvincere', 'navi'] },
   2586976:  { name: 'OG', tag: 'OG', country: 'EU', tier: { grade: 'SSS', label: 'TI 参赛' },
               aliases: ['og'] },
   2163:     { name: 'Team Liquid', tag: 'TL', country: 'NL', tier: { grade: 'SSS', label: 'TI 参赛' },
+              logo: 'https://liquipedia.net/commons/images/thumb/f/f5/Team_Liquid_2024_full_lightmode.png/320px-Team_Liquid_2024_full_lightmode.png',
               aliases: ['teamliquid', 'liquid'] },
   1838315:  { name: 'Team Secret', tag: 'SEC', country: 'EU', tier: { grade: 'S', label: 'S-Tier' },
               aliases: ['teamsecret', 'secret'] },
@@ -966,6 +977,7 @@ const CURATED_TEAMS = {
   111474:   { name: 'Alliance', tag: 'ALL', country: 'SE', tier: { grade: 'SSS', label: 'TI 参赛' },
               aliases: ['alliance'] },
   10136357: { name: 'Nigma Galaxy', tag: 'NGX', country: 'EU', tier: { grade: 'SSS', label: 'TI 参赛' },
+              logo: 'https://liquipedia.net/commons/images/thumb/e/e8/Nigma_Galaxy_full_lightmode.png/320px-Nigma_Galaxy_full_lightmode.png',
               aliases: ['nigma', 'nigmagalaxy', 'nigmagx'] },  // 合并原 350190 + 8124688
   8255888:  { name: 'BetBoom Team', tag: 'BB', country: 'RU', tier: { grade: 'S', label: 'S-Tier' },
               // ★ 2026-10-28（比分审计）：LP 对战表把队名写成「BetBoom Team 2024」（带年份后缀）；
@@ -976,16 +988,34 @@ const CURATED_TEAMS = {
               odName: '1win',
               aliases: ['1w', '1wteam', '1win'] },  // ★ 2026-08-05（审核 R3）：OpenDota 名 '1w'
   8261500:  { name: 'Xtreme Gaming', tag: 'XG', country: 'CN', tier: { grade: 'SSS', label: 'TI 参赛' },
+              logo: 'https://liquipedia.net/commons/images/thumb/9/97/Xtreme_Gaming_%28China%29_full_allmode.png/320px-Xtreme_Gaming_%28China%29_full_allmode.png',
               aliases: ['xtremegaming', 'xg', 'extremegaming'] },
   8574561:  { name: 'Azure Ray', tag: 'AR', country: 'CN', tier: { grade: 'S', label: 'S-Tier' },
               aliases: ['azureray', 'ar'] },
   9467224:  { name: 'Aurora Gaming', tag: 'AUR', country: 'TH', tier: { grade: 'S', label: 'S-Tier' },
+              logo: 'https://liquipedia.net/commons/images/thumb/3/32/Aurora_Gaming_2025_full_allmode.png/320px-Aurora_Gaming_2025_full_allmode.png',
               aliases: ['aurora', 'auroragaming'] },
   9247354:  { name: 'Team Falcons', tag: 'FAL', country: 'SA', tier: { grade: 'SSS', label: 'TI 参赛' },
+              logo: 'https://liquipedia.net/commons/images/thumb/e/e9/Team_Falcons_2022_full_lightmode.png/320px-Team_Falcons_2022_full_lightmode.png',
               aliases: ['falcons', 'teamfalcons'] },
-  8260824:  { name: 'PARIVISION', tag: 'PARI', country: 'RU', tier: { grade: 'S', label: 'S-Tier' },
+  // ★ 2026-11-15：id 由 8260824 校正为 9824702（8260824 实测已无数据；OpenDota
+  //   /api/teams/9824702 = PARIVISION，2026-11 仍活跃）。人工覆盖队标取 Liquipedia。
+  9824702:  { name: 'PARIVISION', tag: 'PARI', country: 'RU', tier: { grade: 'S', label: 'S-Tier' },
+              logo: 'https://liquipedia.net/commons/images/thumb/9/9d/PARIVISION_allmode.png/320px-PARIVISION_allmode.png',
               // ★ 2026-10-28（比分审计）：Liquipedia 常写缩写 PVISION
-              aliases: ['parivision', 'pvision'] },   // ⚠️待复核：id 待替换正确值
+              aliases: ['parivision', 'pvision'] },
+  // ★ 2026-11-15（首批人工覆盖队标）：TI 2026 参赛队。
+  //   ⚠️ LP 的 TEAM_VISION 页面是 PARIVISION 的重定向（同一组织/同一队标），故沿用该文件；
+  //      OpenDota 仍把 9572001 作为独立 team_id，队标按人工覆盖显示 LP 口径。
+  9572001:  { name: 'TEAM VISION', tag: 'TV', country: 'RU', tier: { grade: 'S', label: 'S-Tier' },
+              logo: 'https://liquipedia.net/commons/images/thumb/9/9d/PARIVISION_allmode.png/320px-PARIVISION_allmode.png',
+              aliases: ['teamvision'] },
+  5017210:  { name: 'Team Resilience', tag: 'TR', country: 'CN', tier: { grade: 'A', label: 'A-Tier' },
+              logo: 'https://liquipedia.net/commons/images/thumb/b/bf/Team_Resilience_%28DOTA2%29_full_lightmode.png/320px-Team_Resilience_%28DOTA2%29_full_lightmode.png',
+              aliases: ['teamresilience', 'resilience'] },
+  2108395:  { name: 'TNC Predator', tag: 'TNC', country: 'PH', tier: { grade: 'A', label: '历史战队' },
+              logo: 'https://liquipedia.net/commons/images/thumb/1/1c/TNC_Predator_2021_allmode.png/160px-TNC_Predator_2021_allmode.png',
+              aliases: ['tncpredator', 'tnc'] },
   // ★ 2026-10-28（比分审计）：EWC 2026 / TI26 预选常见队；OD 名与 LP 写法一致，仅需登记别名索引
   9895247:  { name: 'Rune Eaters', tag: 'RE', country: '', tier: { grade: 'A', label: 'A-Tier' },
               aliases: ['runeeaters'] },
@@ -1274,6 +1304,27 @@ const LOCAL = buildLookups(CURATED_EVENTS, CURATED_TEAMS);
 function curatedEventFor(name, ctx) { return LOCAL.eventFor(name, ctx); }
 function curatedTeamFor(nameOrId) { return LOCAL.teamFor(nameOrId); }
 
+// ===== 人工覆盖队标（★ 2026-11-15）=====
+// 背景：队标主源是 OpenDota/Steam，与 Liquipedia 的队标本来就可能不同（不是"没更新"）。
+//   需要按队指定以谁为准时，由策展人在 CURATED_TEAMS（本地兜底）或云端
+//   curation_teams.data.logo（热更，见 remoteCuration.curatedTeamLogo）显式指定 URL。
+// 优先级约定（全链路一致）：人工覆盖 > OpenDota/Steam > STRATZ > Liquipedia 兜底。
+// 参数：teamId 优先（精确命中，防同名/改名漂移）；未命中再按队名/别名查（LP 赛程无 team_id 场景）。
+// 返回：合法 http(s) URL；无覆盖或格式非法 → ''（调用方继续走原多源链路）。
+function isHttpLogoUrl(u) {
+  return typeof u === 'string' && /^https?:\/\//i.test(u);
+}
+function curatedTeamLogo(teamId, name) {
+  const id = Number(teamId);
+  let t = null;
+  if (teamId != null && teamId !== '' && !isNaN(id) && id > 0) t = LOCAL.teamFor(id);
+  if ((!t || !isHttpLogoUrl(t.logo)) && name) {
+    const byName = LOCAL.teamFor(name);
+    if (byName) t = byName;
+  }
+  return isHttpLogoUrl(t && t.logo) ? t.logo : '';
+}
+
 // 判断 team_id/队名 是否为高优先级战队（S-Tier 或 TI 参赛队）。
 // 综合判定：先看 TI 名单快速判定，再用 curation 库的 tier 字段交叉验证。
 // 用于 H2H / 战队队员资料功能优先覆盖 S-Tier 与 TI 参赛队。
@@ -1343,6 +1394,7 @@ module.exports = {
   buildLookups: buildLookups,
   curatedEventFor: curatedEventFor,
   curatedTeamFor: curatedTeamFor,
+  curatedTeamLogo: curatedTeamLogo,
   isTIContestantTeam: isTIContestantTeam,
   isHighPriorityTeam: isHighPriorityTeam,
   detectCancelledEvents: detectCancelledEvents

@@ -157,6 +157,18 @@ check('enrichTeamLogo existing logo -> return directly', async () => {
   assert(r !== null && r.logo === 'https://existing.example/logo.png', 'should return existing');
   assert(r.source === 'opendota', 'source should be opendota');
 });
+// ★ 2026-11-15：人工覆盖最高优先级（必须压过直连 existing / 本地缓存 / 负缓存）
+check('enrichTeamLogo ★ 人工覆盖优先于 existing', async () => {
+  const r = await sources.enrichTeamLogo({
+    name: 'Team Spirit', id: 7119388, logo: 'https://cdn.steamusercontent.com/ugc/mock/'
+  });
+  assert(r && r.source === 'curation', 'source 应为 curation: ' + JSON.stringify(r));
+  assert(/^https:\/\/liquipedia\.net\//.test(r.logo), '应返回 LP 覆盖 URL: ' + r.logo);
+});
+check('enrichTeamLogo 未覆盖队伍仍走原链路（existing 直出）', async () => {
+  const r = await sources.enrichTeamLogo({ name: 'Unknown Team', id: 888888, logo: 'https://existing.example/logo2.png' });
+  assert(r && r.source === 'opendota' && r.logo === 'https://existing.example/logo2.png', '无覆盖时不应改变原行为');
+});
 check('enrichPlayerAvatar no avatar + STRATZ disabled -> null', async () => {
   const r = await sources.enrichPlayerAvatar({ accountId: '123456' });
   assert(r === null, 'should return null');

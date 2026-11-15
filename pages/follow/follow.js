@@ -6,6 +6,7 @@ const config = require('../../utils/config.js');
 const experiment = require('../../utils/experiment.js');
 const reminderStrategy = require('../../utils/reminderStrategy.js');
 const sources = require('../../utils/sources.js');
+const remoteCuration = require('../../utils/remoteCuration.js');   // ★ 2026-11-15：队标人工覆盖（展示层优先）
 // ★ 2026-08-07（审核 R1/R2）：账号登录态（ensureOpenId 上移单点实现 + 预登录前置）
 const auth = require('../../utils/auth.js');
 // ★ 2026-10-24：内置快照移除后「数据健康」卡已下线（本页不再 require diagnostics）。
@@ -330,6 +331,9 @@ Page({
     out.selected = false;   // ★ 2026-10-24：编辑态选中标记（与 items 索引一一对应）
     if (type === 'teams') {
       out.typeLabel = '战队';
+      // ★ 2026-11-15：人工覆盖队标优先（只影响展示，不改写用户 storage/云同步数据）
+      const ov = remoteCuration.curatedTeamLogo(it.id, it.name);
+      if (ov) out.logo = ov;
       out.iconText = (it.name || '?').slice(0, 1).toUpperCase();
       out.sub = '点击查看战队详情';
       out.target = '/subpackages/detail/team-detail/team-detail?teamId=' + it.id;

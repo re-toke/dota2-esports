@@ -156,6 +156,25 @@ function buildEffective(remote) {
 function curatedEventFor(name, ctx) { return ensure().eventFor(name, ctx); }
 function curatedTeamFor(nameOrId) { return ensure().teamFor(nameOrId); }
 
+// ★ 2026-11-15：人工覆盖队标（查「远程覆盖后的生效集合」）。
+//   与 curation.curatedTeamLogo 同签名/同语义，差异是数据源为「本地 CURATED_TEAMS 为底 +
+//   云端 curation_teams.data.logo 字段级覆盖」——策展人改库后无需发版即可生效。
+//   优先级：人工覆盖 > OpenDota/Steam > STRATZ > Liquipedia 兜底（调用方按此顺序短路）。
+function _isHttpLogo(u) {
+  return typeof u === 'string' && /^https?:\/\//i.test(u);
+}
+function curatedTeamLogo(teamId, name) {
+  const lk = ensure();
+  const id = Number(teamId);
+  let t = null;
+  if (teamId != null && teamId !== '' && !isNaN(id) && id > 0) t = lk.teamFor(id);
+  if ((!t || !_isHttpLogo(t.logo)) && name) {
+    const byName = lk.teamFor(name);
+    if (byName) t = byName;
+  }
+  return _isHttpLogo(t && t.logo) ? t.logo : '';
+}
+
 // 判断 team_id 是否为历届 TI 参赛队
 // 优先用远程覆盖后的 effectiveTiIds，回退本地静态名单
 function isTIContestantTeam(teamId) {
@@ -498,6 +517,7 @@ function _doLoad(_sbOn, force, meta) {
 module.exports = {
   curatedEventFor: curatedEventFor,
   curatedTeamFor: curatedTeamFor,
+  curatedTeamLogo: curatedTeamLogo,
   isTIContestantTeam: isTIContestantTeam,
   isHighPriorityTeam: isHighPriorityTeam,
   getEffectiveEvents: getEffectiveEvents,

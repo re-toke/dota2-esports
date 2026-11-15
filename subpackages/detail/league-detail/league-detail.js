@@ -1457,9 +1457,70 @@ Page({
     return this._enrichLogosInflight;
   },
 
+  // ★ 2026-11-15：人工覆盖队标（curation_teams.data.logo）同步直填 —— 全链路最高优先级。
+  //   与 sources.enrichTeamLogo 的 ⓪ 分支同源同语义；差别：详情页队标走的是
+  //   「build-time 快照 + 网络批量查询」，不经过 enrichTeamLogo，故需在此单独前置一层：
+  //   ① 覆盖**已有**队标（人工覆盖 > 任何自动来源，含 LP/Steam 直出与快照）；
+  //   ② 同步写 _logoQueryCache，供 refreshMetadataDerived 重建 participantsList 时回填；
+  //   ③ 调用方随后把已覆盖的 id/队名从查询清单剔除（省掉无谓网络）。
+  _applyCuratedTeamLogos() {
+    const qc = this._logoQueryCache || (this._logoQueryCache = { byId: {}, byNormName: {} });
+    const patch = {};
+    const norm = names.normTeamName;
+
+    const remember = (id, name, logo) => {
+      if (id > 0) { qc.byId[id] = { logo: logo, source: 'curation' }; return; }
+      const nk = norm(name || '');
+      if (nk) qc.byNormName[nk] = { logo: logo, source: 'curation' };
+    };
+
+    const applyList = (list, prefix, visible) => {
+      (list || []).forEach((s, i) => {
+        if (!s) return;
+        const sides = [
+          { id: s.radiantTeamId, name: s.radiantName, logo: s.radiantLogo, key: 'radiantLogo', srcKey: 'radiantLogoSource' },
+          { id: s.direTeamId, name: s.direName, logo: s.direLogo, key: 'direLogo', srcKey: 'direLogoSource' }
+        ];
+        sides.forEach((side) => {
+          const ov = remoteCuration.curatedTeamLogo(side.id, side.name);
+          if (!ov) return;
+          remember(side.id, side.name, ov);
+          if (visible && side.logo !== ov) {
+            patch[prefix + '[' + i + '].' + side.key] = ov;
+            patch[prefix + '[' + i + '].' + side.srcKey] = 'curation';
+          }
+          s[side.key] = ov;
+          s[side.srcKey] = 'curation';
+        });
+      });
+    };
+    applyList(this.data.series, 'series', true);
+    applyList(this.allSeries, 'allSeries', false);
+
+    const cur = this.data.participantsList || [];
+    if (cur.length) {
+      let changed = false;
+      const next = cur.map((t) => {
+        if (!t) return t;
+        const ov = remoteCuration.curatedTeamLogo(t.id, t.name);
+        if (!ov) return t;
+        remember(t.id, t.name, ov);
+        if (t.logo === ov) return t;
+        changed = true;
+        return Object.assign({}, t, { logo: ov });
+      });
+      if (changed) patch.participantsList = next;
+    }
+
+    if (Object.keys(patch).length) this.setData(patch);
+  },
+
   // 实际执行 logo 批量补全（由 enrichTeamLogos 调用，含 inflight 去重）
   // ★ P2-8：声明为 async —— 队标查询改用 await api.getTeamLogos 批量（见下方「2) 队标查询」）。
   async _doEnrichTeamLogos() {
+    // ⓪ 人工覆盖先同步直填（零网络、最高优先级）
+    this._applyCuratedTeamLogos();
+
     // 1) 收集所有 team_id（去重）
     //    同时收集 participantsList 中的占位 id（与 enrichTeamNames 一致）
     const teamIds = {};
@@ -1543,6 +1604,15 @@ Page({
       if (this._logoFailNames && this._logoFailNames[norm] &&
           (Date.now() - this._logoFailNames[norm]) < 30 * 60 * 1000) return; // 30min 负缓存
       nameTeams[norm] = { name: nm, skip: false };
+    });
+
+    // ★ 2026-11-15：人工覆盖已由 ⓪ 同步直填（含已有队标的系列）→ 从查询清单剔除，零网络。
+    //   守卫不区分 skip：有覆盖时任何自动来源都不再参与（优先级约定的唯一实现点）。
+    Object.keys(teamIds).forEach((tid) => {
+      if (remoteCuration.curatedTeamLogo(Number(tid), teamIds[tid].name)) delete teamIds[tid];
+    });
+    Object.keys(nameTeams).forEach((nk) => {
+      if (remoteCuration.curatedTeamLogo(null, nameTeams[nk].name)) delete nameTeams[nk];
     });
 
     // 过滤出需要查询的 team_id（skip=true 的跳过）
