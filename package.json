@@ -25,6 +25,7 @@
     "check:syntax": "node scripts/ops/check-syntax.js",
     "coverage": "node scripts/ops/curation-coverage.js",
     "coverage:offline": "node scripts/ops/curation-coverage.js --offline",
+    "diff:logos": "node scripts/ops/diff-team-logos.js",
     "prepare": "husky",
     "precommit": "node scripts/ops/check-syntax.js && npx eslint --rulesdir scripts/eslint-rules && npm test",
     "audit:colors": "node scripts/ops/audit-wxss-colors.js",
