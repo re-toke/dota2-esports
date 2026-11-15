@@ -64,6 +64,28 @@ const NOW = 1794729600; // 2026-11-15 00:00:00 UTC
   ok(capped && (capped.match(/leagueid = /g) || []).length === 25, '③ 上限 25 条（防 SQL 过长）');
 })();
 
+// ④ G14 双源镜像：EF（opendota-proxy）的 SQL 必须与 utils/sqlFragments.js 同源
+//   ★ 2026-11-15：此前只有人工注释「保持同源」，无自动守卫 ⇒ 改一边漏另一边查不出。
+(function () {
+  const fs = require('fs');
+  const path = require('path');
+  const ef = fs.readFileSync(path.join(__dirname, '..', '..',
+    'supabase', 'functions', 'opendota-proxy', 'index.ts'), 'utf8');
+  const own = fs.readFileSync(path.join(__dirname, '..', '..', 'utils', 'sqlFragments.js'), 'utf8');
+  [
+    'count(DISTINCT COALESCE(series_id, -match_id)) AS sn',
+    'max(start_time + duration) AS last_end',
+    'count(*) AS n'
+  ].forEach(function (frag) {
+    ok(ef.indexOf(frag) >= 0, '④ EF 镜像含关键片段：' + frag);
+  });
+  ok(ef.indexOf('LEAGUE_WINDOWS_WINDOW_DAYS = 90') >= 0, '④ EF 窗口天数常量 = 90');
+  ok(own.indexOf('const WINDOW_DAYS = 90;') >= 0, '④ 客户端窗口天数常量 = 90');
+  ok(ef.indexOf('const floor = dayStart - LEAGUE_WINDOWS_WINDOW_DAYS * 86400;') >= 0 &&
+     own.indexOf('const floor = dayStart - WINDOW_DAYS * 86400;') >= 0,
+    '④ 两侧下界公式同源（按日对齐的整数秒，可走索引）');
+})();
+
 console.log('\n=== 结果 ===');
 console.log('通过: ' + pass + '  失败: ' + fail);
 if (fail) {

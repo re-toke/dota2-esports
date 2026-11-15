@@ -154,12 +154,8 @@ const _curatedEventCache = {};
 // ★ 2026-10-24：内置快照已移除（改为纯联网）—— 原「快照匹配 leagueKey 记忆化」随之删除，
 //   列表赛期只由 curation + OpenDota 合并。
 
-// 等级 -> TDesign Tag 主题/变体
-function tagThemeOf(grade) {
-  if (grade === 'SSS' || grade === 'S') return { theme: 'danger', variant: 'light' };
-  if (grade === 'A') return { theme: 'warning', variant: 'light' };
-  return { theme: 'default', variant: 'light' };
-}
+// 等级 -> TDesign Tag 主题/变体：**唯一实现**在 utils/tiers.js 的 displayThemeOf
+// （★ 2026-11-15：原本地副本与 tiers.DISPLAY_TIERS 完全等价，收口避免两处漂移）。
 
 // 状态 -> 中文标签 + 颜色：**唯一实现**已收口到 utils/util.js 的 statusBadgeOf
 // （★ 2026-11-15：与 league-detail 的同名副本已漂移，按产品决定以本页文案/配色为准合并）。
@@ -320,8 +316,8 @@ function buildUpcomingCard(entry, ctx) {
     label: label,
     tierClass: 'tier-' + grade.toLowerCase(),
     displayLabel: tiers.displayOf(grade),
-    tagTheme: tagThemeOf(grade).theme,
-    tagVariant: tagThemeOf(grade).variant,
+    tagTheme: tiers.displayThemeOf(grade).theme,
+    tagVariant: tiers.displayThemeOf(grade).variant,
     startDate: entry.start,
     endDate: entry.end,
     status: cardStatus,
@@ -605,8 +601,8 @@ Page({
       label: ut.label,
       displayLabel: tiers.displayOf(grade),
       source: ut.source,
-      tagTheme: tagThemeOf(grade).theme,
-      tagVariant: tagThemeOf(grade).variant,
+      tagTheme: tiers.displayThemeOf(grade).theme,
+      tagVariant: tiers.displayThemeOf(grade).variant,
       followed: follow.isFollowed('leagues', l.leagueid),
       earliest: earliest,
       latest: latest,
@@ -855,7 +851,7 @@ Page({
     // ★ 2026-09-19（收录严谨化 · 用户决策 3）：预选赛「保留但降级标注」——
     //   级别已由 tiers.applyQualifierCap 扣到最高 B 级，此处只补展示标记。
     const isQualifier = !!(curTier ? curTier.qualifier : ut.qualifier) || tiers.isQualifier(l.name || '');
-    const t = tagThemeOf(grade);
+    const t = tiers.displayThemeOf(grade);
     const valve = (cur && cur.valve != null) ? cur.valve : tiers.flagValve(l.name);
     const topThirdParty = (cur && cur.topThirdParty != null) ? cur.topThirdParty : tiers.flagTopThirdParty(l.name);
     const defunct = !!(cur && cur.defunct);
@@ -1430,7 +1426,7 @@ Page({
       seen[k] = true;
 
       const ut = ev.tier || { grade: 'S', rank: 3, label: 'S级' };
-      const t = tagThemeOf(ut.grade);
+      const t = tiers.displayThemeOf(ut.grade);
       const daysToStart = Math.ceil((ev.startDate - nowSec) / 86400);
       // 真实状态：已开赛的 curation 赛事（如 TI 主赛事开打）应归入「进行中」而非「即将到来」
       const cardStatus = (ev.startDate && ev.endDate && nowSec >= ev.startDate && nowSec <= ev.endDate + 86400) ? 'ongoing' : 'upcoming';
@@ -1628,7 +1624,7 @@ Page({
         const cardStatus = upcomingCardStatus({ start: _winStart, end: _winEnd }, now);
         const cardBadge = util.statusBadgeOf(cardStatus);
         const daysToStart = Math.ceil((_winStart - now) / 86400);
-        const t = tagThemeOf(grade);
+        const t = tiers.displayThemeOf(grade);
         const cardId = (_curLeagueId != null) ? _curLeagueId : fakeId;
         if (cardId != null) seenIds[String(cardId)] = true;
         results.push({

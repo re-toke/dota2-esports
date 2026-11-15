@@ -45,6 +45,20 @@ function countRegexInBlock(src, marker) {
   return (block.match(/^\s*\/.*\/[a-z]*,?\s*$/gm) || []).length;
 }
 
+/** 抽取块内**逐条正则字面量**（★ 2026-11-15：EF 侧此前只校验条数，内容漂移查不出） */
+function regexesInBlock(src, marker) {
+  const i = src.indexOf(marker);
+  if (i < 0) return null;
+  const j = src.indexOf('];', i);
+  if (j < 0) return null;
+  const block = src.slice(i, j);
+  const out = [];
+  const re = /^\s*(\/.*\/[a-z]*),?\s*$/gm;
+  let m;
+  while ((m = re.exec(block)) !== null) out.push(m[1]);
+  return out;
+}
+
 // ===== 1. utils/tiers.js ↔ discover-core.js 逐条一致 =====
 function sameSources(a, b) {
   if (!a || !b || a.length !== b.length) return false;
@@ -95,6 +109,10 @@ const efSrc = stripComments(fs.readFileSync(path.join(ROOT, 'supabase/functions/
 const efCount = countRegexInBlock(efSrc, 'COMMUNITY_TIER_RES');
 ok(efCount === tiers.COMMUNITY_TIERS.length,
   'opendota-proxy EF COMMUNITY_TIER_RES 条数一致（' + efCount + '）');
+// ★ 2026-11-15：**逐条内容**比对（原实现只比条数 ⇒ 同条数下改正则内容查不出漂移）。
+const efRegexes = regexesInBlock(efSrc, 'COMMUNITY_TIER_RES');
+ok(!!efRegexes && sameSources(tiers.COMMUNITY_TIERS.map((x) => String(x.test)), efRegexes),
+  'opendota-proxy EF COMMUNITY_TIER_RES 正则**逐条一致**（客户端为准）');
 
 // ===== 3. 服务端必须是「白名单准入」：KEEP_LEAGUE_TIERS 不得含 amateur/professional =====
 function keepTiersLine(src) {
