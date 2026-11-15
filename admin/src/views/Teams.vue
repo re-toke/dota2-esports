@@ -137,6 +137,12 @@ onMounted(loadTeams)
       style="width: 100%"
     >
       <el-table-column prop="_id" label="ID" width="70" />
+      <el-table-column label="队标" width="80">
+        <template #default="{ row }">
+          <img v-if="row.logo" :src="row.logo" alt="logo" class="logo-thumb" />
+          <span v-else>-</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="name" label="战队名" min-width="180" show-overflow-tooltip />
       <el-table-column prop="tag" label="缩写" width="100" />
       <el-table-column prop="country" label="国家/地区" width="100">
@@ -226,6 +232,14 @@ onMounted(loadTeams)
 
 .write-tip {
   margin-bottom: 16px;
+}
+
+.logo-thumb {
+  height: 32px;
+  width: auto;
+  max-width: 64px;
+  object-fit: contain;
+  vertical-align: middle;
 }
 
 .pager {

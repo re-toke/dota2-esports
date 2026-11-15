@@ -44,6 +44,7 @@ const form = reactive({
   grade: '',
   label: '',
   aliases: [],
+  logo: '',
 })
 
 const rules = {
@@ -62,6 +63,7 @@ function fillForm(t) {
   form.grade = tier.grade || ''
   form.label = tier.label || ''
   form.aliases = Array.isArray(x.aliases) ? [...x.aliases] : []
+  form.logo = x.logo || ''
 }
 
 watch(
@@ -91,6 +93,9 @@ async function handleSubmit() {
       country: form.country,
       tier: { grade: form.grade, label: form.label },
       aliases: form.aliases || [],
+      // 人工覆盖队标（最高优先级：人工覆盖 > OpenDota/Steam > STRATZ > Liquipedia 兜底）
+      // 留空表示不覆盖，客户端继续走多源自动解析。
+      logo: (form.logo || '').trim(),
       updatedAt: Date.now(),
     }
     // 仅 emit，由父组件执行云函数写操作；成功后父组件关闭对话框，失败时保持打开
@@ -152,6 +157,19 @@ async function handleSubmit() {
           <el-option v-for="a in form.aliases" :key="a" :label="a" :value="a" />
         </el-select>
       </el-form-item>
+      <el-form-item label="队标 URL">
+        <el-input
+          v-model="form.logo"
+          placeholder="留空 = 不覆盖；填 http(s) 图片地址"
+          clearable
+        />
+        <div v-if="form.logo" class="logo-preview">
+          <img :src="form.logo" alt="队标预览" />
+        </div>
+        <span class="form-hint">
+          人工覆盖优先级最高：人工覆盖 &gt; OpenDota/Steam &gt; STRATZ &gt; Liquipedia 兜底
+        </span>
+      </el-form-item>
     </el-form>
 
     <template #footer>
@@ -166,5 +184,16 @@ async function handleSubmit() {
   margin-left: 12px;
   color: #909399;
   font-size: 12px;
+}
+.logo-preview {
+  margin-top: 8px;
+}
+.logo-preview img {
+  max-height: 56px;
+  max-width: 120px;
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+  padding: 4px;
+  background: #fafafa;
 }
 </style>

@@ -69,7 +69,8 @@ DOTA2 电竞小程序的 curation 数据管理后台，用于在 Web 端管理 S
 ## 字段约定（Supabase 现行 schema）
 
 - **curation_events**：`canonical_key`（= 规范名归一化）为主键；`league_id`（int，可空）；`data`（jsonb：canonical / aliases / tier / year / start / end / liquipediaSlug 等）。
-- **curation_teams**：`team_id`（int8）为主键；`data`（jsonb：name / tag / country / tier / aliases 等）。
+- **curation_teams**：`team_id`（int8）为主键；`data`（jsonb：name / tag / country / tier / aliases / **logo** 等）。
+  - `logo`（★ 2026-11-15）：**队标人工覆盖 URL**（http(s)）。客户端优先级：人工覆盖 > OpenDota/Steam > STRATZ > Liquipedia 兜底；留空 = 不覆盖（走原多源自动解析）。
 - **curation_meta**：`key`（text，默认 `ti_contestant_ids`）为主键；`value`（jsonb：ids / version / count / updatedAt）。
 - 表单层用 `_id` 统一指代主键（视图层兼容），写回 EF 时由 `admin-write` 映射到 `canonical_key` / `team_id` / `key`。
 
