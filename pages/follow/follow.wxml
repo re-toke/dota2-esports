@@ -16,13 +16,20 @@
              placeholder="设置昵称" placeholder-class="hero-name-ph"
              maxlength="12" bindblur="onNicknameBlur" />
       <view class="hero-status">
-        <view class="status-dot {{sync.status}}"></view>
-        <text class="hero-sub">{{sync.status === 'syncing' ? '正在同步…' : (sync.status === 'failed' ? '同步失败' : (sync.enabled ? '已同步 · ' + sync.lastSyncText : '未开启云同步'))}}</text>
-        <text wx:if="{{sync.status === 'failed'}}" class="hero-retry" catchtap="onSyncRetry">重试</text>
+        <view class="status-dot {{sync.status}} {{sync.pendingDelete && !sync.enabled ? 'pending' : ''}}"></view>
+        <!-- ★ 2026-11-15：新增 pendingDelete 态文案（开关已关，但云端数据未删成功） -->
+        <text class="hero-sub">{{sync.pendingDelete && !sync.enabled ? '已关闭（云端待清理）' : (sync.status === 'syncing' ? '正在同步…' : (sync.status === 'failed' ? '同步失败' : (sync.enabled ? '已同步 · ' + sync.lastSyncText : '未开启云同步')))}}</text>
+        <text wx:if="{{sync.status === 'failed' || (sync.pendingDelete && !sync.enabled)}}" class="hero-retry" catchtap="onSyncRetry">重试</text>
       </view>
     </view>
     <view class="tap-88" bindtap="onSyncToggle" hover-class="tap-scale">
-      <view class="switch {{sync.enabled ? 'on' : ''}} {{sync.status === 'syncing' ? 'busy' : ''}}">
+      <!-- ★ 2026-11-15：自绘开关补可访问性语义（role/aria-checked/aria-label），
+           busy 时给 aria-disabled（视觉上 .switch.busy 已半透明） -->
+      <view class="switch {{sync.enabled ? 'on' : ''}} {{sync.busy || sync.status === 'syncing' ? 'busy' : ''}}"
+            aria-role="switch"
+            aria-checked="{{sync.enabled}}"
+            aria-label="云同步"
+            aria-disabled="{{sync.busy ? 'true' : 'false'}}">
         <view class="switch-knob"></view>
       </view>
     </view>

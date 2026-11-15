@@ -493,6 +493,18 @@
   font-weight: 500;
   letter-spacing: 0.5rpx;
 }
+/* ★ 2026-11-15：赛段口径说明条 —— 跟在「正赛 / 预选赛」筛选下方，
+   用一句话解释「为什么这里只显示正赛」，避免用户对参赛队/赛期数字产生疑问。
+   颜色全部走现有 CSS 变量（随主题切换），不硬编码色值。 */
+.stage-note {
+  margin: var(--space-1) var(--space-2) 0;
+  padding: var(--space-1-5) var(--space-2);
+  font-size: var(--fs-caption);
+  line-height: 1.5;
+  color: var(--text-3);
+  background: var(--overlay-06);
+  border-radius: var(--radius-sm, 8rpx);
+}
 .series-live-tag {
   font-size: var(--fs-caption);
   color: var(--status-live);

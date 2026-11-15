@@ -68,7 +68,9 @@ Page({
       sync: {
         enabled: s.enabled,
         status: s.status,
-        lastSyncText: formatLastSync(s.lastSyncAt)
+        lastSyncText: formatLastSync(s.lastSyncAt),
+        // ★ 2026-11-15：开关已关但云端数据未删成功（「删除云端数据」正是给这个态兜底的入口）
+        pendingDelete: !!s.pendingDelete
       }
     });
   },
@@ -129,10 +131,21 @@ Page({
     });
   },
 
+  /**
+   * 删除云端数据（★ 2026-11-15：与「停止同步」文案区分）
+   *
+   * 「停止同步」（我的页开关）= 关开关 + 删云端；本入口 = 只清云端残留。
+   * 典型场景：开关已关但上次删除失败 → cloudSync 里 pendingDelete=true，
+   * 由 deleteCloudData() 删成功后**一并清掉 pendingDelete**，随后 _refreshSyncState()
+   * 把「云端待清理」文案复位，回到「我的」页也不会再看到「重试」。
+   */
   onDeleteCloud() {
+    const st = cloudSync.getState();
     wx.showModal({
       title: '删除云端数据',
-      content: '将删除云端保存的关注与提醒数据。本机数据不受影响。删除后换设备将无法恢复。',
+      content: st.pendingDelete
+        ? '云端仍留有上次关闭同步时未清理的数据。此操作只删除云端记录（同步已处于关闭态），本机数据不受影响。'
+        : '此操作与「停止同步」不同：只删除云端保存的关注与提醒记录（同步开关在「我的」页），本机的关注、资料与登录状态不受影响。删除后换设备将无法恢复。',
       confirmText: '删除',
       confirmColor: '#E8443B',
       success: (res) => {
@@ -140,6 +153,7 @@ Page({
         wx.showLoading({ title: '删除中…', mask: true });
         cloudSync.deleteCloudData().then((r) => {
           wx.hideLoading();
+          // deleteCloudData 成功时已清 pendingDelete / 开关态 → 这里只需刷新展示
           this._refreshSyncState();
           wx.showToast({ title: r.ok ? '云端数据已删除' : '删除失败，请检查网络后重试', icon: 'none' });
         });
@@ -148,7 +162,9 @@ Page({
   },
 
   onResetAll() {
-    const hasCloud = cloudSync.getState().enabled;
+    const st = cloudSync.getState();
+    // ★ 2026-11-15：pendingDelete（开关已关但云端有残留）也算「云端有数据」，文案不能漏
+    const hasCloud = st.enabled || st.pendingDelete;
     wx.showModal({
       title: '重置全部数据',
       content: hasCloud

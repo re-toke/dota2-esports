@@ -944,10 +944,17 @@ function leagueDisplayName(league, ctx) {
 // 不依赖 Liquipedia（避免 IP 风险）。
 // 入参 leagueId；返回 [{ team_id, name, tag, wins, losses, games, winRate }]
 // 按 胜场降序 -> 负场升序 排序。
-function getLeagueStandings(leagueId) {
+// ★ 2026-11-15（赛事赛段分层）：新增第二参数 opts，支持 opts.fromSec（unix 秒）——
+//   只统计 start_time >= fromSec 的对局，用于「战绩只算正赛（main）、不含预选赛（playin）」。
+//   不传 opts（或 fromSec 非法/<= 1e9）时行为与旧版**完全一致**（向后兼容）。
+function getLeagueStandings(leagueId, opts) {
   if (!leagueId) return Promise.resolve([]);
+  const fromSec = (opts && Number(opts.fromSec) > 1e9) ? Math.floor(Number(opts.fromSec)) : 0;
   return api.getLeagueMatches(leagueId).then(function (matches) {
-    const list = matches || [];
+    const list = (matches || []).filter(function (m) {
+      if (!fromSec) return true;
+      return Number(m && m.start_time) >= fromSec;
+    });
     const stats = {};  // team_id -> { wins, losses, name }
     list.forEach(function (m) {
       const rId = m.radiant_team_id;

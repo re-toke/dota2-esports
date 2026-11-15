@@ -46,6 +46,26 @@ const haglund = require('../../utils/haglund.js');   // ★ 2026-08-22 列表 ta
 // 跨页状态持久化键（I5）：离开页面时保存筛选/关键词/滚动位置，返回时还原
 const VIEW_KEY = 'leagues_view_state';
 
+// ★ 2026-11-15（赛事收录口径收紧）：预选赛开关的存储键。
+//   背景：794 个 OpenDota league 中 243 个（30.6%）名字含 qualifier / play-in / seeding，
+//   原先仅由 tiers 降级为 B 级，仍会挤在「全部 / 进行中 / 已结束」主列表里把正赛淹没。
+const QUALIFIER_KEY = 'leagues_show_qualifiers';
+
+// ★ 2026-11-15（赛事收录口径收紧）：列表是否展示该赛事 —— 抽成纯函数，
+//   供 applyAndSlice 统一过滤 + `scripts/test/test-league-qualifier-filter.js` 直接 require 单测。
+//   规则：showQualifiers=true 一律展示；否则隐藏预选赛。
+//   item.qualifier 由 normalize() 产出（curation tier.qualifier / tiers.applyQualifierCap 标注）；
+//   阶段 1 normalizeLite 尚无该字段 ⇒ 回退按赛事名判定，保证首屏不漏过滤。
+//   ⚠️ 只影响列表展示：allLeagues / _leagueMap / 关注态均不改动 ⇒ 详情页跳转与关注数据不受影响。
+function shouldShowLeague(item, showQualifiers) {
+  if (!item) return false;
+  if (showQualifiers) return true;
+  const isQ = (item.qualifier != null)
+    ? !!item.qualifier
+    : tiers.isQualifier(item.name || item.displayName || '');
+  return !isQ;
+}
+
 // ★ 2026-09-01（P2-L5）：curatedEventFor 结果缓存（leagueid → curation event）。
 //   阶段 2 normalize 全量 300 条逐条调用（单条 1-3ms ≈ 300-900ms 主线程分批占用），
 //   同 leagueid 输入恒定 → 结果可缓存。模块级（跨页面实例共享），列表数据不变时零重算。
@@ -170,7 +190,25 @@ function dedupeByDisplayName(arr) {
     // 选优：matchCount 高者优先；平局则选有 curation 元数据更丰富的（有 dateRange 说明赛期已解析）
     const aScore = (x.matchCount || 0) * 1000 + (x.dateRange ? 1 : 0) + (x.grade ? 1 : 0);
     const bScore = (prev.matchCount || 0) * 1000 + (prev.dateRange ? 1 : 0) + (prev.grade ? 1 : 0);
-    if (aScore > bScore) groups[key] = x;
+    const winner = aScore > bScore ? x : prev;   // 择优规则不变（平局保留先入者）
+    const loser = winner === x ? prev : x;
+    // ★ 2026-11-15（收录口径收紧 · 同名多 id 兜底）：落选条目的 leagueid 记到保留项的
+    //   aliasLeagueIds（仅诊断用，不参与任何择优/跳转逻辑），便于后续排查「同名多 id」
+    //   （实测：1win Essence III 同时存在 20177（0 场）与 20486（85 场））。
+    //   落选项自身已有的 alias 一并继承，避免多轮合并丢信息。
+    if (String(winner.leagueid) !== String(loser.leagueid)) {
+      const alias = (winner.aliasLeagueIds || []).slice();
+      alias.push(loser.leagueid);
+      (loser.aliasLeagueIds || []).forEach((id) => alias.push(id));
+      const uniq = [];
+      alias.forEach((id) => {
+        if (String(id) === String(winner.leagueid)) return;              // 不记录自身
+        if (uniq.some((v) => String(v) === String(id))) return;          // 去重
+        uniq.push(id);
+      });
+      winner.aliasLeagueIds = uniq;
+    }
+    groups[key] = winner;
   });
   return Object.keys(groups).map((k) => groups[k]);
 }
@@ -243,6 +281,11 @@ Page({
     filter: 'all',
     // 等级筛选：all=全部 / sss=TI顶级 / s=S级 / a=A级 / b=B级
     gradeFilter: 'all',
+    // ★ 2026-11-15（赛事收录口径收紧）：是否在主列表展示预选赛。
+    //   false（默认）= 只留正赛，预选赛不进主列表；true = 用户显式开启后全部展示（状态持久化）。
+    showQualifiers: false,
+    // ★ 2026-11-15：被隐藏的预选赛数量（applyAndSlice 计算），用于工具条下方的说明条。
+    qualifierHidden: 0,
     // 1.3 排序模式：smart=智能排序（关注置顶+S级优先+时间）/ time=按时间倒序（默认）
     sortMode: 'time',
     gradeCounts: { all: 0, sss: 0, s: 0, a: 0, b: 0 },
@@ -300,6 +343,11 @@ Page({
     //   _normalizeDone 表示全量 normalize 是否已完成（阶段 2 跑完置 true）。
     this._normalizeGen = 0;
     this._normalizeDone = true;   // 首次 loadLeagues 调用前先设 true，避免守卫拦截
+    // ★ 2026-11-15：还原「含预选赛」开关（持久化）—— 存储异常静默，保持默认关闭。
+    //   必须在 loadLeagues 之前读入，否则首屏 applyAndSlice 会按默认 false 渲染后再重排（闪一下）。
+    try {
+      this.setData({ showQualifiers: !!wx.getStorageSync(QUALIFIER_KEY) });
+    } catch (e) { /* 存储不可用：保持默认 false */ }
     this.loadLeagues();
     this.buildFocusNode();
     // Phase 1-④：refreshTeamOptions 延迟到首次点击战队筛选按钮（openTeamFilter）
@@ -831,6 +879,16 @@ Page({
     const g = e.currentTarget.dataset.g;
     if (g === this.data.gradeFilter) return;
     this.setData({ gradeFilter: g, page: 0 });
+    this.applyAndSlice(true);
+  },
+
+  // ★ 2026-11-15（赛事收录口径收紧）：切换「含预选赛」开关（默认关闭）。
+  //   翻转 → 写 storage 持久化 → 复用现有渲染入口 applyAndSlice 重排（不新造数据链路，
+  //   allLeagues / 关注态零改动，仅重新过滤列表展示）。
+  onToggleQualifiers() {
+    const next = !this.data.showQualifiers;
+    this.setData({ showQualifiers: next, page: 0 });
+    try { wx.setStorageSync(QUALIFIER_KEY, next); } catch (e) { /* 存储异常：仅本次会话生效 */ }
     this.applyAndSlice(true);
   },
 
@@ -1493,6 +1551,24 @@ Page({
       if (x.rank != null && x.rank <= 0) return false;
       return !!g;
     });
+    // ★ 2026-11-15（赛事收录口径收紧）：预选赛统一在**渲染前**过滤 —— 默认不进主列表。
+    //   为什么在这一处：所有 Tab（全部/进行中/即将/已结束）都汇流到这里，且 dedupeByDisplayName /
+    //   mergeAllWithUpcoming 均已完成 ⇒ 一处收口即可，不会漏掉任何数据链路。
+    //   ⚠️ 只影响列表展示：this.allLeagues / this._leagueMap / 关注态保持不变，
+    //      点击详情跳转、关注数据、gradeCounts 统计口径均不受影响。
+    const showQ = this.data.showQualifiers;
+    let _hiddenQ = 0;
+    arr = arr.filter((x) => {
+      const ok = shouldShowLeague(x, showQ);
+      if (!ok) _hiddenQ++;
+      return ok;
+    });
+    // ★ 2026-11-15（可读性优化）：把「被隐藏了多少个预选赛」显式告诉用户。
+    //   原实现只在工具条放一个「含预选赛」开关，和状态 chip 混在一起，用户不知道它是什么、
+    //   也不知道打开后会发生什么；改为工具条下方一条可点击的说明条（已隐藏 N 个… / 当前显示…）。
+    if (this.data.qualifierHidden !== _hiddenQ) {
+      this.setData({ qualifierHidden: _hiddenQ });
+    }
     // 排序：默认按时间倒序；智能排序（关注置顶 + S级优先 + 时间）为高级模式
     if (this.data.sortMode === 'smart') {
       arr = sortSmart(arr);
@@ -1862,3 +1938,11 @@ Page({
     } catch (e) { return false; }
   }
 });
+
+// ★ 2026-11-15（赛事收录口径收紧）：纯函数兼容层 —— 供 node 单测直接 require 复用，
+//   避免测试里再抄一份规则（抄一份就等于保护不到线上实现）。
+//   ⚠️ 小程序侧 Page() 已注册完毕，exports 不参与任何运行时逻辑。
+module.exports = {
+  shouldShowLeague: shouldShowLeague,
+  dedupeByDisplayName: dedupeByDisplayName
+};

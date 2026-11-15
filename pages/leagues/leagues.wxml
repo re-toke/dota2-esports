@@ -52,6 +52,21 @@
     </view>
   </view>
 
+  <!-- ★ 2026-11-15（可读性优化）：预选赛说明条 —— 原「含预选赛」开关与状态 chip 并排，
+       用户无法判断它是状态还是筛选、打开后会多出什么。改为一条自解释的可点击说明：
+       默认「已隐藏 N 个预选赛赛事 · 显示」，开启后「正在显示预选赛赛事 · 仅看正赛」。 -->
+  <view
+    wx:if="{{showQualifiers || qualifierHidden > 0}}"
+    class="qualifier-bar {{showQualifiers ? 'qualifier-bar--on' : ''}}"
+    bindtap="onToggleQualifiers"
+    hover-class="tap-scale"
+    aria-role="button"
+    aria-label="{{showQualifiers ? '关闭预选赛显示' : '显示预选赛赛事'}}"
+  >
+    <text class="qb-text">{{showQualifiers ? '正在显示预选赛赛事（含各赛区海选/资格赛）' : '已隐藏 ' + qualifierHidden + ' 个预选赛赛事'}}</text>
+    <text class="qb-action">{{showQualifiers ? '仅看正赛' : '显示'}}</text>
+  </view>
+
   <!-- ★ v8.31（赛事页 4s 感知优化）：运行期缓存已渲染 + 网络刷新失败/进行中 → 顶部提示条。
        比骨架屏更有效：用户看到列表 + 明确的来源指示，感知等待时间显著下降。 -->
   <view wx:if="{{leaguesAsOfText}}" class="sync-bar">

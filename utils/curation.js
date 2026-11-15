@@ -835,6 +835,20 @@ const CURATED_EVENTS = [
     start: Math.floor(Date.UTC(2026, 6, 30) / 1000),
     end: Math.floor(Date.UTC(2026, 7, 5, 23, 59, 59) / 1000),
     liquipediaSlug: '1win_Essence/2' },
+  // ★ 2026-11-15（收录口径收紧 · 同名多 id 事故）：1win Essence III —— 源：Liquipedia 权威页
+  //   （1win_Essence/3）。OpenDota 同时存在同名 leagueid 20177（0 场）与 20486（85 场），
+  //   此处以 leagueId=20486 精确 pin，避免落到 0 场的空壳联赛。
+  //   ⚠️ aliases 里不能放 '1win Essence'（会被 Essence II 的别名抢占，两届互相串味）；
+  //   ⚠️ 不加 participants：正赛 12 队名单尚未完整确认，宁可空（不写占位/猜测）。
+  { canonical: '1win Essence III', tier: { grade: 'S', rank: 3, label: 'S级' },
+    aliases: ['1win Essence 3', '1win essence iii'],
+    leagueId: 20486,
+    year: 2026,
+    start: Math.floor(Date.UTC(2026, 10, 12) / 1000),
+    end: Math.floor(Date.UTC(2026, 10, 18, 23, 59, 59) / 1000),
+    liquipediaSlug: '1win_Essence/3',
+    organizer: 'BASED Esports', region: '欧洲', format: '小组赛 + 双败淘汰',
+    prizePool: '$200,000', status: '进行中' },
   { canonical: 'Games of the Future 2026', tier: { grade: 'A', rank: 2, label: 'A级' },
     aliases: ['games of the future', 'future 2026', 'gotf 2026'],
     leagueId: 19917,

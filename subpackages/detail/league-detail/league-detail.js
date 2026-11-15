@@ -20,6 +20,8 @@ const heroes = require('../../../utils/heroes.js');
 const logoCache = require('../../../utils/logoCache.js'); // Phase 1-⑦：persistNow onUnload
 // ★ 2026-08-11 长期架构改进落地：数据源健康检查（数据为空时区分「数据源暂不可用」与「确实无数据」）
 const dataHealth = require('../dataHealth.js');
+// ★ 2026-11-15：赛事赛段分层（main 正赛 / playin 预选赛）——统计口径只用 main
+const stages = require('../../../utils/stages.js');
 // ★ 2026-10-24：内置「即将到来」赛程快照已移除（改为纯联网）⇒ 不再读取本地快照补赛期。
 
 // Steam CDN 英雄头像基址（_sb.png = 小横幅图，约 59x33，aspectFill 裁切填满方形框）
@@ -204,6 +206,14 @@ Page({
     // ===== P2：对阵筛选 / 队伍待公布 =====
     playoffOnly: false,        // 「仅看淘汰赛」筛选态
     hasPlayoffSeries: false,   // 是否出现 playoff/grandFinal 阶段（无则不显示筛选）
+    // ★ 2026-11-15（赛段分层 · 可读性优化）：正赛/预选赛 二选一筛选。
+    //   原实现只在卡片上贴一个「预选赛」小标签，用户看不出「为什么参赛队 18 支、赛期从 11-07 开始」；
+    //   改为与「淘汰赛」同一形态的分段筛选：默认正赛，预选赛需显式切换，并在筛选条下方
+    //   用一句话说明统计口径（参赛队/赛期/战绩只算正赛）。
+    stageFilter: 'main',       // 'main' | 'playin'
+    hasStageSplit: false,      // 是否存在预选赛（为 false 时不显示该组筛选）
+    stageMainCount: 0,
+    stagePlayinCount: 0,
     pendingTeams: 0,           // 「另有 N 队待公布」汇总数
     // ===== P2（2026-10-27）：参赛队伍本地搜索（零网络） =====
     teamQuery: '',             // 搜索关键词（WXML 由 WXS 过滤，不重建列表）
@@ -533,6 +543,52 @@ Page({
     return null;
   },
 
+  // ★ 2026-11-15（赛事赛段分层）：把 raw 对局切分为 main（正赛）/ playin（预选赛）。
+  //   背景：OpenDota 把同一赛事的多个赛段合并进同一 leagueid（1win Essence III / 20486：
+  //   Play-In 11-07~11-11 + 正赛 11-12~11-18），导致赛期/参赛队/战绩全被预选赛污染。
+  //   口径：统计只用 main；playin 不删除，仅打标（isPlayin）供页面标注。
+  //   正赛窗口优先取 curation 的 start/end（人工策展最权威）；无 curation 赛期时交给
+  //   splitStages 的保守启发式（间隙 ≥72h + 两段队集合几乎不重叠才切，否则全部 main）。
+  _computeStages(raw) {
+    let mainStart = 0, mainEnd = 0;
+    try {
+      const cur = remoteCuration.curatedEventFor(this.data.name, {
+        leagueId: Number(this.data.leagueId) || null,
+        game: 'dota2'
+      });
+      if (cur && cur.start && cur.end) {
+        mainStart = Number(cur.start) || 0;
+        mainEnd = Number(cur.end) || 0;
+      }
+    } catch (e) { /* curation 异常 → 交给启发式 */ }
+    return stages.splitStages(raw || [], mainStart > 1e9 ? { mainStart: mainStart, mainEnd: mainEnd } : {});
+  },
+
+  // ★ 2026-11-15：把赛段判定打到 series 聚合对象上（供 wxml「预选赛」标签）。
+  //   groupSeries 产物用 key/series_id 标识身份，但**不带 start_time**（只有 firstTime/lastTime），
+  //   故按「playin 对局的 series_id / match_id」集合匹配；时间窗口判定（seriesStageOf）作兜底。
+  _applyStageFlags(seriesList) {
+    const split = this._stages;
+    const playinKeys = {};
+    if (split && split.playin && split.playin.length) {
+      split.playin.forEach((m) => {
+        if (!m) return;
+        if (m.series_id != null && m.series_id !== 0) playinKeys['s' + m.series_id] = true;
+        if (m.match_id != null && m.match_id !== 0) playinKeys['m' + m.match_id] = true;
+      });
+    }
+    (seriesList || []).forEach((s) => {
+      if (!s) return;
+      let isPlayin = false;
+      if (s.series_id != null && s.series_id !== 0 && playinKeys['s' + s.series_id]) isPlayin = true;
+      if (!isPlayin && s.games && s.games.length) {
+        isPlayin = s.games.some((g) => !!(g && g.match_id && playinKeys['m' + g.match_id]));
+      }
+      if (!isPlayin) isPlayin = stages.seriesStageOf(s, split);
+      s.isPlayin = !!isPlayin;
+    });
+  },
+
   load() {
     // B4 定时刷新（2026-08-03）：重载前停止旧轮询（下拉刷新/重试时避免与重建并发）
     this.stopSchedulePolling();
@@ -634,6 +690,13 @@ Page({
         const _t0 = Date.now();
         console.info('[detail][perf] od+lp 并行段 ' + (Date.now() - this._perfLoadStart || 0) + 'ms（od ' + ((list || []).length) + ' 场 / lp ' + (((scheduled && scheduled.matches) || []).length) + ' 场）');
         const raw = sources.filterMatchesByWindow(list || [], this._editionWindowOf());
+        // ★ 2026-11-15（赛事赛段分层）：拿到 raw 后立刻算出赛段（main/playin）。
+        //   后续「参赛队 / 战绩 / 赛期 KPI / 卡片标注」四处统一消费 this._stages（口径只用 main）。
+        this._stages = this._computeStages(raw);
+        if (this._stages && this._stages.playin && this._stages.playin.length) {
+          console.info('[league-detail] 赛段切分（' + this._stages.basis + '）：main ' +
+            this._stages.main.length + ' 场 / playin ' + this._stages.playin.length + ' 场');
+        }
         // ★ 2026-08-04（v3.1，R1/R2）：串行预取 team_id→名（explorer teams 表，6h 缓存）——
         //   吸收方向解析的可靠源（curation 覆盖不全 + OpenDota 比赛端点队名恒空）。
         //   不能与 raw 并行（team_id 集合来自 raw）；失败 catch 降级不阻塞 load（R2）。
@@ -707,7 +770,12 @@ Page({
         // 并应用 cur.status 显式覆盖（与列表页 leagues.js 第 362-364 行一致），
         // 防止「赛事仍在进行但 DOTA2 比赛已结束」被误判为「已结束」。
         // 2026-07-28 修复：此前详情页仅用真实比赛窗口，导致与列表页赛期/状态显示不一致。
-        const mList = raw || [];
+        // ★ 2026-11-15（赛事赛段分层）：存在预选赛时，真实比赛窗口只按**正赛（main）**算，
+        //   否则赛期 KPI 从预选赛首日（如 11-07）开始，与正赛（11-12 起）不符。
+        //   curation 赛期仍优先（mergeEventPeriod 的字段级回退），故此处只影响 OpenDota 兜底窗口。
+        const _stageMain = (this._stages && this._stages.playin && this._stages.playin.length &&
+          this._stages.main && this._stages.main.length) ? this._stages.main : raw;
+        const mList = _stageMain || [];
         let mStart = 0, mEnd = 0, mLatestStart = 0;
         mList.forEach((m) => {
           const st = m.start_time || 0;
@@ -796,6 +864,9 @@ Page({
           farFutureCount: farFutureCount,
           hasFarFuture: farFutureCount > 0,
           hasPlayoffSeries: !!built.hasPlayoffSeries,
+          hasStageSplit: !!built.hasStageSplit,
+          stageMainCount: built.stageMainCount || 0,
+          stagePlayinCount: built.stagePlayinCount || 0,
           showFarFuture: false   // 默认折叠远期赛程
         });
         // 步骤2：明细（series 数组体积大，独立 setData 避免阻塞骨架渲染）
@@ -898,7 +969,10 @@ Page({
         upcomingGroups: built.upcomingGroups || [],
         farFutureCount: built.farFutureCount || 0,
         hasFarFuture: !!(built.farFutureCount > 0),
-        hasPlayoffSeries: !!built.hasPlayoffSeries
+        hasPlayoffSeries: !!built.hasPlayoffSeries,
+        hasStageSplit: !!built.hasStageSplit,
+        stageMainCount: built.stageMainCount || 0,
+        stagePlayinCount: built.stagePlayinCount || 0
       });
       console.info('[detail][perf] LP 先行渲染：LIVE ' + live.length + ' / UPCOMING ' + upcoming.length +
         ' 卡先上（OD 未到，' + (Date.now() - this._perfLoadStart) + 'ms）');
@@ -1340,18 +1414,44 @@ Page({
           }
         });
         allSeries = liveList.concat(upcomingList, recentList);
+        // ★ 2026-11-15（赛事赛段分层）：给每张卡打 isPlayin（预选赛对局保留但不计入统计口径），
+        //   wxml 据此显示「预选赛」小标签；不改变现有分组/折叠结构。
+        this._applyStageFlags(allSeries);
+        // ★ 2026-11-15（赛段筛选）：存在预选赛时，对阵列表按 stageFilter 二选一展示。
+        //   计数恒基于**未过滤**集合（正赛 N / 预选赛 M），供筛选条展示；
+        //   默认只看正赛 —— 这样「共 N 组对阵」与参赛队/赛期/战绩口径一致，不会再出现
+        //   「卡片说 18 队、但其中 6 队只在预选赛出场」的困惑。
+        const _stagePlayinN = allSeries.filter((s) => s.isPlayin).length;
+        const _stageMainN = allSeries.length - _stagePlayinN;
+        // 三段计数（LIVE/UPCOMING/RECENT）必须跟着一起过滤 —— 否则切到「预选赛」时
+        // 分段头的「已结束 N 场」仍是正赛+预选赛的总数，与可见卡片对不上。
+        let _liveOut = liveList;
+        let _upcomingOut = upcomingList;
+        let _recentOut = recentList;
+        if (_stagePlayinN > 0) {
+          const _wantPlayin = this.data.stageFilter === 'playin';
+          const _keep = (s) => !!s.isPlayin === _wantPlayin;
+          allSeries = allSeries.filter(_keep);
+          _liveOut = liveList.filter(_keep);
+          _upcomingOut = upcomingList.filter(_keep);
+          _recentOut = recentList.filter(_keep);
+        }
         // ★ 已结束对阵胜负标识：金色多层级强调（仅 recent），详见 decorateSeriesWinner
         allSeries = allSeries.map((s) => this.decorateSeriesWinner(s));
 
     return {
       allSeries: allSeries,
-      liveList: liveList,
-      upcomingList: upcomingList,
-      recentList: recentList,
+      liveList: _liveOut,
+      upcomingList: _upcomingOut,
+      recentList: _recentOut,
       upcomingGroups: upcomingGroups,
       farFutureCount: farFutureCount,
       hasFarFuture: farFutureCount > 0,
-      hasPlayoffSeries: hasPlayoffSeries
+      hasPlayoffSeries: hasPlayoffSeries,
+      // ★ 2026-11-15（赛段筛选）：供筛选条与口径说明使用（计数基于未过滤集合）
+      hasStageSplit: _stagePlayinN > 0,
+      stageMainCount: _stageMainN,
+      stagePlayinCount: _stagePlayinN
     };
   },
 
@@ -1385,6 +1485,8 @@ Page({
         //   - R4：仅第二次 rebuild 的 built 用于 setData；失败静默降级不阻塞 LP 刷新
         var hasValidLid = !!(Number(self.data.leagueId) > 0);
         var nowSec = Math.floor(Date.now() / 1000);
+        // ★ 2026-11-15：轮询重建前同步赛段（与 load 同口径，防「预选赛」标注/参赛队口径漂移）
+        self._stages = self._computeStages(self._rawMatches);
         var built = self.buildSeriesFromSources(self._rawMatches, scheduled.matches, scheduled.boFormat || null);
         var needOd = hasValidLid && sources.shouldRefreshOpenDota(built.liveList.length, self._lastOdRefresh || 0, nowSec);
         // P2（2026-08-05）：_lastOdRefresh 置位从"完成后"改"发起时" ——
@@ -1401,6 +1503,8 @@ Page({
             //   （与 load 同口径，防 _rawMatches 被两届混杂数据回填）
             fresh = sources.filterMatchesByWindow(fresh, self._editionWindowOf());
             self._rawMatches = fresh;
+            // ★ 2026-11-15：重拉后同步赛段（新对局可能落在正赛/预选赛不同段）
+            self._stages = self._computeStages(fresh);
             // ★ 2026-08-04（v3.1，R4）：增量补查新 team_id → 合并 map（下一轮 build 自然生效）
             var _newIds = [];
             fresh.forEach(function (m) {
@@ -2211,7 +2315,12 @@ Page({
   // 在 load() 和 finalize() 都会调用，保证无论网络源快慢最终状态一致。
   refreshMetadataDerived() {
     const meta = Object.assign({}, buildMetadataSkeleton(), this.data.metadata || {});
-    const raw = this.allMatches || [];
+    // ★ 2026-11-15（赛事赛段分层）：参赛队口径**只用正赛（main）**——
+    //   存在预选赛时，不得把 playin 队伍算进「参赛队 N 支」（实证：1win Essence III
+    //   18 支 = 正赛 12 + 预选赛 6，正确应为 12）。无预选赛时 main 即全部对局，行为不变。
+    //   注意：curation/Liquipedia 的 participants 数组仍最高权威（下方分支已优先使用）。
+    const raw = (this._stages && this._stages.playin && this._stages.playin.length &&
+      this._stages.main && this._stages.main.length) ? this._stages.main : (this.allMatches || []);
 
     // 1) 参赛队伍列表：按 team_id 去重，优先用已有队名，占位名后续 enrichTeamNames 会回填
     const teamMap = {};
@@ -2758,6 +2867,38 @@ Page({
         hasFarFuture: built.hasFarFuture,
         farFutureCount: built.farFutureCount,
         hasPlayoffSeries: built.hasPlayoffSeries,
+        recentCollapsed: false,
+        expandedGame: ''
+      });
+      try { this.enrichTeamLogos(); } catch (err) { /* 隔离 */ }
+    });
+  },
+
+  // ★ 2026-11-15（赛段筛选）：「正赛 / 预选赛」切换 —— 与「淘汰赛」同形态：
+  //   用缓存的构建入参本地重算（零网络），重建后按 stageFilter 过滤，并同步计数。
+  setStageFilter(e) {
+    const next = String(e.currentTarget.dataset.v) === 'playin' ? 'playin' : 'main';
+    if (next === this.data.stageFilter) return;
+    this.setData({ stageFilter: next }, () => {
+      const a = this._buildArgs;
+      if (!a) return;
+      const built = this.buildSeriesFromSources(a.raw, a.liqScheduled, a.liqBoFormat);
+      this.allSeries = built.allSeries;
+      const pageSize = this.data.pageSize;
+      this.setData({
+        series: built.allSeries.slice(0, pageSize),
+        totalSeries: built.allSeries.length,
+        page: 0,
+        hasMore: built.allSeries.length > pageSize,
+        liveCount: built.liveList.length,
+        upcomingCount: built.upcomingList.length,
+        recentCount: built.recentList.length,
+        hasFarFuture: built.hasFarFuture,
+        farFutureCount: built.farFutureCount,
+        hasPlayoffSeries: built.hasPlayoffSeries,
+        hasStageSplit: !!built.hasStageSplit,
+        stageMainCount: built.stageMainCount || 0,
+        stagePlayinCount: built.stagePlayinCount || 0,
         recentCollapsed: false,
         expandedGame: ''
       });
@@ -3387,7 +3528,11 @@ Page({
   // Tab 2: 赛事排名（按已结束比赛聚合队伍胜负）
   loadStandings() {
     this.setData({ standingsLoading: true });
-    return sources.getLeagueStandings(this.data.leagueId).then((list) => {
+    // ★ 2026-11-15（赛事赛段分层）：战绩只算**正赛（main）**——传入正赛窗口起点
+    //   （playin 对局不计入胜负，否则预选赛弱队会霸榜）。无切分时 fromSec=0，旧行为不变。
+    const _fromSec = (this._stages && this._stages.playin && this._stages.playin.length)
+      ? (this._stages.mainStart || 0) : 0;
+    return sources.getLeagueStandings(this.data.leagueId, { fromSec: _fromSec }).then((list) => {
       const standings = list || [];
       // 队名补全：OpenDota /api/matches 返回的 radiant_team_name / dire_team_name
       // 可能为空，导致 getLeagueStandings 回退为 "Team {id}" 占位符。

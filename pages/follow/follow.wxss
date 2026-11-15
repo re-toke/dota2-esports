@@ -79,6 +79,9 @@
 .status-dot.syncing { background: var(--tier-b); }
 .status-dot.failed { background: var(--dire); }
 .status-dot.off { background: var(--text-4); }
+/* ★ 2026-11-15：「已关闭（云端待清理）」—— 不是同步失败（红），而是"已停止 + 待回收"的中间态，
+   用品牌金区分，避免用户误读为"关不掉/出错"。 */
+.status-dot.pending { background: var(--dota-gold); }
 .hero-retry {
   font-size: var(--fs-caption);
   font-weight: 600;

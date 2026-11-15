@@ -61,7 +61,8 @@ Page({
     // ★ 2026-09-10（账号体系重构）：云同步四态（off/syncing/synced/failed）
     //   对外不叫「微信登录」—— 该概念已不存在（getUserInfo/getUserProfile 被回收，
     //   openid 只能静默获取、无授权界面），改叫「云同步」= 换设备可恢复关注与提醒。
-    sync: { enabled: false, status: 'off', lastSyncText: '' },
+    // ★ 2026-11-15：新增 pendingDelete（开关已关但云端数据未删成功）与 busy（自绘开关的禁用态）
+    sync: { enabled: false, status: 'off', lastSyncText: '', pendingDelete: false, busy: false },
     // ★ 2026-09-10（复核 A4）：隐私授权状态——未授权时 <input type="nickname"> 会
     //   降级为普通文本框（官方行为），用户会误以为「填不出微信昵称 = 坏了」
     privacyNeedAuth: false,
@@ -69,6 +70,21 @@ Page({
     // 空态「发现」按钮文案（按当前 Tab + A/B 实验动态生成）
     exploreText: '去发现战队'
     // ★ 2026-09-14（极简改造）：appVersion 随「关于」区块下沉到设置页，本页不再需要。
+  },
+
+  // ★ 2026-11-15：订阅云同步状态变更（返回退订函数，onUnload 里调用）。
+  //   解决「设置页关闭同步后回到我的页不刷新」—— 原实现只在 onShow 读一次状态，
+  //   若用户停在设置页操作（或本页在后台），回到本页时 onShow 虽会刷新，
+  //   但本页与设置页同时在栈上时不会触发 onShow，导致开关显示与实际状态不一致。
+  onLoad() {
+    this._unsubSync = cloudSync.onChange(() => this._refreshSyncState());
+  },
+
+  onUnload() {
+    if (typeof this._unsubSync === 'function') {
+      this._unsubSync();
+      this._unsubSync = null;
+    }
   },
 
   onShow() {
@@ -98,6 +114,11 @@ Page({
     subscribe.restoreSubFromCloud().catch(() => {});
     // ★ 2026-09-10：刷新云同步状态（四态展示）
     this._refreshSyncState();
+    // ★ 2026-11-15：上次关闭同步时云端没删成功（enabled=false + pendingDelete）→ 静默补一次删除。
+    //   fire-and-forget：失败不打扰用户（仍保留「重试」入口），成功则开关区文案自动复位。
+    if (cloudSync.hasPendingDelete()) {
+      cloudSync.retryPendingDelete().catch(() => {});
+    }
     // ★ 2026-09-10（复核 A4）：查询隐私授权状态（未授权时昵称填充会降级）
     this._checkPrivacy();
     // ★ 2026-09-10（复核修正）：已开启同步时自动恢复云端关注 ——
@@ -563,15 +584,28 @@ Page({
       sync: {
         enabled: s.enabled,
         status: s.status,
-        lastSyncText: formatLastSync(s.lastSyncAt)
+        lastSyncText: formatLastSync(s.lastSyncAt),
+        // ★ 2026-11-15：开关已关但云端数据待清理（wxml 显示「已关闭（云端待清理）」）
+        pendingDelete: !!s.pendingDelete,
+        // ★ 2026-11-15：自绘开关的禁用/半透明反馈（不再依赖全局 status 判断）
+        busy: s.status === 'syncing'
       }
     });
   },
 
-  /** 开关切换 */
+  /**
+   * 开关切换（★ 2026-11-15 重写）
+   *
+   * 原实现的两个缺陷：
+   *   ① 守卫是 `if (s.status === 'syncing') return;` —— 一旦某次 enable/disable 的 promise
+   *      不落地，status 永久卡 syncing，之后**所有点击都被静默拦掉**（表现为「点开关没反应」）；
+   *   ② confirmText '关闭并删除' 是 5 个字，wx.showModal 上限 4 字（同文件其它 4 处都是 4 字），
+   *      部分机型直接不弹窗/按钮异常。
+   * 现在：只用本页 `_syncBusy`（同一操作 in-flight 才拦），文案压到 4 字内。
+   */
   onSyncToggle() {
+    if (this._syncBusy) return;                          // 同一操作进行中才拦截
     const s = cloudSync.getState();
-    if (s.status === 'syncing') return;                  // 进行中防重
     if (!s.enabled) return this._enableSync();
 
     wx.showModal({
@@ -579,32 +613,47 @@ Page({
       // ★ B9′（复核修正）：如实说明影响范围 —— 影响的是**恢复能力**，不是推送本身。
       //   原方案误判为「推送会失效」（实际推送走客户端触发链路，不依赖云端 profile）。
       content: '将删除云端保存的关注与提醒数据。本机的关注与提醒**不受影响**，但换设备或清缓存后无法自动恢复。',
-      confirmText: '关闭并删除',
+      confirmText: '关闭',        // ★ 2026-11-15：4 字以内（官方上限）
+      cancelText: '再想想',
       confirmColor: '#E8443B',
       success: (r) => {
         if (!r.confirm) return;
-        this.setData({ 'sync.status': 'syncing' });
-        cloudSync.disable().then((res) => {
-          this._refreshSyncState();
-          if (res.ok) {
-            wx.showToast({ title: '已关闭并删除云端数据', icon: 'success' });
-          } else {
-            // ★ 不得报假成功：明确告知「云端数据可能仍在」
-            wx.showModal({
-              title: '云端数据未能删除',
-              content: '已停止同步，但云端数据删除失败（可能是网络问题）。可稍后点「删除云端数据」重试。',
-              showCancel: false,
-              confirmText: '知道了'
-            });
-          }
+        this._disableSync();
+      }
+    });
+  },
+
+  /** 关闭同步（本地先行：开关立刻关，云端删除失败可见「重试」） */
+  _disableSync() {
+    this._syncBusy = true;
+    this.setData({ 'sync.busy': true });
+    cloudSync.disable().then((res) => {
+      this._refreshSyncState();
+      if (res.ok) {
+        wx.showToast({ title: '已关闭并删除云端数据', icon: 'success' });
+      } else {
+        // ★ 不得报假成功：明确告知「云端数据可能仍在」，并给出可点的「重试」
+        wx.showModal({
+          title: '云端数据未能删除',
+          content: '已停止同步，但云端数据删除失败（可能是网络问题）。可稍后点状态旁的「重试」继续删除。',
+          showCancel: false,
+          confirmText: '知道了'
         });
       }
+    }).catch(() => {
+      this._refreshSyncState();
+      wx.showToast({ title: '已停止同步，云端删除稍后重试', icon: 'none' });
+    }).finally(() => {
+      // ★ 2026-11-15：无论如何复位 in-flight 标记，绝不让开关永久失去响应
+      this._syncBusy = false;
+      this.setData({ 'sync.busy': false });
     });
   },
 
   /** 开启同步：登录 → 全量上传 → 尝试恢复云端关注 */
   _enableSync() {
-    this.setData({ 'sync.status': 'syncing' });
+    this._syncBusy = true;
+    this.setData({ 'sync.busy': true });
     cloudSync.enable().then((r) => {
       if (!r.ok) {
         this._refreshSyncState();
@@ -633,12 +682,49 @@ Page({
           this._refreshSyncState();
           wx.showToast({ title: '已开启，首次同步稍后重试', icon: 'none' });
         });
+    }).catch(() => {
+      this._refreshSyncState();
+      wx.showToast({ title: '开启失败，请检查网络后重试', icon: 'none' });
+    }).finally(() => {
+      this._syncBusy = false;
+      this.setData({ 'sync.busy': false });
     });
   },
 
-  /** 同步失败时点击重试 */
+  /**
+   * 同步失败时点击重试（★ 2026-11-15 改三态）
+   *
+   * 原实现 `enabled ? syncProfile() : _enableSync()`：disable() 失败时是
+   * enabled=false + status='failed' ⇒ 用户点「重试」实际**重新开启了同步**，
+   * 云端数据也删不掉了（缺陷 1/5）。现由纯函数 resolveRetryAction 决策：
+   *   pendingDelete → 删除云端（重试删除）
+   *   enabled       → 重新上传
+   *   其它           → 开启同步
+   */
   onSyncRetry() {
-    if (cloudSync.getState().enabled) this.syncProfile();
-    else this._enableSync();
+    if (this._syncBusy) return;
+    const action = cloudSync.resolveRetryAction(cloudSync.getState());
+    if (action === 'delete') return this._retryPendingDelete();
+    if (action === 'sync') return this.syncProfile();
+    return this._enableSync();
+  },
+
+  /** 重试删除云端数据（只删，不开启同步） */
+  _retryPendingDelete() {
+    this._syncBusy = true;
+    this.setData({ 'sync.busy': true });
+    cloudSync.retryPendingDelete().then((r) => {
+      this._refreshSyncState();
+      wx.showToast({
+        title: (r && r.ok) ? '云端数据已删除' : '仍未能删除，请检查网络',
+        icon: 'none'
+      });
+    }).catch(() => {
+      this._refreshSyncState();
+      wx.showToast({ title: '仍未能删除，请检查网络', icon: 'none' });
+    }).finally(() => {
+      this._syncBusy = false;
+      this.setData({ 'sync.busy': false });
+    });
   },
 });
