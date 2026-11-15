@@ -1283,11 +1283,13 @@ check('names：★ 全库禁止再内联该规则（白名单外一律 FAIL）',
   //  实测教训：首版把判定写在 `if (!k)` 处 ⇒ 被前面的 `if (m.phase !== 'recent') return true;`
   //  （v1.1 R1「LP live/upcoming 永不剔除」）早退挡住 ⇒ **完全不生效**（重复卡仍在）。
   //  ⇒ 本守卫锁定"判定必须出现在该早退**之前**"这一顺序约束（顺序错了功能就没了，静态可查）。
+  //  ★ 2026-11-15（第三批 · 第二刀）：该段已搬到 utils/leagueSeriesView.js（mergeLiquipediaSeries），
+  //    守卫跟随到新文件（若再搬家请同步此处，否则会以"未找到调用点"报红）。
   check('★ 位置守卫：占位卡剔除判定必须在 live/upcoming 早退之前（否则静默失效）', () => {
     const fs = require('fs');
     const path = require('path');
     const src = fs.readFileSync(path.join(__dirname, '..', '..',
-      'subpackages', 'detail', 'league-detail', 'league-detail.js'), 'utf8');
+      'utils', 'leagueSeriesView.js'), 'utf8');
     const iCall = src.indexOf('placeholderCoveredByReal(m, openDotaKeys');
     const iEarly = src.indexOf("if (m.phase !== 'recent') return true;");
     assert(iCall > 0, '未找到占位卡剔除的调用点（是否被改名/删除？）');

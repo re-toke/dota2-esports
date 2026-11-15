@@ -26,6 +26,7 @@ const TESTS = [
   { file: 'scripts/test/test-bo.js' },
   { file: 'scripts/test/test-formatters.js' },
   { file: 'scripts/test/test-league-meta-view.js' },
+  { file: 'scripts/test/test-league-series-view.js' },
   { file: 'scripts/test/test-incremental.js' },
   { file: 'scripts/test/test-api-inflight.js' },
   { file: 'scripts/test/test-remote-curation.js' },
