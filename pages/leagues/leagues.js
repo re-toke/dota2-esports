@@ -35,6 +35,16 @@ const sources = require('../../utils/sources.js');
 //   ⚠️ 新增任何「按赛事名比对」的逻辑都必须复用本函数，不要再内联一套 ——
 //      本项目已因各自内联而**复发三次**（haglund 匹配 → 列表去重 → 全局键）。
 const leagueKey = sources.leagueKey;
+// ★ 2026-11-15（跨源同一性约束）：从 Liquipedia URL 提取 slug。
+//   实测 Haglund 的对局带 `leagueUrl: https://liquipedia.net/dota2/1win_Essence/3#Playoffs`，
+//   而同一赛事在 OpenDota/curation 里叫 "1win Essence III"、Haglund 用 LP 简称 "1w Essence III"
+//   ⇒ 仅按名字去重必然漏（真机出现「同一赛事两张卡」）。slug 是赛事的稳定身份，优先用它归并。
+function _lpSlugOf(url) {
+  return String(url || '')
+    .replace(/^https?:\/\/[^/]+\/(?:dota2\/)?/i, '')
+    .replace(/[#?].*$/, '')
+    .replace(/^\/+|\/+$/g, '');
+}
 const stratz = require('../../utils/stratz.js');
 // ★ 2026-09-21：cloudProxy 曾用于 trySupabaseUpcoming（原 tryCloudUpcoming）的可用性判断；
 //   该路径改为 Supabase 直读后不再需要，故移除导入（保留会变成未使用变量）。
@@ -1426,11 +1436,18 @@ Page({
         if (!ln || !m.startTime) return;
         const hasTeams = !!(m.team1Name || m.team2Name);
         if (!evMap[ln]) {
-          evMap[ln] = { name: ln, start: m.startTime, end: m.startTime, count: hasTeams ? 1 : 0 };
+          evMap[ln] = { name: ln, slug: '', start: m.startTime, end: m.startTime, count: hasTeams ? 1 : 0 };
         } else {
           evMap[ln].start = Math.min(evMap[ln].start, m.startTime);
           evMap[ln].end = Math.max(evMap[ln].end, m.startTime);
           if (hasTeams) evMap[ln].count++;
+        }
+        // ★ 2026-11-15（跨源同一性）：Haglund 每场都带 leagueUrl（LP 页面），
+        //   取首个非空 slug 作为该赛事的**唯一身份**，供 curation 按 slug 归并。
+        if (!evMap[ln].slug) {
+          // ⚠️ haglund.normalizeMatch 产出的是下划线前缀字段（_leagueUrl），兼容无前缀写法。
+          const s = _lpSlugOf(m._leagueUrl || m.leagueUrl);
+          if (s) evMap[ln].slug = s;
         }
       });
 
@@ -1438,18 +1455,38 @@ Page({
       const horizon = now + config.leagueWindow.upcomingRangeSec;
       const norm = leagueKey;   // ★ 2026-09-19 统一去重键（见文件顶部说明）
       const seen = {};
-      results.forEach((r) => { const k = norm(r.name); if (k) seen[k] = true; });
+      const seenIds = {};
+      results.forEach((r) => {
+        const k = norm(r.name);
+        if (k) seen[k] = true;
+        if (r && r.leagueid != null) seenIds[String(r.leagueid)] = true;
+      });
 
       // 3) 与已有 results 去重后合并
       Object.keys(evMap).forEach((ln) => {
         const ev = evMap[ln];
         if (ev.start > horizon) return;       // 超出未来 180 天
         if (ev.end < now - 86400) return;     // 全部场次已结束超 24h（无 ongoing 价值）
-        const k = norm(ev.name);
+        // ★ 2026-11-15：先按 **slug → 名称** 反查 curation，命中则用权威规范名参与去重。
+        //   否则 Haglund 的简称（"1w Essence III"）与 OpenDota/curation 的
+        //   "1win Essence III" 键不同 → 同一赛事出现两条卡（实测重复）。
+        let _curHit = null;
+        try {
+          _curHit = curation.curatedEventFor(ev.name, { game: 'dota2', slug: ev.slug || undefined });
+        } catch (e) { /* curation 查询失败静默 */ }
+        const _canonical = (_curHit && _curHit.canonical) || '';
+        const _evName = _canonical || ev.name;
+        const k = norm(_evName);
         if (!k) return;
-        if (seen[k]) {
+        // ★ 2026-11-15（身份约束）：**同 leagueId = 同赛事**，优先级高于名称。
+        //   名称归一被跨源写法差异击穿时（"1w Essence III" vs "1win Essence III"），
+        //   leagueId 仍能兜住 —— 避免同一赛事在「进行中」和「即将到来」各出现一张卡。
+        const _curLid = (_curHit && _curHit.leagueId != null) ? String(_curHit.leagueId) : '';
+        const _hitExisting = (_curLid && results.find((r) => String(r.leagueid) === _curLid))
+          || results.find((r) => norm(r.name) === k);
+        if (seen[k] || (_curLid && seenIds[_curLid])) {
           // 已存在：若 haglund 数据更完整（end 更晚或 start 更早），修正日期
-          const existing = results.find((r) => norm(r.name) === k);
+          const existing = _hitExisting;
           if (existing && ev.end > (existing.endDate || 0)) {
             existing.endDate = ev.end;
             existing.dateRange = util.formatDateRange(existing.startDate, ev.end);
@@ -1473,25 +1510,31 @@ Page({
         //   命中 curation 后可用真实 leagueId（详情页跳转更可靠）。
         let _curTier = null;
         let _curLeagueId = null;
-        try {
-          const curHit = curation.curatedEventFor(ev.name, { game: 'dota2' });
-          if (curHit) {
-            _curTier = curHit.tier || null;
-            _curLeagueId = (curHit.leagueId != null) ? curHit.leagueId : null;
-          }
-        } catch (e) { /* curation 查询失败静默 */ }
+        // ★ 2026-11-15：复用上面按 slug→名称 的命中结果（避免重复查询），
+        //   并让卡面直接使用 curation 规范名（"1w Essence III" → "1win Essence III"）。
+        if (_curHit) {
+          _curTier = _curHit.tier || null;
+          _curLeagueId = (_curHit.leagueId != null) ? _curHit.leagueId : null;
+        }
         const grade = (_curTier && _curTier.grade) ? _curTier.grade : 'A';
         const rank = (_curTier && _curTier.rank != null) ? _curTier.rank : 2;
         const label = (_curTier && _curTier.label) ? _curTier.label : 'A级';
-        const cardStatus = upcomingCardStatus({ start: ev.start, end: ev.end }, now);
+        // ★ 2026-11-15：状态约束 —— Haglund 只给「未来场次」，其 start 天然 ≥ now，
+        //   会把**已开赛**的赛事误判成「即将到来」。故优先用 curation 权威赛期窗口判定；
+        //   无 curation 赛期时才退回 haglund 的场次窗口（此时 start 仍 ≥ now，标 upcoming 正确）。
+        //   ⚠️ 不可用 Math.min(ev.start, now) 强行拉成 ongoing —— 那会让**所有**未来赛事都变进行中。
+        const _winStart = (_curHit && _curHit.start) || ev.start;
+        const _winEnd = (_curHit && _curHit.end) || ev.end;
+        const cardStatus = upcomingCardStatus({ start: _winStart, end: _winEnd }, now);
         const cardBadge = statusBadgeOf(cardStatus);
-        const daysToStart = Math.ceil((ev.start - now) / 86400);
+        const daysToStart = Math.ceil((_winStart - now) / 86400);
         const t = tagThemeOf(grade);
         const cardId = (_curLeagueId != null) ? _curLeagueId : fakeId;
+        if (cardId != null) seenIds[String(cardId)] = true;
         results.push({
           leagueid: cardId,
           legacyFakeId: fakeId,
-          name: ev.name,
+          name: _evName,
           grade: grade,
           rank: rank,
           tierClass: 'tier-' + grade.toLowerCase(),
@@ -1504,20 +1547,21 @@ Page({
           tagTheme: t.theme,
           tagVariant: t.variant,
           followed: follow.isFollowed('leagues', cardId),
-          startDate: ev.start,
-          endDate: ev.end,
+          startDate: _winStart,
+          endDate: _winEnd,
           status: cardStatus,
           statusText: cardBadge.text,
           statusColor: cardBadge.color,
-          dateRange: util.formatDateRange(ev.start, ev.end),
+          dateRange: util.formatDateRange(_winStart, _winEnd),
           daysToStart: daysToStart,
           countdownText: util.countdownTextOf(daysToStart, cardStatus === 'ongoing'),
           matchCount: ev.count,
-          earliest: ev.start,
-          latest: ev.end,
-          _win: { startDate: ev.start, endDate: ev.end }
+          earliest: _winStart,
+          latest: _winEnd,
+          _win: { startDate: _winStart, endDate: _winEnd }
         });
-        console.log('[leagues] mergeHaglundUpcoming: 新增', ev.name, 'start=' + new Date(ev.start * 1000).toISOString());
+        console.log('[leagues] mergeHaglundUpcoming: 新增', _evName, 'slug=' + (ev.slug || '-'),
+          'start=' + new Date(_winStart * 1000).toISOString(), 'status=' + cardStatus);
       });
     }.bind(this)).catch(function (e) {
       // haglund 失败不应阻塞列表加载
@@ -1525,6 +1569,17 @@ Page({
     });
   },
 
+  // ===== 赛事 Tab 显示条件约束（v1 · 2026-11-15）=====
+  // 一处收口所有 Tab 的准入/互斥规则，新增数据源时必须逐条对照：
+  //   C1 身份唯一：同一赛事只能有一张卡。身份优先级 **LP slug > leagueId > 归一化赛事名**
+  //      （见 curation SLUG_INDEX / mergeHaglundUpcoming / mergeAllWithUpcoming）。
+  //   C2 状态唯一：status 由**赛期窗口**单点判定（curation 权威窗口优先），ongoing 优先；
+  //      三个 Tab 按 status 互斥分流 ⇒ 同一赛事不可能同时出现在两个 Tab。
+  //   C3 时间视野：upcoming 仅收 start ≤ now+180d；end < now-24h 的赛事不进 upcoming 链路。
+  //   C4 收录门槛：白名单准入（tiers）+ C 级/rank≤0 一律不展示（LP Notability 的本地近似：
+  //      LP 只收「有 DotaTV 门票 + ≥$500 现金奖池」的赛事，业余/无奖池赛事不进主列表）。
+  //   C5 预选赛：默认不进主列表（showQualifiers=false），与正赛分开成卡、绝不合并进正赛数据。
+  //   C6 正赛口径：场次/队伍/赛期统计只算 main（utils/stages.js），预选赛单独成段。
   applyAndSlice(reset) {
     this.syncFilterBadge();
     const f = this.data.filter;
@@ -1538,7 +1593,19 @@ Page({
     let arr;
     if (f === 'upcoming') {
       // 仅显示「即将到来」状态：已开赛的进行中赛事归入「进行中」tab，不在此重复出现
-      const fromList = (this.upcomingList || []).filter((x) => gradeMatch(x) && x.status === 'upcoming').slice();
+      // ★ 2026-11-15（跨 Tab 唯一性约束）：同一 leagueId 若已在主列表（OpenDota）有卡且状态
+      //   不是 upcoming（进行中/已结束），则**以主列表为准**，远程卡不再重复展示。
+      //   这是「同一赛事同时出现在进行中 + 即将到来」的最后一道防线 ——
+      //   即使两侧状态判定分叉（远程源只有未来场次，天然像 upcoming），也不会出两张卡。
+      const _allStatusById = {};
+      (this.allLeagues || []).forEach((x) => {
+        if (x && x.leagueid != null) _allStatusById[String(x.leagueid)] = x.status;
+      });
+      const fromList = (this.upcomingList || []).filter((x) => {
+        if (!gradeMatch(x) || x.status !== 'upcoming') return false;
+        const st = _allStatusById[String(x.leagueid)];
+        return !(st && st !== 'upcoming');
+      }).slice();
       // ★ 2026-09-09（三源 miss 兜底 · 口径脱节修复）：upcomingList 的回退链
       //   （表预热缓存 → 串行查询）全 miss 时（如 curation 未收录 9 月赛事、
       //   STRATZ schema 失效、LP slug 缺失），allLeagues 中 OpenDota earliest 在未来的赛事
@@ -1557,9 +1624,16 @@ Page({
       //     判重依据与实际数据形态不匹配）。
       //   修复：改按 `leagueKey`（归一化赛事名）判重 —— 与「全部」「进行中」Tab 口径统一。
       const _seenUp = {};
-      fromList.forEach((x) => { const k = leagueKey(x.displayName || x.name); if (k) _seenUp[k] = true; });
+      const _seenUpIds = {};
+      fromList.forEach((x) => {
+        const k = leagueKey(x.displayName || x.name);
+        if (k) _seenUp[k] = true;
+        if (x && x.leagueid != null) _seenUpIds[String(x.leagueid)] = true;
+      });
       const fromAll = (this.allLeagues || []).filter((x) =>
-        x.status === 'upcoming' && gradeMatch(x) && !_seenUp[leagueKey(x.displayName || x.name)]);
+        x.status === 'upcoming' && gradeMatch(x)
+        && !_seenUp[leagueKey(x.displayName || x.name)]
+        && !_seenUpIds[String(x.leagueid)]);
       // ★ v8.13 诊断：upcoming tab 数据流透出（确认战队筛选豁免已生效）
       console.log('[leagues] upcoming tab: 远程卡/实时卡', fromList.length,
         '+ allLeagues 兜底', fromAll.length, '| 战队筛选已豁免 ★v8.13');
@@ -1990,5 +2064,8 @@ Page({
 //   ⚠️ 小程序侧 Page() 已注册完毕，exports 不参与任何运行时逻辑。
 module.exports = {
   shouldShowLeague: shouldShowLeague,
-  dedupeByDisplayName: dedupeByDisplayName
+  dedupeByDisplayName: dedupeByDisplayName,
+  // ★ 2026-11-15：导出供回归测试（同一赛事跨源重复卡片的防线，见 test-league-qualifier-filter T5/T6）
+  mergeAllWithUpcoming: mergeAllWithUpcoming,
+  _lpSlugOf: _lpSlugOf
 };

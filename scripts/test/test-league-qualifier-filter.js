@@ -135,5 +135,61 @@ if (typeof shouldShowLeague !== 'function') {
     '实际: ' + JSON.stringify(single[0] && single[0].aliasLeagueIds));
 })();
 
+// ===== T5：跨源同一性 —— Liquipedia slug 优先于赛事名（同一赛事不得出现两张卡）=====
+// 真实事故（2026-11-15 真机）：「1win Essence III」同时出现在「进行中」和「即将到来」，
+//   因为 Haglund 用 LP 简称 "1w Essence III - Playoffs"（curation 名 "1win Essence III"），
+//   名称归一后仍不同键 → 两条卡。LP 页面 slug 才是唯一身份，须优先按 slug 归并。
+(function () {
+  const curation = require(path.resolve(__dirname, '..', '..', 'utils', 'curation.js'));
+  const bySlug = curation.curatedEventFor('1w Essence III - Playoffs', { game: 'dota2', slug: '1win_Essence/3' });
+  assert('T5: Haglund 简称 + LP slug → 命中 curation', !!bySlug && bySlug.canonical === '1win Essence III',
+    '实际: ' + JSON.stringify(bySlug && bySlug.canonical));
+  assert('T5: 命中后带真实 leagueId（详情页跳转不靠负哈希 fakeId）', !!bySlug && bySlug.leagueId === 20486,
+    '实际: ' + (bySlug && bySlug.leagueId));
+  assert('T5: curation 条目带权威赛期窗口（用于状态判定）', !!bySlug && bySlug.start > 0 && bySlug.end > bySlug.start,
+    '实际: ' + JSON.stringify(bySlug && { start: bySlug.start, end: bySlug.end }));
+
+  // slug 允许直接传 URL（带 #锚点 / ?query），应与裸 slug 等价
+  const byUrl = curation.curatedEventFor('Whatever Name', {
+    game: 'dota2', slug: 'https://liquipedia.net/dota2/1win_Essence/3#Playoffs' });
+  assert('T5: URL 形式 slug（含 #锚点）同样命中', !!byUrl && byUrl.canonical === '1win Essence III',
+    '实际: ' + JSON.stringify(byUrl && byUrl.canonical));
+
+  // 双保险：leagueUrl 缺失时，靠别名仍能命中（不再分叉）
+  const byAlias = curation.curatedEventFor('1w Essence III', { game: 'dota2' });
+  assert('T5: slug 缺失时别名兜底命中', !!byAlias && byAlias.canonical === '1win Essence III',
+    '实际: ' + JSON.stringify(byAlias && byAlias.canonical));
+
+  // 不误伤相邻届：Essence II 的 slug 必须落到 II
+  const prev = curation.curatedEventFor('1w Essence II', { game: 'dota2', slug: '1win_Essence/2' });
+  assert('T5: 相邻届不串味（/2 → Essence II）', !!prev && /Essence II$/.test(prev.canonical),
+    '实际: ' + JSON.stringify(prev && prev.canonical));
+})();
+
+// ===== T6：同 leagueId = 同赛事（跨 Tab 去重的最后一道防线）=====
+(function () {
+  const mergeAllWithUpcoming = leagues.mergeAllWithUpcoming;
+  assert('T6: mergeAllWithUpcoming 已导出', typeof mergeAllWithUpcoming === 'function',
+    '实际: ' + typeof mergeAllWithUpcoming);
+  if (typeof mergeAllWithUpcoming !== 'function') return;
+
+  const t = Math.floor(Date.UTC(2026, 10, 12) / 1000);
+  // 「进行中」Tab 的 OpenDota 卡（有真实 leagueid）
+  const ongoing = { leagueid: 20486, name: '1win Essence III', displayName: '1win Essence III',
+    startDate: t, endDate: t + 6 * 86400, status: 'ongoing', matchCount: 85, grade: 'S' };
+  // 「即将到来」Tab 的 Haglund 卡（slug 归并后已拿到同一 leagueid）
+  const fromHaglund = { leagueid: 20486, name: '1win Essence III', displayName: '1win Essence III',
+    startDate: t + 3 * 86400, endDate: t + 7 * 86400, status: 'upcoming', matchCount: 4, grade: 'S' };
+  const out = mergeAllWithUpcoming([ongoing], [fromHaglund]);
+  assert('T6: 同 leagueId 只保留 1 张卡', out.length === 1, '实际 ' + out.length);
+  assert('T6: 保留进行中（已有真实赛期的那条）', out[0] && out[0].status === 'ongoing',
+    '实际: ' + (out[0] && out[0].status));
+
+  // 名称归一（无 leagueId 的负 fakeId 卡）也应被吸收
+  const fake = { leagueid: -2345678, name: '1win Essence 3', startDate: t + 3 * 86400, status: 'upcoming' };
+  const out2 = mergeAllWithUpcoming([ongoing], [fake]);
+  assert('T6: 规范名变体（Essence 3）按名归并', out2.length === 1, '实际 ' + out2.length);
+})();
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 if (fail > 0) process.exit(1);

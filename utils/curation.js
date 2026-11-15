@@ -839,9 +839,12 @@ const CURATED_EVENTS = [
   //   （1win_Essence/3）。OpenDota 同时存在同名 leagueid 20177（0 场）与 20486（85 场），
   //   此处以 leagueId=20486 精确 pin，避免落到 0 场的空壳联赛。
   //   ⚠️ aliases 里不能放 '1win Essence'（会被 Essence II 的别名抢占，两届互相串味）；
+  //   ★ 2026-11-15：补 '1w Essence III/3' —— Haglund 用 LP 简称 "1w Essence III - Playoffs"，
+  //     这是「同一赛事两张卡」的另一个入口（名称归一后仍与 "1win" 不同键）。slug 归并为主，
+  //     此处别名做双保险（避免 leagueUrl 缺失时再次分叉）。
   //   ⚠️ 不加 participants：正赛 12 队名单尚未完整确认，宁可空（不写占位/猜测）。
   { canonical: '1win Essence III', tier: { grade: 'S', rank: 3, label: 'S级' },
-    aliases: ['1win Essence 3', '1win essence iii'],
+    aliases: ['1win Essence 3', '1win essence iii', '1w Essence III', '1w Essence 3'],
     leagueId: 20486,
     year: 2026,
     start: Math.floor(Date.UTC(2026, 10, 12) / 1000),
@@ -1049,10 +1052,27 @@ function buildLookups(events, teams) {
   //   窗口内即命中该届。多届均未命中窗口时回退最后一条（宁可错配也不空手——
   //   名称匹配兜底仍可纠正；空手会让「修复 A 影响 B」防线整体失效）。
   const LEAGUE_ID_INDEX = {};
+  // ★ 2026-11-15（跨源同一性约束）：Liquipedia slug → 事件。
+  //   为什么需要：不同数据源对同一赛事的写法差异极大（Haglund 用 LP 的简称
+  //   "1w Essence III - Playoffs"，OpenDota/curation 用 "1win Essence III"），
+  //   仅靠名称归一无法互认 → 列表出现「同一赛事两条卡」（实测 1win Essence III）。
+  //   而 **LP 页面 slug 是赛事的唯一稳定标识**（同一页面 = 同一赛事），
+  //   故凡是能拿到 slug 的来源（Haglund 的 leagueUrl、LP 抓取结果）优先按 slug 归并。
+  const SLUG_INDEX = {};
+  const normSlug = (s) => String(s || '')
+    .replace(/^https?:\/\/[^/]+\/(?:dota2\/)?/i, '')
+    .replace(/[#?].*$/, '')
+    .replace(/^\/+|\/+$/g, '')
+    .replace(/[ \t]+/g, '_')
+    .toLowerCase();
   (events || []).forEach((ev) => {
     if (!ev || !ev.canonical) return;
     EVENT_INDEX[consensus.normName(ev.canonical)] = ev;
     (ev.aliases || []).forEach((a) => { EVENT_INDEX[consensus.normName(a)] = ev; });
+    if (ev.liquipediaSlug) {
+      const sk = normSlug(ev.liquipediaSlug);
+      if (sk) SLUG_INDEX[sk] = ev;
+    }
     if (ev.leagueId != null) {
       (LEAGUE_ID_INDEX[ev.leagueId] = LEAGUE_ID_INDEX[ev.leagueId] || []).push(ev);
     }
@@ -1206,6 +1226,12 @@ function buildLookups(events, teams) {
       if (ctx && ctx.game && entry.game && entry.game !== ctx.game) return null;
       return entry;
     };
+    // 0. ★ 2026-11-15：Liquipedia slug 显式匹配（最高优先级，跨源同一性）
+    //    同一 LP 页面 = 同一赛事；用于 Haglund 等「名称写法不同但带 leagueUrl」的来源。
+    if (ctx && ctx.slug) {
+      const hit = SLUG_INDEX[normSlug(ctx.slug)];
+      if (hit) return validGame(hit);
+    }
     // 1. 显式 leagueId 匹配（最高优先级，绕过别名漂移；name 为空也可命中——关注页只传 id）
     //    仅当调用方提供了 leagueId 且确实有对应 pin 时返回；其余情况走名称匹配。
     //    ★ 2026-08-31 P0：一 ID 多届时按 leagueIdWindow 判届（ctx.now 缺省用当前时间）。

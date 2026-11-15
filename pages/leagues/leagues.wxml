@@ -195,7 +195,7 @@
             <text wx:elif="{{item.matchCount}}"> · {{item.matchCount}} 场{{item.preMain ? '（含预选赛）' : ''}}</text>
             <text wx:if="{{item.prizePool}}"> · {{item.prizePool}}</text>
           </view>
-          <text class="src-inline src-{{item.source === 'community' ? 'curation' : (item.source === 'liquipedia' ? 'liquipedia' : (item.source === 'stratz' ? 'stratz' : 'opendota'))}}">{{item.source === 'community' ? '社区分级' : (item.source === 'liquipedia' ? 'Liquipedia' : (item.source === 'stratz' ? 'STRATZ' : 'OpenDota'))}}</text>
+          <text class="src-inline src-{{item.source === 'community' ? 'curation' : (item.source === 'liquipedia' || item.source === 'haglund' ? 'liquipedia' : (item.source === 'stratz' ? 'stratz' : 'opendota'))}}">{{item.source === 'community' ? '社区分级' : (item.source === 'haglund' ? 'Liquipedia' : (item.source === 'liquipedia' ? 'Liquipedia' : (item.source === 'stratz' ? 'STRATZ' : 'OpenDota')))}}</text>
         </view>
         <!-- 即将到来：突出显示倒计时 -->
         <view class="league-countdown" wx:if="{{filter === 'upcoming' && item.countdownText}}">
