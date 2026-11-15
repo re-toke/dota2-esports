@@ -96,7 +96,7 @@
         <view class="fp-row" bindtap="onToggleQualifiers" hover-class="fp-row-hover" aria-role="switch" aria-checked="{{showQualifiers}}" aria-label="显示预选赛赛事">
           <view class="fp-row-main">
             <text class="fp-row-title">预选赛赛事</text>
-            <text class="fp-row-sub">{{showQualifiers ? '正在显示各赛区海选 / 资格赛' : (qualifierHidden ? '已隐藏 ' + qualifierHidden + ' 个各赛区海选 / 资格赛' : '当前没有可显示的预选赛')}}</text>
+            <text class="fp-row-sub">{{qualifierCount ? (showQualifiers ? '正在显示 ' + qualifierCount + ' 个各赛区海选 / 资格赛' : '已隐藏 ' + qualifierCount + ' 个各赛区海选 / 资格赛') : (filter === 'upcoming' ? '「即将」当前没有预选赛数据' : '本 Tab 没有可显示的预选赛')}}</text>
           </view>
           <view class="fp-switch {{showQualifiers ? 'on' : ''}}"><view class="fp-switch-knob"></view></view>
         </view>

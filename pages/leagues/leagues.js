@@ -294,8 +294,11 @@ Page({
     // ★ 2026-11-15（赛事收录口径收紧）：是否在主列表展示预选赛。
     //   false（默认）= 只留正赛，预选赛不进主列表；true = 用户显式开启后全部展示（状态持久化）。
     showQualifiers: false,
-    // ★ 2026-11-15：被隐藏的预选赛数量（applyAndSlice 计算），用于工具条下方的说明条。
+    // ★ 2026-11-15：被隐藏的预选赛数量（applyAndSlice 计算），用于筛选抽屉里的开关副标题。
     qualifierHidden: 0,
+    // ★ 2026-11-15：**当前 Tab 的预选赛总数**（无论开关是否打开）——
+    //   开关副标题/打开后的 Toast 都用它，用户能明确知道「有多少、是否真的多出来了」。
+    qualifierCount: 0,
     // 1.3 排序模式：smart=智能排序（关注置顶+S级优先+时间）/ time=按时间倒序（默认）
     sortMode: 'time',
     gradeCounts: { all: 0, sss: 0, s: 0, a: 0, b: 0 },
@@ -917,6 +920,19 @@ Page({
     try { wx.setStorageSync(QUALIFIER_KEY, next); } catch (e) { /* 存储异常：仅本次会话生效 */ }
     this.syncFilterBadge();
     this.applyAndSlice(true);
+    // ★ 2026-11-15（开关反馈）：只改列表内容时用户很难察觉 —— 预选赛按时间排序多在列表后段，
+    //   且「即将」Tab 的数据源（curation / Haglund / upcoming_schedule）**实测不含预选赛**，
+    //   打开后自然"毫无动静"。这里用 Toast 明确告知「有多少 / 为什么没有」。
+    const n = this.data.qualifierCount || 0;
+    let title;
+    if (!next) {
+      title = n ? '已隐藏 ' + n + ' 个预选赛' : '已隐藏预选赛赛事';
+    } else if (n) {
+      title = '已显示 ' + n + ' 个预选赛';
+    } else {
+      title = (this.data.filter === 'upcoming') ? '「即将」暂无预选赛数据' : '本 Tab 没有可显示的预选赛';
+    }
+    try { wx.showToast({ title: title, icon: 'none', duration: 1600 }); } catch (e) { /* 非小程序环境 */ }
   },
 
   // ★ 2026-11-15：正赛口径组数（series）—— 只对「同一 leagueid 混有预选赛」的赛事发起，
@@ -965,13 +981,18 @@ Page({
   // 重置等级/排序/战队筛选为默认
   resetFilters() {
     this.teamLeagueIds = null;
+    // ★ 2026-11-15：重置也要复位「预选赛」开关（含持久化），否则用户点"重置"后仍是打开态，
+    //   角标与列表口径不一致。
+    try { wx.setStorageSync(QUALIFIER_KEY, false); } catch (e) { /* 存储异常忽略 */ }
     this.setData({
       filterPanel: false,
       gradeFilter: 'all',
       sortMode: 'time',
       teamFilter: [],
-      teamActive: false
+      teamActive: false,
+      showQualifiers: false
     });
+    this.syncFilterBadge();
     this.applyAndSlice(true);
   },
 
@@ -1677,17 +1698,22 @@ Page({
     //   ⚠️ 只影响列表展示：this.allLeagues / this._leagueMap / 关注态保持不变，
     //      点击详情跳转、关注数据、gradeCounts 统计口径均不受影响。
     const showQ = this.data.showQualifiers;
+    // ★ 2026-11-15（开关可感知）：先统计「当前 Tab 的预选赛总数」（与开关状态无关），
+    //   供筛选抽屉副标题 + 切换 Toast 使用 —— 用户能确切知道本 Tab 有没有预选赛、有多少。
+    //   成本：多一次 O(n) 纯内存遍历（n ≤ 800），相对渲染可忽略。
+    let _totalQ = 0;
+    arr.forEach((x) => { if (!shouldShowLeague(x, false)) _totalQ++; });
     let _hiddenQ = 0;
     arr = arr.filter((x) => {
       const ok = shouldShowLeague(x, showQ);
       if (!ok) _hiddenQ++;
       return ok;
     });
-    // ★ 2026-11-15（可读性优化）：把「被隐藏了多少个预选赛」显式告诉用户。
-    //   原实现只在工具条放一个「含预选赛」开关，和状态 chip 混在一起，用户不知道它是什么、
-    //   也不知道打开后会发生什么；改为工具条下方一条可点击的说明条（已隐藏 N 个… / 当前显示…）。
-    if (this.data.qualifierHidden !== _hiddenQ) {
-      this.setData({ qualifierHidden: _hiddenQ });
+    // ★ 2026-11-15（可读性优化）：把预选赛数量显式告诉用户 ——
+    //   筛选抽屉里的开关副标题（已隐藏 N 个 / 正在显示 N 个）与切换 Toast 都读这里，
+    //   避免"打开了开关却看不出区别"（预选赛按时间排序多在列表后段）。
+    if (this.data.qualifierHidden !== _hiddenQ || this.data.qualifierCount !== _totalQ) {
+      this.setData({ qualifierHidden: _hiddenQ, qualifierCount: _totalQ });
     }
     // 排序：默认按时间倒序；智能排序（关注置顶 + S级优先 + 时间）为高级模式
     if (this.data.sortMode === 'smart') {
