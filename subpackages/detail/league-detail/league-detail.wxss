@@ -1057,6 +1057,10 @@
   width: 100%;
   height: 100%;
   display: block;
+  /* ★ 2026-11-15：白色/浅色队标（XG、DO KONCA 等）在白底 chip 上几乎不可见；
+     极淡的 alpha 轮廓描边提升可辨识度，深色/彩色队标基本无感。 */
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.45)) drop-shadow(0 0 2px rgba(0, 0, 0, 0.18));
+  -webkit-filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.45)) drop-shadow(0 0 2px rgba(0, 0, 0, 0.18));
 }
 
 /* ===== 三段式分段分隔符（2026-07-28 新增） ===== */

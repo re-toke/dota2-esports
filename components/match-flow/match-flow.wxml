@@ -59,7 +59,7 @@
         <!-- v4.2：左右两侧结构完全一致（居中竖排），靠 DOM 顺序定左右，
              不再需要 .mf-side--left / --right 修饰符（v4.1 的镜像对齐样式已废弃） -->
         <view class="mf-side">
-          <image-fallback class="mf-logo" src="{{item.teamA.logo}}" placeholder="{{item.teamA.tag}}" mode="aspectFill" />
+          <image-fallback class="mf-logo" src="{{item.teamA.logo}}" placeholder="{{item.teamA.tag}}" mode="aspectFill" shadow="{{true}}" />
           <text class="mf-name {{item.winA ? 'mf-name--win' : ''}}">{{item.teamA.name}}</text>
         </view>
 
@@ -88,7 +88,7 @@
         </view>
 
         <view class="mf-side">
-          <image-fallback class="mf-logo" src="{{item.teamB.logo}}" placeholder="{{item.teamB.tag}}" mode="aspectFill" />
+          <image-fallback class="mf-logo" src="{{item.teamB.logo}}" placeholder="{{item.teamB.tag}}" mode="aspectFill" shadow="{{true}}" />
           <text class="mf-name {{item.winB ? 'mf-name--win' : ''}}">{{item.teamB.name}}</text>
         </view>
       </view>

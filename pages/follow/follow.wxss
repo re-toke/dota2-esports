@@ -295,6 +295,9 @@
   height: 100%;
   border-radius: inherit;
   background: var(--card-bg-inset);
+  /* ★ 2026-11-15：白色/浅色队标（XG、DO KONCA 等）在白底上不可见 → alpha 轮廓描边 */
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.45)) drop-shadow(0 0 2px rgba(0, 0, 0, 0.18));
+  -webkit-filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.45)) drop-shadow(0 0 2px rgba(0, 0, 0, 0.18));
 }
 .follow-name {
   flex: 1;

@@ -15,7 +15,7 @@
      logoUrlOf + buildLpLiveSeries 类型净化）。此处保留原条件。 -->
 <image
     wx:if="{{src && !failed}}"
-    class="imgfb-img {{loaded ? 'imgfb-img--loaded' : ''}}"
+    class="imgfb-img {{loaded ? 'imgfb-img--loaded' : ''}} {{shadow ? 'imgfb-img--shadow' : ''}}"
     src="{{useSrc || src}}"
     mode="{{mode}}"
     lazy-load="{{true}}"

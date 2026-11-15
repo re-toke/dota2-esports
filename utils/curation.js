@@ -951,7 +951,9 @@ const CURATED_TEAMS = {
   10150538: { name: 'LGD Gaming', tag: 'LGD', country: 'CN', tier: { grade: 'S', label: 'S-Tier' },
               aliases: ['lgd', 'lgdgaming', 'psglgd'] },
   7119388:  { name: 'Team Spirit', tag: 'TS', country: 'RU', tier: { grade: 'SSS', label: 'TI 参赛' },
-              logo: 'https://liquipedia.net/commons/images/thumb/f/f2/Team_Spirit_2022_full_lightmode.png/320px-Team_Spirit_2022_full_lightmode.png',
+              // ★ 2026-11-15 二次校正：改用「方形徽标」而非 full 横版字标 ——
+              //   参赛队伍/对阵头像为方形 aspectFill，横版字标会被裁成半截（实测）。
+              logo: 'https://liquipedia.net/commons/images/thumb/6/66/Team_Spirit_2022_lightmode.png/320px-Team_Spirit_2022_lightmode.png',
               aliases: ['teamspirit', 'spirit'] },
   36:       { name: 'Natus Vincere', tag: 'NAVI', country: 'UA', tier: { grade: 'SSS', label: 'TI 参赛' },
               logo: 'https://liquipedia.net/commons/images/thumb/3/3f/Natus_Vincere_2021_lightmode.png/320px-Natus_Vincere_2021_lightmode.png',
@@ -959,7 +961,8 @@ const CURATED_TEAMS = {
   2586976:  { name: 'OG', tag: 'OG', country: 'EU', tier: { grade: 'SSS', label: 'TI 参赛' },
               aliases: ['og'] },
   2163:     { name: 'Team Liquid', tag: 'TL', country: 'NL', tier: { grade: 'SSS', label: 'TI 参赛' },
-              logo: 'https://liquipedia.net/commons/images/thumb/f/f5/Team_Liquid_2024_full_lightmode.png/320px-Team_Liquid_2024_full_lightmode.png',
+              // 方形徽标（lightmode：深蓝盾，白底可见）
+              logo: 'https://liquipedia.net/commons/images/thumb/0/01/Team_Liquid_2024_lightmode.png/320px-Team_Liquid_2024_lightmode.png',
               aliases: ['teamliquid', 'liquid'] },
   1838315:  { name: 'Team Secret', tag: 'SEC', country: 'EU', tier: { grade: 'S', label: 'S-Tier' },
               aliases: ['teamsecret', 'secret'] },
@@ -980,7 +983,7 @@ const CURATED_TEAMS = {
   111474:   { name: 'Alliance', tag: 'ALL', country: 'SE', tier: { grade: 'SSS', label: 'TI 参赛' },
               aliases: ['alliance'] },
   10136357: { name: 'Nigma Galaxy', tag: 'NGX', country: 'EU', tier: { grade: 'SSS', label: 'TI 参赛' },
-              logo: 'https://liquipedia.net/commons/images/thumb/e/e8/Nigma_Galaxy_full_lightmode.png/320px-Nigma_Galaxy_full_lightmode.png',
+              logo: 'https://liquipedia.net/commons/images/thumb/6/67/Nigma_Galaxy_allmode.png/320px-Nigma_Galaxy_allmode.png',
               aliases: ['nigma', 'nigmagalaxy', 'nigmagx'] },  // 合并原 350190 + 8124688
   8255888:  { name: 'BetBoom Team', tag: 'BB', country: 'RU', tier: { grade: 'S', label: 'S-Tier' },
               // ★ 2026-10-28（比分审计）：LP 对战表把队名写成「BetBoom Team 2024」（带年份后缀）；
@@ -991,15 +994,16 @@ const CURATED_TEAMS = {
               odName: '1win',
               aliases: ['1w', '1wteam', '1win'] },  // ★ 2026-08-05（审核 R3）：OpenDota 名 '1w'
   8261500:  { name: 'Xtreme Gaming', tag: 'XG', country: 'CN', tier: { grade: 'SSS', label: 'TI 参赛' },
-              logo: 'https://liquipedia.net/commons/images/thumb/9/97/Xtreme_Gaming_%28China%29_full_allmode.png/320px-Xtreme_Gaming_%28China%29_full_allmode.png',
+              // ⚠️ XG 官方标是白色翼形（LP 无深色变体）⇒ 白底上偏淡；已加 CSS drop-shadow 描边提升可见性
+              logo: 'https://liquipedia.net/commons/images/thumb/7/72/Xtreme_Gaming_%28China%29_allmode.png/320px-Xtreme_Gaming_%28China%29_allmode.png',
               aliases: ['xtremegaming', 'xg', 'extremegaming'] },
   8574561:  { name: 'Azure Ray', tag: 'AR', country: 'CN', tier: { grade: 'S', label: 'S-Tier' },
               aliases: ['azureray', 'ar'] },
   9467224:  { name: 'Aurora Gaming', tag: 'AUR', country: 'TH', tier: { grade: 'S', label: 'S-Tier' },
-              logo: 'https://liquipedia.net/commons/images/thumb/3/32/Aurora_Gaming_2025_full_allmode.png/320px-Aurora_Gaming_2025_full_allmode.png',
+              logo: 'https://liquipedia.net/commons/images/thumb/1/1c/Aurora_Gaming_2025_allmode.png/320px-Aurora_Gaming_2025_allmode.png',
               aliases: ['aurora', 'auroragaming'] },
   9247354:  { name: 'Team Falcons', tag: 'FAL', country: 'SA', tier: { grade: 'SSS', label: 'TI 参赛' },
-              logo: 'https://liquipedia.net/commons/images/thumb/e/e9/Team_Falcons_2022_full_lightmode.png/320px-Team_Falcons_2022_full_lightmode.png',
+              logo: 'https://liquipedia.net/commons/images/thumb/8/83/Team_Falcons_2022_allmode.png/320px-Team_Falcons_2022_allmode.png',
               aliases: ['falcons', 'teamfalcons'] },
   // ★ 2026-11-15：id 由 8260824 校正为 9824702（8260824 实测已无数据；OpenDota
   //   /api/teams/9824702 = PARIVISION，2026-11 仍活跃）。人工覆盖队标取 Liquipedia。
@@ -1014,8 +1018,12 @@ const CURATED_TEAMS = {
               logo: 'https://liquipedia.net/commons/images/thumb/9/9d/PARIVISION_allmode.png/320px-PARIVISION_allmode.png',
               aliases: ['teamvision'] },
   5017210:  { name: 'Team Resilience', tag: 'TR', country: 'CN', tier: { grade: 'A', label: 'A-Tier' },
-              logo: 'https://liquipedia.net/commons/images/thumb/b/bf/Team_Resilience_%28DOTA2%29_full_lightmode.png/320px-Team_Resilience_%28DOTA2%29_full_lightmode.png',
+              logo: 'https://liquipedia.net/commons/images/thumb/2/27/Team_Resilience_allmode.png/320px-Team_Resilience_allmode.png',
               aliases: ['teamresilience', 'resilience'] },
+  // ★ 2026-11-15（人工覆盖队标）：OpenDota/Steam 原生标是白色 GL（白底不可见）⇒ 取 LP 2026 黑色徽标。
+  9964962:  { name: 'GamerLegion', tag: 'GL', country: 'EU', tier: { grade: 'A', label: 'A-Tier' },
+              logo: 'https://liquipedia.net/commons/images/thumb/2/21/GamerLegion_2026_allmode.png/320px-GamerLegion_2026_allmode.png',
+              aliases: ['gamerlegion', 'gl'] },
   2108395:  { name: 'TNC Predator', tag: 'TNC', country: 'PH', tier: { grade: 'A', label: '历史战队' },
               logo: 'https://liquipedia.net/commons/images/thumb/1/1c/TNC_Predator_2021_allmode.png/160px-TNC_Predator_2021_allmode.png',
               aliases: ['tncpredator', 'tnc'] },

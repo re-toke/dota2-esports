@@ -3,7 +3,7 @@
   <block wx:if="{{!error}}">
     <view class="head">
       <view class="head-logo">
-        <image-fallback src="{{team.logo}}" placeholder="{{team.tag || '?'}}" />
+        <image-fallback src="{{team.logo}}" placeholder="{{team.tag || '?'}}" shadow="{{true}}" />
       </view>
       <view class="head-info">
         <view class="title">{{team.name || '加载中…'}}</view>

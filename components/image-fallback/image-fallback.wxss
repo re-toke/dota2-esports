@@ -70,3 +70,10 @@
 .imgfb-img.imgfb-img--loaded {
   opacity: 1;
 }
+/* ★ 2026-11-15：队标描边 —— 白色/浅色队标（XG / DO KONCA）在白底卡片上几乎不可见，
+   drop-shadow 沿 alpha 轮廓生成极淡描边，提升可辨识度（深色/彩色队标基本无感）。
+   只在调用方显式传 shadow="{{true}}" 的队标位生效（头像/物品图不开启）。 */
+.imgfb-img--shadow {
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.45)) drop-shadow(0 0 2px rgba(0, 0, 0, 0.18));
+  -webkit-filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.45)) drop-shadow(0 0 2px rgba(0, 0, 0, 0.18));
+}

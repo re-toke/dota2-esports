@@ -34,7 +34,11 @@ Component({
     // 裁剪模式
     mode: { type: String, value: 'aspectFill' },
     // 是否圆形（头像）；父容器已是圆形时也可不传
-    round: { type: Boolean, value: false }
+    round: { type: Boolean, value: false },
+    // ★ 2026-11-15：队标描边阴影 —— 白色/浅色队标（Xtreme Gaming、DO KONCA 等）在白色卡片上
+    //   几乎不可见；drop-shadow 沿图片 alpha 轮廓生成浅描边，深色/彩色队标观感基本不变。
+    //   仅队标位开启（头像/物品图保持原样）。
+    shadow: { type: Boolean, value: false }
   },
   data: {
     failed: false,

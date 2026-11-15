@@ -201,7 +201,7 @@ module.exports.match = function (name, tag, q) {
         <view class="series-head">
           <view class="series-team {{s.teamACls}}" catchtap="openTeam" data-id="{{s.radiantTeamId}}">
             <view class="series-team-logo {{s.teamALogoCls}}">
-              <image-fallback src="{{s.radiantLogo}}" placeholder="{{s.radiantName ? s.radiantName[0] : '?'}}" />
+              <image-fallback src="{{s.radiantLogo}}" placeholder="{{s.radiantName ? s.radiantName[0] : '?'}}" shadow="{{true}}" />
             </view>
             <text class="series-team-name {{s.radiantTbd ? 'tbd' : ''}}">{{s.radiantTbd ? '待定' : (s.radiantName || '天辉')}}</text>
             <text wx:if="{{s.seriesWinner === 'A'}}" class="series-win-badge">胜</text>
@@ -226,7 +226,7 @@ module.exports.match = function (name, tag, q) {
             <text class="series-team-name {{s.direTbd ? 'tbd' : ''}}">{{s.direTbd ? '待定' : (s.direName || '夜魇')}}</text>
             <text wx:if="{{s.seriesWinner === 'B'}}" class="series-win-badge">胜</text>
             <view class="series-team-logo {{s.teamBLogoCls}}">
-              <image-fallback src="{{s.direLogo}}" placeholder="{{s.direName ? s.direName[0] : '?'}}" />
+              <image-fallback src="{{s.direLogo}}" placeholder="{{s.direName ? s.direName[0] : '?'}}" shadow="{{true}}" />
             </view>
           </view>
         </view>
