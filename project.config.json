@@ -389,6 +389,38 @@
       {
         "type": "folder",
         "value": "/.husky"
+      },
+      {
+        "type": "folder",
+        "value": "/.netlify"
+      },
+      {
+        "type": "folder",
+        "value": "/netlify"
+      },
+      {
+        "type": "file",
+        "value": "/netlify.toml"
+      },
+      {
+        "type": "file",
+        "value": "/README.md"
+      },
+      {
+        "type": "file",
+        "value": "/CODE_WIKI.md"
+      },
+      {
+        "type": "file",
+        "value": "/PROJECT_OVERVIEW.md"
+      },
+      {
+        "type": "file",
+        "value": "/DEPLOY.md"
+      },
+      {
+        "type": "file",
+        "value": "/DOMAIN-NAMING-REFERENCE.md"
       }
     ],
     "include": []
