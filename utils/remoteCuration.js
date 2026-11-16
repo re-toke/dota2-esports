@@ -174,6 +174,12 @@ function curatedTeamLogo(teamId, name) {
     const byName = lk.teamFor(name);
     if (byName) t = byName;
   }
+  // ★ 2026-11-16：重点队伍优先用「随包分发的本地队标」（零网络，规避 LP 中转 1–18s 与偶发 502）。
+  //   本地没有的队才走远端 URL → toLogoUrl（LP 反代）。
+  if (t) {
+    const local = curation.localTeamLogoAsset(t.id);
+    if (local) return local;
+  }
   // 出口统一走 toLogoUrl：LP 原图 → 中转反代（绕开 LP 对 servicewechat referer 的 403 占位图）
   return _isHttpLogo(t && t.logo) ? imageUtil.toLogoUrl(t.logo) : '';
 }

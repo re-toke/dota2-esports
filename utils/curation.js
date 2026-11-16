@@ -1321,10 +1321,40 @@ function curatedTeamFor(nameOrId) { return LOCAL.teamFor(nameOrId); }
 //   curation_teams.data.logo（热更，见 remoteCuration.curatedTeamLogo）显式指定 URL。
 // 优先级约定（全链路一致）：人工覆盖 > OpenDota/Steam > STRATZ > Liquipedia 兜底。
 // 参数：teamId 优先（精确命中，防同名/改名漂移）；未命中再按队名/别名查（LP 赛程无 team_id 场景）。
-// 返回：合法 http(s) URL；无覆盖或格式非法 → ''（调用方继续走原多源链路）。
+// 返回：本地打包路径（/assets/team-logos/…）或合法 http(s) URL；无覆盖 → ''（调用方继续原链路）。
 function isHttpLogoUrl(u) {
   return typeof u === 'string' && /^https?:\/\//i.test(u);
 }
+
+// ★★ 2026-11-16：**重点队伍队标随包分发（零网络）**。
+// 背景（实测）：LP 图片直连会被热链保护返回 403 占位图，只能走 `/img` 中转；
+//   而主出口 Deno 取 LP 图 1–18s，代理内存缓存跨 isolate 不共享（第二轮仍 MISS）
+//   ⇒ 首屏慢、偶发 20s 超时后 502。重点队伍的队标变更频率极低，改为随包分发后：
+//   · 零网络、离线可用、必出图（不再受中转/LP 影响）；
+//   · 代价：这 12 支换标需发版（CURATED_TEAMS.logo 的 LP URL 保留，供 admin 预览与将来热更参考）。
+// 文件由 LP 原图压缩为 96×96 透明 PNG（总计 ~73KB；覆盖 28–48px 展示位 @3x），源图见 scripts/ops/output。
+const LOCAL_TEAM_LOGOS = {
+  7119388:  '/assets/team-logos/team-spirit.png',      // Team Spirit
+  36:       '/assets/team-logos/natus-vincere.png',    // Natus Vincere
+  2163:     '/assets/team-logos/team-liquid.png',      // Team Liquid
+  9247354:  '/assets/team-logos/team-falcons.png',     // Team Falcons
+  9467224:  '/assets/team-logos/aurora-gaming.png',    // Aurora Gaming
+  10136357: '/assets/team-logos/nigma-galaxy.png',     // Nigma Galaxy
+  8261500:  '/assets/team-logos/xtreme-gaming.png',    // Xtreme Gaming
+  9824702:  '/assets/team-logos/parivision.png',       // PARIVISION
+  9572001:  '/assets/team-logos/parivision.png',       // TEAM VISION（LP 重定向到 PARIVISION，共用）
+  5017210:  '/assets/team-logos/team-resilience.png',  // Team Resilience
+  2108395:  '/assets/team-logos/tnc-predator.png',     // TNC Predator
+  9964962:  '/assets/team-logos/gamerlegion.png'       // GamerLegion
+};
+
+/** 按 team_id 取本地打包队标；无则 ''（调用方继续走 URL / 多源链路） */
+function localTeamLogoAsset(teamId) {
+  const id = Number(teamId);
+  if (teamId == null || teamId === '' || !isFinite(id) || id <= 0) return '';
+  return LOCAL_TEAM_LOGOS[id] || '';
+}
+
 function curatedTeamLogo(teamId, name) {
   const id = Number(teamId);
   let t = null;
@@ -1333,7 +1363,12 @@ function curatedTeamLogo(teamId, name) {
     const byName = LOCAL.teamFor(name);
     if (byName) t = byName;
   }
-  // 出口统一走 toLogoUrl：LP 原图 → 中转反代（见顶部 imageUtil 注释）
+  // ① 本地打包优先（零网络，见上方 LOCAL_TEAM_LOGOS 注释）
+  if (t) {
+    const local = localTeamLogoAsset(t.id);
+    if (local) return local;
+  }
+  // ② 出口统一走 toLogoUrl：LP 原图 → 中转反代（见顶部 imageUtil 注释）
   return isHttpLogoUrl(t && t.logo) ? imageUtil.toLogoUrl(t.logo) : '';
 }
 
@@ -1407,6 +1442,8 @@ module.exports = {
   curatedEventFor: curatedEventFor,
   curatedTeamFor: curatedTeamFor,
   curatedTeamLogo: curatedTeamLogo,
+  localTeamLogoAsset: localTeamLogoAsset,
+  LOCAL_TEAM_LOGOS: LOCAL_TEAM_LOGOS,
   isTIContestantTeam: isTIContestantTeam,
   isHighPriorityTeam: isHighPriorityTeam,
   detectCancelledEvents: detectCancelledEvents

@@ -3,6 +3,7 @@
 //
 // 契约：人工覆盖 > OpenDota/Steam > STRATZ > Liquipedia 兜底。
 // 本文件锁住「覆盖查询」这一层：
+//   0) LOCAL_TEAM_LOGOS 的本地打包文件必须存在（重点队伍随包分发，零网络）
 //   1) 本地 CURATED_TEAMS.logo 按 id / 队名 / 别名命中（LP 赛程无 team_id 只能按名）
 //   2) 无覆盖 / 非法协议 → 空串（调用方必须能继续走原多源链路）
 //   3) remoteCuration 查的是「本地为底 + 云端 curation_teams.data.logo 字段级覆盖」的生效集合
@@ -38,16 +39,26 @@ function check(label, fn) {
   }
 }
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
-// ★ 2026-11-15：覆盖 URL 出口已改为「中转反代」（LP 对 servicewechat referer 返回 403 占位图，
-//   见 utils/image.js）：原始 LP URL 会被编码进 `/img?u=...`。
-function isLp(u) {
-  return typeof u === 'string' && /\/img\?u=https%3A%2F%2Fliquipedia\.net%2Fcommons%2Fimages%2F/.test(u);
+// ★ 2026-11-16：重点队伍改为「随包分发的本地队标」（零网络，规避 LP 中转 1–18s 与偶发 502）。
+function isLocalAsset(u) {
+  return typeof u === 'string' && /^\/assets\/team-logos\/[a-z0-9-]+\.png$/.test(u);
 }
+
+// ===== 0. 本地打包文件自检（防路径/文件名漂移）=====
+check('LOCAL_TEAM_LOGOS 指向的文件都存在', () => {
+  const fs = require('fs');
+  const ROOT = path.resolve(__dirname, '..', '..');
+  Object.keys(curation.LOCAL_TEAM_LOGOS).forEach((id) => {
+    const p = curation.LOCAL_TEAM_LOGOS[id];
+    assert(isLocalAsset(p), '路径格式异常: ' + id + ' -> ' + p);
+    assert(fs.existsSync(path.join(ROOT, p)), '文件缺失: ' + p);
+  });
+});
 
 // ===== 1. 本地覆盖：按 id / 队名 / 别名 =====
 check('按 team_id 命中人工覆盖（Team Spirit）', () => {
   const u = curation.curatedTeamLogo(7119388);
-  assert(isLp(u), '应返回 LP 队标: ' + u);
+  assert(isLocalAsset(u), '应返回本地打包队标: ' + u);
 });
 check('按队名命中同一覆盖（Team Spirit）', () => {
   const u = curation.curatedTeamLogo(null, 'Team Spirit');
@@ -59,7 +70,7 @@ check('按别名命中同一覆盖（spirit）', () => {
 });
 check('PARIVISION 覆盖按现 id(9824702) 命中', () => {
   const u = curation.curatedTeamLogo(9824702, 'PARIVISION');
-  assert(isLp(u), '应返回 LP 队标: ' + u);
+  assert(isLocalAsset(u), '应返回本地打包队标: ' + u);
 });
 
 // ===== 2. 无覆盖 / 非法协议 → 空串 =====
@@ -78,7 +89,7 @@ check('非法协议不当作覆盖（ftp://）', () => {
 // ===== 3. remoteCuration：本地兜底 + 远程字段覆盖 =====
 check('remoteCuration 无云端缓存时回退本地覆盖', () => {
   const u = remoteCuration.curatedTeamLogo(2163, 'Team Liquid');
-  assert(isLp(u), '应返回本地 LP 队标: ' + u);
+  assert(isLocalAsset(u), '应返回本地打包队标: ' + u);
 });
 check('云端 data.logo 覆盖本地 logo（热更契约）', () => {
   const eff = remoteCuration.buildEffective({
